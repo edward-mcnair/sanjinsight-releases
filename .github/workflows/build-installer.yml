@@ -206,23 +206,71 @@ jobs:
         run: choco install innosetup --yes --no-progress
         shell: pwsh
 
-      # ── 11. Update .iss version number ────────────────────────────────────
+      # ── 11. Generate sanjinsight.iss ──────────────────────────────────────────
       - name: Update Inno Setup version
-        shell: python
+        shell: pwsh
         run: |
-          version = '${{ steps.version.outputs.version }}'
-          with open('installer/sanjinsight.iss', 'r') as f:
-              content = f.read()
-          import re
-          content = re.sub(
-              r'(#define AppVersion\s+")[^"]+(")',
-              rf'\g<1>{version}\2',
-              content)
-          with open('installer/sanjinsight.iss', 'w') as f:
-              f.write(content)
-          print(f"[OK] sanjinsight.iss updated to {version}")
+          $version = '${{ steps.version.outputs.version }}'
+          New-Item -ItemType Directory -Force -Path installer | Out-Null
+          New-Item -ItemType Directory -Force -Path installer_output | Out-Null
+          $lines = @(
+            '#define AppName      "SanjINSIGHT"',
+            "#define AppVersion   `"$version`"",
+            '#define AppPublisher "Microsanj, LLC"',
+            '#define AppURL       "https://microsanj.com"',
+            '#define AppExeName   "SanjINSIGHT.exe"',
+            '',
+            '[Setup]',
+            'AppId               ={A1B2C3D4-E5F6-7890-ABCD-EF1234567890}',
+            'AppName             ={#AppName}',
+            'AppVersion          ={#AppVersion}',
+            'AppVerName          ={#AppName} {#AppVersion}',
+            'AppPublisher        ={#AppPublisher}',
+            'AppPublisherURL     ={#AppURL}',
+            'AppSupportURL       =https://microsanj.com/support',
+            'AppUpdatesURL       =https://github.com/edward-mcnair/sanjinsight/releases',
+            'DefaultDirName      ={autopf}\Microsanj\{#AppName}',
+            'DefaultGroupName    =Microsanj\{#AppName}',
+            'OutputDir           =installer_output',
+            "#OutputBaseFilename  =SanjINSIGHT-Setup-$version",
+            'OutputBaseFilename  =SanjINSIGHT-Setup-{#AppVersion}',
+            'Compression         =lzma2/ultra64',
+            'SolidCompression    =yes',
+            'WizardStyle         =modern',
+            'PrivilegesRequired  =admin',
+            'UninstallDisplayIcon={app}\{#AppExeName}',
+            'UninstallDisplayName={#AppName} {#AppVersion}',
+            '',
+            '[Languages]',
+            'Name: "english"; MessagesFile: "compiler:Default.isl"',
+            '',
+            '[Tasks]',
+            'Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked',
+            '',
+            '[Files]',
+            'Source: "dist\SanjINSIGHT\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs',
+            '',
+            '[Icons]',
+            'Name: "{group}\{#AppName}";           Filename: "{app}\{#AppExeName}"',
+            'Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"',
+            'Name: "{autodesktop}\{#AppName}";     Filename: "{app}\{#AppExeName}"; Tasks: desktopicon',
+            '',
+            '[Run]',
+            'Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent',
+            '',
+            '[Code]',
+            'procedure CurStepChanged(CurStep: TSetupStep);',
+            'begin',
+            '  if CurStep = ssInstall then begin',
+            '    ForceDirectories(ExpandConstant(''{app}\logs''));',
+            '    ForceDirectories(ExpandConstant(''{app}\profiles\user''));',
+            '  end;',
+            'end;'
+          )
+          $lines | Out-File -FilePath installer\sanjinsight.iss -Encoding utf8
+          Write-Host "[OK] sanjinsight.iss generated for v$version"
 
-      # ── 12. Build installer with Inno Setup ───────────────────────────────
+            # ── 12. Build installer with Inno Setup ───────────────────────────────
       - name: Build installer with Inno Setup
         run: |
           $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
