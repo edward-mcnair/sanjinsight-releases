@@ -143,32 +143,43 @@ jobs:
                   append_images=images[1:])
               print("[OK] Fallback icon created")
 
-      # ── 7. Update version_info.txt with current version ───────────────────
+      # ── 7. Generate version_info.txt with current version ──────────────────
       - name: Update Windows version metadata
         shell: python
         run: |
+          import os, re
           version = '${{ steps.version.outputs.version }}'
           parts = version.split('.')
           while len(parts) < 4:
               parts.append('0')
-          ver_tuple = f"({', '.join(parts)})"
+          v = tuple(int(x) for x in parts)
 
-          with open('installer/version_info.txt', 'r') as f:
-              content = f.read()
-
-          import re
-          # Update both filevers and prodvers tuples
-          content = re.sub(r'filevers=\([^)]+\)', f'filevers={ver_tuple}', content)
-          content = re.sub(r'prodvers=\([^)]+\)', f'prodvers={ver_tuple}', content)
-          # Update string values
-          content = re.sub(r"(u'FileVersion',\s+u')[^']+(')", 
-                           rf"\g<1>{version}.0\2", content)
-          content = re.sub(r"(u'ProductVersion',\s+u')[^']+(')", 
-                           rf"\g<1>{version}.0\2", content)
-
+          content = f"""VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=({v[0]}, {v[1]}, {v[2]}, {v[3]}),
+    prodvers=({v[0]}, {v[1]}, {v[2]}, {v[3]}),
+    mask=0x3f, flags=0x0, OS=0x40004, fileType=0x1, subtype=0x0, date=(0, 0)
+  ),
+  kids=[
+    StringFileInfo([
+      StringTable(u'040904B0', [
+        StringStruct(u'CompanyName',      u'Microsanj, LLC'),
+        StringStruct(u'FileDescription',  u'SanjINSIGHT Thermal Analysis Software'),
+        StringStruct(u'FileVersion',      u'{version}.0'),
+        StringStruct(u'InternalName',     u'SanjINSIGHT'),
+        StringStruct(u'LegalCopyright',   u'Copyright 2026 Microsanj, LLC. All Rights Reserved.'),
+        StringStruct(u'OriginalFilename', u'SanjINSIGHT.exe'),
+        StringStruct(u'ProductName',      u'Microsanj SanjINSIGHT'),
+        StringStruct(u'ProductVersion',   u'{version}.0'),
+      ])
+    ]),
+    VarFileInfo([VarStruct(u'Translation', [0x0409, 1200])])
+  ]
+)"""
+          os.makedirs('installer', exist_ok=True)
           with open('installer/version_info.txt', 'w') as f:
               f.write(content)
-          print(f"[OK] version_info.txt updated to {version}")
+          print(f"[OK] version_info.txt generated for v{version}")
 
       # ── 8. PyInstaller ────────────────────────────────────────────────────
       - name: Build with PyInstaller
