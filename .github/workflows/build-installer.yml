@@ -36,6 +36,10 @@ jobs:
     name: Build & Release
     runs-on: windows-latest    # free Windows Server 2022 runner
 
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: "utf-8"
+
     steps:
 
       # ── 1. Checkout ────────────────────────────────────────────────────────
@@ -87,6 +91,8 @@ jobs:
       # ── 6. Create application icon from SVG ───────────────────────────────
       - name: Generate .ico from SVG
         shell: python
+        env:
+          PYTHONUTF8: "1"
         run: |
           # Cairosvg converts SVG to PNG; Pillow converts PNG to multi-size ICO.
           # If cairosvg fails (missing cairo DLL), we fall back to a plain Pillow icon.
@@ -112,10 +118,10 @@ jobs:
                   format='ICO',
                   sizes=[(img.width, img.height) for img in images],
                   append_images=images[1:])
-              print("✓ Icon created from SVG via cairosvg")
+              print("[OK] Icon created from SVG via cairosvg")
 
           except Exception as e:
-              print(f"cairosvg not available ({e}), using Pillow fallback")
+              print(f"[WARN] cairosvg not available, using Pillow fallback: {e}")
               from PIL import Image, ImageDraw
 
               sizes = [16, 32, 48, 64, 256]
@@ -135,7 +141,7 @@ jobs:
                   format='ICO',
                   sizes=[(img.width, img.height) for img in images],
                   append_images=images[1:])
-              print("✓ Fallback icon created")
+              print("[OK] Fallback icon created")
 
       # ── 7. Update version_info.txt with current version ───────────────────
       - name: Update Windows version metadata
@@ -162,7 +168,7 @@ jobs:
 
           with open('installer/version_info.txt', 'w') as f:
               f.write(content)
-          print(f"✓ version_info.txt updated to {version}")
+          print(f"[OK] version_info.txt updated to {version}")
 
       # ── 8. PyInstaller ────────────────────────────────────────────────────
       - name: Build with PyInstaller
@@ -180,7 +186,7 @@ jobs:
             exit 1
           }
           $count = (Get-ChildItem "dist\SanjINSIGHT" -Recurse -File).Count
-          Write-Host "✓ Bundle OK — $count files"
+          Write-Host "[OK] Bundle OK — $count files"
         shell: pwsh
 
       # ── 10. Install Inno Setup ────────────────────────────────────────────
@@ -190,7 +196,7 @@ jobs:
           $out = "$env:TEMP\innosetup.exe"
           Invoke-WebRequest -Uri $url -OutFile $out
           Start-Process -FilePath $out -Args "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait
-          Write-Host "✓ Inno Setup installed"
+          Write-Host "[OK] Inno Setup installed"
         shell: pwsh
 
       # ── 11. Update .iss version number ────────────────────────────────────
@@ -207,7 +213,7 @@ jobs:
               content)
           with open('installer/sanjinsight.iss', 'w') as f:
               f.write(content)
-          print(f"✓ sanjinsight.iss updated to {version}")
+          print(f"[OK] sanjinsight.iss updated to {version}")
 
       # ── 12. Build installer with Inno Setup ───────────────────────────────
       - name: Build installer with Inno Setup
@@ -234,7 +240,7 @@ jobs:
             exit 1
           }
           $size = [math]::Round((Get-Item $installer).Length / 1MB, 1)
-          Write-Host "✓ Installer: $installer ($size MB)"
+          Write-Host "[OK] Installer: $installer ($size MB)"
           echo "INSTALLER_PATH=$installer" >> $env:GITHUB_ENV
         shell: pwsh
 
@@ -272,7 +278,7 @@ jobs:
           with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
               f.write(f"notes<<{delimiter}\n{notes}\n{delimiter}\n")
 
-          print(f"✓ Release notes extracted ({len(notes)} chars)")
+          print(f"[OK] Release notes extracted ({len(notes)} chars)")
 
       # ── 16. Create GitHub Release ─────────────────────────────────────────
       - name: Create GitHub Release
