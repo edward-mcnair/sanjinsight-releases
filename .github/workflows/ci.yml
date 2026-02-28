@@ -1,0 +1,66 @@
+# .github/workflows/ci.yml
+#
+# Runs on every push and pull request.
+# Fast syntax + import check — catches broken code before it reaches the installer build.
+
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  syntax-check:
+    name: Syntax & import check
+    runs-on: ubuntu-latest      # fast and free
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          # Install only what's needed for syntax checks — not hardware packages
+          pip install PyQt5 numpy PyYAML matplotlib h5py scipy
+
+      - name: Compile check all Python files
+        run: |
+          echo "Checking syntax of all .py files..."
+          find . -name "*.py" \
+            ! -path "./.git/*" \
+            ! -path "./dist/*" \
+            ! -path "./build/*" \
+            -print0 | xargs -0 python3 -m py_compile
+          echo "✓ All files compile clean"
+
+      - name: Check version.py is valid
+        run: |
+          python3 -c "
+          from version import __version__, VERSION_TUPLE, APP_NAME, APP_VENDOR
+          from version import parse_version, is_newer, version_string
+          print(f'✓ Version: {version_string()}')
+          print(f'✓ Tuple:   {VERSION_TUPLE}')
+          assert len(VERSION_TUPLE) == 3, 'VERSION_TUPLE must have 3 elements'
+          assert __version__ == '.'.join(str(x) for x in VERSION_TUPLE), \
+              '__version__ and VERSION_TUPLE are out of sync'
+          print('✓ version.py is consistent')
+          "
+
+      - name: Check CHANGELOG has entry for current version
+        run: |
+          python3 -c "
+          from version import __version__
+          with open('CHANGELOG.md', 'r') as f:
+              content = f.read()
+          assert f'[{__version__}]' in content, \
+              f'CHANGELOG.md has no entry for v{__version__} — add one before releasing'
+          print(f'✓ CHANGELOG.md has entry for v{__version__}')
+          "

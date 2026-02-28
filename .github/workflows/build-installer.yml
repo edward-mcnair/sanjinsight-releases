@@ -1,0 +1,288 @@
+# .github/workflows/build-installer.yml
+#
+# Builds the SanjINSIGHT Windows installer and publishes it as a GitHub Release.
+#
+# Triggers
+# --------
+# Automatic : push a version tag  →  git tag v1.0.1 && git push origin v1.0.1
+# Manual    : GitHub → Actions → "Build Windows Installer" → Run workflow
+#
+# What it does
+# ------------
+# 1. Checks out the code on a Windows runner (free GitHub-hosted)
+# 2. Installs Python 3.11 and all dependencies
+# 3. Converts the SVG logo to a .ico file (no manual step needed)
+# 4. Runs PyInstaller → dist/SanjINSIGHT/
+# 5. Installs Inno Setup and builds the .exe installer
+# 6. Creates a GitHub Release with the installer attached
+#    (the in-app update checker reads this release automatically)
+
+name: Build Windows Installer
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'          # triggers on v1.0.0, v1.2.3, etc.
+
+  workflow_dispatch:       # allows manual trigger from GitHub Actions UI
+    inputs:
+      version_override:
+        description: 'Version string (leave blank to read from version.py)'
+        required: false
+        default: ''
+
+jobs:
+  build:
+    name: Build & Release
+    runs-on: windows-latest    # free Windows Server 2022 runner
+
+    steps:
+
+      # ── 1. Checkout ────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Python ──────────────────────────────────────────────────────────
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          architecture: 'x64'
+
+      # ── 3. Cache pip packages (speeds up subsequent builds) ───────────────
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\pip\Cache
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      # ── 4. Install dependencies ────────────────────────────────────────────
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller pillow
+          # Pillow is used below to convert SVG → ICO
+
+      # ── 5. Read version from version.py ───────────────────────────────────
+      - name: Read version
+        id: version
+        shell: python
+        run: |
+          import re, os
+          with open('version.py', 'r') as f:
+              content = f.read()
+          m = re.search(r"^__version__\s*=\s*['\"](.+?)['\"]", content, re.MULTILINE)
+          version = m.group(1) if m else '0.0.0'
+          override = '${{ github.event.inputs.version_override }}'
+          if override:
+              version = override.lstrip('v')
+          print(f"Version: {version}")
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"version={version}\n")
+              f.write(f"tag=v{version}\n")
+
+      # ── 6. Create application icon from SVG ───────────────────────────────
+      - name: Generate .ico from SVG
+        shell: python
+        run: |
+          # Cairosvg converts SVG to PNG; Pillow converts PNG to multi-size ICO.
+          # If cairosvg fails (missing cairo DLL), we fall back to a plain Pillow icon.
+          import os, struct
+          os.makedirs('installer/assets', exist_ok=True)
+
+          try:
+              import cairosvg
+              from PIL import Image
+              from io import BytesIO
+
+              sizes = [16, 32, 48, 64, 256]
+              images = []
+              for size in sizes:
+                  png_data = cairosvg.svg2png(
+                      url='assets/microsanj-logo.svg',
+                      output_width=size, output_height=size)
+                  img = Image.open(BytesIO(png_data)).convert('RGBA')
+                  images.append(img)
+
+              images[0].save(
+                  'installer/assets/sanjinsight.ico',
+                  format='ICO',
+                  sizes=[(img.width, img.height) for img in images],
+                  append_images=images[1:])
+              print("✓ Icon created from SVG via cairosvg")
+
+          except Exception as e:
+              print(f"cairosvg not available ({e}), using Pillow fallback")
+              from PIL import Image, ImageDraw
+
+              sizes = [16, 32, 48, 64, 256]
+              images = []
+              for size in sizes:
+                  img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+                  draw = ImageDraw.Draw(img)
+                  # Simple teal square as placeholder icon
+                  margin = size // 8
+                  draw.rectangle(
+                      [margin, margin, size - margin, size - margin],
+                      fill=(0, 212, 170, 255))
+                  images.append(img)
+
+              images[0].save(
+                  'installer/assets/sanjinsight.ico',
+                  format='ICO',
+                  sizes=[(img.width, img.height) for img in images],
+                  append_images=images[1:])
+              print("✓ Fallback icon created")
+
+      # ── 7. Update version_info.txt with current version ───────────────────
+      - name: Update Windows version metadata
+        shell: python
+        run: |
+          version = '${{ steps.version.outputs.version }}'
+          parts = version.split('.')
+          while len(parts) < 4:
+              parts.append('0')
+          ver_tuple = f"({', '.join(parts)})"
+
+          with open('installer/version_info.txt', 'r') as f:
+              content = f.read()
+
+          import re
+          # Update both filevers and prodvers tuples
+          content = re.sub(r'filevers=\([^)]+\)', f'filevers={ver_tuple}', content)
+          content = re.sub(r'prodvers=\([^)]+\)', f'prodvers={ver_tuple}', content)
+          # Update string values
+          content = re.sub(r"(u'FileVersion',\s+u')[^']+(')", 
+                           rf"\g<1>{version}.0\2", content)
+          content = re.sub(r"(u'ProductVersion',\s+u')[^']+(')", 
+                           rf"\g<1>{version}.0\2", content)
+
+          with open('installer/version_info.txt', 'w') as f:
+              f.write(content)
+          print(f"✓ version_info.txt updated to {version}")
+
+      # ── 8. PyInstaller ────────────────────────────────────────────────────
+      - name: Build with PyInstaller
+        run: |
+          pyinstaller installer/sanjinsight.spec --noconfirm --clean
+        env:
+          # Suppress PyInstaller progress bars in CI logs
+          PYTHONUNBUFFERED: '1'
+
+      # ── 9. Verify bundle ──────────────────────────────────────────────────
+      - name: Verify PyInstaller output
+        run: |
+          if (!(Test-Path "dist\SanjINSIGHT\SanjINSIGHT.exe")) {
+            Write-Error "SanjINSIGHT.exe not found in dist\SanjINSIGHT\"
+            exit 1
+          }
+          $count = (Get-ChildItem "dist\SanjINSIGHT" -Recurse -File).Count
+          Write-Host "✓ Bundle OK — $count files"
+        shell: pwsh
+
+      # ── 10. Install Inno Setup ────────────────────────────────────────────
+      - name: Install Inno Setup 6
+        run: |
+          $url = "https://files.jrsoftware.org/is/6/innosetup-6.3.3.exe"
+          $out = "$env:TEMP\innosetup.exe"
+          Invoke-WebRequest -Uri $url -OutFile $out
+          Start-Process -FilePath $out -Args "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait
+          Write-Host "✓ Inno Setup installed"
+        shell: pwsh
+
+      # ── 11. Update .iss version number ────────────────────────────────────
+      - name: Update Inno Setup version
+        shell: python
+        run: |
+          version = '${{ steps.version.outputs.version }}'
+          with open('installer/sanjinsight.iss', 'r') as f:
+              content = f.read()
+          import re
+          content = re.sub(
+              r'(#define AppVersion\s+")[^"]+(")',
+              rf'\g<1>{version}\2',
+              content)
+          with open('installer/sanjinsight.iss', 'w') as f:
+              f.write(content)
+          print(f"✓ sanjinsight.iss updated to {version}")
+
+      # ── 12. Build installer with Inno Setup ───────────────────────────────
+      - name: Build installer with Inno Setup
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          & $iscc "installer\sanjinsight.iss"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Inno Setup failed with exit code $LASTEXITCODE"
+            exit 1
+          }
+        shell: pwsh
+
+      # ── 13. Verify installer ──────────────────────────────────────────────
+      - name: Verify installer output
+        run: |
+          $version = '${{ steps.version.outputs.version }}'
+          $installer = "installer_output\SanjINSIGHT-Setup-$version.exe"
+          if (!(Test-Path $installer)) {
+            # Try wildcard in case version format differs
+            $installer = (Get-ChildItem "installer_output\*.exe" | Select-Object -First 1).FullName
+          }
+          if (!$installer -or !(Test-Path $installer)) {
+            Write-Error "Installer .exe not found in installer_output\"
+            exit 1
+          }
+          $size = [math]::Round((Get-Item $installer).Length / 1MB, 1)
+          Write-Host "✓ Installer: $installer ($size MB)"
+          echo "INSTALLER_PATH=$installer" >> $env:GITHUB_ENV
+        shell: pwsh
+
+      # ── 14. Upload installer as build artifact (always saved) ─────────────
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SanjINSIGHT-Setup-${{ steps.version.outputs.version }}
+          path: installer_output/*.exe
+          retention-days: 90
+
+      # ── 15. Extract release notes from CHANGELOG.md ───────────────────────
+      - name: Extract release notes
+        id: release_notes
+        shell: python
+        run: |
+          import re, os
+
+          version = '${{ steps.version.outputs.version }}'
+
+          with open('CHANGELOG.md', 'r', encoding='utf-8') as f:
+              content = f.read()
+
+          # Find the section for this version
+          pattern = rf'## \[{re.escape(version)}\][^\n]*\n(.*?)(?=\n## \[|\Z)'
+          m = re.search(pattern, content, re.DOTALL)
+
+          if m:
+              notes = m.group(1).strip()
+          else:
+              notes = f"Release {version}\n\nSee CHANGELOG.md for details."
+
+          # GitHub Actions multiline output
+          delimiter = "EOF_RELEASE_NOTES"
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"notes<<{delimiter}\n{notes}\n{delimiter}\n")
+
+          print(f"✓ Release notes extracted ({len(notes)} chars)")
+
+      # ── 16. Create GitHub Release ─────────────────────────────────────────
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name:   ${{ steps.version.outputs.tag }}
+          name:       SanjINSIGHT ${{ steps.version.outputs.tag }}
+          body:       ${{ steps.release_notes.outputs.notes }}
+          draft:      false
+          prerelease: ${{ contains(steps.version.outputs.version, 'beta') || contains(steps.version.outputs.version, 'rc') }}
+          files:      installer_output/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
