@@ -147,38 +147,39 @@ jobs:
       - name: Update Windows version metadata
         shell: python
         run: |
-          import os, re
+          import os
           version = '${{ steps.version.outputs.version }}'
           parts = version.split('.')
           while len(parts) < 4:
               parts.append('0')
-          v = tuple(int(x) for x in parts)
-
-          content = f"""VSVersionInfo(
-  ffi=FixedFileInfo(
-    filevers=({v[0]}, {v[1]}, {v[2]}, {v[3]}),
-    prodvers=({v[0]}, {v[1]}, {v[2]}, {v[3]}),
-    mask=0x3f, flags=0x0, OS=0x40004, fileType=0x1, subtype=0x0, date=(0, 0)
-  ),
-  kids=[
-    StringFileInfo([
-      StringTable(u'040904B0', [
-        StringStruct(u'CompanyName',      u'Microsanj, LLC'),
-        StringStruct(u'FileDescription',  u'SanjINSIGHT Thermal Analysis Software'),
-        StringStruct(u'FileVersion',      u'{version}.0'),
-        StringStruct(u'InternalName',     u'SanjINSIGHT'),
-        StringStruct(u'LegalCopyright',   u'Copyright 2026 Microsanj, LLC. All Rights Reserved.'),
-        StringStruct(u'OriginalFilename', u'SanjINSIGHT.exe'),
-        StringStruct(u'ProductName',      u'Microsanj SanjINSIGHT'),
-        StringStruct(u'ProductVersion',   u'{version}.0'),
-      ])
-    ]),
-    VarFileInfo([VarStruct(u'Translation', [0x0409, 1200])])
-  ]
-)"""
+          v0,v1,v2,v3 = parts[0],parts[1],parts[2],parts[3]
+          lines = [
+            'VSVersionInfo(',
+            '  ffi=FixedFileInfo(',
+            f'    filevers=({v0}, {v1}, {v2}, {v3}),',
+            f'    prodvers=({v0}, {v1}, {v2}, {v3}),',
+            '    mask=0x3f, flags=0x0, OS=0x40004, fileType=0x1, subtype=0x0, date=(0, 0)',
+            '  ),',
+            '  kids=[',
+            '    StringFileInfo([',
+            "      StringTable(u'040904B0', [",
+            "        StringStruct(u'CompanyName',      u'Microsanj, LLC'),",
+            "        StringStruct(u'FileDescription',  u'SanjINSIGHT Thermal Analysis Software'),",
+            f"        StringStruct(u'FileVersion',      u'{version}.0'),",
+            "        StringStruct(u'InternalName',     u'SanjINSIGHT'),",
+            "        StringStruct(u'LegalCopyright',   u'Copyright 2026 Microsanj, LLC.'),",
+            "        StringStruct(u'OriginalFilename', u'SanjINSIGHT.exe'),",
+            "        StringStruct(u'ProductName',      u'Microsanj SanjINSIGHT'),",
+            f"        StringStruct(u'ProductVersion',   u'{version}.0'),",
+            '      ])',
+            '    ]),',
+            '    VarFileInfo([VarStruct(u' + "'" + 'Translation' + "'" + ', [0x0409, 1200])])',
+            '  ]',
+            ')',
+          ]
           os.makedirs('installer', exist_ok=True)
           with open('installer/version_info.txt', 'w') as f:
-              f.write(content)
+              f.write('\n'.join(lines))
           print(f"[OK] version_info.txt generated for v{version}")
 
       # ── 8. PyInstaller ────────────────────────────────────────────────────
