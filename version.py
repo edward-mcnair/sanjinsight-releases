@@ -29,7 +29,7 @@ APP_FULL_NAME  = f"{APP_VENDOR} {APP_NAME}"
 # ── Update channel ────────────────────────────────────────────────────────────
 # GitHub repo where releases are published.
 # The updater hits:  https://api.github.com/repos/{GITHUB_REPO}/releases/latest
-GITHUB_REPO         = "microsanj/sanjinsight"          # change to real repo when created
+GITHUB_REPO         = "edward-mcnair/sanjinsight"
 UPDATE_CHECK_URL    = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 RELEASES_PAGE_URL   = f"https://github.com/{GITHUB_REPO}/releases"
 DOCS_URL            = f"https://docs.microsanj.com/sanjinsight"
