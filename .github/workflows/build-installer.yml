@@ -232,7 +232,6 @@ jobs:
             'DefaultDirName      ={autopf}\Microsanj\{#AppName}',
             'DefaultGroupName    =Microsanj\{#AppName}',
             'OutputDir           =installer_output',
-            "#OutputBaseFilename  =SanjINSIGHT-Setup-$version",
             'OutputBaseFilename  =SanjINSIGHT-Setup-{#AppVersion}',
             'Compression         =lzma2/ultra64',
             'SolidCompression    =yes',
