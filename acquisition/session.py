@@ -1,0 +1,259 @@
+"""
+acquisition/session.py
+
+A Session is one complete measurement acquisition saved to disk.
+Supports all Microsanj imaging modalities: thermoreflectance, IR lock-in,
+hybrid, and optical pump-probe (OPP).
+
+Each session lives in a self-contained folder:
+
+    sessions/
+        20250315_143022_device_A/
+            session.json           ← metadata (human-readable)
+            cold_avg.npy           ← float32 baseline frame
+            hot_avg.npy            ← float32 stimulus frame
+            delta_r_over_r.npy     ← float32 ΔR/R signal
+            difference.npy         ← float32 hot − cold
+            thumbnail.png          ← small ΔR/R preview for browser
+
+Usage:
+    session = Session.from_result(result, label="device_A_25C")
+    path    = session.save("/path/to/sessions")
+
+    session = Session.load("/path/to/sessions/20250315_143022_device_A")
+    drr     = session.delta_r_over_r   # float32 numpy array
+"""
+
+from __future__ import annotations
+import os, json, time
+import numpy as np
+from dataclasses import dataclass, field, asdict
+from typing import Optional
+
+
+@dataclass
+class SessionMeta:
+    """
+    Lightweight metadata — loadable without reading numpy files.
+
+    All fields needed to fully reproduce a measurement and trace it in
+    a quality management system are stored here.
+    """
+    # Identity
+    uid:           str            = ""
+    label:         str            = ""
+    timestamp:     float          = 0.0
+    timestamp_str: str            = ""
+
+    # ── Imaging modality ───────────────────────────────────────────
+    imaging_mode:  str  = "thermoreflectance"  # ImagingModality value
+    wavelength_nm: int  = 532                  # illumination wavelength
+
+    # ── Camera / acquisition ───────────────────────────────────────
+    n_frames:      int            = 0
+    exposure_us:   float          = 0.0
+    gain_db:       float          = 0.0
+    duration_s:    float          = 0.0
+    snr_db:        Optional[float]= None
+    frame_h:       int            = 0
+    frame_w:       int            = 0
+
+    # ── FPGA modulation ────────────────────────────────────────────
+    fpga_frequency_hz: float = 0.0    # modulation frequency used
+    fpga_duty_cycle:   float = 0.5    # duty cycle (0–1)
+
+    # ── TEC / temperature ──────────────────────────────────────────
+    tec_temperature:   float = 0.0   # sample temperature at acquisition (°C)
+    tec_setpoint:      float = 0.0   # TEC setpoint at acquisition (°C)
+
+    # ── Bias / DUT drive conditions ────────────────────────────────
+    bias_voltage:   float = 0.0      # V  (0 if not applicable)
+    bias_current:   float = 0.0      # A  (0 if not applicable)
+
+    # ── Material profile ───────────────────────────────────────────
+    profile_uid:    str   = ""       # uid of the MaterialProfile used
+    profile_name:   str   = ""       # human-readable copy for traceability
+    ct_value:       float = 0.0      # C_T coefficient used (0 if uncalibrated)
+
+    # ── Geometry ───────────────────────────────────────────────────
+    notes:          str            = ""
+    roi:            Optional[dict] = None
+    has_drr:        bool           = False
+    path:           str            = ""
+
+    def to_dict(self) -> dict:
+        d = asdict(self)
+        d.pop("path", None)
+        return d
+
+    @staticmethod
+    def from_dict(d: dict, path: str = "") -> "SessionMeta":
+        m = SessionMeta(path=path)
+        for k, v in d.items():
+            if hasattr(m, k):
+                setattr(m, k, v)
+        return m
+
+
+@dataclass
+class Session:
+    """Full session — metadata + lazily-loaded numpy arrays."""
+    meta:             SessionMeta          = field(default_factory=SessionMeta)
+    _cold_avg:        Optional[np.ndarray] = field(default=None, repr=False)
+    _hot_avg:         Optional[np.ndarray] = field(default=None, repr=False)
+    _delta_r_over_r:  Optional[np.ndarray] = field(default=None, repr=False)
+    _difference:      Optional[np.ndarray] = field(default=None, repr=False)
+
+    @property
+    def cold_avg(self) -> Optional[np.ndarray]:
+        if self._cold_avg is None:
+            self._cold_avg = self._load("cold_avg.npy")
+        return self._cold_avg
+
+    @property
+    def hot_avg(self) -> Optional[np.ndarray]:
+        if self._hot_avg is None:
+            self._hot_avg = self._load("hot_avg.npy")
+        return self._hot_avg
+
+    @property
+    def delta_r_over_r(self) -> Optional[np.ndarray]:
+        if self._delta_r_over_r is None:
+            self._delta_r_over_r = self._load("delta_r_over_r.npy")
+        return self._delta_r_over_r
+
+    @property
+    def difference(self) -> Optional[np.ndarray]:
+        if self._difference is None:
+            self._difference = self._load("difference.npy")
+        return self._difference
+
+    def _load(self, filename: str) -> Optional[np.ndarray]:
+        p = os.path.join(self.meta.path, filename)
+        return np.load(p) if os.path.exists(p) else None
+
+    def unload(self):
+        self._cold_avg = self._hot_avg = None
+        self._delta_r_over_r = self._difference = None
+
+    @staticmethod
+    def from_result(result, label: str = "",
+                    imaging_mode: str = "thermoreflectance",
+                    wavelength_nm: int = 532,
+                    fpga_frequency_hz: float = 0.0,
+                    fpga_duty_cycle: float = 0.5,
+                    tec_temperature: float = 0.0,
+                    tec_setpoint: float = 0.0,
+                    bias_voltage: float = 0.0,
+                    bias_current: float = 0.0,
+                    profile_uid: str = "",
+                    profile_name: str = "",
+                    ct_value: float = 0.0) -> "Session":
+        ts     = time.time()
+        ts_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts))
+        slug   = label.replace(" ", "_").replace("/", "-") if label else "unnamed"
+        uid    = f"{time.strftime('%Y%m%d_%H%M%S')}_{slug}"
+
+        h, w = 0, 0
+        for arr in [result.cold_avg, result.hot_avg, result.delta_r_over_r]:
+            if arr is not None:
+                h, w = arr.shape[:2]; break
+
+        roi_dict = None
+        if hasattr(result, "roi") and result.roi is not None:
+            roi_dict = result.roi.to_dict()
+
+        meta = SessionMeta(
+            uid           = uid,
+            label         = label or uid,
+            timestamp     = ts,
+            timestamp_str = ts_str,
+            imaging_mode  = imaging_mode,
+            wavelength_nm = wavelength_nm,
+            n_frames      = getattr(result, "n_frames",    0),
+            exposure_us   = getattr(result, "exposure_us", 0.0),
+            gain_db       = getattr(result, "gain_db",     0.0),
+            duration_s    = getattr(result, "duration_s",  0.0),
+            snr_db        = getattr(result, "snr_db",      None),
+            frame_h       = h,
+            frame_w       = w,
+            fpga_frequency_hz = fpga_frequency_hz,
+            fpga_duty_cycle   = fpga_duty_cycle,
+            tec_temperature   = tec_temperature,
+            tec_setpoint      = tec_setpoint,
+            bias_voltage      = bias_voltage,
+            bias_current      = bias_current,
+            profile_uid       = profile_uid,
+            profile_name      = profile_name,
+            ct_value          = ct_value,
+            notes         = getattr(result, "notes",       ""),
+            roi           = roi_dict,
+            has_drr       = result.delta_r_over_r is not None,
+        )
+
+        return Session(
+            meta            = meta,
+            _cold_avg       = result.cold_avg,
+            _hot_avg        = result.hot_avg,
+            _delta_r_over_r = result.delta_r_over_r,
+            _difference     = result.difference,
+        )
+
+    def save(self, sessions_root: str) -> str:
+        folder = os.path.join(sessions_root, self.meta.uid)
+        os.makedirs(folder, exist_ok=True)
+        self.meta.path = folder
+
+        for name, arr in [
+            ("cold_avg",       self._cold_avg),
+            ("hot_avg",        self._hot_avg),
+            ("delta_r_over_r", self._delta_r_over_r),
+            ("difference",     self._difference),
+        ]:
+            if arr is not None:
+                np.save(os.path.join(folder, f"{name}.npy"), arr)
+
+        if self._delta_r_over_r is not None:
+            self._save_thumbnail(folder)
+
+        with open(os.path.join(folder, "session.json"), "w") as f:
+            json.dump(self.meta.to_dict(), f, indent=2)
+
+        return folder
+
+    def _save_thumbnail(self, folder: str):
+        try:
+            drr    = self._delta_r_over_r.astype(np.float32)
+            limit  = float(np.percentile(np.abs(drr), 99.5)) or 1e-9
+            normed = np.clip(drr / limit, -1.0, 1.0)
+            r = (np.clip( normed, 0, 1) * 255).astype(np.uint8)
+            b = (np.clip(-normed, 0, 1) * 255).astype(np.uint8)
+            g = np.zeros_like(r)
+            import cv2
+            thumb = cv2.resize(np.stack([r, g, b], axis=-1), (160, 120))
+            cv2.imwrite(os.path.join(folder, "thumbnail.png"), thumb)
+        except Exception:
+            pass
+
+    @staticmethod
+    def load(folder: str) -> "Session":
+        p = os.path.join(folder, "session.json")
+        if not os.path.exists(p):
+            raise FileNotFoundError(f"No session.json in {folder}")
+        with open(p) as f:
+            d = json.load(f)
+        return Session(meta=SessionMeta.from_dict(d, path=folder))
+
+    @staticmethod
+    def load_meta(folder: str) -> Optional[SessionMeta]:
+        p = os.path.join(folder, "session.json")
+        if not os.path.exists(p):
+            return None
+        try:
+            with open(p) as f:
+                return SessionMeta.from_dict(json.load(f), path=folder)
+        except Exception:
+            return None
+
+    def __repr__(self):
+        return f"<Session {self.meta.uid!r} snr={self.meta.snr_db}>"

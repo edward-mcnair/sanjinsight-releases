@@ -1,0 +1,105 @@
+# Microsanj System Configuration
+# Edit this file to match your hardware setup - no code changes needed.
+
+hardware:
+
+  tec_meerstetter:
+    enabled: true
+    driver: "simulated"   # simulated | meerstetter
+    port: "COM3"          # Change to match your system (e.g. COM4, /dev/ttyUSB0)
+    baudrate: 57600
+    address: 2            # Device address set on the unit (default: 2)
+    timeout: 1.0
+    initial_temp: 25.0    # simulated driver starting temperature
+
+  tec_atec:
+    enabled: true
+    driver: "simulated"   # simulated | atec
+    port: "COM4"          # Change to match your system
+    baudrate: 9600
+    address: 1
+    timeout: 1.0
+    initial_temp: 25.0
+
+  camera:
+    enabled: true
+    driver: "ni_imaqdx"    # ni_imaqdx | pypylon | directshow | simulated
+    # --- NI IMAQdx settings (driver: ni_imaqdx) ---
+    camera_name: "cam4"     # Name shown in NI MAX
+    width: 1920
+    height: 1200
+    model: "Basler acA1920-155um"
+    # --- pypylon settings (driver: pypylon) ---
+    # serial: ""            # Leave blank for first found Basler camera
+    # --- DirectShow settings (driver: directshow) ---
+    # device_index: 0       # Run find_camera.py to identify index
+    # fourcc: "Y16 "        # Pixel format (Y16 for 16-bit mono)
+    # --- Common settings ---
+    exposure_us: 5000
+    gain: 0.0
+    trigger_mode: "Off"
+
+  fpga:
+    enabled: true
+    driver: "simulated"   # simulated | ni9637
+    bitfile: "C:/Software/1. EZ500 New Set Up/EZ500_V1.2/Source/RIO_Source_32Bit/FPGA Bitfiles/ez500firmware_FPGATarget_FPGACODE_wPlAxJTjkzE.lvbitx"
+    resource: "rio://169.254.19.194/RIO0"
+    reset_on_open: false
+    initial_freq_hz: 1000.0
+    initial_duty: 0.5
+
+  autofocus:
+    enabled: true
+    driver: "simulated"     # simulated | sweep | hill_climb
+    strategy: "sweep"       # used when driver is "sweep" or "hill_climb"
+    metric: "laplacian"     # laplacian | tenengrad | normalized | fft | brenner
+    z_start: -500.0         # μm relative to current Z (coarse sweep start)
+    z_end:    500.0         # μm relative to current Z (coarse sweep end)
+    coarse_step:  50.0      # μm — first pass step size
+    fine_step:     5.0      # μm — second pass step size
+    fine_range:  100.0      # μm — window around coarse peak for fine pass
+    n_avg:         2        # frames to average per Z position
+    settle_ms:    50        # ms to wait after each Z move
+    move_to_best: true      # move to best Z when done
+    # --- Simulated driver settings ---
+    true_best_z:  1250.0    # μm — simulated best-focus Z position
+    focus_width:   200.0    # μm — simulated depth of field (Gaussian σ)
+    noise_level:    0.02    # fractional noise on simulated score
+
+  stage:
+    enabled: true
+    driver: "simulated"     # simulated | thorlabs | serial_stage
+    speed_xy: 1000.0        # μm/s lateral speed
+    speed_z:  100.0         # μm/s focus speed
+    noise:    0.05          # simulated position noise (μm)
+    # --- Thorlabs settings ---
+    # serial_x: "27000001"
+    # serial_y: "27000002"
+    # serial_z: "27000003"
+    # --- Serial stage settings ---
+    # port:    "COM5"
+    # baudrate: 9600
+    # dialect: "prior"      # prior | ludl | asi | marzhauser
+
+  bias:
+    enabled: true
+    driver: "simulated"     # simulated | keithley | visa_generic
+    mode: "voltage"          # voltage | current
+    level: 0.0               # initial output level (V or A)
+    compliance: 0.1          # current limit (A) when voltage mode, or V limit when current mode
+    noise: 0.001             # simulated readback noise
+    # --- Keithley settings ---
+    # address: "GPIB::24"   # VISA resource string
+    # model: "2400"         # 2400 | 2450 | 2601 | 2611
+    # --- Generic VISA settings ---
+    # address: "TCPIP::192.168.1.10::INSTR"
+    # channel: 1
+
+acquisition:
+  default_frames: 100
+  frame_timeout_ms: 5000
+
+logging:
+  level: "INFO"           # DEBUG, INFO, WARNING, ERROR
+  log_to_file: true
+  log_file: "logs/microsanj.log"

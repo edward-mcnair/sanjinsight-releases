@@ -1,0 +1,45 @@
+# SanjINSIGHT — Python Dependencies
+# Install with:   pip install -r requirements.txt
+#
+# After installing, verify hardware-specific packages separately (see README_INSTALL.md).
+
+# ── GUI framework ─────────────────────────────────────────────────────────────
+PyQt5>=5.15.0
+PyQt5-Qt5>=5.15.0
+PyQt5-sip>=12.11.0
+
+# ── Scientific / imaging ──────────────────────────────────────────────────────
+numpy>=1.24.0
+opencv-python>=4.7.0          # cv2 — frame processing, image save
+matplotlib>=3.7.0             # 3D surface plots, analysis charts
+
+# ── Data export ───────────────────────────────────────────────────────────────
+h5py>=3.8.0                   # HDF5 export format
+scipy>=1.10.0                 # optional: additional analysis utilities
+
+# ── Configuration ─────────────────────────────────────────────────────────────
+PyYAML>=6.0
+
+# ── Hardware (install only what applies to your system) ───────────────────────
+# Basler camera (pypylon driver):
+#   pip install pypylon
+#   Also install Basler Pylon SDK from https://www.baslerweb.com/en/downloads/software-downloads/
+#
+# NI FPGA (ni9637 driver):
+#   pip install nifpga
+#   Also install NI-RIO drivers from https://www.ni.com/en/support/downloads/drivers/download.ni-rio.html
+#
+# Meerstetter TEC controller:
+#   pip install pyMeCom
+#
+# VISA instruments (Keithley bias source etc.):
+#   pip install pyvisa pyvisa-py
+#   Or install NI-VISA from https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html
+
+# ── Optional: SVG logo rendering in header ────────────────────────────────────
+# PyQt5 includes SVG support — no extra package needed on most systems.
+# If the logo does not appear, install:  pip install PyQt5-sip
+
+# ── Development / testing only (not needed for deployment) ────────────────────
+# pytest>=7.0.0
+# pytest-qt>=4.2.0

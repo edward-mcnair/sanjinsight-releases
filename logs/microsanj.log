@@ -1,0 +1,2 @@
+2026-02-28 04:00:37,189 [WARNING] config: config.yaml not found at /tmp/tmp0qsijkue/nonexistent.yaml — using built-in defaults and writing a starter file for you to customise.
+2026-02-28 04:00:37,191 [INFO] config: Generated default config.yaml at /tmp/tmp0qsijkue/nonexistent.yaml — edit to match your hardware.
