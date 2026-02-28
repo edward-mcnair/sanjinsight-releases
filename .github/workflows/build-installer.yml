@@ -203,12 +203,7 @@ jobs:
 
       # ── 10. Install Inno Setup ────────────────────────────────────────────
       - name: Install Inno Setup 6
-        run: |
-          $url = "https://files.jrsoftware.org/is/6/innosetup-6.3.3.exe"
-          $out = "$env:TEMP\innosetup.exe"
-          Invoke-WebRequest -Uri $url -OutFile $out
-          Start-Process -FilePath $out -Args "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait
-          Write-Host "[OK] Inno Setup installed"
+        run: choco install innosetup --yes --no-progress
         shell: pwsh
 
       # ── 11. Update .iss version number ────────────────────────────────────
