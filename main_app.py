@@ -105,8 +105,8 @@ QGroupBox {
     border-radius: 3px;
     margin-top: 10px;
     padding: 8px 6px 6px 6px;
-    font-size:14pt;
-    color: #666;
+    font-size:13pt;
+    color: #999;
     letter-spacing: 1px;
     text-transform: uppercase;
 }
@@ -197,15 +197,16 @@ QLabel#readout_warn { color: #ffaa44; }
 QLabel#readout_error { color: #ff6666; }
 QLabel#sublabel {
     font-size:12pt;
-    color: #555;
+    color: #888;
     letter-spacing: 1px;
     text-transform: uppercase;
 }
-QStatusBar { background: #111; color: #555; font-size:13pt; }
-QMenuBar { background: #181818; color: #888; border-bottom: 1px solid #2a2a2a; }
-QMenuBar::item:selected { background: #2a2a2a; color: #ccc; }
-QMenu { background: #222; color: #ccc; border: 1px solid #444; }
-QMenu::item:selected { background: #2a2a2a; }
+QStatusBar { background: #111; color: #888; font-size:12pt; }
+QMenuBar { background: #111; color: #888; border-bottom: 1px solid #222; font-size:13pt; }
+QMenuBar::item:selected { background: #222; color: #ddd; }
+QMenu { background: #1a1a1a; color: #ccc; border: 1px solid #333; font-size:13pt; }
+QMenu::item:selected { background: #252525; color: #fff; }
+QMenu::separator { height: 1px; background: #333; margin: 4px 0; }
 """
 
 # ------------------------------------------------------------------ #
@@ -566,7 +567,8 @@ class AcquireTab(QWidget):
         self._frames = QSpinBox()
         self._frames.setRange(1, 10000)
         self._frames.setValue(100)
-        self._frames.setFixedWidth(90)
+        self._frames.setSuffix(" frames")
+        self._frames.setFixedWidth(130)
         cl.addWidget(self._frames, 0, 1)
 
         cl.addWidget(self._sub("Phase delay (s)"), 1, 0)
@@ -574,7 +576,12 @@ class AcquireTab(QWidget):
         self._delay.setRange(0, 60)
         self._delay.setValue(0)
         self._delay.setSingleStep(0.5)
+        self._delay.setSuffix(" s")
         self._delay.setFixedWidth(90)
+        self._delay.setToolTip(
+            "Wait time between switching from cold to hot (or vice versa).\n"
+            "Allows the device to reach thermal equilibrium after the stimulus changes.\n"
+            "Set to 0 for rapid alternating measurements.")
         cl.addWidget(self._delay, 1, 1)
 
         cl.addWidget(self._sub("ΔR/R colormap"), 2, 0)
@@ -588,12 +595,28 @@ class AcquireTab(QWidget):
         btn_row = QHBoxLayout()
         self._cold_btn = QPushButton("① COLD")
         self._cold_btn.setObjectName("cold_btn")
+        self._cold_btn.setToolTip(
+            "Capture cold (baseline) frames only.\n"
+            "Use this when you want to set up the cold reference manually "
+            "before applying the stimulus.")
         self._hot_btn  = QPushButton("② HOT")
         self._hot_btn.setObjectName("hot_btn")
+        self._hot_btn.setToolTip(
+            "Capture hot (stimulus) frames and compute ΔR/R immediately.\n"
+            "Requires a cold reference to already be captured.")
         self._run_btn  = QPushButton("▶  RUN SEQUENCE")
         self._run_btn.setObjectName("primary")
+        self._run_btn.setToolTip(
+            "Run the full cold → hot acquisition sequence automatically.\n"
+            "Captures cold baseline, applies stimulus, captures hot frames, "
+            "then computes ΔR/R and ΔT.\n\n"
+            "Keyboard shortcut: Ctrl+R")
         self._abort_btn = QPushButton("■  ABORT")
         self._abort_btn.setObjectName("danger")
+        self._abort_btn.setToolTip(
+            "Abort the current acquisition immediately.\n"
+            "Any frames already captured will be discarded.\n\n"
+            "Keyboard shortcut: Escape")
         self._abort_btn.setEnabled(False)
         for b in [self._cold_btn, self._hot_btn,
                   self._run_btn, self._abort_btn]:
@@ -611,7 +634,8 @@ class AcquireTab(QWidget):
         logl = QVBoxLayout(log_box)
         self._log = QTextEdit()
         self._log.setReadOnly(True)
-        self._log.setMaximumHeight(80)
+        self._log.setMinimumHeight(80)
+        self._log.setMaximumHeight(140)
         logl.addWidget(self._log)
         left.addWidget(log_box)
 
@@ -2217,7 +2241,8 @@ class AutofocusTab(QWidget):
         ll = QVBoxLayout(log_box)
         self._log = QTextEdit()
         self._log.setReadOnly(True)
-        self._log.setMaximumHeight(90)
+        self._log.setMinimumHeight(80)
+        self._log.setMaximumHeight(140)
         ll.addWidget(self._log)
         root.addWidget(log_box)
 
@@ -3185,14 +3210,77 @@ class MainWindow(QMainWindow):
     # ── Menu bar ──────────────────────────────────────────────────
 
     def _build_menu_bar(self):
-        """Build the Help menu (the only top-level menu needed for now)."""
+        """Build menus and keyboard shortcuts for the main window."""
+        from PyQt5.QtWidgets import QShortcut
+        from PyQt5.QtGui import QKeySequence
+
         mb = self.menuBar()
         mb.setStyleSheet(
-            "QMenuBar { background:#0e1120; color:#8892a4; font-size:12pt; }"
-            "QMenuBar::item:selected { background:#1e2337; color:#fff; }"
-            "QMenu { background:#13172a; color:#c0c8e0; border:1px solid #1e2337; }"
-            "QMenu::item:selected { background:#1e2337; }")
+            "QMenuBar { background:#111; color:#888; font-size:12pt; }"
+            "QMenuBar::item:selected { background:#222; color:#fff; }"
+            "QMenu { background:#1a1a1a; color:#ccc; border:1px solid #333; }"
+            "QMenu::item:selected { background:#222; }")
 
+        # ── Acquisition menu ─────────────────────────────────────
+        acq_menu = mb.addMenu("Acquisition")
+
+        act_run = acq_menu.addAction("▶  Run Sequence")
+        act_run.setShortcut(QKeySequence("Ctrl+R"))
+        act_run.setToolTip(
+            "Capture cold and hot frames then compute ΔR/R (Ctrl+R)")
+        act_run.triggered.connect(self._acquire_tab._run)
+
+        act_abort = acq_menu.addAction("■  Abort")
+        act_abort.setShortcut(QKeySequence("Escape"))
+        act_abort.triggered.connect(self._acquire_tab._abort)
+
+        acq_menu.addSeparator()
+
+        act_live = acq_menu.addAction("Live Mode")
+        act_live.setShortcut(QKeySequence("Ctrl+L"))
+        act_live.triggered.connect(
+            lambda: self._nav.navigate_to(self._live_tab))
+
+        act_scan = acq_menu.addAction("Scan Mode")
+        act_scan.setShortcut(QKeySequence("Ctrl+Shift+S"))
+        act_scan.triggered.connect(
+            lambda: self._nav.navigate_to(self._scan_tab))
+
+        # ── View menu ────────────────────────────────────────────
+        view_menu = mb.addMenu("View")
+
+        act_acquire_view = view_menu.addAction("Acquire")
+        act_acquire_view.setShortcut(QKeySequence("Ctrl+1"))
+        act_acquire_view.triggered.connect(
+            lambda: self._nav.navigate_to(self._acquire_tab))
+
+        act_camera_view = view_menu.addAction("Camera")
+        act_camera_view.setShortcut(QKeySequence("Ctrl+2"))
+        act_camera_view.triggered.connect(
+            lambda: self._nav.navigate_to(self._camera_tab))
+
+        act_temp_view = view_menu.addAction("Temperature")
+        act_temp_view.setShortcut(QKeySequence("Ctrl+3"))
+        act_temp_view.triggered.connect(
+            lambda: self._nav.navigate_to(self._temp_tab))
+
+        act_stage_view = view_menu.addAction("Stage")
+        act_stage_view.setShortcut(QKeySequence("Ctrl+4"))
+        act_stage_view.triggered.connect(
+            lambda: self._nav.navigate_to(self._stage_tab))
+
+        act_analysis_view = view_menu.addAction("Analysis")
+        act_analysis_view.setShortcut(QKeySequence("Ctrl+5"))
+        act_analysis_view.triggered.connect(
+            lambda: self._nav.navigate_to(self._analysis_tab))
+
+        view_menu.addSeparator()
+
+        act_device_mgr = view_menu.addAction("Device Manager…")
+        act_device_mgr.setShortcut(QKeySequence("Ctrl+D"))
+        act_device_mgr.triggered.connect(self._open_device_manager)
+
+        # ── Help menu ────────────────────────────────────────────
         help_menu = mb.addMenu("Help")
 
         act_about = help_menu.addAction(f"About {APP_NAME}…")
@@ -3204,8 +3292,13 @@ class MainWindow(QMainWindow):
         help_menu.addSeparator()
 
         act_settings = help_menu.addAction("Settings")
+        act_settings.setShortcut(QKeySequence("Ctrl+,"))
         act_settings.triggered.connect(
             lambda: self._nav.select_by_label("Settings"))
+
+        # ── Emergency stop shortcut (keyboard) ───────────────────
+        estop_sc = QShortcut(QKeySequence("Ctrl+."), self)
+        estop_sc.activated.connect(self._trigger_estop)
 
     # ── About ──────────────────────────────────────────────────────
 

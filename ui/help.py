@@ -426,12 +426,12 @@ class HelpPopover(QWidget):
             h = QLabel(heading.upper())
             h.setStyleSheet(
                 f"font-size:11pt; letter-spacing:1.5px; "
-                f"color:{self._ACCENT if accent else '#444'};")
+                f"color:{self._ACCENT if accent else '#777'};")
             b = QLabel(body)
             b.setWordWrap(True)
             b.setStyleSheet(
-                f"font-size:8.5pt; "
-                f"color:{'#ccc' if accent else '#888'};")
+                f"font-size:12pt; "
+                f"color:{'#ddd' if accent else '#999'};")
             sl.addWidget(h)
             sl.addWidget(b)
             return sl
@@ -453,7 +453,7 @@ class HelpPopover(QWidget):
             warn_text = QLabel(content["warning"])
             warn_text.setWordWrap(True)
             warn_text.setStyleSheet(
-                "font-size:12pt; color:#aa8800; font-style:italic;")
+                "font-size:12pt; color:#cc9900; font-style:italic;")
             warn_row.addWidget(warn_icon, 0, Qt.AlignTop)
             warn_row.addWidget(warn_text, 1)
             cl.addLayout(warn_row)
@@ -461,7 +461,7 @@ class HelpPopover(QWidget):
         if content.get("docs"):
             docs_lbl = QLabel(f"📖  User Guide: {content['docs']}")
             docs_lbl.setStyleSheet(
-                "font-size:12pt; color:#333; font-style:italic;")
+                "font-size:12pt; color:#666; font-style:italic;")
             cl.addWidget(docs_lbl)
 
         outer.addWidget(card)
@@ -521,19 +521,19 @@ class HelpButton(QPushButton):
     def __init__(self, topic_id: str, parent=None):
         super().__init__("?", parent)
         self._topic = topic_id
-        self.setFixedSize(18, 18)
+        self.setFixedSize(22, 22)
         self.setStyleSheet("""
             QPushButton {
                 background:#1a1a1a;
-                color:#00d4aa44;
+                color:#00d4aa99;
                 border:1px solid #2a2a2a;
-                border-radius:9px;
+                border-radius:11px;
                 font-size:12pt;
                 font-weight:bold;
             }
             QPushButton:hover {
                 color:#00d4aa;
-                border-color:#00d4aa44;
+                border-color:#00d4aa66;
                 background:#0d2a1a;
             }
         """)

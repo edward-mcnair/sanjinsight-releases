@@ -20,15 +20,15 @@ from PyQt5.QtGui   import (
 )
 
 # ── Palette ────────────────────────────────────────────────────────
-_BG         = "#1e2337"
-_BG_HOVER   = "#252d45"
-_BG_ACTIVE  = "#2a3551"
-_ACCENT     = "#4e73df"
-_TEXT_DIM   = "#8892a4"
-_TEXT_NORM  = "#c8d0e0"
+_BG         = "#1a1a1a"
+_BG_HOVER   = "#222222"
+_BG_ACTIVE  = "#0d2520"
+_ACCENT     = "#00d4aa"
+_TEXT_DIM   = "#777777"
+_TEXT_NORM  = "#c0c0c0"
 _TEXT_WHITE = "#ffffff"
-_DIVIDER    = "#2a3249"
-_HDR_BG     = "#1a1f33"
+_DIVIDER    = "#2a2a2a"
+_HDR_BG     = "#111111"
 
 # ── Sizes ──────────────────────────────────────────────────────────
 _ITEM_H    = 30    # menu row height
@@ -361,7 +361,7 @@ class _Sidebar(QWidget):
         scroll.setStyleSheet(f"""
             QScrollArea {{ background:{_BG}; border:none; }}
             QScrollBar:vertical {{ background:{_BG}; width:5px; margin:0; }}
-            QScrollBar::handle:vertical {{ background:#3a4460; border-radius:2px; min-height:20px; }}
+            QScrollBar::handle:vertical {{ background:#3a3a3a; border-radius:2px; min-height:20px; }}
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height:0; }}
         """)
         self._menu_w = QWidget()
@@ -453,7 +453,7 @@ class SidebarNav(QWidget):
         self._sidebar = _Sidebar(app_name)
         self._bar     = _CollapseBar()
         self._stack   = QStackedWidget()
-        self._stack.setStyleSheet("background:#0d1117;")
+        self._stack.setStyleSheet("background:#1a1a1a;")
 
         self._sep = QFrame()
         self._sep.setFrameShape(QFrame.VLine)
