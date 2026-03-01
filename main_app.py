@@ -3117,7 +3117,7 @@ class MainWindow(QMainWindow):
         self._temp_tab.update_tec(index, status)
         key = f"tec{index}"
         ok  = status.error is None
-        tip = (f"TEC {index+1}: {status.temperature:.1f}°C → {status.setpoint:.1f}°C"
+        tip = (f"TEC {index+1}: {status.actual_temp:.1f}°C → {status.target_temp:.1f}°C"
                if ok else f"TEC {index+1} error: {status.error}")
         self._header.set_connected(key, ok, tip)
 
@@ -3131,7 +3131,7 @@ class MainWindow(QMainWindow):
     def _on_bias(self, status):
         self._bias_tab.update_status(status)
         ok  = status.error is None and status.output_on
-        tip = (f"Bias: {status.voltage_v:.3f}V / {status.current_a*1000:.2f}mA"
+        tip = (f"Bias: {status.actual_voltage:.3f}V / {status.actual_current*1000:.2f}mA"
                if ok else
                f"Bias error: {status.error}" if status.error else "Bias: output off")
         self._header.set_connected("bias", ok, tip)
