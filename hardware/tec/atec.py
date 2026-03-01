@@ -12,9 +12,12 @@ Config keys (under hardware.tec_atec):
     timeout:  1.0
 """
 
+import logging
 import struct
 import serial
 from .base import TecDriver, TecStatus
+
+log = logging.getLogger(__name__)
 
 
 class AtecDriver(TecDriver):
@@ -50,7 +53,7 @@ class AtecDriver(TecDriver):
                 timeout  = self._timeout,
             )
             self._connected = True
-            print(f"ATEC-302 connected on {self._port}")
+            log.info("ATEC-302 connected on %s", self._port)
         except ImportError:
             raise RuntimeError(
                 "pyserial not installed. Run: pip install pyserial")

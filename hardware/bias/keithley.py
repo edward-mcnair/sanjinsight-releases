@@ -26,7 +26,7 @@ import logging
 log = logging.getLogger(__name__)
 
 
-class KeyithleyDriver(BiasDriver):
+class KeithleyDriver(BiasDriver):
 
     def __init__(self, cfg: dict):
         super().__init__(cfg)
@@ -134,10 +134,12 @@ class KeyithleyDriver(BiasDriver):
                 current = float(parts[0]) if parts else 0.0
                 voltage = float(parts[1]) if len(parts) > 1 else 0.0
             else:
-                raw = self._query(":MEAS:CURR:VOLT?")
-                parts = raw.split(',')
-                voltage = float(parts[0]) if parts else 0.0
-                current = float(parts[1]) if len(parts) > 1 else 0.0
+                # Use separate :MEAS:VOLT? and :MEAS:CURR? queries —
+                # the combined ":MEAS:CURR:VOLT?" command is not a valid SCPI command.
+                raw_v = self._query(":MEAS:VOLT?")
+                raw_i = self._query(":MEAS:CURR?")
+                voltage = float(raw_v.split(',')[0]) if raw_v else 0.0
+                current = float(raw_i.split(',')[0]) if raw_i else 0.0
 
             out_raw = self._query(
                 "print(smua.source.output)" if self._tsp else ":OUTP?")

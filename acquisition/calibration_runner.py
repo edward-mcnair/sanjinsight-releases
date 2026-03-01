@@ -184,13 +184,22 @@ class CalibrationRunner:
         """Capture N frames and return their float32 average."""
         if self._cam is None:
             return None
-        acc   = None
-        count = 0
+        acc       = None
+        count     = 0
+        max_tries = n * 5   # at most 5× retries total before giving up
+        tries     = 0
         while count < n:
+            if self._abort:
+                return None
+            if tries >= max_tries:
+                break
+            tries += 1
             frame = self._cam.grab(timeout_ms=2000)
             if frame is None:
                 continue
             data = frame.data.astype(np.float64)
             acc  = data if acc is None else acc + data
             count += 1
-        return (acc / n).astype(np.float32) if acc is not None else None
+        if acc is None or count == 0:
+            return None
+        return (acc / count).astype(np.float32)

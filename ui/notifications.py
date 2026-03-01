@@ -21,6 +21,8 @@ toast_manager.show_warning("Exposure clamped to 50 ms")
 toast_manager.show_info("Session saved to Desktop/measurements/")
 """
 
+from __future__ import annotations
+
 import re
 from PyQt5.QtWidgets import (
     QDialog, QWidget, QLabel, QVBoxLayout, QHBoxLayout, QScrollArea,

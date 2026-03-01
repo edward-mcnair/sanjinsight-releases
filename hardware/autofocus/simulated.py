@@ -42,6 +42,13 @@ class SimulatedAutofocus(AutofocusDriver):
         score += random.gauss(0, self._noise_level)
         return max(0.0, score)
 
+    def abort(self):
+        self._abort = True
+        # Forward abort to the active sweeper (if run() is in progress)
+        sweeper = getattr(self, "_sweeper", None)
+        if sweeper is not None:
+            sweeper._abort = True
+
     def run(self) -> AfResult:
         # Delegate to SweepAutofocus with our synthetic _grab_score
         self._abort = False
@@ -52,7 +59,9 @@ class SimulatedAutofocus(AutofocusDriver):
         sweeper._grab_score  = self._grab_score
         sweeper.on_progress  = self.on_progress
         sweeper.on_complete  = self.on_complete
+        self._sweeper = sweeper   # allow abort() to forward the signal
 
         result = sweeper.run()
+        self._sweeper = None
         self._state = result.state
         return result

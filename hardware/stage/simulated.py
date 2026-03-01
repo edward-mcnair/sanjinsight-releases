@@ -34,8 +34,8 @@ class SimulatedStage(StageDriver):
 
     def connect(self) -> None:
         self._connected = True
-        print(f"[SIM] Stage connected  "
-              f"(XY {self._speed_xy:.0f}μm/s, Z {self._speed_z:.0f}μm/s)")
+        log.info("[SIM] Stage connected  (XY %.0fμm/s, Z %.0fμm/s)",
+                 self._speed_xy, self._speed_z)
 
     def disconnect(self) -> None:
         self.stop()

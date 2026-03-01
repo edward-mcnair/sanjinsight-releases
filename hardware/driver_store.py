@@ -41,7 +41,7 @@ Index format (hosted at MICROSANJ_DRIVER_INDEX_URL)
 """
 
 from __future__ import annotations
-import os, json, time, hashlib, zipfile, importlib.util, threading
+import os, json, sys, time, hashlib, zipfile, importlib.util, threading, subprocess
 from dataclasses import dataclass, field
 from typing      import List, Optional, Callable
 from urllib      import request, error as url_error
@@ -179,10 +179,11 @@ class DriverStore:
 
         # Require checksum — reject unsigned packages
         if not entry.checksum_sha256:
-            raise ValueError(
-                f"Driver '{entry.uid}' has no SHA-256 checksum. "
-                "Unsigned driver packages are not installed for security. "
-                "Contact Microsanj support to obtain a signed driver.")
+            return InstallResult(
+                uid=entry.uid, success=False,
+                error=(f"Driver '{entry.uid}' has no SHA-256 checksum. "
+                       "Unsigned driver packages are not installed for security. "
+                       "Contact Microsanj support to obtain a signed driver."))
 
         # Verify checksum
         actual = hashlib.sha256(data).hexdigest()
@@ -282,9 +283,11 @@ class DriverStore:
                         progress_cb(
                             f"Installing dependencies: {', '.join(reqs)}…")
                     for req in reqs:
-                        os.system(
-                            f"pip install {req} --quiet "
-                            f"--break-system-packages 2>/dev/null")
+                        subprocess.run(
+                            [sys.executable, "-m", "pip", "install",
+                             req, "--quiet", "--break-system-packages"],
+                            capture_output=True,
+                        )
 
         os.unlink(zip_path)
         return os.path.join(DRIVERS_DIR, f"{entry.driver_module}.py")
