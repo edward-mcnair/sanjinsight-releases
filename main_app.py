@@ -420,6 +420,12 @@ class ImagePane(QWidget):
     def set_title(self, t):
         self._title.setText(t)
 
+    def clear(self):
+        """Reset the pane to a blank state (no image, no stats)."""
+        self._lbl.setPixmap(QPixmap())
+        self._lbl.setText("")
+        self._stats.setText("")
+
 
 class TempPlot(QWidget):
     HISTORY = 120
