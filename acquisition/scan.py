@@ -269,15 +269,12 @@ class ScanEngine:
         Falls back to direct frame averaging if no pipeline.
         """
         if self._pipe is not None:
-            # Re-use existing pipeline with a short frame count
-            old_n = getattr(self._pipe, "_n_frames", n_frames)
+            # Use the pipeline's synchronous run() — blocks until complete
             try:
-                self._pipe._n_frames = n_frames
-                result = self._pipe.run_sync()   # blocking
-                self._pipe._n_frames = old_n
+                result = self._pipe.run(n_frames=n_frames)
                 return result.delta_r_over_r if result else None
             except Exception:
-                self._pipe._n_frames = old_n
+                pass
 
         # Direct capture fallback (simulated / no pipeline)
         if self._cam is None:

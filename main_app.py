@@ -3753,6 +3753,16 @@ if __name__ == "__main__":
     app.setStyle("Fusion")
     app.setStyleSheet(STYLE)
 
+    # Register QTextCursor with Qt's meta-type system so it can be safely
+    # queued across threads (suppresses the "Cannot queue arguments of type
+    # 'QTextCursor'" warning that appears when QTextEdit is used near threads).
+    try:
+        from PyQt5.QtGui  import QTextCursor
+        from PyQt5.QtCore import QMetaType
+        QMetaType.type("QTextCursor")   # ensures the type is registered
+    except Exception:
+        pass
+
     # ── First-run wizard (Windows + real hardware only) ───────────────
     if not _FORCE_DEMO:
         _config_path = config._path if hasattr(config, "_path") else os.path.join(

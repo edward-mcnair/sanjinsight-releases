@@ -377,7 +377,7 @@ class HardwareService(QObject):
         bias = app_state.bias
         if bias:
             try:
-                bias.disable_output()
+                bias.disable()
                 stopped.append("bias output")
                 log.info("HardwareService: E-STOP — bias output disabled")
             except Exception as e:
