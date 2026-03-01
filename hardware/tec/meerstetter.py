@@ -13,6 +13,7 @@ Config keys (under hardware.tec_meerstetter):
 
 import logging
 from .base import TecDriver, TecStatus
+from hardware.port_lock import PortLock
 
 log = logging.getLogger(__name__)
 
@@ -24,20 +25,24 @@ class MeerstetterDriver(TecDriver):
         self._port    = cfg.get("port",    "COM3")
         self._address = cfg.get("address", 2)
         self._timeout = cfg.get("timeout", 1.0)
-        self._tec     = None
-        self._target  = 25.0
+        self._tec       = None
+        self._target    = 25.0
+        self._port_lock = PortLock(self._port)
 
     def connect(self) -> None:
         try:
+            self._port_lock.acquire()
             from mecom import MeComAPI, MeComQuerySet, MeComQuery
             self._tec = MeComAPI(self._port)
             self._tec.identify()
             self._connected = True
             log.info("Meerstetter TEC-1089 connected on %s", self._port)
         except ImportError:
+            self._port_lock.release()
             raise RuntimeError(
                 "pyMeCom not installed. Run: pip install pyMeCom")
         except Exception as e:
+            self._port_lock.release()
             raise RuntimeError(
                 f"Meerstetter connect failed on {self._port}: {e}\n"
                 f"Check port name and that nothing else is using it.")
@@ -49,6 +54,7 @@ class MeerstetterDriver(TecDriver):
             except Exception:
                 pass
         self._connected = False
+        self._port_lock.release()
 
     def enable(self) -> None:
         # Parameter 2010: Output Enable (1 = on)

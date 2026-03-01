@@ -117,6 +117,16 @@ class HardwareService(QObject):
         self._threads: list[threading.Thread] = []
         self._lock = threading.Lock()
 
+        # Pull poll intervals from config (class-level values are defaults).
+        try:
+            poll = (config_module.get("hardware") or {}).get("polling", {})
+            self._TEC_POLL_S   = float(poll.get("tec_interval_s",   self._TEC_POLL_S))
+            self._FPGA_POLL_S  = float(poll.get("fpga_interval_s",  self._FPGA_POLL_S))
+            self._BIAS_POLL_S  = float(poll.get("bias_interval_s",  self._BIAS_POLL_S))
+            self._STAGE_POLL_S = float(poll.get("stage_interval_s", self._STAGE_POLL_S))
+        except Exception:
+            pass  # keep class-level defaults on any config error
+
     # ================================================================ #
     #  Public API                                                       #
     # ================================================================ #
@@ -430,6 +440,43 @@ class HardwareService(QObject):
     #  Internal thread launchers                                        #
     # ================================================================ #
 
+    def _connect_with_retry(self, connect_fn, *, label: str,
+                             max_retries: int = 3,
+                             initial_delay_s: float = 2.0) -> None:
+        """
+        Call *connect_fn()* up to *max_retries* times with exponential backoff.
+
+        Returns silently on first success.
+        Raises the last exception if all attempts fail.
+        Sleep is interruptible via _stop_event so shutdown is instant.
+        """
+        delay    = initial_delay_s
+        last_exc: Exception | None = None
+
+        for attempt in range(1, max_retries + 1):
+            if self._stop_event.is_set():
+                raise RuntimeError("Service stopped during connect retry")
+            try:
+                t0 = time.time()
+                connect_fn()
+                log.info("[%s] Connected (attempt %d/%.2fs)",
+                         label, attempt, time.time() - t0)
+                return
+            except Exception as exc:
+                last_exc = exc
+                if attempt < max_retries:
+                    log.warning(
+                        "[%s] Attempt %d/%d failed: %s  — retrying in %.1fs …",
+                        label, attempt, max_retries, exc, delay)
+                    # Interruptible sleep: wakes immediately if service stops.
+                    self._stop_event.wait(timeout=delay)
+                    delay = min(delay * 1.5, 30.0)   # cap at 30 s
+                else:
+                    log.error("[%s] All %d attempts failed. Last error: %s",
+                              label, max_retries, exc)
+
+        raise last_exc  # type: ignore[misc]
+
     def _launch(self, target, args=(), name="hw.thread") -> threading.Thread:
         t = threading.Thread(target=target, args=args, name=name, daemon=True)
         with self._lock:
@@ -443,7 +490,7 @@ class HardwareService(QObject):
         cfg = config_module.get("hardware").get("camera", {})
         try:
             cam = create_camera(cfg)
-            cam.open()
+            self._connect_with_retry(cam.open, label="camera")
             cam.start()
 
             if _HAS_PIPELINE:
@@ -499,7 +546,7 @@ class HardwareService(QObject):
         tec_key = "tec0" if "meerstetter" in key else "tec1"
         try:
             tec = create_tec(cfg)
-            tec.connect()
+            self._connect_with_retry(tec.connect, label=key)
             idx = app_state.add_tec(tec)
             self.log_message.emit(f"{key}: connected ({cfg.get('driver','?')})")
             self.device_connected.emit(tec_key, True)
@@ -539,7 +586,7 @@ class HardwareService(QObject):
     def _run_fpga(self, cfg: dict):
         try:
             fpga = create_fpga(cfg)
-            fpga.open()
+            self._connect_with_retry(fpga.open, label="fpga")
             app_state.fpga = fpga
             # Wire existing pipeline to FPGA if camera already up
             if app_state.pipeline and _HAS_PIPELINE:
@@ -568,7 +615,7 @@ class HardwareService(QObject):
     def _run_bias(self, cfg: dict):
         try:
             bias = create_bias(cfg)
-            bias.connect()
+            self._connect_with_retry(bias.connect, label="bias")
             app_state.bias = bias
             if app_state.pipeline and _HAS_PIPELINE and app_state.fpga is None:
                 app_state.pipeline.update_hardware(fpga=None, bias=bias)
@@ -596,7 +643,7 @@ class HardwareService(QObject):
     def _run_stage(self, cfg: dict):
         try:
             stage = create_stage(cfg)
-            stage.connect()
+            self._connect_with_retry(stage.connect, label="stage")
             app_state.stage = stage
             self.log_message.emit(f"Stage: connected ({cfg.get('driver','?')})")
             self.device_connected.emit("stage", True)

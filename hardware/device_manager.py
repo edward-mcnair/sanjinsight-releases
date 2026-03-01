@@ -20,10 +20,18 @@ delegates the actual I/O to them.
 """
 
 from __future__ import annotations
+import concurrent.futures
+import logging
 import time, threading, importlib
 from dataclasses   import dataclass, field
 from enum          import Enum, auto
 from typing        import List, Optional, Dict, Callable
+
+log = logging.getLogger(__name__)
+
+# Hard limit on a single driver.connect() call.  If the call does not return
+# within this time it is treated as a timeout failure.
+_CONNECT_TIMEOUT_S: float = 12.0
 
 from .device_registry import (DeviceDescriptor, DEVICE_REGISTRY,
                                 DTYPE_CAMERA, DTYPE_TEC, DTYPE_FPGA,
@@ -60,6 +68,17 @@ STATE_LABELS = {
     DeviceState.CONNECTED:     "Connected",
     DeviceState.ERROR:         "Error",
     DeviceState.DISCONNECTING: "Disconnecting…",
+}
+
+# Formal state machine: maps each state to the set of valid next states.
+# Any transition not listed here is illegal and will be logged + rejected.
+_VALID_TRANSITIONS: dict[DeviceState, set[DeviceState]] = {
+    DeviceState.ABSENT:        {DeviceState.DISCOVERED},
+    DeviceState.DISCOVERED:    {DeviceState.CONNECTING, DeviceState.ABSENT},
+    DeviceState.CONNECTING:    {DeviceState.CONNECTED,  DeviceState.ERROR, DeviceState.ABSENT},
+    DeviceState.CONNECTED:     {DeviceState.DISCONNECTING, DeviceState.ERROR},
+    DeviceState.ERROR:         {DeviceState.CONNECTING, DeviceState.ABSENT},
+    DeviceState.DISCONNECTING: {DeviceState.DISCOVERED, DeviceState.ABSENT},
 }
 
 
@@ -223,15 +242,28 @@ class DeviceManager:
             if on_complete:
                 on_complete(False, f"Unknown device: {uid}")
             return
-        if entry.state == DeviceState.CONNECTED:
-            if on_complete:
-                on_complete(True, "Already connected")
-            return
 
-        entry.state     = DeviceState.CONNECTING
-        entry.error_msg = ""
+        with self._lock:
+            if entry.state == DeviceState.CONNECTED:
+                if on_complete:
+                    on_complete(True, "Already connected")
+                return
+            if entry.state == DeviceState.CONNECTING:
+                if on_complete:
+                    on_complete(False, "Already connecting")
+                return
+            allowed = _VALID_TRANSITIONS.get(entry.state, set())
+            if DeviceState.CONNECTING not in allowed:
+                msg = (f"Cannot connect from state {entry.state.name}. "
+                       f"Try disconnecting first.")
+                log.warning("[%s] %s", uid, msg)
+                if on_complete:
+                    on_complete(False, msg)
+                return
+            entry.state     = DeviceState.CONNECTING
+            entry.error_msg = ""
+
         self._emit(uid, DeviceState.CONNECTING)
-
         threading.Thread(
             target=self._connect_worker,
             args=(uid, on_complete),
@@ -241,35 +273,61 @@ class DeviceManager:
                         on_complete: Optional[Callable]):
         entry = self._entries[uid]
         desc  = entry.descriptor
+        t0    = time.time()
+        driver_obj = None
 
         try:
             driver_obj = self._instantiate_driver(entry)
-            driver_obj.connect()
+
+            # Enforce a hard timeout on connect() so the UI is never frozen.
+            log.info("[%s] Connecting %s on %s …",
+                     uid, desc.display_name, entry.address or "?")
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                future = pool.submit(driver_obj.connect)
+                try:
+                    future.result(timeout=_CONNECT_TIMEOUT_S)
+                except concurrent.futures.TimeoutError:
+                    raise TimeoutError(
+                        f"Connect timed out after {_CONNECT_TIMEOUT_S:.0f}s. "
+                        f"Check that the device is powered and not held by "
+                        f"another process (terminal, firmware updater, etc.)."
+                    )
+
+            log.info("[%s] Connected in %.2fs", uid, time.time() - t0)
 
             with self._lock:
                 entry.driver_obj     = driver_obj
                 entry.state          = DeviceState.CONNECTED
                 entry.last_connected = time.time()
                 entry.error_msg      = ""
-                # Try to read firmware/serial from driver
                 try:
                     st = driver_obj.get_status()
-                    entry.firmware_ver = getattr(st, "firmware_version", "") or ""
+                    entry.firmware_ver  = getattr(st, "firmware_version", "") or ""
                     entry.serial_number = getattr(st, "serial_number",
-                                                   entry.serial_number) or ""
+                                                  entry.serial_number) or ""
                 except Exception:
                     pass
 
             self._log(f"✓  Connected: {desc.display_name}  ({entry.address})")
             self._emit(uid, DeviceState.CONNECTED)
-
-            # Inject into main_app globals
             self._inject_into_app(uid, driver_obj)
 
             if on_complete:
                 on_complete(True, "Connected")
 
         except Exception as e:
+            log.error("[%s] Connect failed after %.2fs: %s",
+                      uid, time.time() - t0, e, exc_info=True)
+
+            # Release any resources the driver may have partially acquired
+            # (serial port locks, USB handles, NI sessions, etc.).
+            if driver_obj is not None:
+                try:
+                    driver_obj.disconnect()
+                except Exception as cleanup_exc:
+                    log.debug("[%s] Cleanup after failed connect: %s",
+                              uid, cleanup_exc)
+
             with self._lock:
                 entry.state     = DeviceState.ERROR
                 entry.error_msg = str(e)

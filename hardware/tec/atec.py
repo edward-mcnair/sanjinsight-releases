@@ -16,6 +16,7 @@ import logging
 import struct
 import serial
 from .base import TecDriver, TecStatus
+from hardware.port_lock import PortLock, exclusive_serial_kwargs
 
 log = logging.getLogger(__name__)
 
@@ -41,9 +42,11 @@ class AtecDriver(TecDriver):
         self._timeout  = cfg.get("timeout",  1.0)
         self._serial   = None
         self._target   = 25.0
+        self._port_lock = PortLock(self._port)
 
     def connect(self) -> None:
         try:
+            self._port_lock.acquire()
             self._serial = serial.Serial(
                 port     = self._port,
                 baudrate = self._baudrate,
@@ -51,21 +54,28 @@ class AtecDriver(TecDriver):
                 parity   = serial.PARITY_NONE,
                 stopbits = serial.STOPBITS_ONE,
                 timeout  = self._timeout,
+                **exclusive_serial_kwargs(),
             )
             self._connected = True
             log.info("ATEC-302 connected on %s", self._port)
         except ImportError:
+            self._port_lock.release()
             raise RuntimeError(
                 "pyserial not installed. Run: pip install pyserial")
         except serial.SerialException as e:
+            self._port_lock.release()
             raise RuntimeError(
                 f"ATEC-302 connect failed on {self._port}: {e}\n"
                 f"Check port name and cable connection.")
+        except Exception:
+            self._port_lock.release()
+            raise
 
     def disconnect(self) -> None:
         if self._serial and self._serial.is_open:
             self._serial.close()
         self._connected = False
+        self._port_lock.release()
 
     def _crc16(self, data: bytes) -> int:
         crc = 0xFFFF

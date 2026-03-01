@@ -69,16 +69,52 @@ def create_camera(cfg: dict) -> CameraDriver:
         driver_name = 'simulated'
 
     module_path, class_name = _DRIVERS[driver_name]
-
-    # Lazy import so missing dependencies only fail for the driver being used
-    import importlib
-    module = importlib.import_module(module_path)
-    cls    = getattr(module, class_name)
-
-    driver = cls(cfg)
-    return driver
+    cls = _load_driver(driver_name, module_path, class_name)
+    return cls(cfg)
 
 
 def list_drivers() -> list:
     """Return the names of all registered drivers."""
     return list(_DRIVERS.keys())
+
+
+# ---------------------------------------------------------------------------
+# Install hints shown when a driver's dependencies are missing.
+# ---------------------------------------------------------------------------
+_INSTALL_HINTS: dict[str, str] = {
+    "pypylon": (
+        "pip install pypylon\n"
+        "Also install the Basler Pylon SDK: "
+        "https://www.baslerweb.com/en/downloads/software-downloads/"
+    ),
+    "ni_imaqdx": (
+        "Install NI Vision Acquisition Software (Windows only).\n"
+        "Download from: https://www.ni.com/en/support/downloads/drivers/"
+        "download.ni-vision-acquisition-software.html"
+    ),
+    "directshow": (
+        "DirectShow is built into Windows — no extra install required.\n"
+        "Make sure you are running on Windows and your camera has a WDM driver."
+    ),
+}
+
+
+def _load_driver(driver_name: str, module_path: str, class_name: str):
+    """Import *module_path* and return *class_name*, with actionable errors."""
+    import importlib
+    try:
+        module = importlib.import_module(module_path)
+    except ImportError as exc:
+        hint = _INSTALL_HINTS.get(driver_name, "Check the hardware documentation.")
+        raise ImportError(
+            f"Camera driver '{driver_name}' dependencies are not installed.\n"
+            f"Error: {exc}\n"
+            f"Fix:   {hint}"
+        ) from exc
+    try:
+        return getattr(module, class_name)
+    except AttributeError as exc:
+        raise RuntimeError(
+            f"Driver module '{module_path}' does not export '{class_name}'. "
+            f"The driver file may be corrupted or the wrong version."
+        ) from exc

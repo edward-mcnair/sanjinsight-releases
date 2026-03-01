@@ -20,10 +20,14 @@ Dialect summary:
     marzhauser  :move x y z CR  /  :pos CR  /  :home CR
 """
 
+import logging
 import serial
 import time
 from typing import Optional
 from .base import StageDriver, StageStatus, StagePosition
+from hardware.port_lock import PortLock, exclusive_serial_kwargs
+
+log = logging.getLogger(__name__)
 
 
 class SerialStageDriver(StageDriver):
@@ -34,29 +38,39 @@ class SerialStageDriver(StageDriver):
         self._baud    = cfg.get("baudrate", 9600)
         self._dialect = cfg.get("dialect", "prior").lower()
         self._timeout = cfg.get("timeout", 1.0)
-        self._serial  = None
-        self._homed   = False
+        self._serial    = None
+        self._homed     = False
+        self._port_lock = PortLock(self._port)
 
     def connect(self) -> None:
         try:
+            self._port_lock.acquire()
             self._serial = serial.Serial(
                 port     = self._port,
                 baudrate = self._baud,
-                timeout  = self._timeout)
+                timeout  = self._timeout,
+                **exclusive_serial_kwargs(),
+            )
             self._connected = True
-            print(f"Stage ({self._dialect}) connected on {self._port}")
+            log.info("Stage (%s) connected on %s", self._dialect, self._port)
         except ImportError:
+            self._port_lock.release()
             raise RuntimeError(
                 "pyserial not installed. Run: pip install pyserial")
         except serial.SerialException as e:
+            self._port_lock.release()
             raise RuntimeError(
                 f"Stage connect failed on {self._port}: {e}")
+        except Exception:
+            self._port_lock.release()
+            raise
 
     def disconnect(self) -> None:
         self.stop()
         if self._serial and self._serial.is_open:
             self._serial.close()
         self._connected = False
+        self._port_lock.release()
 
     def _send(self, cmd: str) -> str:
         self._serial.write((cmd + "\r").encode())
