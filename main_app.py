@@ -789,7 +789,12 @@ class AcquireTab(QWidget):
         self._set_busy(True)
         self.log("Capturing cold frames...")
         def _run():
-            r = pipeline.capture_reference(self._frames.value())
+            pl = app_state.pipeline
+            if pl is None:
+                self.log("No acquisition pipeline — is hardware connected?")
+                self._set_busy(False)
+                return
+            r = pl.capture_reference(self._frames.value())
             if r is not None:
                 if self._result is None:
                     from acquisition.pipeline import AcquisitionResult
@@ -804,7 +809,12 @@ class AcquireTab(QWidget):
         self._set_busy(True)
         self.log("Capturing hot frames...")
         def _run():
-            r = pipeline.capture_reference(self._frames.value())
+            pl = app_state.pipeline
+            if pl is None:
+                self.log("No acquisition pipeline — is hardware connected?")
+                self._set_busy(False)
+                return
+            r = pl.capture_reference(self._frames.value())
             if r is not None:
                 if self._result is None:
                     from acquisition.pipeline import AcquisitionResult
@@ -820,15 +830,20 @@ class AcquireTab(QWidget):
         threading.Thread(target=_run, daemon=True).start()
 
     def _run(self):
+        pl = app_state.pipeline
+        if pl is None:
+            self.log("No acquisition pipeline — is hardware connected?")
+            return
         self._set_busy(True)
         self._progress.setValue(0)
         self.log("Starting acquisition sequence...")
-        pipeline.start(n_frames=self._frames.value(),
-                       inter_phase_delay=self._delay.value())
+        pl.start(n_frames=self._frames.value(),
+                 inter_phase_delay=self._delay.value())
 
     def _abort(self):
-        if pipeline:
-            pipeline.abort()
+        pl = app_state.pipeline
+        if pl:
+            pl.abort()
 
     def _export(self):
         if not self._result or not self._result.is_complete:
@@ -1305,9 +1320,10 @@ class TemperatureTab(QWidget):
 
     def _set_target(self, box, val):
         idx = self._panels.index(box)
-        if idx < len(tecs):
+        _tecs = app_state.tecs
+        if _tecs and idx < len(_tecs):
             threading.Thread(
-                target=tecs[idx].set_target, args=(val,),
+                target=_tecs[idx].set_target, args=(val,),
                 daemon=True).start()
 
     def _enable(self, box):
@@ -1316,13 +1332,15 @@ class TemperatureTab(QWidget):
         if guard and guard.is_alarmed:
             # Don't allow re-enable while alarm is active
             return
-        if idx < len(tecs):
-            threading.Thread(target=tecs[idx].enable, daemon=True).start()
+        _tecs = app_state.tecs
+        if _tecs and idx < len(_tecs):
+            threading.Thread(target=_tecs[idx].enable, daemon=True).start()
 
     def _disable(self, box):
         idx = self._panels.index(box)
-        if idx < len(tecs):
-            threading.Thread(target=tecs[idx].disable, daemon=True).start()
+        _tecs = app_state.tecs
+        if _tecs and idx < len(_tecs):
+            threading.Thread(target=_tecs[idx].disable, daemon=True).start()
 
 
 # ------------------------------------------------------------------ #
@@ -2119,8 +2137,9 @@ class RoiTab(QWidget):
 
     def _apply_to_acq(self):
         roi = self._selector.roi
-        if pipeline:
-            pipeline.roi = roi if not roi.is_empty else None
+        pl = app_state.pipeline
+        if pl:
+            pl.roi = roi if not roi.is_empty else None
         msg = str(roi) if not roi.is_empty else "Full frame (no ROI)"
         self._acq_status.setText(f"Active: {msg}")
         self._acq_status.setStyleSheet(
@@ -2129,8 +2148,9 @@ class RoiTab(QWidget):
 
     def _clear_acq(self):
         self._selector._canvas.clear_roi()
-        if pipeline:
-            pipeline.roi = None
+        pl = app_state.pipeline
+        if pl:
+            pl.roi = None
         self._acq_status.setText("No ROI active (full frame)")
         self._acq_status.setStyleSheet(
             "font-family:Menlo,monospace; font-size:14pt; color:#555;")
