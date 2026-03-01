@@ -13,6 +13,8 @@ The pipeline is camera-agnostic — it works with any CameraDriver.
 Progress and completion are reported via callbacks so any UI can subscribe.
 """
 
+from __future__ import annotations
+
 import time
 import threading
 import numpy as np
