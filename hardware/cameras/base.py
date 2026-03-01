@@ -103,9 +103,17 @@ class CameraDriver(ABC):
     def set_exposure(self, microseconds: float) -> None:
         """Set exposure time in microseconds."""
 
+    def get_exposure(self) -> float:
+        """Return current exposure time in microseconds. Override for live readback."""
+        return self._cfg.get("exposure_us", 0.0)
+
     @abstractmethod
     def set_gain(self, db: float) -> None:
         """Set analog gain in dB."""
+
+    def get_gain(self) -> float:
+        """Return current gain in dB. Override for live readback."""
+        return self._cfg.get("gain_db", 0.0)
 
     def set_trigger(self, mode: str) -> None:
         """

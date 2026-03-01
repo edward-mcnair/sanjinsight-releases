@@ -31,7 +31,7 @@ class SimulatedFpga(FpgaDriver):
 
     def open(self) -> None:
         self._open = True
-        print(f"[SIM] FPGA open  ({self._freq:.0f} Hz, duty {self._duty:.0%})")
+        log.info("[SIM] FPGA open  (%.0f Hz, duty %.0f%%)", self._freq, self._duty * 100)
 
     def close(self) -> None:
         self.stop()
@@ -41,7 +41,7 @@ class SimulatedFpga(FpgaDriver):
         self._running     = True
         self._start_time  = time.time()
         self._sync_locked = True
-        print("[SIM] FPGA started")
+        log.info("[SIM] FPGA started")
 
     def stop(self) -> None:
         self._running     = False

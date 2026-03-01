@@ -108,6 +108,11 @@ class Recipe:
 
     @classmethod
     def from_dict(cls, d: dict) -> "Recipe":
+        def _filter(dc_cls, raw: dict) -> dict:
+            """Strip unknown keys to avoid TypeError on version mismatch."""
+            known = {f for f in dc_cls.__dataclass_fields__}
+            return {k: v for k, v in raw.items() if k in known}
+
         r = cls()
         r.uid          = d.get("uid",         r.uid)
         r.label        = d.get("label",        "")
@@ -116,11 +121,11 @@ class Recipe:
         r.version      = d.get("version",       1)
         r.profile_name = d.get("profile_name", "")
         r.notes        = d.get("notes",         "")
-        r.camera       = RecipeCamera(**d.get("camera",      {}))
-        r.acquisition  = RecipeAcquisition(**d.get("acquisition", {}))
-        r.analysis     = RecipeAnalysis(**d.get("analysis",   {}))
-        r.bias         = RecipeBias(**d.get("bias",          {}))
-        r.tec          = RecipeTec(**d.get("tec",            {}))
+        r.camera       = RecipeCamera(**_filter(RecipeCamera,      d.get("camera",      {})))
+        r.acquisition  = RecipeAcquisition(**_filter(RecipeAcquisition, d.get("acquisition", {})))
+        r.analysis     = RecipeAnalysis(**_filter(RecipeAnalysis,  d.get("analysis",   {})))
+        r.bias         = RecipeBias(**_filter(RecipeBias,          d.get("bias",        {})))
+        r.tec          = RecipeTec(**_filter(RecipeTec,            d.get("tec",         {})))
         return r
 
     @classmethod

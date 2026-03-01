@@ -643,10 +643,10 @@ class CalibrationTab(QWidget):
             QMessageBox.critical(self, "Load Failed", str(e))
 
     def _apply(self):
-        """Store calibration in main_app for use by AcquireTab."""
+        """Store calibration in app_state for use by AcquireTab."""
         try:
-            import main_app
-            main_app.active_calibration = self._result
+            from hardware.app_state import app_state
+            app_state.active_calibration = self._result
             self._stats["saved"]._val.setText("Applied ✓")
             self._stats["saved"]._val.setStyleSheet(
                 "font-family:Menlo,monospace; font-size:18pt; color:#00d4aa;")

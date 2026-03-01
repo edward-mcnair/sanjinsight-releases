@@ -189,8 +189,7 @@ class ScriptingConsoleTab(QWidget):
 
         self._clear_btn = QPushButton("Clear Output")
         self._clear_btn.setFixedHeight(28)
-        self._clear_btn.clicked.connect(self._output.clear
-                                         if hasattr(self, "_output") else lambda: None)
+        # _output is built later; connection is deferred until then
         toolbar.addWidget(self._clear_btn)
 
         self._save_btn = QPushButton("Save Script…")
@@ -260,8 +259,7 @@ class ScriptingConsoleTab(QWidget):
         splitter.addWidget(output_frame)
         splitter.setSizes([500, 500])
 
-        # Fix the clear button now that _output exists
-        self._clear_btn.clicked.disconnect()
+        # Connect clear button now that _output exists
         self._clear_btn.clicked.connect(self._output.clear)
 
         # ─ Namespace info ─

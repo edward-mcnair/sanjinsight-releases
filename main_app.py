@@ -68,6 +68,7 @@ from ui.notifications            import (StartupProgressDialog,   # ← notifica
 from profiles.profiles        import MaterialProfile
 from profiles.profile_manager import ProfileManager
 from profiles.profile_tab     import ProfileTab
+from ui.settings_tab          import SettingsTab
 
 # ------------------------------------------------------------------ #
 #  App-wide style                                                     #
@@ -1393,7 +1394,6 @@ class FpgaTab(QWidget):
         btn_row.addStretch()
         cl.addLayout(btn_row, 5, 0, 1, 3)
 
-        apply_btn.clicked.connect(self._apply)
         start_btn.clicked.connect(self._start)
         stop_btn.clicked.connect(self._stop)
         stim_on.clicked.connect(lambda: self._set_stimulus(True))
@@ -2871,10 +2871,9 @@ class StatusHeader(QWidget):
         target = {"camera": self._cam_dot,
                   "tec0":   self._tec1_dot,
                   "tec1":   self._tec2_dot,
+                  "tec2":   self._tec2_dot,
                   "tec_meerstetter": self._tec1_dot,
                   "tec_atec":        self._tec2_dot,
-                  "tec1":   self._tec1_dot,
-                  "tec2":   self._tec2_dot,
                   "fpga":   self._fpga_dot,
                   "bias":   self._bias_dot,
                   "stage":  self._stage_dot}.get(which)
@@ -2984,6 +2983,7 @@ class MainWindow(QMainWindow):
         self._profile_tab  = ProfileTab(self._profile_mgr)
         self._data_tab     = DataTab(session_mgr)
         self._log_tab      = LogTab()
+        self._settings_tab = SettingsTab()
 
         # ── New enhancement tabs ──────────────────────────────────
         self._compare_tab  = ComparisonTab(session_manager=session_mgr)
@@ -2993,6 +2993,10 @@ class MainWindow(QMainWindow):
 
         # Wire recipe RUN signal → apply recipe to hardware
         self._recipe_tab.recipe_run.connect(self._apply_recipe)
+
+        # Wire Settings tab → manual update check
+        self._settings_tab.check_for_updates_requested.connect(
+            self._on_manual_update_check)
 
         # ── Register panels with the Bootstrap-style sidebar ─────
         from ui.sidebar_nav import NavItem as NI

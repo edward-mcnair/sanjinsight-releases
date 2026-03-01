@@ -351,6 +351,18 @@ class _DeviceProfilePanel(QWidget):
         if entry is None:
             self._show_placeholder()
             return
+
+        # Restore persisted connection params (saved by _save_params)
+        try:
+            import config as _cfg
+            saved = _cfg.get_pref(f"device_params.{uid}", {})
+            if saved.get("address"):    entry.address    = saved["address"]
+            if saved.get("baud_rate"):  entry.baud_rate  = saved["baud_rate"]
+            if saved.get("ip_address"): entry.ip_address = saved["ip_address"]
+            if saved.get("timeout_s"):  entry.timeout_s  = saved["timeout_s"]
+        except Exception:
+            pass
+
         self._clear()
         desc = entry.descriptor
 
@@ -516,6 +528,21 @@ class _DeviceProfilePanel(QWidget):
         if "baud"    in pw: entry.baud_rate  = int(pw["baud"].currentText())
         if "ip"      in pw: entry.ip_address = pw["ip"].text().strip()
         if "timeout" in pw: entry.timeout_s  = pw["timeout"].value()
+
+        # Persist connection parameters to user preferences so they survive
+        # dialog close / app restart.
+        try:
+            import config as _cfg
+            pref_key = f"device_params.{entry.uid}"
+            _cfg.set_pref(pref_key, {
+                "address":    entry.address,
+                "baud_rate":  entry.baud_rate,
+                "ip_address": entry.ip_address,
+                "timeout_s":  entry.timeout_s,
+            })
+        except Exception:
+            pass
+
         # Refresh display
         self.show_device(entry.uid)
 

@@ -353,25 +353,31 @@ class NiScanner:
 
     def _probe_ni_resources(self) -> List[str]:
         """
-        Try common NI resource name patterns.
-        nifpga requires knowing the resource name — we probe likely names.
+        List NI resource names using VISA or NI-DAQmx enumeration.
+        Returns only resources that physically exist.
         """
-        import nifpga
-        found = []
-        candidates = (
-            [f"RIO{i}" for i in range(4)] +
-            [f"cRIO-{i}" for i in range(9030, 9070)] +
-            [f"Dev{i}" for i in range(8)]
-        )
-        for name in candidates:
-            try:
-                # A lightweight probe — open/close immediately
-                with nifpga.Session.__new__(nifpga.Session):
-                    pass
-                found.append(name)
-            except Exception:
-                pass
-        return found
+        # Prefer PyVISA resource enumeration — zero false positives
+        try:
+            import pyvisa
+            rm    = pyvisa.ResourceManager()
+            found = []
+            for rname in rm.list_resources():
+                upper = rname.upper()
+                if any(k in upper for k in ("RIO", "CRIO", "FPGA", "DEV")):
+                    found.append(rname)
+            return found
+        except Exception:
+            pass
+
+        # Fallback: NI-DAQmx device list
+        try:
+            import nidaqmx
+            system = nidaqmx.system.System.local()
+            return [d.name for d in system.devices]
+        except Exception:
+            pass
+
+        return []
 
 
 # ------------------------------------------------------------------ #
