@@ -1,0 +1,45 @@
+# ── Runtime / generated ───────────────────────────────────────────────────────
+logs/
+*.log
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# ── Claude Code internal state ────────────────────────────────────────────────
+.claude/
+
+# ── Virtual environments ──────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+.env
+
+# ── Build / dist ──────────────────────────────────────────────────────────────
+build/
+dist/
+*.egg-info/
+*.egg
+
+# ── macOS ─────────────────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# ── IDEs ──────────────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ── Secrets / config overrides ────────────────────────────────────────────────
+config.local.yaml
+secrets.yaml
+*.key
+*.pem
+
+# ── Test / coverage ───────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
