@@ -2357,7 +2357,7 @@ class AutofocusTab(QWidget):
         self._abort_btn.setEnabled(busy)
 
     def update_progress(self, result):
-        self._plot.update(result.z_positions, result.scores)
+        self._plot.set_data(result.z_positions, result.scores)
         self.log(result.message)
 
         # Estimate progress as fraction of z range covered
@@ -2375,8 +2375,8 @@ class AutofocusTab(QWidget):
     def update_complete(self, result):
         self._set_busy(False)
         self._prog.setValue(100)
-        self._plot.update(result.z_positions, result.scores,
-                          best_z=result.best_z)
+        self._plot.set_data(result.z_positions, result.scores,
+                            best_z=result.best_z)
         self.log(result.message)
 
         if result.state == AfState.COMPLETE:
@@ -2413,9 +2413,9 @@ class FocusPlot(QWidget):
         self._z      = []
         self._scores = []
         self._best_z = None
-        self.update()
+        self.repaint()
 
-    def update(self, z, scores, best_z=None):
+    def set_data(self, z, scores, best_z=None):
         self._z      = list(z)
         self._scores = list(scores)
         self._best_z = best_z
