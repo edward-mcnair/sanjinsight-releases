@@ -11,6 +11,12 @@ hardware:
     address: 2            # Device address set on the unit (default: 2)
     timeout: 1.0
     initial_temp: 25.0    # simulated driver starting temperature
+    # ── Safety limits ──────────────────────────────────────────────
+    # TEC output is immediately disabled if temperature exceeds these limits.
+    # A warning is shown when temperature is within temp_warning_margin of a limit.
+    temp_min: -20.0       # °C  — hard lower limit
+    temp_max:  85.0       # °C  — hard upper limit
+    temp_warning_margin: 5.0  # °C  — warning zone inside each limit
 
   tec_atec:
     enabled: true
@@ -20,6 +26,10 @@ hardware:
     address: 1
     timeout: 1.0
     initial_temp: 25.0
+    # ── Safety limits ──────────────────────────────────────────────
+    temp_min: -20.0
+    temp_max:  85.0
+    temp_warning_margin: 5.0
 
   camera:
     enabled: true

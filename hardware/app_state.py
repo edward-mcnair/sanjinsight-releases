@@ -56,6 +56,7 @@ class ApplicationState:
         self._stage    = None    # StageDriver   | None
         self._af       = None    # AutofocusDriver | None
         self._tecs: List = []    # List[TecDriver]
+        self._tec_guards: List = []   # List[ThermalGuard | None]
 
         # ── Acquisition objects ─────────────────────────────────────
         self._pipeline = None    # AcquisitionPipeline | None
@@ -65,6 +66,9 @@ class ApplicationState:
         self._active_profile     = None   # MaterialProfile   | None
         self._active_analysis    = None   # AnalysisResult    | None
         self._active_modality    = "thermoreflectance"  # str
+
+        # ── Demo mode ───────────────────────────────────────────────
+        self.demo_mode: bool = False      # True when running on simulated hardware
 
     # ── Context manager (use for compound operations) ───────────────
 
@@ -135,7 +139,22 @@ class ApplicationState:
         """Thread-safely append a TEC driver and return its index."""
         with self._lock:
             self._tecs.append(tec)
+            self._tec_guards.append(None)   # guard registered separately
             return len(self._tecs) - 1
+
+    def set_tec_guard(self, index: int, guard) -> None:
+        """Register a ThermalGuard for the given TEC index."""
+        with self._lock:
+            while len(self._tec_guards) <= index:
+                self._tec_guards.append(None)
+            self._tec_guards[index] = guard
+
+    def get_tec_guard(self, index: int):
+        """Return the ThermalGuard for the given index, or None."""
+        with self._lock:
+            if 0 <= index < len(self._tec_guards):
+                return self._tec_guards[index]
+            return None
 
     # ── Pipeline ────────────────────────────────────────────────────
 

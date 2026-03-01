@@ -28,6 +28,119 @@ from .processing      import to_display, apply_colormap
 
 
 # ------------------------------------------------------------------ #
+#  Notes dialog                                                        #
+# ------------------------------------------------------------------ #
+
+class NotesDialog(QDialog):
+    """
+    Full-featured notes editor with quick-insert tag chips.
+    Replaces the bare QInputDialog for a much better UX.
+    """
+
+    QUICK_TAGS = [
+        "25°C", "-20°C", "50°C", "85°C",
+        "dark room", "ambient light",
+        "no bias", "Vbias=1.5 V", "Vbias=3.3 V",
+        "after reflow", "before reflow",
+        "calibrated", "uncalibrated",
+        "reference sample", "fresh sample",
+        "repeat measurement",
+    ]
+
+    def __init__(self, initial_text: str = "", parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Session Notes")
+        self.setMinimumWidth(560)
+        self.setMinimumHeight(340)
+        self.setStyleSheet(
+            "QDialog  { background:#1a1a1a; }"
+            "QLabel   { color:#aaa; font-size:14pt; }"
+            "QGroupBox { color:#666; font-size:13pt; border:1px solid #2a2a2a; "
+            "            border-radius:3px; margin-top:8px; padding-top:6px; }"
+            "QGroupBox::title { subcontrol-origin:margin; left:8px; }"
+            "QPushButton { background:#252525; color:#aaa; border:1px solid #333; "
+            "              border-radius:2px; padding:4px 10px; font-size:13pt; }"
+            "QPushButton:hover { background:#2e2e2e; color:#fff; }")
+
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(16, 14, 16, 14)
+        lay.setSpacing(10)
+
+        # Title
+        title = QLabel("Edit Notes")
+        title.setStyleSheet("font-size:18pt; font-weight:bold; color:#ccc;")
+        lay.addWidget(title)
+
+        hint = QLabel(
+            "Describe the sample, conditions, DUT ID, or anything needed "
+            "to reproduce this measurement.")
+        hint.setWordWrap(True)
+        hint.setStyleSheet("font-size:13pt; color:#555;")
+        lay.addWidget(hint)
+
+        # Main text editor
+        self._edit = QTextEdit()
+        self._edit.setPlainText(initial_text)
+        self._edit.setStyleSheet(
+            "background:#161616; color:#ccc; border:1px solid #2a2a2a; "
+            "font-size:14pt; font-family:Menlo,monospace;")
+        self._edit.setMinimumHeight(120)
+        lay.addWidget(self._edit)
+
+        # Quick-insert chips
+        chips_box = QGroupBox("Quick tags — click to insert")
+        chips_lay = QGridLayout(chips_box)
+        chips_lay.setSpacing(5)
+        cols = 4
+        for i, tag in enumerate(self.QUICK_TAGS):
+            btn = QPushButton(tag)
+            btn.setFixedHeight(26)
+            btn.setStyleSheet(
+                "QPushButton { background:#1e2a28; color:#00d4aa; "
+                "border:1px solid #00d4aa33; border-radius:12px; "
+                "font-size:12pt; padding:0 8px; }"
+                "QPushButton:hover { background:#254d42; border-color:#00d4aa99; }")
+            btn.clicked.connect(lambda _, t=tag: self._insert(t))
+            chips_lay.addWidget(btn, i // cols, i % cols)
+        lay.addWidget(chips_box)
+
+        # Character count
+        self._char_lbl = QLabel()
+        self._char_lbl.setStyleSheet("color:#444; font-size:12pt;")
+        self._edit.textChanged.connect(self._update_char_count)
+        self._update_char_count()
+        lay.addWidget(self._char_lbl)
+
+        # Buttons
+        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btns.button(QDialogButtonBox.Ok).setText("Save Notes")
+        btns.accepted.connect(self.accept)
+        btns.rejected.connect(self.reject)
+        lay.addWidget(btns)
+
+        # Focus the editor, cursor at end
+        self._edit.setFocus()
+        c = self._edit.textCursor()
+        c.movePosition(c.End)
+        self._edit.setTextCursor(c)
+
+    def notes(self) -> str:
+        return self._edit.toPlainText().strip()
+
+    def _insert(self, text: str):
+        cursor = self._edit.textCursor()
+        existing = self._edit.toPlainText()
+        if existing and not existing.endswith(", ") and not existing.endswith("\n"):
+            cursor.insertText(", ")
+        cursor.insertText(text)
+        self._edit.setFocus()
+
+    def _update_char_count(self):
+        n = len(self._edit.toPlainText())
+        self._char_lbl.setText(f"{n} characters")
+
+
+# ------------------------------------------------------------------ #
 #  Thumbnail card widget                                               #
 # ------------------------------------------------------------------ #
 
@@ -78,6 +191,15 @@ class SessionCard(QFrame):
         info.addWidget(sub)
         lay.addLayout(info, 1)
 
+        # Notes badge — visible only when the session has notes
+        self._notes_badge = QLabel("📝")
+        self._notes_badge.setFixedSize(20, 20)
+        self._notes_badge.setAlignment(Qt.AlignCenter)
+        self._notes_badge.setStyleSheet("color:#00d4aa66; font-size:13pt;")
+        self._notes_badge.setToolTip("This session has notes")
+        self._notes_badge.setVisible(bool(meta.notes))
+        lay.addWidget(self._notes_badge)
+
         # Delete button
         del_btn = QToolButton()
         del_btn.setText("✕")
@@ -99,6 +221,10 @@ class SessionCard(QFrame):
             self._thumb.setStyleSheet(
                 "background:#0d0d0d; border:1px solid #2a2a2a; "
                 "color:#333; font-size:16.5pt;")
+
+    def set_has_notes(self, has_notes: bool):
+        """Show or hide the notes badge."""
+        self._notes_badge.setVisible(has_notes)
 
     def set_selected(self, sel: bool):
         self._selected = sel
@@ -284,8 +410,7 @@ class DataTab(QWidget):
                 ("Size",      "frame_size"),
                 ("Exposure",  "exposure_us"),
                 ("Duration",  "duration_s"),
-                ("ROI",       "roi"),
-                ("Notes",     "notes")]
+                ("ROI",       "roi")]
         for r, (lbl, key) in enumerate(rows):
             ml.addWidget(self._sub(lbl), r, 0)
             val = QLabel("—")
@@ -294,6 +419,18 @@ class DataTab(QWidget):
             val.setWordWrap(True)
             ml.addWidget(val, r, 1)
             self._meta_fields[key] = val
+
+        # Notes — inline editable, auto-saves on focus-out
+        notes_row = len(rows)
+        ml.addWidget(self._sub("Notes"), notes_row, 0, Qt.AlignTop)
+        self._notes_edit = QTextEdit()
+        self._notes_edit.setPlaceholderText("Click to add notes…")
+        self._notes_edit.setFixedHeight(72)
+        self._notes_edit.setStyleSheet(
+            "background:#161616; color:#bbb; border:1px solid #2a2a2a; "
+            "font-size:13pt; font-family:Menlo,monospace;")
+        self._notes_edit.focusOutEvent = self._notes_focus_out
+        ml.addWidget(self._notes_edit, notes_row, 1)
         top.addWidget(meta_box, 1)
 
         # Controls
@@ -477,7 +614,10 @@ class DataTab(QWidget):
         self._meta_fields["exposure_us"].setText(f"{meta.exposure_us:.0f} μs")
         self._meta_fields["duration_s"].setText(f"{meta.duration_s:.1f} s")
         self._meta_fields["roi"].setText(roi)
-        self._meta_fields["notes"].setText(meta.notes or "—")
+        # Populate the inline notes editor (block signals to avoid premature save)
+        self._notes_edit.blockSignals(True)
+        self._notes_edit.setPlainText(meta.notes or "")
+        self._notes_edit.blockSignals(False)
 
         # Load session arrays (lazy)
         session = self._mgr.load(uid)
@@ -500,6 +640,18 @@ class DataTab(QWidget):
     #  Actions                                                          #
     # ---------------------------------------------------------------- #
 
+    def _notes_focus_out(self, event):
+        """Auto-save notes when the inline editor loses focus."""
+        if self._selected:
+            notes = self._notes_edit.toPlainText().strip()
+            self._mgr.update_notes(self._selected, notes)
+            # Update the card badge
+            card = self._cards.get(self._selected)
+            if card:
+                card.set_has_notes(bool(notes))
+        # Call original focusOutEvent
+        QTextEdit.focusOutEvent(self._notes_edit, event)
+
     def _rename(self):
         if not self._selected:
             return
@@ -520,11 +672,16 @@ class DataTab(QWidget):
         meta = self._mgr.get_meta(self._selected)
         if meta is None:
             return
-        text, ok = QInputDialog.getMultiLineText(
-            self, "Edit Notes", "Notes:", meta.notes or "")
-        if ok:
+        dlg = NotesDialog(meta.notes or "", parent=self)
+        if dlg.exec_() == QDialog.Accepted:
+            text = dlg.notes()
             self._mgr.update_notes(self._selected, text)
-            self._meta_fields["notes"].setText(text or "—")
+            self._notes_edit.blockSignals(True)
+            self._notes_edit.setPlainText(text)
+            self._notes_edit.blockSignals(False)
+            card = self._cards.get(self._selected)
+            if card:
+                card.set_has_notes(bool(text))
 
     def _generate_report(self):
         if not self._selected:

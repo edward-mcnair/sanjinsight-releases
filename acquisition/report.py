@@ -381,14 +381,30 @@ def generate_report(session: Session,
     # ---- Metadata table ----
     story.append(Paragraph("Acquisition Parameters", styles["h1"]))
 
-    snr_str = f"{meta.snr_db:.1f} dB" if meta.snr_db else "—"
-    roi_str = (f"x={meta.roi['x']}  y={meta.roi['y']}  "
-               f"w={meta.roi['w']}  h={meta.roi['h']}"
-               if meta.roi else "Full frame")
-    cal_str = (f"{calibration.t_min:.1f}–{calibration.t_max:.1f}°C  "
-               f"({calibration.n_points} pts)"
-               if (calibration and calibration.valid) else "Not applied")
+    snr_str  = f"{meta.snr_db:.1f} dB" if meta.snr_db else "—"
+    roi_str  = (f"x={meta.roi['x']}  y={meta.roi['y']}  "
+                f"w={meta.roi['w']}  h={meta.roi['h']}"
+                if meta.roi else "Full frame")
+    cal_str  = (f"{calibration.t_min:.1f}–{calibration.t_max:.1f}°C  "
+                f"({calibration.n_points} pts)"
+                if (calibration and calibration.valid) else "Not applied")
 
+    # Instrument / DUT condition strings
+    tec_str  = (f"{meta.tec_temperature:.1f}°C  "
+                f"(setpoint {meta.tec_setpoint:.1f}°C)"
+                if meta.tec_temperature else "—")
+    bias_str = (f"{meta.bias_voltage:.3f} V  /  {meta.bias_current*1e3:.2f} mA"
+                if (meta.bias_voltage or meta.bias_current) else "—")
+    fpga_str = (f"{meta.fpga_frequency_hz/1e3:.1f} kHz  "
+                f"({meta.fpga_duty_cycle*100:.0f}% duty)"
+                if meta.fpga_frequency_hz else "—")
+    wl_str   = f"{meta.wavelength_nm} nm" if meta.wavelength_nm else "—"
+    mode_str = meta.imaging_mode.replace("_", " ").title() if meta.imaging_mode else "—"
+    prof_str = meta.profile_name or "—"
+    ct_str   = f"{meta.ct_value:.4e} K⁻¹" if meta.ct_value else "— (uncalibrated)"
+
+    # ── Table: two sections ──────────────────────────────────────────
+    # Section 1: Camera / acquisition parameters
     meta_rows = [
         ["Date / Time",    meta.timestamp_str,
          "Frame size",     f"{meta.frame_w} × {meta.frame_h} px"],
@@ -402,30 +418,52 @@ def generate_report(session: Session,
          "Session ID",     meta.uid[:28]],
     ]
 
-    col_w = [28*mm, 52*mm, 28*mm, 52*mm]
-    tbl_style = TableStyle([
-        ("BACKGROUND",  (0, 0), (-1, 0), LIGHT),
-        ("BACKGROUND",  (0, 2), (-1, 2), LIGHT),
-        ("BACKGROUND",  (0, 4), (-1, 4), LIGHT),
-        ("TEXTCOLOR",   (0, 0), (0, -1), MID),
-        ("TEXTCOLOR",   (2, 0), (2, -1), MID),
-        ("FONTNAME",    (0, 0), (0, -1), "Helvetica-Bold"),
-        ("FONTNAME",    (2, 0), (2, -1), "Helvetica-Bold"),
-        ("FONTNAME",    (1, 0), (1, -1), "Courier"),
-        ("FONTNAME",    (3, 0), (3, -1), "Courier"),
-        ("FONTSIZE",    (0, 0), (-1, -1), 8.5),
-        ("PADDING",     (0, 0), (-1, -1), 4),
-        ("GRID",        (0, 0), (-1, -1), 0.25, colors.HexColor("#dddddd")),
-        ("ROWBACKGROUND", (0, 0), (-1, -1),
-         [WHITE, colors.HexColor("#f8f8fc")]),
-    ])
+    # Section 2: Instrument / DUT conditions
+    instrument_rows = [
+        ["Imaging mode",   mode_str,
+         "Wavelength",     wl_str],
+        ["TEC temp",       tec_str,
+         "Bias",           bias_str],
+        ["FPGA modulation",fpga_str,
+         "Material profile", prof_str],
+        ["C_T coefficient",ct_str,
+         "",               ""],
+    ]
 
-    meta_table = Table(
-        [[Paragraph(str(c), styles["body"]) for c in row]
-         for row in meta_rows],
-        colWidths=col_w)
-    meta_table.setStyle(tbl_style)
+    col_w = [28*mm, 52*mm, 28*mm, 52*mm]
+
+    def _make_table(rows, alternate_from=0):
+        tbl = Table(
+            [[Paragraph(str(c), styles["body"]) for c in row]
+             for row in rows],
+            colWidths=col_w)
+        light_rows = [(0, 0), (2, 0), (4, 0), (6, 0), (8, 0)]
+        style_cmds = [
+            ("TEXTCOLOR",   (0, 0), (0, -1), MID),
+            ("TEXTCOLOR",   (2, 0), (2, -1), MID),
+            ("FONTNAME",    (0, 0), (0, -1), "Helvetica-Bold"),
+            ("FONTNAME",    (2, 0), (2, -1), "Helvetica-Bold"),
+            ("FONTNAME",    (1, 0), (1, -1), "Courier"),
+            ("FONTNAME",    (3, 0), (3, -1), "Courier"),
+            ("FONTSIZE",    (0, 0), (-1, -1), 8.5),
+            ("PADDING",     (0, 0), (-1, -1), 4),
+            ("GRID",        (0, 0), (-1, -1), 0.25, colors.HexColor("#dddddd")),
+            ("ROWBACKGROUND", (0, 0), (-1, -1),
+             [WHITE, colors.HexColor("#f8f8fc")]),
+        ]
+        # Alternate row shading
+        for i in range(0, len(rows), 2):
+            style_cmds.append(("BACKGROUND", (0, i), (-1, i), LIGHT))
+        tbl.setStyle(TableStyle(style_cmds))
+        return tbl
+
+    meta_table = _make_table(meta_rows)
     story.append(meta_table)
+    story.append(Spacer(1, 3*mm))
+
+    story.append(Paragraph("Instrument & DUT Conditions", styles["h1"]))
+    inst_table = _make_table(instrument_rows)
+    story.append(inst_table)
     story.append(Spacer(1, 5*mm))
 
     # ---- ΔR/R main image ----

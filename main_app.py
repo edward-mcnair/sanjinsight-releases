@@ -63,6 +63,8 @@ from ui.scripting_console        import ScriptingConsoleTab # ← Python console
 from ui.sidebar_nav              import SidebarNav          # ← grouped sidebar nav
 from hardware.device_manager     import DeviceManager
 from ui.device_manager_dialog    import DeviceManagerDialog
+from ui.notifications            import (StartupProgressDialog,   # ← notifications
+                                          ToastManager, get_guidance)
 from profiles.profiles        import MaterialProfile
 from profiles.profile_manager import ProfileManager
 from profiles.profile_tab     import ProfileTab
@@ -427,10 +429,20 @@ class TempPlot(QWidget):
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self._actual = collections.deque([None]*self.HISTORY, maxlen=self.HISTORY)
         self._target = collections.deque([None]*self.HISTORY, maxlen=self.HISTORY)
+        self._temp_min:    float | None = None
+        self._temp_max:    float | None = None
+        self._warn_margin: float        = 5.0
 
     def push(self, actual, target):
         self._actual.append(actual)
         self._target.append(target)
+        self.update()
+
+    def set_limits(self, temp_min: float, temp_max: float,
+                   warn_margin: float = 5.0):
+        self._temp_min    = temp_min
+        self._temp_max    = temp_max
+        self._warn_margin = warn_margin
         self.update()
 
     def paintEvent(self, e):
@@ -440,10 +452,15 @@ class TempPlot(QWidget):
         p.fillRect(0, 0, W, H, QColor(13, 13, 13))
 
         vals = [v for v in list(self._actual)+list(self._target) if v is not None]
+
+        # Include limits in the Y-range calculation so lines are always visible
+        if self._temp_min is not None: vals.append(self._temp_min)
+        if self._temp_max is not None: vals.append(self._temp_max)
+
         if not vals:
             return
-        lo   = min(vals) - 1
-        hi   = max(vals) + 1
+        lo   = min(vals) - 2
+        hi   = max(vals) + 2
         span = max(hi - lo, 0.5)
 
         def tx(i): return int(pad + i/(self.HISTORY-1)*(W-2*pad))
@@ -463,7 +480,35 @@ class TempPlot(QWidget):
                 p.setPen(QPen(QColor(35,35,35), 1))
             t += step
 
-        # Lines
+        # ── Alarm limit lines ─────────────────────────────────────────
+        if self._temp_min is not None or self._temp_max is not None:
+            dash = [6, 4]
+            for limit, color, warn_offset in [
+                (self._temp_min, QColor(255,68,68),   +self._warn_margin),
+                (self._temp_max, QColor(255,68,68),   -self._warn_margin),
+            ]:
+                if limit is None:
+                    continue
+                # Hard limit — dashed red
+                pen = QPen(QColor(255, 68, 68), 1, Qt.DashLine)
+                p.setPen(pen)
+                y = ty(limit)
+                if 0 <= y <= H:
+                    p.drawLine(pad, y, W-pad, y)
+                    p.setFont(QFont("Menlo", 10))
+                    p.setPen(QPen(QColor(255, 100, 100), 1))
+                    label = f"{'min' if warn_offset > 0 else 'max'} {limit:.0f}°"
+                    p.drawText(pad+2, y-2, label)
+
+                # Warning zone — dashed amber
+                warn_limit = limit + warn_offset
+                pen_w = QPen(QColor(255, 153, 0), 1, Qt.DotLine)
+                p.setPen(pen_w)
+                yw = ty(warn_limit)
+                if 0 <= yw <= H:
+                    p.drawLine(pad, yw, W-pad, yw)
+
+        # ── Temperature traces ────────────────────────────────────────
         for series, col in [(self._actual, QColor(0,212,170)),
                              (self._target, QColor(255,170,68))]:
             p.setPen(QPen(col, 1))
@@ -569,6 +614,46 @@ class AcquireTab(QWidget):
         logl.addWidget(self._log)
         left.addWidget(log_box)
 
+        # Session notes — annotate before saving
+        notes_box = QGroupBox("Session Notes")
+        notes_box.setToolTip(
+            "Notes are saved with the session. Describe sample, conditions, "
+            "DUT ID, or anything relevant to reproduce this measurement.")
+        nl = QVBoxLayout(notes_box)
+        nl.setContentsMargins(8, 6, 8, 6)
+
+        self._notes_edit = QTextEdit()
+        self._notes_edit.setPlaceholderText(
+            "Sample ID, conditions, DUT info, temperature, bias settings…\n"
+            "e.g.  Au on Si, 25°C ambient, Vbias=1.5 V, dark room")
+        self._notes_edit.setMaximumHeight(70)
+        self._notes_edit.setStyleSheet(
+            "background:#161616; color:#bbb; border:1px solid #2a2a2a; "
+            "font-size:13pt; font-family:Menlo,monospace;")
+        nl.addWidget(self._notes_edit)
+
+        # Quick-insert chips for common tags
+        chips_row = QHBoxLayout()
+        chips_row.setSpacing(4)
+        chips_lbl = QLabel("Quick tags:")
+        chips_lbl.setObjectName("sublabel")
+        chips_row.addWidget(chips_lbl)
+        for chip_text in ["25°C", "dark room", "no bias", "after reflow",
+                           "calibrated", "reference sample"]:
+            btn = QPushButton(chip_text)
+            btn.setFixedHeight(22)
+            btn.setStyleSheet(
+                "QPushButton { background:#1e2a28; color:#00d4aa; "
+                "border:1px solid #00d4aa44; border-radius:10px; "
+                "font-size:11pt; padding:0 8px; }"
+                "QPushButton:hover { background:#254d42; }")
+            btn.clicked.connect(
+                lambda _, t=chip_text: self._insert_notes_chip(t))
+            chips_row.addWidget(btn)
+        chips_row.addStretch()
+        nl.addLayout(chips_row)
+        left.addWidget(notes_box)
+
         # RIGHT — results
         right = QVBoxLayout()
         right.setSpacing(8)
@@ -611,6 +696,19 @@ class AcquireTab(QWidget):
         l = QLabel(text)
         l.setObjectName("sublabel")
         return l
+
+    def get_notes(self) -> str:
+        """Return the current session notes (called by MainWindow before saving)."""
+        return self._notes_edit.toPlainText().strip()
+
+    def _insert_notes_chip(self, text: str):
+        """Insert a quick-tag chip at the cursor position."""
+        cursor = self._notes_edit.textCursor()
+        existing = self._notes_edit.toPlainText()
+        if existing and not existing.endswith(", ") and not existing.endswith("\n"):
+            cursor.insertText(", ")
+        cursor.insertText(text)
+        self._notes_edit.setFocus()
 
     def update_live(self, frame):
         self._live.show_array(frame.data, mode="auto")
@@ -901,19 +999,66 @@ class TemperatureTab(QWidget):
         self._panels = []
         labels = ["TEC 1 — Meerstetter TEC-1089", "TEC 2 — ATEC-302"]
         for i in range(n_tecs):
-            p = self._build_tec(labels[i] if i < len(labels) else f"TEC {i+1}")
+            p = self._build_tec(labels[i] if i < len(labels) else f"TEC {i+1}", i)
             root.addWidget(p)
             self._panels.append(p)
 
         root.addStretch()
 
-    def _build_tec(self, title):
+    def _build_tec(self, title, tec_index):
         box = QGroupBox(title)
         main = QVBoxLayout(box)
 
-        # Readouts
-        top = QHBoxLayout()
+        # ── Alarm banner (hidden by default) ─────────────────────────
+        alarm_banner = QWidget()
+        alarm_banner.setVisible(False)
+        alarm_banner.setStyleSheet(
+            "background:#330000; border:1px solid #ff4444; border-radius:3px;")
+        ab_lay = QHBoxLayout(alarm_banner)
+        ab_lay.setContentsMargins(10, 6, 10, 6)
+        ab_icon = QLabel("⊗")
+        ab_icon.setStyleSheet("color:#ff4444; font-size:16pt;")
+        ab_msg  = QLabel("Temperature alarm")
+        ab_msg.setStyleSheet("color:#ff6666; font-size:13pt;")
+        ab_msg.setWordWrap(True)
+        ab_ack  = QPushButton("Acknowledge")
+        ab_ack.setFixedHeight(26)
+        ab_ack.setStyleSheet("""
+            QPushButton {
+                background:#550000; color:#ff9999;
+                border:1px solid #ff444466; border-radius:3px;
+                font-size:12pt; padding: 0 10px;
+            }
+            QPushButton:hover { background:#660000; color:#ffbbbb; }
+        """)
+        ab_lay.addWidget(ab_icon)
+        ab_lay.addWidget(ab_msg, 1)
+        ab_lay.addWidget(ab_ack)
+        box._alarm_banner  = alarm_banner
+        box._alarm_msg_lbl = ab_msg
+        box._alarm_ack_btn = ab_ack
+        main.addWidget(alarm_banner)
 
+        # ── Warning banner (hidden by default) ───────────────────────
+        warn_banner = QWidget()
+        warn_banner.setVisible(False)
+        warn_banner.setStyleSheet(
+            "background:#332200; border:1px solid #ff9900; border-radius:3px;")
+        wb_lay = QHBoxLayout(warn_banner)
+        wb_lay.setContentsMargins(10, 4, 10, 4)
+        wb_icon = QLabel("⚠")
+        wb_icon.setStyleSheet("color:#ff9900; font-size:14pt;")
+        wb_msg  = QLabel("Approaching limit")
+        wb_msg.setStyleSheet("color:#ffaa44; font-size:12pt;")
+        wb_msg.setWordWrap(True)
+        wb_lay.addWidget(wb_icon)
+        wb_lay.addWidget(wb_msg, 1)
+        box._warn_banner  = warn_banner
+        box._warn_msg_lbl = wb_msg
+        main.addWidget(warn_banner)
+
+        # ── Readouts ─────────────────────────────────────────────────
+        top = QHBoxLayout()
         actual_w = self._readout_widget("ACTUAL", "--", "#00d4aa")
         target_w = self._readout_widget("SETPOINT", "--", "#ffaa44")
         power_w  = self._readout_widget("OUTPUT", "--", "#6699ff")
@@ -928,12 +1073,12 @@ class TemperatureTab(QWidget):
             top.addWidget(w)
         main.addLayout(top)
 
-        # Plot
+        # ── Plot ──────────────────────────────────────────────────────
         plot = TempPlot(h=130)
         box._plot = plot
         main.addWidget(plot)
 
-        # Controls
+        # ── Setpoint controls ─────────────────────────────────────────
         ctrl = QHBoxLayout()
         ctrl.addWidget(QLabel("Target (°C)"))
         spin = QDoubleSpinBox()
@@ -970,12 +1115,65 @@ class TemperatureTab(QWidget):
         ctrl.addWidget(dis_btn)
         main.addLayout(ctrl)
 
-        # Wire
-        box._tec_index = len(self._panels) if hasattr(self, '_panels') else 0
+        # ── Safety limits row ─────────────────────────────────────────
+        lim_row = QHBoxLayout()
+        lim_row.addWidget(QLabel("Safety limits:"))
+
+        min_spin = QDoubleSpinBox()
+        min_spin.setRange(-40, 148)
+        min_spin.setValue(-20.0)
+        min_spin.setSingleStep(1.0)
+        min_spin.setDecimals(1)
+        min_spin.setFixedWidth(70)
+        min_spin.setPrefix("min ")
+        min_spin.setSuffix(" °C")
+
+        max_spin = QDoubleSpinBox()
+        max_spin.setRange(-38, 150)
+        max_spin.setValue(85.0)
+        max_spin.setSingleStep(1.0)
+        max_spin.setDecimals(1)
+        max_spin.setFixedWidth(70)
+        max_spin.setPrefix("max ")
+        max_spin.setSuffix(" °C")
+
+        warn_spin = QDoubleSpinBox()
+        warn_spin.setRange(0.5, 20.0)
+        warn_spin.setValue(5.0)
+        warn_spin.setSingleStep(0.5)
+        warn_spin.setDecimals(1)
+        warn_spin.setFixedWidth(70)
+        warn_spin.setPrefix("warn ±")
+        warn_spin.setSuffix(" °C")
+
+        apply_btn = QPushButton("Apply")
+        apply_btn.setFixedWidth(55)
+
+        for w in [min_spin, max_spin, warn_spin]:
+            w.setStyleSheet("font-size:12pt;")
+
+        lim_row.addWidget(min_spin)
+        lim_row.addWidget(max_spin)
+        lim_row.addWidget(warn_spin)
+        lim_row.addWidget(apply_btn)
+        lim_row.addStretch()
+        main.addLayout(lim_row)
+
+        box._min_spin  = min_spin
+        box._max_spin  = max_spin
+        box._warn_spin = warn_spin
+        box._tec_index = tec_index
+
+        # Update plot limits immediately with defaults
+        plot.set_limits(-20.0, 85.0, 5.0)
+
+        # ── Wire ──────────────────────────────────────────────────────
         set_btn.clicked.connect(
             lambda _, s=spin, b=box: self._set_target(b, s.value()))
         en_btn.clicked.connect( lambda _, b=box: self._enable(b))
         dis_btn.clicked.connect(lambda _, b=box: self._disable(b))
+        apply_btn.clicked.connect(lambda _, b=box: self._apply_limits(b))
+        ab_ack.clicked.connect(lambda _, b=box: self._acknowledge_alarm(b))
 
         return box
 
@@ -1024,6 +1222,62 @@ class TemperatureTab(QWidget):
                 "font-family:Menlo,monospace; font-size:22pt; color:#ffaa44;")
         p._plot.push(status.actual_temp, status.target_temp)
 
+    def show_alarm(self, index: int, message: str):
+        """Show the alarm banner for the given TEC panel."""
+        if index >= len(self._panels):
+            return
+        p = self._panels[index]
+        p._alarm_msg_lbl.setText(message)
+        p._alarm_banner.setVisible(True)
+        p._warn_banner.setVisible(False)
+        p._actual_lbl.setStyleSheet(
+            "font-family:Menlo,monospace; font-size:31pt; color:#ff4444;")
+        p.setStyleSheet("QGroupBox { border-color: #ff4444; }")
+
+    def show_warning(self, index: int, message: str):
+        """Show the warning banner for the given TEC panel."""
+        if index >= len(self._panels):
+            return
+        p = self._panels[index]
+        p._warn_msg_lbl.setText(message)
+        p._warn_banner.setVisible(True)
+        p._actual_lbl.setStyleSheet(
+            "font-family:Menlo,monospace; font-size:31pt; color:#ff9900;")
+
+    def clear_alarm(self, index: int):
+        """Clear alarm/warning state for the given TEC panel."""
+        if index >= len(self._panels):
+            return
+        p = self._panels[index]
+        p._alarm_banner.setVisible(False)
+        p._warn_banner.setVisible(False)
+        p._actual_lbl.setStyleSheet(
+            "font-family:Menlo,monospace; font-size:31pt; color:#00d4aa;")
+        p.setStyleSheet("")
+
+    def _apply_limits(self, box):
+        """Push updated limits to the ThermalGuard and TempPlot."""
+        idx        = self._panels.index(box)
+        temp_min   = box._min_spin.value()
+        temp_max   = box._max_spin.value()
+        warn_margin = box._warn_spin.value()
+
+        # Update the chart
+        box._plot.set_limits(temp_min, temp_max, warn_margin)
+
+        # Update the guard
+        guard = app_state.get_tec_guard(idx)
+        if guard:
+            guard.update_limits(temp_min, temp_max, warn_margin)
+
+    def _acknowledge_alarm(self, box):
+        """Acknowledge the alarm — clears latch, hides banner."""
+        idx   = self._panels.index(box)
+        guard = app_state.get_tec_guard(idx)
+        if guard:
+            guard.acknowledge()
+        self.clear_alarm(idx)
+
     def _set_target(self, box, val):
         idx = self._panels.index(box)
         if idx < len(tecs):
@@ -1032,7 +1286,11 @@ class TemperatureTab(QWidget):
                 daemon=True).start()
 
     def _enable(self, box):
-        idx = self._panels.index(box)
+        idx   = self._panels.index(box)
+        guard = app_state.get_tec_guard(idx)
+        if guard and guard.is_alarmed:
+            # Don't allow re-enable while alarm is active
+            return
         if idx < len(tecs):
             threading.Thread(target=tecs[idx].enable, daemon=True).start()
 
@@ -2441,6 +2699,70 @@ class StatusHeader(QWidget):
                   self._fpga_dot, self._bias_dot, self._stage_dot]:
             lay.addWidget(d)
 
+        # ---- Demo mode banner (hidden until activated) ----
+        self._demo_banner = QWidget()
+        self._demo_banner.setVisible(False)
+        self._demo_banner.setStyleSheet(
+            "background:#ff990022; border:1px solid #ff990066; border-radius:4px;")
+        db_lay = QHBoxLayout(self._demo_banner)
+        db_lay.setContentsMargins(10, 0, 10, 0)
+        db_lay.setSpacing(6)
+        db_icon = QLabel("▶")
+        db_icon.setStyleSheet("color:#ff9900; font-size:13pt;")
+        db_text = QLabel("DEMO MODE")
+        db_text.setStyleSheet(
+            "color:#ff9900; font-size:12pt; font-family:Menlo,monospace; "
+            "letter-spacing:2px; font-weight:bold;")
+        db_lay.addWidget(db_icon)
+        db_lay.addWidget(db_text)
+        self._demo_banner.setToolTip(
+            "Running with simulated hardware — no instrument connected.\n"
+            "All measurements use synthetic data.")
+        lay.addWidget(self._demo_banner)
+
+        # ---- Emergency Stop button (always visible, right edge) ------
+        lay.addSpacing(8)
+        self._estop_btn = QPushButton("■  STOP")
+        self._estop_btn.setFixedHeight(36)
+        self._estop_btn.setMinimumWidth(90)
+        self._estop_btn.setToolTip(
+            "Emergency Stop — immediately disables bias output, "
+            "all TECs, stage motion, and aborts any active acquisition.\n"
+            "Hardware stays connected. Click 'Clear' to re-arm.")
+        self._estop_btn.setStyleSheet("""
+            QPushButton {
+                background: #5a0000;
+                color: #ff4444;
+                border: 2px solid #aa0000;
+                border-radius: 5px;
+                font-size: 13pt;
+                font-weight: bold;
+                letter-spacing: 1px;
+                padding: 0 12px;
+            }
+            QPushButton:hover {
+                background: #7a0000;
+                color: #ff6666;
+                border-color: #cc2222;
+            }
+            QPushButton:pressed {
+                background: #3a0000;
+            }
+            QPushButton[armed="false"] {
+                background: #1a1a1a;
+                color: #555;
+                border: 1px solid #2a2a2a;
+            }
+            QPushButton[armed="false"]:hover {
+                background: #222;
+                color: #888;
+                border-color: #444;
+            }
+        """)
+        self._estop_btn.setProperty("armed", "true")
+        self._estop_armed = True
+        lay.addWidget(self._estop_btn)
+
     def _dot(self, label):
         w = QWidget()
         h = QHBoxLayout(w)
@@ -2485,9 +2807,41 @@ class StatusHeader(QWidget):
         """Wire the mode toggle to a callback(advanced: bool)."""
         self._mode_toggle.toggled.connect(callback)
 
+    def set_demo_mode(self, active: bool):
+        """Show or hide the DEMO MODE banner in the header."""
+        self._demo_banner.setVisible(active)
+
     def set_mode(self, advanced: bool):
         """Set the toggle position programmatically (no callback fired)."""
         self._mode_toggle.set_checked(advanced, emit=False)
+
+    def connect_estop(self, on_stop, on_clear):
+        """Wire E-Stop button: on_stop fires when armed & clicked, on_clear when latched & clicked."""
+        def _clicked():
+            if self._estop_armed:
+                on_stop()
+            else:
+                on_clear()
+        self._estop_btn.clicked.connect(_clicked)
+
+    def set_estop_triggered(self):
+        """Visually latch the button into STOPPED state."""
+        self._estop_armed = False
+        self._estop_btn.setText("⚠  STOPPED — Click to Clear")
+        self._estop_btn.setProperty("armed", "false")
+        self._estop_btn.setMinimumWidth(200)
+        # Force Qt to re-evaluate the stylesheet property
+        self._estop_btn.style().unpolish(self._estop_btn)
+        self._estop_btn.style().polish(self._estop_btn)
+
+    def set_estop_armed(self):
+        """Reset button back to armed/ready state."""
+        self._estop_armed = True
+        self._estop_btn.setText("■  STOP")
+        self._estop_btn.setProperty("armed", "true")
+        self._estop_btn.setMinimumWidth(90)
+        self._estop_btn.style().unpolish(self._estop_btn)
+        self._estop_btn.style().polish(self._estop_btn)
 
     def add_device_manager_button(self, callback):
         """Add a ⚙ gear button that opens the Device Manager."""
@@ -2512,9 +2866,13 @@ class StatusHeader(QWidget):
         self.layout().addWidget(self._update_badge)
         return self._update_badge
 
-    def set_connected(self, which: str, ok: bool):
+    def set_connected(self, which: str, ok: bool, tooltip: str = ""):
         color  = "#00d4aa" if ok else "#ff4444"
         target = {"camera": self._cam_dot,
+                  "tec0":   self._tec1_dot,
+                  "tec1":   self._tec2_dot,
+                  "tec_meerstetter": self._tec1_dot,
+                  "tec_atec":        self._tec2_dot,
                   "tec1":   self._tec1_dot,
                   "tec2":   self._tec2_dot,
                   "fpga":   self._fpga_dot,
@@ -2522,6 +2880,20 @@ class StatusHeader(QWidget):
                   "stage":  self._stage_dot}.get(which)
         if target:
             target._dot.setStyleSheet(f"color:{color}; font-size:14pt;")
+            if tooltip:
+                target.setToolTip(tooltip)
+
+    def set_connecting(self, which: str):
+        """Show amber 'connecting' state while device initializes."""
+        target = {"camera": self._cam_dot,
+                  "tec0":   self._tec1_dot,
+                  "tec1":   self._tec2_dot,
+                  "fpga":   self._fpga_dot,
+                  "bias":   self._bias_dot,
+                  "stage":  self._stage_dot}.get(which)
+        if target:
+            target._dot.setStyleSheet("color:#ff9900; font-size:14pt;")
+            target.setToolTip("Connecting…")
 
 
 # ------------------------------------------------------------------ #
@@ -2682,6 +3054,13 @@ class MainWindow(QMainWindow):
         self._device_mgr_dlg: DeviceManagerDialog = None
         self._header.add_device_manager_button(self._open_device_manager)
 
+        # Emergency stop — wire header button to hw_service
+        self._header.connect_estop(
+            on_stop  = self._trigger_estop,
+            on_clear = self._clear_estop,
+        )
+        hw_service.emergency_stop_complete.connect(self._on_estop_complete)
+
         # Update badge in header
         self._update_badge = self._header.add_update_badge()
         self._update_badge.clicked_with_info.connect(self._show_update_dialog)
@@ -2693,6 +3072,9 @@ class MainWindow(QMainWindow):
         self._status = QStatusBar()
         self.setStatusBar(self._status)
         self._status.showMessage(f"SanjINSIGHT {version_string()}  —  Ready")
+
+        # Toast notification manager — bottom-right corner of the window
+        self._toasts = ToastManager(self)
 
     def _connect_signals(self):
         signals.new_live_frame.connect(self._on_frame)
@@ -2712,6 +3094,10 @@ class MainWindow(QMainWindow):
         signals.acq_saved.connect(self._on_acq_saved)
         signals.log_message.connect(self._on_log)
         signals.error.connect(self._on_error)
+        # TEC alarm signals
+        hw_service.tec_alarm.connect(self._on_tec_alarm)
+        hw_service.tec_warning.connect(self._on_tec_warning)
+        hw_service.tec_alarm_clear.connect(self._on_tec_alarm_clear)
 
     def _on_frame(self, frame):
         self._camera_tab.update_frame(frame)
@@ -2725,20 +3111,33 @@ class MainWindow(QMainWindow):
 
     def _on_tec(self, index, status):
         self._temp_tab.update_tec(index, status)
-        key = f"tec{index+1}"
-        self._header.set_connected(key, status.error is None)
+        key = f"tec{index}"
+        ok  = status.error is None
+        tip = (f"TEC {index+1}: {status.temperature:.1f}°C → {status.setpoint:.1f}°C"
+               if ok else f"TEC {index+1} error: {status.error}")
+        self._header.set_connected(key, ok, tip)
 
     def _on_fpga(self, status):
         self._fpga_tab.update_status(status)
-        self._header.set_connected("fpga", status.error is None and status.running)
+        ok  = status.error is None and status.running
+        tip = ("FPGA: running" if ok else
+               f"FPGA error: {status.error}" if status.error else "FPGA: stopped")
+        self._header.set_connected("fpga", ok, tip)
 
     def _on_bias(self, status):
         self._bias_tab.update_status(status)
-        self._header.set_connected("bias", status.error is None and status.output_on)
+        ok  = status.error is None and status.output_on
+        tip = (f"Bias: {status.voltage_v:.3f}V / {status.current_a*1000:.2f}mA"
+               if ok else
+               f"Bias error: {status.error}" if status.error else "Bias: output off")
+        self._header.set_connected("bias", ok, tip)
 
     def _on_stage(self, status):
         self._stage_tab.update_status(status)
-        self._header.set_connected("stage", status.error is None)
+        ok  = status.error is None
+        tip = (f"Stage: {status.position_mm:.3f}mm" if ok
+               else f"Stage error: {status.error}")
+        self._header.set_connected("stage", ok, tip)
 
     def _on_cal_progress(self, prog):
         self._cal_tab.update_progress(prog)
@@ -3039,6 +3438,7 @@ class MainWindow(QMainWindow):
         # Auto-save to session manager in background — capture full context
         profile = app_state.active_profile
         fpga    = app_state.fpga
+        notes   = self._acquire_tab.get_notes()   # capture now, before UI changes
 
         def _save():
             try:
@@ -3052,6 +3452,7 @@ class MainWindow(QMainWindow):
                     fpga_frequency_hz = (
                         fpga.get_status().frequency_hz
                         if fpga and hasattr(fpga, "get_status") else 0.0),
+                    notes          = notes,
                 )
                 signals.acq_saved.emit(session)
                 signals.log_message.emit(
@@ -3065,13 +3466,86 @@ class MainWindow(QMainWindow):
         """New session was saved — refresh data tab immediately."""
         self._data_tab.add_session(session)
 
-    def _on_log(self, msg):
+    def _on_log(self, msg: str):
         self._log_tab.append(msg)
-        self._status.showMessage(msg, 5000)
+        self._status.showMessage(msg, 4000)
+        # Surface success confirmations as green toasts
+        if any(k in msg.lower() for k in ("saved", "calibration complete",
+                                           "connected", "loaded")):
+            self._toasts.show_success(msg, auto_dismiss_ms=4000)
 
-    def _on_error(self, msg):
+    def _on_error(self, msg: str):
         self._log_tab.append(f"ERROR: {msg}")
         self._status.showMessage(f"Error: {msg}", 8000)
+        self._toasts.show_error(msg)
+
+    # ── TEC alarm handlers ────────────────────────────────────────────
+
+    def _on_tec_alarm(self, index: int, message: str,
+                      actual: float, limit: float):
+        """Hard temperature limit exceeded — TEC already disabled by guard."""
+        self._log_tab.append(f"⊗ ALARM: {message}")
+        self._status.showMessage(f"TEC {index+1} ALARM — {actual:.2f}°C", 0)
+
+        # Show alarm state in the temperature panel
+        self._temp_tab.show_alarm(index, message)
+
+        # Persistent toast — no auto-dismiss for safety alarms
+        self._toasts._show(
+            title=f"TEC {index+1} Temperature Alarm",
+            message=message,
+            level="error",
+            guidance=[
+                "TEC output has been disabled automatically",
+                "Check the temperature on the instrument before proceeding",
+                "Go to the Temperature tab and click Acknowledge when safe to do so",
+                "Do NOT re-enable the TEC until you understand why the limit was reached",
+            ],
+            auto_dismiss_ms=0)
+
+    def _on_tec_warning(self, index: int, message: str,
+                        actual: float, limit: float):
+        """Temperature approaching a limit — TEC still running."""
+        self._log_tab.append(f"⚠ WARNING: {message}")
+        self._temp_tab.show_warning(index, message)
+        self._toasts.show_warning(message, auto_dismiss_ms=0)
+
+    def _on_tec_alarm_clear(self, index: int):
+        """Alarm or warning cleared — temperature back in safe range."""
+        self._log_tab.append(f"✓ TEC {index+1}: temperature alarm cleared")
+        self._temp_tab.clear_alarm(index)
+        self._status.showMessage(f"TEC {index+1} alarm cleared", 4000)
+
+    # ── Emergency Stop ────────────────────────────────────────────────
+
+    def _trigger_estop(self):
+        """User pressed E-Stop — latch the UI then fire the stop sequence."""
+        self._header.set_estop_triggered()
+        self._status.showMessage("⚠  EMERGENCY STOP — stopping all hardware outputs…", 0)
+        self._log_tab.append("⊗ EMERGENCY STOP triggered by user")
+        hw_service.emergency_stop()
+
+    def _on_estop_complete(self, summary: str):
+        """Called on UI thread when all outputs are confirmed stopped."""
+        self._log_tab.append(f"⊗ E-STOP complete — {summary}")
+        self._status.showMessage(f"⚠  STOPPED — {summary}", 0)
+        self._toasts._show(
+            title="Emergency Stop — Hardware Outputs Disabled",
+            message=summary,
+            level="error",
+            guidance=[
+                "Bias output, all TECs, and stage motion have been stopped",
+                "Acquisition has been aborted",
+                "Inspect the instrument before proceeding",
+                "Click '⚠ STOPPED — Click to Clear' in the header when safe to re-arm",
+            ],
+            auto_dismiss_ms=0)
+
+    def _clear_estop(self):
+        """User clicked the latched STOPPED button to re-arm."""
+        self._header.set_estop_armed()
+        self._status.showMessage("Emergency stop cleared — hardware ready", 4000)
+        self._log_tab.append("✓ Emergency stop cleared — outputs can be re-enabled")
 
     def closeEvent(self, event):
         """
@@ -3119,13 +3593,21 @@ class MainWindow(QMainWindow):
 # ------------------------------------------------------------------ #
 
 if __name__ == "__main__":
+    import sys as _sys
+
+    # ── Determine launch mode ─────────────────────────────────────────
+    # Demo mode activates when:
+    #   1.  --demo flag is passed on the command line
+    #   2.  Running on macOS — real hardware drivers are Windows-only
+    _FORCE_DEMO = ("--demo" in _sys.argv or _sys.platform == "darwin")
+
     log.info(f"{'='*60}")
     log.info(f"  {APP_VENDOR} {APP_NAME}  {version_string()}")
     log.info(f"  Build date: {__import__('version').BUILD_DATE}")
+    log.info(f"  Platform: {_sys.platform}  |  Demo mode: {_FORCE_DEMO}")
     log.info(f"{'='*60}")
-    # ── Connect HardwareService signals → app signals ────────────────
-    # This bridges the service's Qt signals to the existing global `signals`
-    # object that all tabs already connect to — zero change to tab code.
+
+    # ── Connect HardwareService signals → app signals ─────────────────
     hw_service.camera_frame.connect(signals.new_live_frame)
     hw_service.tec_status.connect(signals.tec_status)
     hw_service.fpga_status.connect(signals.fpga_status)
@@ -3137,30 +3619,92 @@ if __name__ == "__main__":
     hw_service.log_message.connect(signals.log_message)
     hw_service.device_connected.connect(
         lambda key, ok: signals.log_message.emit(
-            f"{'✓' if ok else '✗'} {key}: {'connected' if ok else 'connection failed'}"))
+            f"{{'✓' if ok else '✗'}} {key}: {{'connected' if ok else 'connection failed'}}"))
 
-    # Start all hardware on background threads
-    hw_service.start()
+    if not _FORCE_DEMO:
+        # Normal startup — attempt real hardware on background threads
+        hw_service.start()
 
-    app = QApplication(sys.argv)
+    app = QApplication(_sys.argv)
     app.setStyle("Fusion")
     app.setStyleSheet(STYLE)
 
-    # ── First-run hardware setup wizard ──────────────────────────────
-    # Show before creating MainWindow so config is correct before hw threads start
-    _config_path = config._path if hasattr(config, "_path") else os.path.join(
-        os.path.dirname(__file__), "config.yaml")
-    try:
-        from ui.first_run import should_show_first_run, FirstRunWizard
-        if should_show_first_run(_config_path):
-            dlg = FirstRunWizard(_config_path)
-            dlg.exec_()          # accepted or skipped — either way we continue
-            # Reload config so hw threads pick up any changes
-            config.reload()
-    except Exception as _fre:
-        log.warning(f"First-run wizard error (non-fatal): {_fre}")
+    # ── First-run wizard (Windows + real hardware only) ───────────────
+    if not _FORCE_DEMO:
+        _config_path = config._path if hasattr(config, "_path") else os.path.join(
+            os.path.dirname(__file__), "config.yaml")
+        try:
+            from ui.first_run import should_show_first_run, FirstRunWizard
+            if should_show_first_run(_config_path):
+                dlg = FirstRunWizard(_config_path)
+                dlg.exec_()
+                config.reload()
+        except Exception as _fre:
+            log.warning(f"First-run wizard error (non-fatal): {_fre}")
 
     window = MainWindow()
+
+    # ── Demo mode: activate immediately, skip the startup dialog ──────
+    if _FORCE_DEMO:
+        app_state.demo_mode = True
+        window._header.set_demo_mode(True)
+        window._status.showMessage(
+            f"SanjINSIGHT {version_string()}  \u2014  DEMO MODE  (simulated hardware)", 0)
+        signals.log_message.emit("Running in demo mode \u2014 all hardware is simulated")
+        hw_service.start_demo()
+
+    # ── Normal startup: amber dots + startup progress dialog ──────────
+    else:
+        hw_cfg = config.get("hardware", {})
+        _configured_devices = []
+        if hw_cfg.get("camera", {}).get("enabled", True):
+            _configured_devices.append("camera")
+            window._header.set_connecting("camera")
+        for _tec_key, _dot_key in [("tec_meerstetter", "tec0"), ("tec_atec", "tec1")]:
+            if hw_cfg.get(_tec_key, {}).get("enabled", False):
+                _configured_devices.append(_dot_key)
+                window._header.set_connecting(_dot_key)
+        if hw_cfg.get("fpga", {}).get("enabled", False):
+            _configured_devices.append("fpga")
+            window._header.set_connecting("fpga")
+        if hw_cfg.get("bias", {}).get("enabled", False):
+            _configured_devices.append("bias")
+            window._header.set_connecting("bias")
+        if hw_cfg.get("stage", {}).get("enabled", False):
+            _configured_devices.append("stage")
+            window._header.set_connecting("stage")
+
+        if _configured_devices:
+            _startup_dlg = StartupProgressDialog(
+                expected_devices=_configured_devices,
+                parent=window)
+            hw_service.startup_status.connect(_startup_dlg.on_device_status)
+
+            def _on_demo_requested():
+                hw_service.shutdown()
+                app_state.demo_mode = True
+                app_state.tecs      = []
+                window._header.set_demo_mode(True)
+                window._status.showMessage(
+                    f"SanjINSIGHT {version_string()}  \u2014  DEMO MODE", 0)
+                signals.log_message.emit(
+                    "Demo mode activated \u2014 all hardware replaced with simulated drivers")
+                hw_service.start_demo()
+
+            _startup_dlg.demo_requested.connect(_on_demo_requested)
+            _startup_dlg.show()
+        else:
+            def _offer_demo():
+                window._toasts._show(
+                    title="No Hardware Configured",
+                    message="All devices are disabled in config.yaml.",
+                    level="warning",
+                    guidance=[
+                        "Open config.yaml and set enabled: true for your devices",
+                        "Or run with --demo to explore with simulated hardware",
+                    ],
+                    auto_dismiss_ms=0)
+            QTimer.singleShot(800, _offer_demo)
 
     # Scan existing sessions on startup
     try:
@@ -3174,4 +3718,4 @@ if __name__ == "__main__":
 
     window.show()
     window._start_update_checker()   # background check, non-blocking
-    sys.exit(app.exec_())
+    _sys.exit(app.exec_())
