@@ -7,7 +7,7 @@ Creates bias source driver instances from config.yaml.
 from .base import BiasDriver
 
 _DRIVERS = {
-    "keithley":     ("hardware.bias.keithley",     "KeyithleyDriver"),
+    "keithley":     ("hardware.bias.keithley",     "KeithleyDriver"),
     "visa_generic": ("hardware.bias.visa_generic",  "VisaGenericDriver"),
     "simulated":    ("hardware.bias.simulated",     "SimulatedBias"),
 }

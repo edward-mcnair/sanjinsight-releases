@@ -246,7 +246,7 @@ class LiveProcessor:
         if self._fpga is None or cfg.trigger_mode != "fpga":
             return
         try:
-            self._fpga.set_output(high)
+            self._fpga.set_stimulus(high)
         except Exception:
             pass
         if cfg.trigger_delay_ms > 0:
@@ -288,9 +288,9 @@ class LiveProcessor:
     @staticmethod
     def _estimate_snr(drr: np.ndarray) -> float:
         try:
-            signal = float(np.percentile(np.abs(drr), 95))
-            noise  = float(np.std(drr))
-            if noise < 1e-15:
+            signal = float(np.nanpercentile(np.abs(drr), 95))
+            noise  = float(np.nanstd(drr))
+            if noise < 1e-15 or not np.isfinite(signal) or not np.isfinite(noise):
                 return 0.0
             return float(20.0 * np.log10(signal / noise))
         except Exception:

@@ -6,10 +6,13 @@ Provides save, load, delete, and comparison operations.
 """
 
 from __future__ import annotations
+import logging
 import os, shutil
 from typing import List, Optional, Dict
 
 from .session import Session, SessionMeta
+
+log = logging.getLogger(__name__)
 
 
 class SessionManager:
@@ -76,7 +79,7 @@ class SessionManager:
         try:
             return Session.load(meta.path)
         except Exception as e:
-            print(f"SessionManager.load({uid}): {e}")
+            log.warning("SessionManager.load(%s): %s", uid, e)
             return None
 
     def update_label(self, uid: str, label: str):
@@ -118,7 +121,7 @@ class SessionManager:
             shutil.rmtree(meta.path)
             return True
         except Exception as e:
-            print(f"SessionManager.delete({uid}): {e}")
+            log.warning("SessionManager.delete(%s): %s", uid, e)
             return False
 
     # ---------------------------------------------------------------- #

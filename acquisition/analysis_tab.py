@@ -699,8 +699,8 @@ class AnalysisTab(QWidget):
         if not self._result:
             return
         try:
-            import main_app as _ma
-            _ma.active_analysis = self._result
+            from hardware.app_state import app_state
+            app_state.active_analysis = self._result
             QMessageBox.information(
                 self, "Added to Report",
                 "Analysis result will be included in the next PDF report.\n\n"

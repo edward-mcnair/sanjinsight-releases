@@ -37,7 +37,8 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QTimer
 
 import matplotlib
-matplotlib.use("Agg")
+if matplotlib.get_backend().lower() in ("", "agg"):
+    matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -219,13 +220,15 @@ class SurfacePlotTab(QWidget):
             z_stretch  = self._z_spin.value()
             cmap_name  = self._cmap_combo.currentText()
 
-            # Normalize Z for stretch
+            # Apply Z-stretch (vertical exaggeration around centre)
             z_min = float(np.nanmin(arr_ds))
             z_max = float(np.nanmax(arr_ds))
             z_range = max(z_max - z_min, 1e-12)
+            z_center  = (z_min + z_max) * 0.5
+            arr_plot  = z_center + (arr_ds - z_center) * z_stretch
 
             surf = ax.plot_surface(
-                X, Y, arr_ds,
+                X, Y, arr_plot,
                 cmap=cmap_name,
                 linewidth=0,
                 antialiased=True,
@@ -233,15 +236,16 @@ class SurfacePlotTab(QWidget):
             )
             self._fig.colorbar(surf, ax=ax, shrink=0.5, aspect=12, pad=0.1)
 
-            # Threshold plane
+            # Threshold plane (draw in stretched Z space)
             if self._thresh_cb.isChecked():
                 t = float(self._thresh_spin.value())
                 if z_min <= t <= z_max:
+                    t_stretched = z_center + (t - z_center) * z_stretch
                     xx = np.array([[0, W - 1], [0, W - 1]])
                     yy = np.array([[0, 0], [H - 1, H - 1]])
-                    zz = np.full_like(xx, t, dtype=float)
+                    zz = np.full_like(xx, t_stretched, dtype=float)
                     ax.plot_surface(xx, yy, zz, alpha=0.25, color="#ff4444")
-                    ax.text(W * 0.05, H * 0.05, t,
+                    ax.text(W * 0.05, H * 0.05, t_stretched,
                             f"threshold={t:.4g}", color="#ff8888", fontsize=7)
 
         self._canvas.draw()

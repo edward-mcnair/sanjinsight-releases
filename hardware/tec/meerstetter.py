@@ -11,7 +11,10 @@ Config keys (under hardware.tec_meerstetter):
     timeout:  1.0
 """
 
+import logging
 from .base import TecDriver, TecStatus
+
+log = logging.getLogger(__name__)
 
 
 class MeerstetterDriver(TecDriver):
@@ -30,7 +33,7 @@ class MeerstetterDriver(TecDriver):
             self._tec = MeComAPI(self._port)
             self._tec.identify()
             self._connected = True
-            print(f"Meerstetter TEC-1089 connected on {self._port}")
+            log.info("Meerstetter TEC-1089 connected on %s", self._port)
         except ImportError:
             raise RuntimeError(
                 "pyMeCom not installed. Run: pip install pyMeCom")

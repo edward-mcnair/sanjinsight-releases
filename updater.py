@@ -28,6 +28,7 @@ from __future__ import annotations
 import json
 import logging
 import threading
+import time
 import urllib.request
 import urllib.error
 from dataclasses import dataclass, field
@@ -93,7 +94,7 @@ class UpdateChecker:
 
     def _run(self, delay_s: float) -> None:
         if delay_s:
-            threading.Event().wait(delay_s)
+            time.sleep(delay_s)
         result = self._fetch()
         if result:
             try:

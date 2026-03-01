@@ -39,7 +39,8 @@ from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QFont, QImage, QPixmap, QColor
 
 import matplotlib
-matplotlib.use("Agg")
+if matplotlib.get_backend().lower() in ("", "agg"):
+    matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from matplotlib.colors import Normalize, TwoSlopeNorm

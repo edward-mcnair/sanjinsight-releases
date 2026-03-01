@@ -409,37 +409,36 @@ class DeviceManager:
     # ---------------------------------------------------------------- #
 
     def _inject_into_app(self, uid: str, driver_obj):
-        """Write connected driver into the main_app global namespace."""
+        """Write connected driver into the app_state singleton."""
         try:
-            import main_app as _ma
-            desc = self._entries[uid].descriptor
+            from hardware.app_state import app_state
+            desc  = self._entries[uid].descriptor
             dtype = desc.device_type
-            if   dtype == DTYPE_CAMERA: _ma.cam     = driver_obj
-            elif dtype == DTYPE_FPGA:   _ma.fpga    = driver_obj
-            elif dtype == DTYPE_STAGE:  _ma.stage   = driver_obj
-            elif dtype == DTYPE_BIAS:   _ma.bias    = driver_obj
+            if   dtype == DTYPE_CAMERA: app_state.cam   = driver_obj
+            elif dtype == DTYPE_FPGA:   app_state.fpga  = driver_obj
+            elif dtype == DTYPE_STAGE:  app_state.stage = driver_obj
+            elif dtype == DTYPE_BIAS:   app_state.bias  = driver_obj
             elif dtype == DTYPE_TEC:
-                # Assign to first empty TEC slot
-                if not getattr(_ma, "tec1", None):  _ma.tec1 = driver_obj
-                elif not getattr(_ma, "tec2", None): _ma.tec2 = driver_obj
+                app_state.add_tec(driver_obj)
         except Exception:
             pass
 
     def _eject_from_app(self, uid: str):
-        """Clear the main_app global when a device disconnects."""
+        """Clear the app_state reference when a device disconnects."""
         try:
-            import main_app as _ma
+            from hardware.app_state import app_state
             desc  = self._entries[uid].descriptor
             dtype = desc.device_type
-            if   dtype == DTYPE_CAMERA: _ma.cam  = None
-            elif dtype == DTYPE_FPGA:   _ma.fpga = None
-            elif dtype == DTYPE_STAGE:  _ma.stage= None
-            elif dtype == DTYPE_BIAS:   _ma.bias = None
+            driver_obj = self._entries[uid].driver_obj
+            if   dtype == DTYPE_CAMERA: app_state.cam   = None
+            elif dtype == DTYPE_FPGA:   app_state.fpga  = None
+            elif dtype == DTYPE_STAGE:  app_state.stage = None
+            elif dtype == DTYPE_BIAS:   app_state.bias  = None
             elif dtype == DTYPE_TEC:
-                if getattr(_ma, "tec1", None) is self._entries[uid].driver_obj:
-                    _ma.tec1 = None
-                elif getattr(_ma, "tec2", None) is self._entries[uid].driver_obj:
-                    _ma.tec2 = None
+                # Remove this TEC from the list; preserve order of others
+                with app_state:
+                    app_state.tecs = [t for t in app_state.tecs
+                                      if t is not driver_obj]
         except Exception:
             pass
 

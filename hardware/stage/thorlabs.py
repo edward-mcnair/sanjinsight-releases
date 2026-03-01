@@ -20,9 +20,12 @@ Config keys (under hardware.stage):
 Leave serial_y / serial_z blank if those axes don't exist on your system.
 """
 
+import logging
 import time
 from typing import Optional
 from .base import StageDriver, StageStatus, StagePosition
+
+log = logging.getLogger(__name__)
 
 
 class ThorlabsDriver(StageDriver):
@@ -52,7 +55,7 @@ class ThorlabsDriver(StageDriver):
             try:
                 dev = APTDevice(serial_port=None, serial_number=serial)
                 self._controllers[axis] = dev
-                print(f"Thorlabs stage {axis.upper()} connected: {serial}")
+                log.info("Thorlabs stage %s connected: %s", axis.upper(), serial)
             except Exception as e:
                 raise RuntimeError(
                     f"Thorlabs {axis.upper()} axis ({serial}) failed: {e}\n"
@@ -103,9 +106,9 @@ class ThorlabsDriver(StageDriver):
     def move_by(self, x=0.0, y=0.0, z=0.0,
                 speed=None, wait=True) -> None:
         self.move_to(
-            x=self._pos.x + x if x else None,
-            y=self._pos.y + y if y else None,
-            z=self._pos.z + z if z else None,
+            x=self._pos.x + x if x is not None else None,
+            y=self._pos.y + y if y is not None else None,
+            z=self._pos.z + z if z is not None else None,
             speed=speed, wait=wait)
 
     def stop(self) -> None:

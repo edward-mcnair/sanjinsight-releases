@@ -97,6 +97,7 @@ def _brenner(img: np.ndarray) -> float:
 
 def _convolve2d(img: np.ndarray, kern: np.ndarray) -> np.ndarray:
     """Simple valid 2D convolution using numpy stride tricks."""
+    img = np.ascontiguousarray(img)   # ensure C-contiguous before stride tricks
     kh, kw = kern.shape
     oh = img.shape[0] - kh + 1
     ow = img.shape[1] - kw + 1
