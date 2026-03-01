@@ -3139,7 +3139,8 @@ class MainWindow(QMainWindow):
     def _on_stage(self, status):
         self._stage_tab.update_status(status)
         ok  = status.error is None
-        tip = (f"Stage: {status.position_mm:.3f}mm" if ok
+        pos = status.position
+        tip = (f"Stage: {pos.x:.0f} / {pos.y:.0f} / {pos.z:.0f} μm" if ok
                else f"Stage error: {status.error}")
         self._header.set_connected("stage", ok, tip)
 
