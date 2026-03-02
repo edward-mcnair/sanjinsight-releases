@@ -32,7 +32,7 @@ from PyQt5.QtWidgets import (
     QAbstractItemView, QHeaderView, QTableWidget, QTableWidgetItem)
 from PyQt5.QtCore  import Qt, QTimer, pyqtSignal, QObject, QSize
 from PyQt5.QtGui   import (QImage, QPixmap, QFont, QColor, QPainter,
-                           QPen, QBrush, QPalette)
+                           QPen, QBrush, QPalette, QIcon)
 
 import config
 from hardware.cameras    import create_camera
@@ -1250,6 +1250,10 @@ if __name__ == "__main__":
     app.setStyle("Fusion")
     app.setStyleSheet(STYLE)
 
+    _icon_path = os.path.join(os.path.dirname(__file__), "assets", "app-icon.png")
+    if os.path.exists(_icon_path):
+        app.setWindowIcon(QIcon(_icon_path))
+
     # Register QTextCursor with Qt's meta-type system so it can be safely
     # queued across threads (suppresses the "Cannot queue arguments of type
     # 'QTextCursor'" warning that appears when QTextEdit is used near threads).
@@ -1274,6 +1278,8 @@ if __name__ == "__main__":
             log.warning(f"First-run wizard error (non-fatal): {_fre}")
 
     window = MainWindow()
+    if os.path.exists(_icon_path):
+        window.setWindowIcon(QIcon(_icon_path))
 
     # ── Demo mode: activate immediately, skip the startup dialog ──────
     if _FORCE_DEMO:
