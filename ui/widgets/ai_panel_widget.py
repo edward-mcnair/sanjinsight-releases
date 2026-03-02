@@ -33,6 +33,7 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTextEdit, QLineEdit, QSizePolicy, QFrame)
 from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtGui import QCursor
 
 log = logging.getLogger(__name__)
 
@@ -173,14 +174,20 @@ class AIPanelWidget(QWidget):
         grade_row.addStretch()
         ev_lay.addLayout(grade_row)
 
-        # Up to 5 issue rows; extras collapsed by default
-        self._issue_rows: list[QLabel] = []
-        for _ in range(5):
-            lbl = QLabel("")
-            lbl.setStyleSheet(f"font-size:10pt; color:{_MUTED}; padding-left:4px;")
-            lbl.setVisible(False)
-            ev_lay.addWidget(lbl)
-            self._issue_rows.append(lbl)
+        # Up to 5 issue rows — clickable buttons that fire a targeted AI query
+        self._issue_rows: list[QPushButton] = []
+        self._active_issues: list = []   # latest RuleResult objects, set by refresh_evidence
+        for i in range(5):
+            btn = QPushButton("")
+            btn.setStyleSheet(
+                f"QPushButton {{ background:transparent; color:{_MUTED}; "
+                f"border:none; text-align:left; padding:1px 4px; font-size:10pt; }}"
+                f"QPushButton:hover {{ background:#1c1c1c; border-radius:3px; }}"
+            )
+            btn.setVisible(False)
+            btn.clicked.connect(lambda checked, idx=i: self._on_issue_clicked(idx))
+            ev_lay.addWidget(btn)
+            self._issue_rows.append(btn)
 
         lay.addWidget(self._evidence_frame)
 
@@ -342,6 +349,13 @@ class AIPanelWidget(QWidget):
             f"font-size:16pt; font-weight:700; color:{color}; "
             f"background:#1a1a1a; border-radius:3px; padding:1px 7px;"
         )
+        _grade_tips = {
+            "A": "Grade A — All checks passed. Instrument is ready for acquisition.",
+            "B": "Grade B — Minor warnings present. Review issues below.",
+            "C": "Grade C — Significant issue or multiple warnings. Address before acquiring.",
+            "D": "Grade D — Critical failures detected. Acquisition may be unreliable.",
+        }
+        self._grade_lbl.setToolTip(_grade_tips.get(grade, ""))
 
         parts: list[str] = []
         if n_fail:
@@ -356,30 +370,52 @@ class AIPanelWidget(QWidget):
 
         # ── Issue rows (fail first, then warn) ──
         active = fails + warns
-        for i, row_lbl in enumerate(self._issue_rows):
+        self._active_issues = active   # store for click handler
+
+        for i, btn in enumerate(self._issue_rows):
             if i < min(len(active), 5):
-                # Last slot: show "…and N more" when list is truncated
+                # Last slot: overflow indicator (not clickable as an issue)
                 if i == 4 and len(active) > 5:
-                    row_lbl.setText(f"  …and {len(active) - 4} more issues")
-                    row_lbl.setStyleSheet(
-                        f"font-size:10pt; color:{_MUTED}; padding-left:4px;"
+                    btn.setText(f"  …and {len(active) - 4} more issues")
+                    btn.setStyleSheet(
+                        f"QPushButton {{ background:transparent; color:{_MUTED}; "
+                        f"border:none; text-align:left; padding:1px 4px; font-size:10pt; }}"
                     )
+                    btn.setToolTip("")
+                    btn.setCursor(Qt.ArrowCursor)
                 else:
                     r = active[i]
                     icon = "⊗" if r.severity == "fail" else "⚠"
                     clr  = _RED if r.severity == "fail" else _AMBER
-                    row_lbl.setText(f"{icon}  {r.display_name}  ·  {r.observed}")
-                    row_lbl.setStyleSheet(
-                        f"font-size:10pt; color:{clr}; padding-left:4px;"
+                    btn.setText(f"{icon}  {r.display_name}  ·  {r.observed}")
+                    btn.setStyleSheet(
+                        f"QPushButton {{ background:transparent; color:{clr}; "
+                        f"border:none; text-align:left; padding:1px 4px; font-size:10pt; }}"
+                        f"QPushButton:hover {{ background:#1c1c1c; border-radius:3px; }}"
                     )
-                    row_lbl.setToolTip(r.hint)
-                row_lbl.setVisible(True)
+                    btn.setToolTip(f"{r.hint}\n\nClick to ask AI for guidance.")
+                    btn.setCursor(Qt.PointingHandCursor)
+                btn.setVisible(True)
             else:
-                row_lbl.setVisible(False)
+                btn.setVisible(False)
 
     # ------------------------------------------------------------------ #
     #  Internal                                                            #
     # ------------------------------------------------------------------ #
+
+    def _on_issue_clicked(self, idx: int) -> None:
+        """Send a targeted AI query about the issue at position idx."""
+        if idx >= len(self._active_issues):
+            return
+        r = self._active_issues[idx]
+        question = (
+            f"Diagnostic check '{r.display_name}' is {r.severity.upper()}: "
+            f"{r.observed}. "
+            f"Please give me step-by-step guidance to resolve this."
+        )
+        if hasattr(self, "_display"):
+            self._display.append(f"\n▷  {question}\n")
+        self.ask_requested.emit(question)
 
     def _on_clear(self) -> None:
         self.clear_display()
