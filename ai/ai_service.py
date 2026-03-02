@@ -24,9 +24,11 @@ from typing import Optional
 
 from PyQt5.QtCore import QObject, pyqtSignal
 
+import config as cfg_mod
 from ai.model_runner import ModelRunner, llama_available
 from ai.context_builder import ContextBuilder
 from ai import prompt_templates as tmpl
+from ai.personas import PERSONAS, DEFAULT_PERSONA_ID
 
 log = logging.getLogger(__name__)
 
@@ -77,6 +79,10 @@ class AIService(QObject):
         """Inject MetricsService so the context builder can include quality data."""
         self._ctx.set_metrics(metrics)
 
+    def set_diagnostics(self, engine) -> None:
+        """Inject DiagnosticEngine so the context builder can include rule results."""
+        self._ctx.set_diagnostics(engine)
+
     def set_active_tab(self, tab_name: str) -> None:
         """Track which tab is visible for context building."""
         self._ctx.set_active_tab(tab_name)
@@ -95,15 +101,27 @@ class AIService(QObject):
 
     def explain_tab(self) -> None:
         """Ask the AI to explain the current active tab."""
-        self._run(tmpl.explain_tab(self._ctx._active_tab, self._ctx.build()))
+        sp = self._active_system_prompt()
+        self._run(tmpl.explain_tab(self._ctx._active_tab, self._ctx.build(), sp))
 
     def diagnose(self) -> None:
         """Ask the AI to diagnose the current instrument state."""
-        self._run(tmpl.diagnose(self._ctx.build()))
+        sp = self._active_system_prompt()
+        self._run(tmpl.diagnose(self._ctx.build(), sp))
 
     def ask(self, question: str) -> None:
         """Send a free-form question with instrument context."""
-        self._run(tmpl.free_ask(question, self._ctx.build()))
+        sp = self._active_system_prompt()
+        self._run(tmpl.free_ask(question, self._ctx.build(), sp))
+
+    # ------------------------------------------------------------------ #
+    #  Persona helpers                                                     #
+    # ------------------------------------------------------------------ #
+
+    def _active_system_prompt(self) -> str:
+        """Return the system prompt for the currently selected persona."""
+        pid = cfg_mod.get_pref("ai.persona", DEFAULT_PERSONA_ID)
+        return PERSONAS.get(pid, PERSONAS[DEFAULT_PERSONA_ID]).system_prompt
 
     # ------------------------------------------------------------------ #
     #  Internal                                                            #

@@ -26,13 +26,17 @@ If you cannot help, say so honestly. Never invent hardware readings.\
 
 # ── Per-query templates ────────────────────────────────────────────────────────
 
-def explain_tab(tab_name: str, context_json: str) -> list[dict]:
+def explain_tab(
+    tab_name: str,
+    context_json: str,
+    system_prompt: str = SYSTEM_PROMPT,
+) -> list[dict]:
     """
     Ask the model to explain the active tab and what the user should do next.
     Returns a messages list ready for create_chat_completion().
     """
     return [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt},
         {
             "role": "user",
             "content": (
@@ -45,13 +49,16 @@ def explain_tab(tab_name: str, context_json: str) -> list[dict]:
     ]
 
 
-def diagnose(context_json: str) -> list[dict]:
+def diagnose(
+    context_json: str,
+    system_prompt: str = SYSTEM_PROMPT,
+) -> list[dict]:
     """
     Ask the model to review current issues and suggest fixes.
     Returns a messages list.
     """
     return [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt},
         {
             "role": "user",
             "content": (
@@ -64,13 +71,17 @@ def diagnose(context_json: str) -> list[dict]:
     ]
 
 
-def free_ask(question: str, context_json: str) -> list[dict]:
+def free_ask(
+    question: str,
+    context_json: str,
+    system_prompt: str = SYSTEM_PROMPT,
+) -> list[dict]:
     """
     Free-form question with instrument context.
     Returns a messages list.
     """
     return [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt},
         {
             "role": "user",
             "content": (

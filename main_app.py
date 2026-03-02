@@ -317,6 +317,7 @@ from ui.tabs.roi_tab          import RoiTab
 from ui.tabs.autofocus_tab    import AutofocusTab, FocusPlot
 from ui.tabs.log_tab          import LogTab
 from ai.metrics_service          import MetricsService
+from ai.diagnostic_engine        import DiagnosticEngine
 from ui.widgets.readiness_widget import ReadinessWidget
 from ai.ai_service               import AIService
 from ai.model_runner             import llama_available
@@ -422,8 +423,10 @@ class MainWindow(QMainWindow):
         self._acquire_tab.insert_readiness_widget(self._readiness_widget)
 
         # ── AI service + model downloader + dockable panel ────────
+        self._diagnostic_engine = DiagnosticEngine(self._metrics)
         self._ai_service = AIService(parent=self)
         self._ai_service.set_metrics(self._metrics)
+        self._ai_service.set_diagnostics(self._diagnostic_engine)
         self._model_downloader = ModelDownloader(parent=self)
 
         self._ai_panel = AIPanelWidget(llama_installed=llama_available())

@@ -16,6 +16,7 @@ from hardware.app_state import app_state
 
 if TYPE_CHECKING:
     from ai.metrics_service import MetricsService
+    from ai.diagnostic_engine import DiagnosticEngine
 
 log = logging.getLogger(__name__)
 
@@ -27,7 +28,8 @@ class ContextBuilder:
     """
 
     def __init__(self, metrics: "MetricsService | None" = None):
-        self._metrics = metrics
+        self._metrics      = metrics
+        self._diagnostics: "DiagnosticEngine | None" = None
         self._active_tab: str = ""
 
     def set_active_tab(self, tab: str) -> None:
@@ -35,6 +37,9 @@ class ContextBuilder:
 
     def set_metrics(self, metrics: "MetricsService") -> None:
         self._metrics = metrics
+
+    def set_diagnostics(self, engine: "DiagnosticEngine") -> None:
+        self._diagnostics = engine
 
     def build(self) -> str:
         """Return a compact JSON string describing current instrument state."""
@@ -128,8 +133,25 @@ class ContextBuilder:
                 }
                 cam_metrics = snap.get("camera", {})
                 if cam_metrics:
-                    data["metrics"]["focus"] = cam_metrics.get("focus", None)
+                    data["metrics"]["focus"] = cam_metrics.get("focus_score", None)
                     data["metrics"]["saturation_pct"] = cam_metrics.get("saturation_pct", None)
+            except Exception:
+                pass
+
+        # Diagnostic rule results — warn/fail only, compact format for token budget
+        if self._diagnostics is not None:
+            try:
+                issues = self._diagnostics.active_issues()
+                if issues:
+                    data["rules"] = [
+                        {
+                            "id":   r.rule_id,
+                            "sev":  r.severity,
+                            "obs":  r.observed,
+                            "hint": r.hint,
+                        }
+                        for r in issues
+                    ]
             except Exception:
                 pass
 

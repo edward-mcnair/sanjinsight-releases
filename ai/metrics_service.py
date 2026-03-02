@@ -193,6 +193,10 @@ class MetricsService(QObject):
             HIGH_DRIFT, drift > self.DRIFT_THRESHOLD,
             f"High frame drift detected "
             f"(score {drift:.3f}, threshold {self.DRIFT_THRESHOLD})")
+        self._set_or_clear(
+            POOR_FOCUS, focus < self.FOCUS_THRESHOLD,
+            f"Poor focus: score {focus:.0f} "
+            f"(threshold {self.FOCUS_THRESHOLD:.0f})")
 
         self._maybe_emit()
 

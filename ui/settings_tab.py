@@ -535,6 +535,43 @@ class SettingsTab(QWidget):
         apply_row.addWidget(self._ai_status_lbl, 1)
         lay.addLayout(apply_row)
 
+        # ── AI Mode (persona) ─────────────────────────────────────────────
+        from ai.personas import PERSONAS, PERSONA_ORDER, DEFAULT_PERSONA_ID
+
+        mode_lbl = QLabel("AI Mode")
+        mode_lbl.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
+        lay.addWidget(mode_lbl)
+
+        mode_row = QHBoxLayout()
+        mode_row.setSpacing(8)
+        self._ai_persona_btns: dict[str, QPushButton] = {}
+        _saved_pid = cfg_mod.get_pref("ai.persona", DEFAULT_PERSONA_ID)
+        for pid in PERSONA_ORDER:
+            p   = PERSONAS[pid]
+            btn = QPushButton(p.display_name)
+            btn.setCheckable(True)
+            btn.setChecked(pid == _saved_pid)
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background:{_BG2}; color:{_MUTED};
+                    border:1px solid {_BORDER}; border-radius:5px;
+                    padding:6px 14px; font-size:11pt;
+                }}
+                QPushButton:checked {{
+                    background:{_ACCENT}22; color:{_TEXT};
+                    border:1px solid {_ACCENT};
+                }}
+                QPushButton:hover:!checked {{ background:#1e2540; color:{_TEXT}; }}
+            """)
+            btn.clicked.connect(lambda checked, _pid=pid: self._on_persona_clicked(_pid))
+            mode_row.addWidget(btn)
+            self._ai_persona_btns[pid] = btn
+        mode_row.addStretch(1)
+        lay.addLayout(mode_row)
+
+        self._ai_persona_desc_lbl = _body(PERSONAS[_saved_pid].description)
+        lay.addWidget(self._ai_persona_desc_lbl)
+
         # Auto-detect existing model from ~/.microsanj/models/
         existing = find_existing_model(DEFAULT_MODELS_DIR)
         if existing and not cfg_mod.get_pref("ai.model_path", ""):
@@ -650,6 +687,15 @@ class SettingsTab(QWidget):
         self._ai_status_lbl.setStyleSheet(f"font-size:12pt; color:{color};")
         if hasattr(self, "_ai_apply_btn"):
             self._ai_apply_btn.setEnabled(status not in ("loading", "thinking"))
+
+    def _on_persona_clicked(self, pid: str) -> None:
+        """Persist persona selection and update button states."""
+        from ai.personas import PERSONAS
+        cfg_mod.set_pref("ai.persona", pid)
+        for _pid, btn in self._ai_persona_btns.items():
+            btn.setChecked(_pid == pid)
+        if hasattr(self, "_ai_persona_desc_lbl"):
+            self._ai_persona_desc_lbl.setText(PERSONAS[pid].description)
 
     def _on_model_combo_changed(self, idx: int) -> None:
         """Update description label and slider range when user changes model selection."""
@@ -778,6 +824,8 @@ class SettingsTab(QWidget):
             self._ai_gpu_slider.setEnabled(enabled)
         if hasattr(self, "_ai_apply_btn"):
             self._ai_apply_btn.setEnabled(enabled)
+        for btn in getattr(self, "_ai_persona_btns", {}).values():
+            btn.setEnabled(enabled)
 
     def _open_about(self):
         from ui.update_dialog import AboutDialog
