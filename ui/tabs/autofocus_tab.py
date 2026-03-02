@@ -22,6 +22,7 @@ from PyQt5.QtGui     import QPainter, QColor, QPen, QFont, QBrush
 
 from hardware.app_state  import app_state
 from hardware.autofocus  import create_autofocus, AfState
+from ui.theme import FONT, PALETTE
 
 # Module-level autofocus driver (set by AutofocusTab._run())
 af_driver = None
@@ -147,7 +148,7 @@ class AutofocusTab(QWidget):
         val = QLabel(initial)
         val.setAlignment(Qt.AlignCenter)
         val.setStyleSheet(
-            f"font-family:Menlo,monospace; font-size:28pt; color:{color};")
+            f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:{color};")
         v.addWidget(sub)
         v.addWidget(val)
         w._val = val
@@ -231,7 +232,7 @@ class AutofocusTab(QWidget):
 
         self._state_w._val.setText("RUNNING")
         self._state_w._val.setStyleSheet(
-            "font-family:Menlo,monospace; font-size:28pt; color:#ffaa44;")
+            f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:{PALETTE['warning']};")
 
     def update_complete(self, result):
         self._set_busy(False)
@@ -243,14 +244,14 @@ class AutofocusTab(QWidget):
         if result.state == AfState.COMPLETE:
             self._state_w._val.setText("COMPLETE ✓")
             self._state_w._val.setStyleSheet(
-                "font-family:Menlo,monospace; font-size:28pt; color:#00d4aa;")
+                f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:{PALETTE['success']};")
             self._best_z_w._val.setText(f"{result.best_z:.2f} μm")
             self._score_w._val.setText(f"{result.best_score:.4f}")
             self._time_w._val.setText(f"{result.duration_s:.1f} s")
         else:
             self._state_w._val.setText(result.state.name)
             self._state_w._val.setStyleSheet(
-                "font-family:Menlo,monospace; font-size:28pt; color:#ff6666;")
+                f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:{PALETTE['danger']};")
 
     def log(self, msg):
         ts = time.strftime("%H:%M:%S")

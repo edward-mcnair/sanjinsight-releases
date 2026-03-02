@@ -214,7 +214,7 @@ class StatusHeader(QWidget):
         pp_lay.setContentsMargins(10, 0, 10, 0)
         pp_lay.setSpacing(6)
         pp_icon = QLabel("◈")
-        pp_icon.setStyleSheet("color:#333; font-size:14pt;")
+        pp_icon.setStyleSheet(f"color:#333; font-size:{FONT['label']}pt;")
         self._profile_name_lbl = QLabel("No profile")
         self._profile_name_lbl.setStyleSheet(
             f"font-size:{FONT['label']}pt; color:#666; font-family:Menlo,monospace;")

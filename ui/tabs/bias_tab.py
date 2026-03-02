@@ -17,6 +17,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore    import Qt
 
 from hardware.app_state import app_state
+from ui.theme import FONT, PALETTE
 
 
 def hline():
@@ -75,7 +76,7 @@ class BiasTab(QWidget):
         self._level_spin.setSingleStep(0.1)
         self._level_spin.setFixedWidth(120)
         self._level_unit = QLabel("V")
-        self._level_unit.setStyleSheet("color:#666; font-size:15pt;")
+        self._level_unit.setStyleSheet(f"color:#666; font-size:{FONT['body']}pt;")
         level_row.addWidget(self._level_spin)
         level_row.addWidget(self._level_unit)
         level_row.addStretch()
@@ -117,7 +118,7 @@ class BiasTab(QWidget):
         self._comp_spin.setSingleStep(0.01)
         self._comp_spin.setFixedWidth(120)
         self._comp_unit = QLabel("A limit")
-        self._comp_unit.setStyleSheet("color:#666; font-size:15pt;")
+        self._comp_unit.setStyleSheet(f"color:#666; font-size:{FONT['body']}pt;")
         comp_row.addWidget(self._comp_spin)
         comp_row.addWidget(self._comp_unit)
         comp_row.addStretch()
@@ -162,7 +163,7 @@ class BiasTab(QWidget):
         val = QLabel(initial)
         val.setAlignment(Qt.AlignCenter)
         val.setStyleSheet(
-            f"font-family:Menlo,monospace; font-size:28pt; color:{color};")
+            f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:{color};")
         v.addWidget(sub)
         v.addWidget(val)
         w._val = val
@@ -242,7 +243,7 @@ class BiasTab(QWidget):
         if status.error:
             self._state_w._val.setText("ERROR")
             self._state_w._val.setStyleSheet(
-                "font-family:Menlo,monospace; font-size:28pt; color:#ff6666;")
+                f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:{PALETTE['danger']};")
             return
 
         self._v_w._val.setText(f"{status.actual_voltage:.4f} V")
@@ -256,8 +257,8 @@ class BiasTab(QWidget):
         if status.output_on:
             self._state_w._val.setText("ON ●")
             self._state_w._val.setStyleSheet(
-                "font-family:Menlo,monospace; font-size:28pt; color:#00d4aa;")
+                f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:{PALETTE['success']};")
         else:
             self._state_w._val.setText("OFF ○")
             self._state_w._val.setStyleSheet(
-                "font-family:Menlo,monospace; font-size:28pt; color:#444;")
+                f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:#444;")

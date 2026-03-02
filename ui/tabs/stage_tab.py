@@ -16,6 +16,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore    import Qt
 
 from hardware.app_state import app_state
+from ui.theme import FONT, PALETTE
 
 
 class StageTab(QWidget):
@@ -125,7 +126,7 @@ class StageTab(QWidget):
         val = QLabel(initial)
         val.setAlignment(Qt.AlignCenter)
         val.setStyleSheet(
-            f"font-family:Menlo,monospace; font-size:31pt; color:{color};")
+            f"font-family:Menlo,monospace; font-size:{FONT['readoutLg']}pt; color:{color};")
         v.addWidget(sub)
         v.addWidget(val)
         w._val = val
@@ -206,7 +207,7 @@ class StageTab(QWidget):
         if status.error:
             self._st_w._val.setText("ERROR")
             self._st_w._val.setStyleSheet(
-                "font-family:Menlo,monospace; font-size:31pt; color:#ff6666;")
+                f"font-family:Menlo,monospace; font-size:{FONT['readoutLg']}pt; color:{PALETTE['danger']};")
             return
 
         p = status.position
@@ -222,12 +223,12 @@ class StageTab(QWidget):
         if status.moving:
             self._st_w._val.setText("MOVING ↔")
             self._st_w._val.setStyleSheet(
-                "font-family:Menlo,monospace; font-size:31pt; color:#ffaa44;")
+                f"font-family:Menlo,monospace; font-size:{FONT['readoutLg']}pt; color:{PALETTE['warning']};")
         elif status.homed:
             self._st_w._val.setText("READY ✓")
             self._st_w._val.setStyleSheet(
-                "font-family:Menlo,monospace; font-size:31pt; color:#00d4aa;")
+                f"font-family:Menlo,monospace; font-size:{FONT['readoutLg']}pt; color:{PALETTE['success']};")
         else:
             self._st_w._val.setText("NOT HOMED")
             self._st_w._val.setStyleSheet(
-                "font-family:Menlo,monospace; font-size:31pt; color:#888;")
+                f"font-family:Menlo,monospace; font-size:{FONT['readoutLg']}pt; color:{PALETTE['textDim']};")

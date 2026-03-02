@@ -76,7 +76,7 @@ QMainWindow, QWidget {
     background-color: #1a1a1a;
     color: #d0d0d0;
     font-family: 'Helvetica Neue', Arial, sans-serif;
-    font-size:15pt;
+    font-size:13pt;
 }
 QTabWidget::pane {
     border: 1px solid #333;
@@ -88,7 +88,7 @@ QTabBar::tab {
     padding: 8px 20px;
     border: 1px solid #333;
     border-bottom: none;
-    font-size:15pt;
+    font-size:13pt;
     letter-spacing: 1px;
 }
 QTabBar::tab:selected {
@@ -119,7 +119,7 @@ QPushButton {
     border: 1px solid #444;
     border-radius: 2px;
     padding: 5px 12px;
-    font-size:14pt;
+    font-size:13pt;
 }
 QPushButton:hover   { background: #383838; color: #fff; border-color: #666; }
 QPushButton:pressed { background: #1a1a1a; border-color: #888; padding-top: 6px; padding-bottom: 4px; }
@@ -218,7 +218,7 @@ QTextEdit {
 }
 QLabel#readout {
     font-family: 'Menlo', 'Courier New', monospace;
-    font-size:35pt;
+    font-size:26pt;
     color: #00d4aa;
 }
 QLabel#readout_warn { color: #ffaa44; }
