@@ -14,11 +14,10 @@ Config keys (under hardware.tec_atec):
 
 import logging
 import struct
+import threading
 import serial
 from .base import TecDriver, TecStatus
 from hardware.port_lock import PortLock, exclusive_serial_kwargs
-
-log = logging.getLogger(__name__)
 
 log = logging.getLogger(__name__)
 
@@ -44,7 +43,10 @@ class AtecDriver(TecDriver):
         self._timeout  = cfg.get("timeout",  1.0)
         self._serial   = None
         self._target   = 25.0
-        self._port_lock = PortLock(self._port)
+        self._port_lock  = PortLock(self._port)
+        # pyserial is not thread-safe; poll thread and control threads
+        # must not interleave Modbus frames on the serial bus
+        self._serial_lock = threading.Lock()
 
     def connect(self) -> None:
         try:
@@ -113,22 +115,28 @@ class AtecDriver(TecDriver):
         self._serial.read(8)   # echo response
 
     def enable(self) -> None:
-        self._write_register(self.REG_ENABLE, 1)
+        with self._serial_lock:
+            self._write_register(self.REG_ENABLE, 1)
 
     def disable(self) -> None:
-        self._write_register(self.REG_ENABLE, 0)
+        with self._serial_lock:
+            self._write_register(self.REG_ENABLE, 0)
 
     def set_target(self, temperature_c: float) -> None:
         self._target = temperature_c
         raw = int(temperature_c * 10) & 0xFFFF
-        self._write_register(self.REG_TARGET_TEMP, raw)
+        with self._serial_lock:
+            self._write_register(self.REG_TARGET_TEMP, raw)
 
     def get_status(self) -> TecStatus:
         try:
-            actual  = self._read_register(self.REG_ACTUAL_TEMP)
-            current = self._read_register(self.REG_OUTPUT_CURRENT)
-            voltage = self._read_register(self.REG_OUTPUT_VOLTAGE)
-            enabled = bool(int(self._read_register(self.REG_ENABLE)))
+            # Hold lock for entire 4-register read sequence — interleaving
+            # a control write between reads would corrupt both transactions
+            with self._serial_lock:
+                actual  = self._read_register(self.REG_ACTUAL_TEMP)
+                current = self._read_register(self.REG_OUTPUT_CURRENT)
+                voltage = self._read_register(self.REG_OUTPUT_VOLTAGE)
+                enabled = bool(int(self._read_register(self.REG_ENABLE)))
             stable  = abs(actual - self._target) <= self.stability_tolerance()
             return TecStatus(
                 actual_temp    = actual,

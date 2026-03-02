@@ -17,6 +17,7 @@ Config keys (under hardware.camera):
 import ctypes
 import os
 import subprocess
+import threading
 import time
 import numpy as np
 from typing import Optional
@@ -56,6 +57,10 @@ class NiImaqdxDriver(CameraDriver):
         self._buf_size  = self._W * self._H * 2   # uint16
         self._frame_num = ctypes.c_uint64(0)
         self._exe_warned = False
+        # Protects self._session across the close→subprocess→reopen sequence
+        # in _set_attr() so grab() never calls IMAQdxGetImageData on a
+        # closed/invalid session handle.
+        self._session_lock = threading.Lock()
 
     # ---------------------------------------------------------------- #
     #  Lifecycle                                                        #
@@ -122,19 +127,20 @@ class NiImaqdxDriver(CameraDriver):
     # ---------------------------------------------------------------- #
 
     def grab(self, timeout_ms: int = 2000) -> Optional[CameraFrame]:
-        status = self._dll.IMAQdxGetImageData(
-            self._session,
-            self._buf,
-            ctypes.c_uint32(self._buf_size),
-            ctypes.c_int32(1),               # IMAQdxBufferNumberMode_Next (1)
-            ctypes.c_uint32(0),              # bufferNumber ignored for mode_Next
-            ctypes.byref(self._frame_num))
+        with self._session_lock:
+            status = self._dll.IMAQdxGetImageData(
+                self._session,
+                self._buf,
+                ctypes.c_uint32(self._buf_size),
+                ctypes.c_int32(1),               # IMAQdxBufferNumberMode_Next (1)
+                ctypes.c_uint32(0),              # bufferNumber ignored for mode_Next
+                ctypes.byref(self._frame_num))
 
-        if status != _NO_ERROR:
-            return None
+            if status != _NO_ERROR:
+                return None
 
-        data = np.frombuffer(self._buf, dtype=np.uint16).reshape(
-            self._H, self._W).copy()
+            data = np.frombuffer(self._buf, dtype=np.uint16).reshape(
+                self._H, self._W).copy()
 
         return CameraFrame(
             data        = data,
@@ -164,11 +170,15 @@ class NiImaqdxDriver(CameraDriver):
 
         cam_name = self._cam_name.decode()
 
-        # 1. Release NI session
-        self.stop()
-        self._dll.IMAQdxCloseCamera(self._session)
+        with self._session_lock:
+            # 1. Release NI session — held under lock so grab() waits
+            self.stop()
+            self._dll.IMAQdxCloseCamera(self._session)
 
-        # 2. Exe opens its own session, sets attribute, closes
+        # 2. Exe opens its own session, sets attribute, closes.
+        #    Lock is released here so grab() doesn't block for the full
+        #    subprocess duration — any grab() calls will simply block
+        #    waiting to acquire the lock in step 3.
         success = False
         try:
             result = subprocess.run(
@@ -181,16 +191,17 @@ class NiImaqdxDriver(CameraDriver):
         except Exception as e:
             log.warning(f"ImaqdxAttr.exe error: {e}")
 
-        # 3. Reopen NI session
-        new_session = ctypes.c_uint32(0)
-        status = self._dll.IMAQdxOpenCamera(
-            self._cam_name, ctypes.c_int32(0), ctypes.byref(new_session))
-        if status == _NO_ERROR:
-            self._session = new_session
-            self.start()
-        else:
-            log.warning(f"Session reopen failed: {status}")
-            self._open = False
+        with self._session_lock:
+            # 3. Reopen NI session before any grab() can proceed
+            new_session = ctypes.c_uint32(0)
+            status = self._dll.IMAQdxOpenCamera(
+                self._cam_name, ctypes.c_int32(0), ctypes.byref(new_session))
+            if status == _NO_ERROR:
+                self._session = new_session
+                self.start()
+            else:
+                log.warning(f"Session reopen failed: {status}")
+                self._open = False
 
         return success
 
