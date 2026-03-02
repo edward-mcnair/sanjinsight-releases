@@ -1,0 +1,129 @@
+"""
+ui/widgets/temp_plot.py
+
+TempPlot — a custom QWidget that draws a rolling temperature history chart
+with actual vs target traces, alarm limit lines, and warning zones.
+"""
+
+from __future__ import annotations
+
+import collections
+import logging
+
+log = logging.getLogger(__name__)
+
+from PyQt5.QtWidgets import QWidget, QSizePolicy
+from PyQt5.QtCore    import Qt
+from PyQt5.QtGui     import QPainter, QColor, QPen, QFont
+
+
+class TempPlot(QWidget):
+    HISTORY = 120
+
+    def __init__(self, h=140):
+        super().__init__()
+        self.setMinimumSize(100, 80)
+        self.setMaximumHeight(h)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._actual = collections.deque([None]*self.HISTORY, maxlen=self.HISTORY)
+        self._target = collections.deque([None]*self.HISTORY, maxlen=self.HISTORY)
+        self._temp_min:    float | None = None
+        self._temp_max:    float | None = None
+        self._warn_margin: float        = 5.0
+
+    def push(self, actual, target):
+        self._actual.append(actual)
+        self._target.append(target)
+        self.update()
+
+    def set_limits(self, temp_min: float, temp_max: float,
+                   warn_margin: float = 5.0):
+        self._temp_min    = temp_min
+        self._temp_max    = temp_max
+        self._warn_margin = warn_margin
+        self.update()
+
+    def paintEvent(self, e):
+        p = QPainter(self)
+        W, H = self.width(), self.height()
+        pad  = 36
+        p.fillRect(0, 0, W, H, QColor(13, 13, 13))
+
+        vals = [v for v in list(self._actual)+list(self._target) if v is not None]
+
+        # Include limits in the Y-range calculation so lines are always visible
+        if self._temp_min is not None: vals.append(self._temp_min)
+        if self._temp_max is not None: vals.append(self._temp_max)
+
+        if not vals:
+            return
+        lo   = min(vals) - 2
+        hi   = max(vals) + 2
+        span = max(hi - lo, 0.5)
+
+        def tx(i): return int(pad + i/(self.HISTORY-1)*(W-2*pad))
+        def ty(v): return int(H-pad-(v-lo)/span*(H-2*pad))
+
+        # Grid
+        p.setPen(QPen(QColor(35,35,35), 1))
+        step = max(1, int(span/4))
+        t = (int(lo/step)-1)*step
+        p.setFont(QFont("Menlo", 11))
+        while t <= hi+step:
+            y = ty(t)
+            if pad <= y <= H-pad:
+                p.drawLine(pad, y, W-pad, y)
+                p.setPen(QPen(QColor(80,80,80), 1))
+                p.drawText(2, y+4, f"{t:.0f}°")
+                p.setPen(QPen(QColor(35,35,35), 1))
+            t += step
+
+        # ── Alarm limit lines ─────────────────────────────────────────
+        if self._temp_min is not None or self._temp_max is not None:
+            dash = [6, 4]
+            for limit, color, warn_offset in [
+                (self._temp_min, QColor(255,68,68),   +self._warn_margin),
+                (self._temp_max, QColor(255,68,68),   -self._warn_margin),
+            ]:
+                if limit is None:
+                    continue
+                # Hard limit — dashed red
+                pen = QPen(QColor(255, 68, 68), 1, Qt.DashLine)
+                p.setPen(pen)
+                y = ty(limit)
+                if 0 <= y <= H:
+                    p.drawLine(pad, y, W-pad, y)
+                    p.setFont(QFont("Menlo", 10))
+                    p.setPen(QPen(QColor(255, 100, 100), 1))
+                    label = f"{'min' if warn_offset > 0 else 'max'} {limit:.0f}°"
+                    p.drawText(pad+2, y-2, label)
+
+                # Warning zone — dashed amber
+                warn_limit = limit + warn_offset
+                pen_w = QPen(QColor(255, 153, 0), 1, Qt.DotLine)
+                p.setPen(pen_w)
+                yw = ty(warn_limit)
+                if 0 <= yw <= H:
+                    p.drawLine(pad, yw, W-pad, yw)
+
+        # ── Temperature traces ────────────────────────────────────────
+        for series, col in [(self._actual, QColor(0,212,170)),
+                             (self._target, QColor(255,170,68))]:
+            p.setPen(QPen(col, 1))
+            prev = None
+            for i, v in enumerate(series):
+                if v is None: prev = None; continue
+                x, y = tx(i), ty(v)
+                if prev: p.drawLine(prev[0], prev[1], x, y)
+                prev = (x, y)
+
+        # Legend
+        p.setPen(QPen(QColor(0,212,170), 1))
+        p.drawLine(W-110, 10, W-95, 10)
+        p.setPen(QPen(QColor(100,100,100), 1))
+        p.drawText(W-90, 14, "actual")
+        p.setPen(QPen(QColor(255,170,68), 1))
+        p.drawLine(W-110, 22, W-95, 22)
+        p.setPen(QPen(QColor(100,100,100), 1))
+        p.drawText(W-90, 26, "target")
+        p.end()
