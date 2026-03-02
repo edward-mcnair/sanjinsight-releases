@@ -1214,7 +1214,7 @@ if __name__ == "__main__":
     # so that every log message (including hardware init) is captured.
     import logging_config as _lc
     import config as _cfg_boot
-    _lc.setup(level=_cfg_boot.get("logging.level", "INFO"))
+    _lc.setup(level=_cfg_boot.get("logging").get("level", "INFO"))
 
     # ── Determine launch mode ─────────────────────────────────────────
     # Demo mode activates when:
