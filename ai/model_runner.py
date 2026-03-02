@@ -72,7 +72,7 @@ class ModelRunner(QObject):
         return self._model is not None
 
     def load(self, model_path: str, n_gpu_layers: int = 0,
-             n_ctx: int = 2048) -> None:
+             n_ctx: int = 4096) -> None:
         """Start loading the model in a daemon thread. Emits load_complete or load_failed."""
         if not _LLAMA_AVAILABLE:
             self.load_failed.emit(

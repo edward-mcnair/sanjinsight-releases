@@ -102,6 +102,7 @@ class AIPanelWidget(QWidget):
     diagnose_requested = pyqtSignal()
     ask_requested      = pyqtSignal(str)
     close_requested    = pyqtSignal()
+    clear_requested    = pyqtSignal()   # user clicked "Clear" — reset conversation
 
     def __init__(self, llama_installed: bool = True, parent=None):
         super().__init__(parent)
@@ -242,11 +243,23 @@ class AIPanelWidget(QWidget):
         input_row.addWidget(self._ask_btn)
         lay.addLayout(input_row)
 
-        # ── Token rate label ──
+        # ── Token rate + Clear row ──
+        rate_row = QHBoxLayout()
+        self._clear_btn = QPushButton("Clear")
+        self._clear_btn.setStyleSheet(
+            f"QPushButton {{ background:transparent; color:{_MUTED}; "
+            f"border:none; font-size:10pt; padding:0px 4px; }}"
+            f"QPushButton:hover {{ color:#888; }}"
+        )
+        self._clear_btn.setToolTip("Clear conversation history")
+        self._clear_btn.clicked.connect(self._on_clear)
         self._rate_lbl = QLabel("")
         self._rate_lbl.setStyleSheet(f"font-size:10pt; color:{_MUTED};")
         self._rate_lbl.setAlignment(Qt.AlignRight)
-        lay.addWidget(self._rate_lbl)
+        rate_row.addWidget(self._clear_btn)
+        rate_row.addStretch()
+        rate_row.addWidget(self._rate_lbl)
+        lay.addLayout(rate_row)
 
     # ------------------------------------------------------------------ #
     #  Public API (called by MainWindow via AIService signals)             #
@@ -359,6 +372,7 @@ class AIPanelWidget(QWidget):
                     row_lbl.setStyleSheet(
                         f"font-size:10pt; color:{clr}; padding-left:4px;"
                     )
+                    row_lbl.setToolTip(r.hint)
                 row_lbl.setVisible(True)
             else:
                 row_lbl.setVisible(False)
@@ -366,6 +380,10 @@ class AIPanelWidget(QWidget):
     # ------------------------------------------------------------------ #
     #  Internal                                                            #
     # ------------------------------------------------------------------ #
+
+    def _on_clear(self) -> None:
+        self.clear_display()
+        self.clear_requested.emit()
 
     def _on_ask(self) -> None:
         if not hasattr(self, "_input"):

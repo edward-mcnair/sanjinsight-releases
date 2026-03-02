@@ -15,6 +15,12 @@ Status states
   "ready"    — model loaded, waiting for query
   "thinking" — inference in progress
   "error"    — last load or infer failed
+
+Conversation history
+--------------------
+  A rolling window of _MAX_HISTORY_TURNS exchange pairs (user + assistant)
+  is prepended to every request so the model can answer follow-up questions.
+  History is cleared when disable() is called or clear_history() is invoked.
 """
 
 from __future__ import annotations
@@ -43,18 +49,24 @@ class AIService(QObject):
     response_token(str)               streaming token
     response_complete(str, float)     full text + elapsed seconds
     ai_error(str)                     human-readable error
+    history_cleared()                 conversation history was reset
     """
 
     status_changed    = pyqtSignal(str)
     response_token    = pyqtSignal(str)
     response_complete = pyqtSignal(str, float)
     ai_error          = pyqtSignal(str)
+    history_cleared   = pyqtSignal()
+
+    # Rolling window: keep the last N user+assistant exchange pairs
+    _MAX_HISTORY_TURNS = 3
 
     def __init__(self, parent: Optional[QObject] = None):
         super().__init__(parent)
-        self._runner = ModelRunner(parent=self)
-        self._ctx    = ContextBuilder()
-        self._status = "off"
+        self._runner  = ModelRunner(parent=self)
+        self._ctx     = ContextBuilder()
+        self._status  = "off"
+        self._history: list[dict] = []   # alternating user / assistant messages
 
         # Wire runner signals
         self._runner.load_complete.connect(self._on_load_complete)
@@ -97,7 +109,14 @@ class AIService(QObject):
     def disable(self) -> None:
         """Unload the model and transition to 'off'."""
         self._runner.unload()
+        self._history.clear()
         self._set_status("off")
+
+    def clear_history(self) -> None:
+        """Reset the conversation history without unloading the model."""
+        self._history.clear()
+        self.history_cleared.emit()
+        log.debug("AIService: conversation history cleared")
 
     def explain_tab(self) -> None:
         """Ask the AI to explain the current active tab."""
@@ -128,12 +147,29 @@ class AIService(QObject):
     # ------------------------------------------------------------------ #
 
     def _run(self, messages: list[dict]) -> None:
+        """
+        Send a request to the runner, injecting conversation history.
+
+        messages must be [system_msg, user_msg].  History is spliced between
+        them so the model sees: system → past turns → new user message.
+        """
         if self._status != "ready":
             self.ai_error.emit(
                 f"AI assistant is not ready (status: {self._status})")
             return
+
+        # Splice history between system prompt and new user message
+        system_msg = messages[0]
+        user_msg   = messages[-1]
+        max_msgs   = self._MAX_HISTORY_TURNS * 2          # pairs → messages
+        trimmed    = self._history[-max_msgs:] if self._history else []
+        full_msgs  = [system_msg] + trimmed + [user_msg]
+
+        # Record the user turn now (before inference, so cancel still records it)
+        self._history.append(user_msg)
+
         self._set_status("thinking")
-        self._runner.infer(messages)
+        self._runner.infer(full_msgs)
 
     def _set_status(self, status: str) -> None:
         if status != self._status:
@@ -154,6 +190,9 @@ class AIService(QObject):
         log.error("AI model load failed: %s", msg)
 
     def _on_response_complete(self, text: str, elapsed: float) -> None:
+        # Record the assistant turn so follow-up questions have context
+        if text.strip():
+            self._history.append({"role": "assistant", "content": text})
         self._set_status("ready")
         self.response_complete.emit(text, elapsed)
 

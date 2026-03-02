@@ -597,6 +597,7 @@ class MainWindow(QMainWindow):
         self._ai_panel.diagnose_requested.connect(self._ai_service.diagnose)
         self._ai_panel.ask_requested.connect(self._ai_service.ask)
         self._ai_panel.close_requested.connect(self._toggle_ai_panel)
+        self._ai_panel.clear_requested.connect(self._ai_service.clear_history)
 
         # Sidebar tab changes → AI context
         self._nav.panel_changed.connect(
