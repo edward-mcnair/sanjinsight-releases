@@ -53,6 +53,14 @@ _FOCUS_FAIL      = 40.0   # Laplacian variance → fail below this
 _TEC_WARN_C      = 0.10   # TEC Δ°C           → warn
 _TEC_FAIL_C      = 0.20   # TEC Δ°C           → fail
 
+# ── Thresholds sourced from ai/instrument_knowledge.py ─────────────────────
+_DC_WARN_PCT  = 50.0     # duty cycle % → overheating warning (T1)
+_DC_FAIL_PCT  = 80.0     # duty cycle % → overheating fail    (T1)
+_PIX_WARN     = 3900     # pixel value within ~5% of 4095     (C3)
+_PIX_FAIL     = 4095     # pixel value at 12-bit saturation   (C3)
+_TEMP_MIN_C   = 10.0     # min safe TEC setpoint              (R5)
+_TEMP_MAX_C   = 150.0    # max safe TEC setpoint              (R5)
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  R-series — Readiness and safety gates
@@ -277,6 +285,92 @@ def rule_fpga_locked(snap: dict) -> Optional[RuleResult]:
     )
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+#  T-series — Thermal safety (DUT overheating)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def rule_duty_cycle_thermal(snap: dict) -> Optional[RuleResult]:
+    """T1 — high FPGA duty cycle risks DUT overheating.
+
+    duty_cycle in the snapshot is a 0–1 fraction (from MetricsService).
+    """
+    fpga = snap.get("fpga", {})
+    if not fpga.get("connected") or not fpga.get("running"):
+        return None
+    dc_pct = fpga.get("duty_cycle", 0.0) * 100.0   # convert fraction → %
+    if dc_pct >= _DC_FAIL_PCT:
+        sev = "fail"
+    elif dc_pct >= _DC_WARN_PCT:
+        sev = "warn"
+    else:
+        sev = "ok"
+    return RuleResult(
+        rule_id      = "T1_duty_cycle",
+        display_name = "Duty cycle thermal risk",
+        severity     = sev,
+        observed     = f"{dc_pct:.0f}%",
+        threshold    = f"Warn ≥{_DC_WARN_PCT:.0f}%   Fail ≥{_DC_FAIL_PCT:.0f}%",
+        hint         = "Reduce FPGA duty cycle to lower average power delivered to the DUT.",
+    )
+
+
+def rule_pixel_headroom(snap: dict) -> Optional[RuleResult]:
+    """C3 — warn when camera pixels approach 12-bit saturation ceiling.
+
+    max_pixel is the single highest pixel value in the latest frame.
+    """
+    cam = snap.get("camera", {})
+    if not cam.get("connected"):
+        return None
+    mx = cam.get("max_pixel", 0)
+    if mx >= _PIX_FAIL:
+        sev = "fail"
+        obs = "CLIPPED (4095)"
+    elif mx >= _PIX_WARN:
+        sev = "warn"
+        obs = f"{mx} / {_PIX_FAIL}"
+    else:
+        sev = "ok"
+        obs = f"{mx} / {_PIX_FAIL}"
+    return RuleResult(
+        rule_id      = "C3_pixel_headroom",
+        display_name = "Pixel headroom",
+        severity     = sev,
+        observed     = obs,
+        threshold    = f"Warn ≥{_PIX_WARN}   Fail ={_PIX_FAIL}",
+        hint         = (
+            "Reduce exposure or illumination to keep pixel values "
+            "below the 12-bit saturation limit (4095)."
+        ),
+    )
+
+
+def rule_tec_temp_range(snap: dict) -> list[RuleResult]:
+    """R5 — TEC setpoints must remain within hardware-safe operating range."""
+    results: list[RuleResult] = []
+    for tec in snap.get("tec", []):
+        if not tec.get("enabled"):
+            continue
+        sp  = tec.get("target_c", 25.0)
+        idx = tec.get("idx", 0)
+        if sp < _TEMP_MIN_C or sp > _TEMP_MAX_C:
+            sev = "fail"
+        else:
+            sev = "ok"
+        results.append(RuleResult(
+            rule_id      = f"R5_tec{idx}_range",
+            display_name = f"TEC {idx + 1} temp range",
+            severity     = sev,
+            observed     = f"{sp:.1f} °C",
+            threshold    = f"{_TEMP_MIN_C}–{_TEMP_MAX_C} °C",
+            hint         = (
+                f"Keep TEC {idx + 1} setpoint between "
+                f"{_TEMP_MIN_C:.0f} and {_TEMP_MAX_C:.0f} °C."
+            ),
+        ))
+    return results
+
+
 # ── Rule registry — order determines evaluation and display order ──────────
 
 ALL_RULES: list = [
@@ -284,9 +378,11 @@ ALL_RULES: list = [
     rule_camera_connected,
     rule_stage_homed,
     rule_tec_stable,
+    rule_tec_temp_range,          # R5 — TEC setpoint within hardware limits
     # C-series — camera signal quality
     rule_saturation,
     rule_underexposure,
+    rule_pixel_headroom,          # C3 — 12-bit pixel headroom
     # F-series — focus and motion
     rule_focus,
     rule_drift,
@@ -294,4 +390,6 @@ ALL_RULES: list = [
     # L-series — modulation
     rule_fpga_running,
     rule_fpga_locked,
+    # T-series — thermal safety
+    rule_duty_cycle_thermal,      # T1 — duty cycle overheating risk
 ]

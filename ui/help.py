@@ -303,6 +303,38 @@ HELP_CONTENT: dict[str, dict] = {
         "docs":    "FPGA › Modulation",
     },
 
+    # ---- Material & Calibration reference ----------------------------
+
+    "ctr_lookup": {
+        "title":   "C_T Coefficient Reference",
+        "what":    "Thermoreflectance coefficient linking ΔR/R to ΔT. "
+                   "It is specific to each material and illumination wavelength.",
+        "do":      ("Select a profile matching your material and LED wavelength. "
+                    "Si/532 nm: 1.5×10⁻⁴  |  GaAs/532 nm: 2.0×10⁻⁴  |  "
+                    "Au/530 nm: 2.5×10⁻⁴  |  Al: use 780 nm LED only "
+                    "(Cth too small at 532/470 nm)."),
+        "range":   "Typical: 1×10⁻⁵ to 3×10⁻⁴ K⁻¹",
+        "warning": ("Aluminium and dielectric-coated surfaces require 780 nm. "
+                    "Changing LED wavelength requires a new calibration."),
+        "docs":    "EZ-Therm User Manual §C_T Coefficients; NanoTherm Rev.A §Calibration",
+    },
+
+    "startup_sequence": {
+        "title":   "System Power-Up Sequence",
+        "what":    "Required hardware startup order to avoid communication errors "
+                   "and hardware damage.",
+        "do":      ("1. Release EMO button (turn counterclockwise).  "
+                    "2. Flip Master switch ON.  "
+                    "3. Flip Chiller switch ON; press external chiller power button.  "
+                    "4. Press EZ-Therm / Nano-THERM power button.  "
+                    "5. Press 4D Nano Align power button.  "
+                    "6. Launch SanjINSIGHT only after all hardware LEDs are stable."),
+        "warning": ("Never launch software before all hardware is fully powered. "
+                    "Never run the cooling pump without coolant in the reservoir — "
+                    "dry-running voids the warranty."),
+        "docs":    "EZ-Therm User Manual §System Startup",
+    },
+
     # ---- Scan --------------------------------------------------------
 
     "scan_step": {

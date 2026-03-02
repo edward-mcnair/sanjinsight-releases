@@ -178,6 +178,7 @@ class MetricsService(QObject):
             "underexposure_pct": round(under_pct, 2),
             "drift_score":       round(drift,     4),
             "focus_score":       round(focus,     1),
+            "max_pixel":         int(data.max()),   # peak value for C3 pixel-headroom rule
         }
 
         # ── Update issues ─────────────────────────────────────────────

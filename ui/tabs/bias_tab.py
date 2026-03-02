@@ -13,11 +13,21 @@ log = logging.getLogger(__name__)
 from PyQt5.QtWidgets import (
     QWidget, QLabel, QPushButton, QDoubleSpinBox, QVBoxLayout,
     QHBoxLayout, QGridLayout, QGroupBox, QButtonGroup, QRadioButton,
-    QFrame)
+    QFrame, QComboBox, QCheckBox)
 from PyQt5.QtCore    import Qt
 
 from hardware.app_state import app_state
 from ui.theme import FONT, PALETTE
+from ai.instrument_knowledge import (
+    BIAS_VO_INT_MAX_V, BIAS_AUX_INT_MAX_V, BIAS_VO_EXT_MAX_V)
+
+
+# (label, max_v, bipolar)
+_PORTS = [
+    ("VO INT  — pulsed  ±10 V",   BIAS_VO_INT_MAX_V,  True),
+    ("AUX INT — DC      ±10 V",   BIAS_AUX_INT_MAX_V, True),
+    ("VO EXT  — pulsed  ≤+60 V",  BIAS_VO_EXT_MAX_V,  False),
+]
 
 
 def hline():
@@ -53,8 +63,27 @@ class BiasTab(QWidget):
         cl = QGridLayout(ctrl_box)
         cl.setSpacing(10)
 
-        # Mode selector
-        cl.addWidget(self._sub("Source Mode"), 0, 0)
+        # ── Row 0: Output Port selector ───────────────────────────────
+        cl.addWidget(self._sub("Output Port"), 0, 0)
+        self._port_combo = QComboBox()
+        for lbl, max_v, bipolar in _PORTS:
+            self._port_combo.addItem(lbl, (max_v, bipolar))
+        self._port_combo.setFixedWidth(230)
+        self._port_combo.currentIndexChanged.connect(self._on_port_change)
+        cl.addWidget(self._port_combo, 0, 1)
+
+        # ── Row 1: VO EXT safety warning (hidden unless VO EXT selected) ─
+        self._port_warn_lbl = QLabel(
+            "⚠  VO EXT routes the external supply directly to the DUT. "
+            "Confirm external supply current limit before enabling output.")
+        self._port_warn_lbl.setStyleSheet(
+            f"color:{PALETTE['warning']}; font-size:{FONT['caption']}pt;")
+        self._port_warn_lbl.setWordWrap(True)
+        self._port_warn_lbl.setVisible(False)
+        cl.addWidget(self._port_warn_lbl, 1, 0, 1, 3)
+
+        # ── Row 2: Mode selector (was row 0) ─────────────────────────
+        cl.addWidget(self._sub("Source Mode"), 2, 0)
         mode_row = QHBoxLayout()
         self._mode_bg = QButtonGroup()
         for i, m in enumerate(["Voltage", "Current"]):
@@ -64,13 +93,13 @@ class BiasTab(QWidget):
         self._mode_bg.button(0).setChecked(True)
         self._mode_bg.buttonClicked.connect(self._on_mode_change)
         mode_row.addStretch()
-        cl.addLayout(mode_row, 0, 1)
+        cl.addLayout(mode_row, 2, 1)
 
-        # Level
-        cl.addWidget(self._sub("Output Level"), 1, 0)
+        # ── Row 3: Level (was row 1) ──────────────────────────────────
+        cl.addWidget(self._sub("Output Level"), 3, 0)
         level_row = QHBoxLayout()
         self._level_spin = QDoubleSpinBox()
-        self._level_spin.setRange(-200, 200)
+        self._level_spin.setRange(-BIAS_VO_INT_MAX_V, BIAS_VO_INT_MAX_V)
         self._level_spin.setValue(0.0)
         self._level_spin.setDecimals(4)
         self._level_spin.setSingleStep(0.1)
@@ -80,9 +109,9 @@ class BiasTab(QWidget):
         level_row.addWidget(self._level_spin)
         level_row.addWidget(self._level_unit)
         level_row.addStretch()
-        cl.addLayout(level_row, 1, 1)
+        cl.addLayout(level_row, 3, 1)
 
-        # Voltage presets
+        # ── Row 4: Voltage presets (was row 2) ───────────────────────
         self._v_presets = QHBoxLayout()
         for lbl, val in [("0V",0),("0.5V",0.5),("1V",1),
                           ("1.8V",1.8),("3.3V",3.3),("5V",5)]:
@@ -93,9 +122,9 @@ class BiasTab(QWidget):
                                   self._set_level(v)))
             self._v_presets.addWidget(b)
         self._v_presets.addStretch()
-        cl.addLayout(self._v_presets, 2, 1)
+        cl.addLayout(self._v_presets, 4, 1)
 
-        # Current presets
+        # ── Row 5: Current presets (was row 3) ───────────────────────
         self._i_presets = QHBoxLayout()
         for lbl, val in [("0A",0),("1mA",0.001),("10mA",0.01),
                           ("100mA",0.1),("500mA",0.5),("1A",1.0)]:
@@ -106,10 +135,10 @@ class BiasTab(QWidget):
                                   self._set_level(v)))
             self._i_presets.addWidget(b)
         self._i_presets.addStretch()
-        cl.addLayout(self._i_presets, 3, 1)
+        cl.addLayout(self._i_presets, 5, 1)
 
-        # Compliance
-        cl.addWidget(self._sub("Compliance Limit"), 4, 0)
+        # ── Row 6: Compliance (was row 4) ────────────────────────────
+        cl.addWidget(self._sub("Compliance Limit"), 6, 0)
         comp_row = QHBoxLayout()
         self._comp_spin = QDoubleSpinBox()
         self._comp_spin.setRange(0.000001, 1.0)
@@ -122,9 +151,26 @@ class BiasTab(QWidget):
         comp_row.addWidget(self._comp_spin)
         comp_row.addWidget(self._comp_unit)
         comp_row.addStretch()
-        cl.addLayout(comp_row, 4, 1)
+        cl.addLayout(comp_row, 6, 1)
 
-        cl.addWidget(hline(), 5, 0, 1, 3)
+        # ── Row 7: 20 mA Range Mode (new) ────────────────────────────
+        self._ma_range_cb = QCheckBox("20 mA Range Mode")
+        self._ma_range_cb.setChecked(True)
+        self._ma_range_cb.setToolTip(
+            "Checked: current is limited to ≤20 mA (safe default).\n"
+            "Uncheck when using IR camera FA / Movie mode — hotspot\n"
+            "detection requires >20 mA. Always verify device thermal\n"
+            "budget before unchecking.")
+        ma_note = QLabel("(Uncheck for IR FA / Movie mode)")
+        ma_note.setStyleSheet(
+            f"color:{PALETTE['textDim']}; font-size:{FONT['caption']}pt;")
+        ma_row = QHBoxLayout()
+        ma_row.addWidget(self._ma_range_cb)
+        ma_row.addWidget(ma_note)
+        ma_row.addStretch()
+        cl.addLayout(ma_row, 7, 0, 1, 3)
+
+        cl.addWidget(hline(), 8, 0, 1, 3)
 
         # Action buttons
         btn_row = QHBoxLayout()
@@ -139,7 +185,7 @@ class BiasTab(QWidget):
             b.setFixedWidth(130)
             btn_row.addWidget(b)
         btn_row.addStretch()
-        cl.addLayout(btn_row, 6, 0, 1, 3)
+        cl.addLayout(btn_row, 9, 0, 1, 3)
 
         apply_btn.clicked.connect(self._apply)
         self._on_btn.clicked.connect(self._enable)
@@ -148,7 +194,8 @@ class BiasTab(QWidget):
         root.addWidget(ctrl_box)
         root.addStretch()
 
-        # Show voltage presets by default
+        # Initialise to port defaults and show voltage presets
+        self._on_port_change()
         self._show_presets("voltage")
 
     # ---------------------------------------------------------------- #
@@ -185,13 +232,29 @@ class BiasTab(QWidget):
             if item and item.widget():
                 item.widget().setVisible(mode == "current")
 
+    def _on_port_change(self):
+        """Update level spinbox limits and VO EXT warning for the selected port."""
+        data = self._port_combo.currentData()
+        if data is None:
+            return
+        max_v, bipolar = data
+        if self._mode_bg.checkedId() == 0:   # voltage mode
+            if bipolar:
+                self._level_spin.setRange(-max_v, max_v)
+            else:
+                self._level_spin.setRange(0.0, max_v)
+        # VO EXT (index 2) is the only external passthrough port
+        self._port_warn_lbl.setVisible(self._port_combo.currentIndex() == 2)
+
     def _on_mode_change(self):
         mode = "voltage" if self._mode_bg.checkedId() == 0 else "current"
         self._level_unit.setText("V" if mode == "voltage" else "A")
         self._comp_unit.setText(
             "A limit" if mode == "voltage" else "V limit")
-        self._level_spin.setRange(
-            *( (-200, 200) if mode == "voltage" else (-1, 1) ))
+        if mode == "voltage":
+            self._on_port_change()          # apply per-port voltage limits
+        else:
+            self._level_spin.setRange(-1, 1)
         self._comp_spin.setRange(
             *( (0.000001, 1.0) if mode == "voltage" else (0.001, 200) ))
         self._show_presets(mode)

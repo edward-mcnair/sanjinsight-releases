@@ -158,8 +158,9 @@ class CameraTab(QWidget):
         self._stat_max  = self._stat_widget("MAX")
         self._stat_mean = self._stat_widget("MEAN")
         self._stat_idx  = self._stat_widget("FRAME")
+        self._sat_w     = self._stat_widget("SATURATION")
         for w in [self._stat_min, self._stat_max,
-                  self._stat_mean, self._stat_idx]:
+                  self._stat_mean, self._stat_idx, self._sat_w]:
             stats_lay.addWidget(w)
 
         stats_panel.addWidget(stats_row)
@@ -185,6 +186,7 @@ class CameraTab(QWidget):
     # ── Slots ─────────────────────────────────────────────────────────
 
     def update_frame(self, frame):
+        from ai.instrument_knowledge import CAMERA_SAT_LIMIT, CAMERA_SAT_WARN
         self._last_frame = frame
         d = frame.data
         mode = "auto" if self._bg.checkedId() == 0 else "fixed"
@@ -193,6 +195,22 @@ class CameraTab(QWidget):
         self._stat_max._val.setText(str(int(d.max())))
         self._stat_mean._val.setText(f"{d.mean():.1f}")
         self._stat_idx._val.setText(str(frame.frame_index))
+
+        # Saturation guard (12-bit sensor: 4095 = clipped)
+        mx = int(d.max())
+        sat_pct = float((d >= CAMERA_SAT_LIMIT).sum()) / max(d.size, 1) * 100
+        if mx >= CAMERA_SAT_LIMIT:
+            self._sat_w._val.setText("CLIPPED ✗")
+            color = PALETTE["danger"]
+        elif mx >= CAMERA_SAT_WARN:
+            self._sat_w._val.setText(f"{sat_pct:.2f}%")
+            color = PALETTE["warning"]
+        else:
+            self._sat_w._val.setText("OK")
+            color = PALETTE["success"]
+        self._sat_w._val.setStyleSheet(
+            f"font-family:Menlo,monospace; font-size:{FONT['readoutSm']}pt;"
+            f" color:{color};")
 
     def _set_exp(self, val):
         self._exp_slider.setValue(val)

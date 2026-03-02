@@ -106,6 +106,19 @@ class ContextBuilder:
         except Exception:
             data["bias"] = {"connected": False}
 
+        # Active measurement profile (material + wavelength + C_T)
+        try:
+            prof = app_state.active_profile
+            if prof is not None:
+                data["profile"] = {
+                    "material":      prof.material,
+                    "wavelength_nm": prof.wavelength_nm,
+                    "ct_value":      prof.ct_value,
+                    "category":      prof.category,
+                }
+        except Exception:
+            pass
+
         # TECs
         try:
             tecs = app_state.tecs or []

@@ -218,8 +218,10 @@ class CalibrationTab(QWidget):
         seq_box = QGroupBox("Temperature Sequence  (°C)")
         sl = QVBoxLayout(seq_box)
 
-        # Preset buttons
-        pre_row = QHBoxLayout()
+        # Preset buttons — row 1: quick density presets
+        from ai.instrument_knowledge import CAL_TR_TEMPS_C, CAL_IR_TEMPS_C
+
+        pre_row1 = QHBoxLayout()
         for label, temps in [
             ("3-pt",  [25.0, 35.0, 45.0]),
             ("5-pt",  [25.0, 30.0, 35.0, 40.0, 45.0]),
@@ -228,8 +230,25 @@ class CalibrationTab(QWidget):
             b = QPushButton(label)
             b.setFixedHeight(26)
             b.clicked.connect(lambda _, t=temps: self._set_preset(t))
-            pre_row.addWidget(b)
-        sl.addLayout(pre_row)
+            pre_row1.addWidget(b)
+        pre_row1.addStretch()
+        sl.addLayout(pre_row1)
+
+        # Preset buttons — row 2: manual standard presets from user manual
+        pre_row2 = QHBoxLayout()
+        for label, temps, tip in [
+            ("TR Std", CAL_TR_TEMPS_C,
+             "TR Standard: 6-pt sweep 20–120 °C (~12 min)"),
+            ("IR Std",  CAL_IR_TEMPS_C,
+             "IR Standard: 7-pt sweep 85–115 °C for IR camera calibration"),
+        ]:
+            b = QPushButton(label)
+            b.setFixedHeight(26)
+            b.setToolTip(tip)
+            b.clicked.connect(lambda _, t=temps: self._set_preset(t))
+            pre_row2.addWidget(b)
+        pre_row2.addStretch()
+        sl.addLayout(pre_row2)
 
         # Scrollable temp list
         scroll = QScrollArea()
@@ -246,7 +265,7 @@ class CalibrationTab(QWidget):
 
         add_row = QHBoxLayout()
         self._add_temp_spin = QDoubleSpinBox()
-        self._add_temp_spin.setRange(-20, 100)
+        self._add_temp_spin.setRange(-20, 150)
         self._add_temp_spin.setValue(25.0)
         self._add_temp_spin.setSuffix(" °C")
         self._add_temp_spin.setFixedWidth(100)
@@ -257,6 +276,12 @@ class CalibrationTab(QWidget):
         add_row.addWidget(add_btn)
         add_row.addStretch()
         sl.addLayout(add_row)
+
+        # Estimated time label (updated whenever steps or settings change)
+        self._time_est_lbl = QLabel("Estimated time: —")
+        self._time_est_lbl.setStyleSheet(
+            "color:#888888; font-size:10pt; padding-left:2px;")
+        sl.addWidget(self._time_est_lbl)
         lay.addWidget(seq_box)
 
         # ---- Capture settings ----
@@ -292,6 +317,10 @@ class CalibrationTab(QWidget):
         row("Stable tolerance", self._stable_tol,  2)
         row("Stable duration",  self._stable_dur,  3)
         row("Min R² threshold", self._min_r2,      4)
+
+        # Update time estimate when capture settings change
+        self._n_avg.valueChanged.connect(lambda _: self._update_time_est())
+        self._settle.valueChanged.connect(lambda _: self._update_time_est())
         lay.addWidget(cfg_box)
 
         # ---- Run controls ----
@@ -481,7 +510,7 @@ class CalibrationTab(QWidget):
         rl.setSpacing(4)
 
         spin = QDoubleSpinBox()
-        spin.setRange(-20, 100)
+        spin.setRange(-20, 150)
         spin.setValue(t)
         spin.setSuffix(" °C")
         spin.setFixedWidth(100)
@@ -500,12 +529,14 @@ class CalibrationTab(QWidget):
         idx = self._seq_layout.count() - 1
         self._seq_layout.insertWidget(idx, row_w)
         self._temp_rows.append((row_w, spin))
+        self._update_time_est()
 
     def _remove_temp_row(self, row_w):
         self._temp_rows = [(rw, sp) for rw, sp in self._temp_rows
                            if rw is not row_w]
         self._seq_layout.removeWidget(row_w)
         row_w.deleteLater()
+        self._update_time_est()
 
     def _clear_temps(self):
         for row_w, _ in self._temp_rows:
@@ -578,6 +609,15 @@ class CalibrationTab(QWidget):
         threading.Thread(target=self._runner.run, daemon=True).start()
 
     def _abort(self):
+        # Guard against discarding unsaved valid results
+        if self._result and self._result.valid:
+            r = QMessageBox.question(
+                self, "Unsaved Calibration",
+                "Valid calibration results exist but have not been saved.\n"
+                "Abort anyway? Unsaved results will be lost.",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            if r != QMessageBox.Yes:
+                return
         if self._runner:
             self._runner.abort()
 
@@ -668,3 +708,17 @@ class CalibrationTab(QWidget):
         l = QLabel(text)
         l.setObjectName("sublabel")
         return l
+
+    def _update_time_est(self):
+        """Recompute and display estimated calibration time."""
+        n      = len(self._temp_rows)
+        settle = self._settle.value()      # seconds per step (max settle)
+        n_avg  = self._n_avg.value()       # frames per step
+        secs   = n * (settle + n_avg / 5.0)   # assume ~5 fps capture rate
+        m, s   = divmod(int(secs), 60)
+        if n == 0:
+            self._time_est_lbl.setText("Estimated time: — (add temperature steps)")
+        else:
+            self._time_est_lbl.setText(
+                f"Estimated time: ~{m} min {s} s  "
+                f"({n} steps × {settle:.0f} s settle + {n_avg} frames)")

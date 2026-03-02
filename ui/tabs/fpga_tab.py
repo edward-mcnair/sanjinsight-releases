@@ -100,6 +100,16 @@ class FpgaTab(QWidget):
         duty_row.addStretch()
         cl.addLayout(duty_row)
 
+        # Duty cycle overheating warning (shown when duty ≥ 50 %)
+        self._dc_warn_lbl = QLabel(
+            "⚠  Duty cycle ≥ 50 % increases average power delivered to the DUT. "
+            "Monitor device temperature closely — risk of overheating.")
+        self._dc_warn_lbl.setStyleSheet(
+            f"color:{PALETTE['warning']}; font-size:{FONT['caption']}pt;")
+        self._dc_warn_lbl.setWordWrap(True)
+        self._dc_warn_lbl.setVisible(False)
+        cl.addWidget(self._dc_warn_lbl)
+
         cl.addWidget(hline())
 
         # Start / Stop / Stimulus row
@@ -162,9 +172,26 @@ class FpgaTab(QWidget):
         apply_btn.clicked.connect(self._apply)
         adv_grid.addWidget(apply_btn, 2, 1)
 
+        # Connect duty spinbox to the overheating warning
+        self._duty_spin.valueChanged.connect(self._on_duty_changed)
+
         adv_panel.addWidget(adv_inner)
         root.addWidget(adv_panel)
         root.addStretch()
+
+        # Initialise warning state from the spinbox default (50 %)
+        self._on_duty_changed(self._duty_spin.value())
+
+    # ── Duty cycle overheating warning ───────────────────────────────
+
+    def _on_duty_changed(self, val: float):
+        from ai.instrument_knowledge import DUTY_CYCLE_WARN_PCT, DUTY_CYCLE_FAIL_PCT
+        visible = val >= DUTY_CYCLE_WARN_PCT
+        self._dc_warn_lbl.setVisible(visible)
+        if visible:
+            color = PALETTE["danger"] if val >= DUTY_CYCLE_FAIL_PCT else PALETTE["warning"]
+            self._dc_warn_lbl.setStyleSheet(
+                f"color:{color}; font-size:{FONT['caption']}pt;")
 
     # ── Readout widget ────────────────────────────────────────────────
 
