@@ -2,6 +2,17 @@
 ui/tabs/temperature_tab.py
 
 TemperatureTab — TEC temperature control with live readouts, plots, and safety limits.
+
+Layout per TEC
+--------------
+Basic (always visible)
+  • Alarm / warning banners
+  • ACTUAL / SETPOINT / OUTPUT / STATUS readouts
+  • Temperature history plot
+  • Setpoint spinbox + quick temperature buttons + Enable / Disable
+
+Advanced — Safety limits (collapsible, hidden by default)
+  • Min / max temperature limits, warning margin, Apply button
 """
 
 from __future__ import annotations
@@ -17,6 +28,8 @@ from PyQt5.QtCore    import Qt
 
 from hardware.app_state    import app_state
 from ui.widgets.temp_plot  import TempPlot
+from ui.widgets.collapsible_panel import CollapsiblePanel
+from ui.theme import FONT, PALETTE
 
 
 class TemperatureTab(QWidget):
@@ -146,9 +159,10 @@ class TemperatureTab(QWidget):
         ctrl.addWidget(dis_btn)
         main.addLayout(ctrl)
 
-        # ── Safety limits row ─────────────────────────────────────────
+        # ── Safety limits (collapsible Advanced section) ──────────────
+        lim_panel = CollapsiblePanel("Safety limits", start_collapsed=True)
+
         lim_row = QHBoxLayout()
-        lim_row.addWidget(QLabel("Safety limits:"))
 
         min_spin = QDoubleSpinBox()
         min_spin.setRange(-40, 148)
@@ -181,14 +195,15 @@ class TemperatureTab(QWidget):
         apply_btn.setFixedWidth(55)
 
         for w in [min_spin, max_spin, warn_spin]:
-            w.setStyleSheet("font-size:12pt;")
+            w.setStyleSheet(f"font-size:{FONT['label']}pt;")
 
         lim_row.addWidget(min_spin)
         lim_row.addWidget(max_spin)
         lim_row.addWidget(warn_spin)
         lim_row.addWidget(apply_btn)
         lim_row.addStretch()
-        main.addLayout(lim_row)
+        lim_panel.addLayout(lim_row)
+        main.addWidget(lim_panel)
 
         box._min_spin  = min_spin
         box._max_spin  = max_spin
@@ -218,7 +233,7 @@ class TemperatureTab(QWidget):
         val = QLabel(initial)
         val.setAlignment(Qt.AlignCenter)
         val.setStyleSheet(
-            f"font-family:Menlo,monospace; font-size:31pt; color:{color};")
+            f"font-family:Menlo,monospace; font-size:{FONT['readoutLg']}pt; color:{color};")
         v.addWidget(sub)
         v.addWidget(val)
         w._val = val
@@ -232,7 +247,7 @@ class TemperatureTab(QWidget):
             p._actual_lbl.setText("ERR")
             p._state_lbl.setText(status.error[:20])
             p._state_lbl.setStyleSheet(
-                "font-family:Menlo,monospace; font-size:22pt; color:#ff6666;")
+                f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:{PALETTE['danger']};")
             return
         p._actual_lbl.setText(f"{status.actual_temp:.2f} °C")
         p._target_lbl.setText(f"{status.target_temp:.1f} °C")
@@ -240,17 +255,17 @@ class TemperatureTab(QWidget):
         if not status.enabled:
             p._state_lbl.setText("DISABLED")
             p._state_lbl.setStyleSheet(
-                "font-family:Menlo,monospace; font-size:22pt; color:#444;")
+                f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:#444;")
         elif status.stable:
             p._state_lbl.setText("STABLE ✓")
             p._state_lbl.setStyleSheet(
-                "font-family:Menlo,monospace; font-size:22pt; color:#00d4aa;")
+                f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:{PALETTE['accent']};")
         else:
             diff  = status.actual_temp - status.target_temp
             arrow = "▼" if diff > 0 else "▲"
             p._state_lbl.setText(f"SETTLING {arrow}")
             p._state_lbl.setStyleSheet(
-                "font-family:Menlo,monospace; font-size:22pt; color:#ffaa44;")
+                f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:{PALETTE['warning']};")
         p._plot.push(status.actual_temp, status.target_temp)
 
     def show_alarm(self, index: int, message: str):
@@ -262,7 +277,7 @@ class TemperatureTab(QWidget):
         p._alarm_banner.setVisible(True)
         p._warn_banner.setVisible(False)
         p._actual_lbl.setStyleSheet(
-            "font-family:Menlo,monospace; font-size:31pt; color:#ff4444;")
+            f"font-family:Menlo,monospace; font-size:{FONT['readoutLg']}pt; color:{PALETTE['danger']};")
         p.setStyleSheet("QGroupBox { border-color: #ff4444; }")
 
     def show_warning(self, index: int, message: str):
@@ -273,7 +288,7 @@ class TemperatureTab(QWidget):
         p._warn_msg_lbl.setText(message)
         p._warn_banner.setVisible(True)
         p._actual_lbl.setStyleSheet(
-            "font-family:Menlo,monospace; font-size:31pt; color:#ff9900;")
+            f"font-family:Menlo,monospace; font-size:{FONT['readoutLg']}pt; color:{PALETTE['warning']};")
 
     def clear_alarm(self, index: int):
         """Clear alarm/warning state for the given TEC panel."""
@@ -283,7 +298,7 @@ class TemperatureTab(QWidget):
         p._alarm_banner.setVisible(False)
         p._warn_banner.setVisible(False)
         p._actual_lbl.setStyleSheet(
-            "font-family:Menlo,monospace; font-size:31pt; color:#00d4aa;")
+            f"font-family:Menlo,monospace; font-size:{FONT['readoutLg']}pt; color:{PALETTE['accent']};")
         p.setStyleSheet("")
 
     def _apply_limits(self, box):

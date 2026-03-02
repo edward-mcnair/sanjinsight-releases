@@ -478,13 +478,13 @@ class MainWindow(QMainWindow):
         from ui.sidebar_nav import NavItem as NI
 
         self._nav.add_section("MEASURE", [
-            NI("Live",        "●",  self._live_tab),
-            NI("Acquire",     "⊙",  self._acquire_tab),
+            NI("Live",        "●",  self._live_tab,    badge="★"),
+            NI("Acquire",     "⊙",  self._acquire_tab, badge="★"),
             NI("Scan",        "⊞",  self._scan_tab),
         ])
         self._nav.add_section("ANALYSIS", [
             NI("Calibration", "⚖",  self._cal_tab),
-            NI("Analysis",    "◈",  self._analysis_tab),
+            NI("Analysis",    "◈",  self._analysis_tab, badge="★"),
             NI("Compare",     "⇌",  self._compare_tab),
             NI("3D Surface",  "△",  self._surface_tab),
         ])
@@ -605,6 +605,10 @@ class MainWindow(QMainWindow):
         # Sidebar tab changes → AI context
         self._nav.panel_changed.connect(
             lambda p: self._ai_service.set_active_tab(type(p).__name__))
+
+        # ReadinessWidget "Fix it →" buttons → sidebar navigation
+        self._readiness_widget.navigate_requested.connect(
+            self._nav.select_by_label)
 
         # Acquisition readiness gate
         self._acquire_tab.acquire_requested.connect(self._on_acquire_requested)

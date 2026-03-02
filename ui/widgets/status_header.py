@@ -17,6 +17,8 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore    import Qt, QTimer, pyqtSignal
 from PyQt5.QtGui     import QPainter, QColor, QPen, QFont, QBrush
 
+from ui.theme import FONT, PALETTE
+
 
 class _ModeToggle(QWidget):
     """
@@ -177,7 +179,7 @@ class StatusHeader(QWidget):
         if not logo_loaded:
             fallback = QLabel("MICROSANJ")
             fallback.setStyleSheet(
-                "font-family:Menlo,monospace; font-size:15pt; "
+                f"font-family:Menlo,monospace; font-size:{FONT['body']}pt; "
                 "color:#fff; letter-spacing:3px; background:transparent;")
             logo_col_lay.addWidget(fallback)
 
@@ -215,7 +217,7 @@ class StatusHeader(QWidget):
         pp_icon.setStyleSheet("color:#333; font-size:14pt;")
         self._profile_name_lbl = QLabel("No profile")
         self._profile_name_lbl.setStyleSheet(
-            "font-size:14pt; color:#666; font-family:Menlo,monospace;")
+            f"font-size:{FONT['label']}pt; color:#666; font-family:Menlo,monospace;")
         pp_lay.addWidget(pp_icon)
         pp_lay.addWidget(self._profile_name_lbl)
         self._profile_pill_icon = pp_icon
@@ -309,9 +311,9 @@ class StatusHeader(QWidget):
         h.setContentsMargins(8, 0, 8, 0)
         h.setSpacing(5)
         dot = QLabel("●")
-        dot.setStyleSheet("color:#555; font-size:14pt;")
+        dot.setStyleSheet(f"color:#555; font-size:{FONT['label']}pt;")
         lbl = QLabel(label)
-        lbl.setStyleSheet("font-size:14pt; color:#888; letter-spacing:1px;")
+        lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:#888; letter-spacing:1px;")
         h.addWidget(dot)
         h.addWidget(lbl)
         w._dot = dot
@@ -323,8 +325,8 @@ class StatusHeader(QWidget):
         if profile is None:
             self._profile_name_lbl.setText("No profile")
             self._profile_name_lbl.setStyleSheet(
-                "font-size:14pt; color:#666; font-family:Menlo,monospace;")
-            self._profile_pill_icon.setStyleSheet("color:#333; font-size:14pt;")
+                f"font-size:{FONT['label']}pt; color:#666; font-family:Menlo,monospace;")
+            self._profile_pill_icon.setStyleSheet(f"color:#333; font-size:{FONT['label']}pt;")
             self._profile_pill.setStyleSheet(
                 "background:#1a1a1a; border:1px solid #2a2a2a; border-radius:4px;")
         else:
@@ -333,9 +335,9 @@ class StatusHeader(QWidget):
             name = profile.name if len(profile.name) <= 28 else profile.name[:26] + "…"
             self._profile_name_lbl.setText(name)
             self._profile_name_lbl.setStyleSheet(
-                f"font-size:14pt; color:{accent}; font-family:Menlo,monospace;")
+                f"font-size:{FONT['label']}pt; color:{accent}; font-family:Menlo,monospace;")
             self._profile_pill_icon.setStyleSheet(
-                f"color:{accent}; font-size:14pt;")
+                f"color:{accent}; font-size:{FONT['label']}pt;")
             self._profile_pill.setStyleSheet(
                 f"background:#111; border:1px solid {accent}44; border-radius:4px;")
             self._profile_pill.setToolTip(
@@ -477,7 +479,7 @@ class StatusHeader(QWidget):
                   "bias":   self._bias_dot,
                   "stage":  self._stage_dot}.get(which)
         if target:
-            target._dot.setStyleSheet(f"color:{color}; font-size:14pt;")
+            target._dot.setStyleSheet(f"color:{color}; font-size:{FONT['label']}pt;")
             if tooltip:
                 target.setToolTip(tooltip)
 
@@ -490,5 +492,5 @@ class StatusHeader(QWidget):
                   "bias":   self._bias_dot,
                   "stage":  self._stage_dot}.get(which)
         if target:
-            target._dot.setStyleSheet("color:#ff9900; font-size:14pt;")
+            target._dot.setStyleSheet(f"color:#ff9900; font-size:{FONT['label']}pt;")
             target.setToolTip("Connecting…")

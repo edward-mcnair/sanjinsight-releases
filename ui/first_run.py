@@ -51,6 +51,11 @@ from PyQt5.QtWidgets import (
     QSizePolicy, QMessageBox,
 )
 
+from ui.theme import (
+    btn_wizard_primary_qss, btn_wizard_secondary_qss, wizard_input_qss,
+    FONT, PALETTE,
+)
+
 log = logging.getLogger(__name__)
 
 
@@ -151,41 +156,18 @@ class _ScanWorker(QThread):
             self.completed.emit(None)
 
 
-# ── Shared style helpers ──────────────────────────────────────────────────────
+# ── Shared style helpers (sourced from ui.theme) ──────────────────────────────
 
-_BTN_PRIMARY = """
-    QPushButton {
-        background:#4e73df; color:#fff; border:none; border-radius:6px;
-        padding:8px 22px; font-size:13pt; font-weight:600;
-    }
-    QPushButton:hover   { background:#3a5fc8; }
-    QPushButton:pressed { background:#2e4fa8; }
-    QPushButton:disabled{ background:#333; color:#666; }
-"""
-_BTN_SECONDARY = """
-    QPushButton {
-        background:#1e2337; color:#aaa; border:1px solid #333;
-        border-radius:6px; padding:8px 22px; font-size:13pt;
-    }
-    QPushButton:hover   { background:#2a3249; color:#ccc; }
-    QPushButton:pressed { background:#1a1f33; }
-"""
-_INPUT_SS = """
-    QLineEdit, QComboBox {
-        background:#13172a; color:#ddd; border:1px solid #2a3249;
-        border-radius:4px; padding:5px 10px; font-size:13pt;
-        selection-background-color:#4e73df;
-    }
-    QLineEdit:focus, QComboBox:focus { border-color:#4e73df; }
-    QComboBox::drop-down { border:none; }
-    QComboBox QAbstractItemView { background:#13172a; color:#ddd; border:1px solid #2a3249; }
-"""
+_BTN_PRIMARY   = btn_wizard_primary_qss()
+_BTN_SECONDARY = btn_wizard_secondary_qss()
+_INPUT_SS      = wizard_input_qss()
+
 _LABEL_H1   = "font-size:20pt; font-weight:700; color:#fff;"
-_LABEL_BODY = "font-size:12pt; color:#8892a4;"
-_LABEL_HINT = "font-size:10pt; color:#5a6480; font-style:italic;"
+_LABEL_BODY = f"font-size:{FONT['body']}pt; color:{PALETTE['textSub']};"
+_LABEL_HINT = f"font-size:{FONT['caption']}pt; color:{PALETTE['textSub']}; font-style:italic;"
 
-_SS_BADGE_OK   = "font-size:10pt; color:#00d4aa;"
-_SS_BADGE_WARN = "font-size:10pt; color:#e8a020;"
+_SS_BADGE_OK   = f"font-size:{FONT['caption']}pt; color:{PALETTE['accent']};"
+_SS_BADGE_WARN = f"font-size:{FONT['caption']}pt; color:{PALETTE['warning']};"
 
 
 def _sep() -> QFrame:
@@ -321,9 +303,16 @@ class _PortRow(QWidget):
         refresh.clicked.connect(self._refresh)
         row.addWidget(refresh)
 
+        test_btn = QPushButton("Test")
+        test_btn.setFixedSize(50, 34)
+        test_btn.setToolTip("Test that this serial port can be opened")
+        test_btn.setStyleSheet(_BTN_SECONDARY.replace("padding:8px 22px", "padding:0"))
+        test_btn.clicked.connect(self._test_connection)
+        row.addWidget(test_btn)
+
         outer.addLayout(row)
 
-        # Badge — hidden until set_detected / set_not_detected is called
+        # Badge — hidden until set_detected / set_not_detected / test is called
         self._badge = QLabel("")
         self._badge.setStyleSheet(_SS_BADGE_OK + " padding-left:228px;")
         self._badge.setVisible(False)
@@ -351,6 +340,30 @@ class _PortRow(QWidget):
         if self.combo.findText(v) == -1:
             self.combo.addItem(v)
         self.combo.setCurrentText(v)
+
+    def _test_connection(self):
+        """Attempt to open the selected COM port and report accessibility."""
+        port = self.combo.currentText().strip()
+        if not port:
+            self._badge.setText("⚠  No port selected")
+            self._badge.setStyleSheet(_SS_BADGE_WARN + " padding-left:228px;")
+            self._badge.setVisible(True)
+            return
+        try:
+            import serial
+            s = serial.Serial(port, timeout=0.5)
+            s.close()
+            self._badge.setText(f"✓  Port {port} opened OK")
+            self._badge.setStyleSheet(_SS_BADGE_OK + " padding-left:228px;")
+        except ImportError:
+            self._badge.setText("⚠  pyserial not installed — pip install pyserial")
+            self._badge.setStyleSheet(_SS_BADGE_WARN + " padding-left:228px;")
+        except Exception as e:
+            self._badge.setText(f"⊗  {port}: {str(e)[:60]}")
+            self._badge.setStyleSheet(
+                f"font-size:{FONT['caption']}pt; color:{PALETTE['danger']};"
+                " padding-left:228px;")
+        self._badge.setVisible(True)
 
     def set_detected(self, port: str, device_name: str):
         """Auto-select *port* and show a green ✓ badge."""
@@ -518,6 +531,22 @@ class _PageCamera(_PageBase):
         self._detection_label.setVisible(False)
         fl.addRow(self._detection_label)
 
+        # Test Camera button + inline result label
+        test_row = QHBoxLayout()
+        self._cam_test_btn = QPushButton("Test Camera")
+        self._cam_test_btn.setFixedHeight(30)
+        self._cam_test_btn.setToolTip(
+            "Attempt to enumerate cameras with the selected driver")
+        self._cam_test_btn.setStyleSheet(
+            _BTN_SECONDARY.replace("padding:8px 22px", "padding:0 12px"))
+        self._cam_test_btn.clicked.connect(self._test_camera)
+        self._cam_test_lbl = QLabel("")
+        self._cam_test_lbl.setStyleSheet(_SS_BADGE_OK)
+        test_row.addWidget(self._cam_test_btn)
+        test_row.addSpacing(8)
+        test_row.addWidget(self._cam_test_lbl, 1)
+        fl.addRow(test_row)
+
         self._content.addWidget(g)
         self._content.addStretch(1)
         self._update_hints(self._drv.currentText())
@@ -531,6 +560,45 @@ class _PageCamera(_PageBase):
             "simulated":  "No real camera required. Generates synthetic frames.",
         }
         self._hint.setText(hints.get(driver, ""))
+
+    def _test_camera(self):
+        """Quick enumeration test using the currently selected driver."""
+        driver = self._drv.currentText()
+        ok_ss   = _SS_BADGE_OK
+        warn_ss = _SS_BADGE_WARN
+        err_ss  = f"font-size:{FONT['caption']}pt; color:{PALETTE['danger']};"
+
+        if driver == "simulated":
+            self._cam_test_lbl.setText("✓  Simulated — no hardware required")
+            self._cam_test_lbl.setStyleSheet(ok_ss)
+            return
+
+        if driver == "pypylon":
+            try:
+                from pypylon import pylon
+                tlf  = pylon.TlFactory.GetInstance()
+                devs = tlf.EnumerateDevices()
+                if devs:
+                    self._cam_test_lbl.setText(
+                        f"✓  {len(devs)} Basler camera(s) found")
+                    self._cam_test_lbl.setStyleSheet(ok_ss)
+                else:
+                    self._cam_test_lbl.setText(
+                        "⚠  No Basler cameras found — check USB/GigE connection")
+                    self._cam_test_lbl.setStyleSheet(warn_ss)
+            except ImportError:
+                self._cam_test_lbl.setText(
+                    "⚠  pypylon not installed — pip install pypylon")
+                self._cam_test_lbl.setStyleSheet(warn_ss)
+            except Exception as e:
+                self._cam_test_lbl.setText(f"⊗  {str(e)[:60]}")
+                self._cam_test_lbl.setStyleSheet(err_ss)
+            return
+
+        self._cam_test_lbl.setText(
+            f"ℹ  Automated test not available for '{driver}' driver")
+        self._cam_test_lbl.setStyleSheet(
+            f"font-size:{FONT['caption']}pt; color:{PALETTE['textDim']};")
 
     def apply_scan(self, report) -> int:
         """

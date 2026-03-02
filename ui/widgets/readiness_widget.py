@@ -9,46 +9,68 @@ whether the instrument is ready to acquire and, if not, exactly what to fix.
 States
 ------
 READY       Green banner: "● READY TO ACQUIRE"
-NOT READY   Amber/red banner + list of issues with human-readable messages
+NOT READY   Amber/red banner + list of issues; each issue with a "Fix it →"
+            link that navigates directly to the relevant hardware tab.
 UNKNOWN     Grey banner (no metrics received yet)
+
+Signals
+-------
+navigate_requested(str)
+    Emitted when the user clicks a "Fix it →" button.
+    The string is a sidebar panel label (e.g. "Camera", "Temperature").
+    Connect to SidebarNav.select_by_label() in MainWindow.
 
 Usage
 -----
     widget = ReadinessWidget()
     metrics_service.metrics_updated.connect(widget.update_metrics)
+    widget.navigate_requested.connect(nav.select_by_label)
     acquire_tab.insert_readiness_widget(widget)
-
-The widget updates itself via update_metrics(snapshot_dict) where the dict
-is the structure produced by MetricsService._build_snapshot().
 """
 
 from __future__ import annotations
 
 from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QSizePolicy)
-from PyQt5.QtCore import Qt
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
+    QSizePolicy, QPushButton,
+)
+from PyQt5.QtCore import Qt, pyqtSignal
+
+from ui.theme import PALETTE, FONT
 
 
-# ── Style constants (match the app's dark theme) ───────────────────────────
+# ── Issue code → sidebar panel label mapping ───────────────────────────────────
+#
+# ReadinessWidget uses this table to attach "Fix it →" buttons to issues that
+# have a corresponding hardware tab.  Issue codes are those produced by
+# ai/metrics_service.py.  Codes with dynamic suffixes (e.g. tec_not_stable_0)
+# are matched via startswith().
 
-_READY_BG       = "#0d2b22"
-_READY_BORDER   = "#00d4aa"
-_READY_TEXT     = "#00d4aa"
+_NAV_MAP: dict[str, str] = {
+    "camera_disconnected":  "Camera",
+    "camera_saturated":     "Camera",
+    "camera_underexposed":  "Camera",
+    "high_drift":           "Camera",
+    "poor_focus":           "Camera",
+    "fpga_not_running":     "FPGA",
+    "fpga_not_locked":      "FPGA",
+    # TEC codes have a channel suffix: tec_not_stable_0, tec_not_stable_1
+    # These are matched via the prefix check in _nav_target_for().
+    "tec_not_stable":       "Temperature",
+    "tec_disabled":         "Temperature",
+    "tec_alarm":            "Temperature",
+}
 
-_WARN_BG        = "#2b1e0a"
-_WARN_BORDER    = "#ffaa44"
-_WARN_TEXT      = "#ffaa44"
 
-_ERROR_BG       = "#2b0a0a"
-_ERROR_BORDER   = "#ff6666"
-_ERROR_TEXT     = "#ff6666"
-
-_UNKNOWN_BG     = "#181818"
-_UNKNOWN_BORDER = "#333"
-_UNKNOWN_TEXT   = "#555"
-
-_ISSUE_TEXT     = "#bbb"
-_ISSUE_FONT     = "font-family: Menlo, monospace; font-size: 11pt;"
+def _nav_target_for(code: str) -> str | None:
+    """Return the sidebar label for *code*, or None if not navigable."""
+    if code in _NAV_MAP:
+        return _NAV_MAP[code]
+    # Handle suffixed TEC codes (tec_not_stable_0, tec_not_stable_1 …)
+    for prefix, target in _NAV_MAP.items():
+        if code.startswith(prefix):
+            return target
+    return None
 
 
 class ReadinessWidget(QWidget):
@@ -56,9 +78,11 @@ class ReadinessWidget(QWidget):
     Compact readiness banner.  Receives metrics snapshots via update_metrics()
     and repaints itself each time.
 
-    The widget is intentionally thin — roughly 36 px when ready, expanding
-    to show the issue list when there are problems.
+    The widget is intentionally thin — ~36 px when ready, expanding to show
+    the issue list (with Fix it links) when there are problems.
     """
+
+    navigate_requested = pyqtSignal(str)   # emitted with sidebar panel label
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -68,7 +92,7 @@ class ReadinessWidget(QWidget):
         outer.setContentsMargins(0, 0, 0, 4)
         outer.setSpacing(0)
 
-        # ── Outer frame (border + background change per state) ─────────
+        # ── Outer frame ────────────────────────────────────────────────
         self._frame = QFrame()
         self._frame.setFrameShape(QFrame.StyledPanel)
         self._frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
@@ -89,7 +113,8 @@ class ReadinessWidget(QWidget):
         self._title = QLabel("Checking instrument state…")
         self._title.setAlignment(Qt.AlignVCenter)
         self._title.setStyleSheet(
-            "font-family: Menlo, monospace; font-size: 13pt; font-weight: bold;")
+            f"font-family: Menlo, monospace; "
+            f"font-size: {FONT['label']}pt; font-weight: bold;")
 
         header_row.addWidget(self._dot)
         header_row.addWidget(self._title)
@@ -100,7 +125,7 @@ class ReadinessWidget(QWidget):
         self._issues_widget = QWidget()
         self._issues_layout = QVBoxLayout(self._issues_widget)
         self._issues_layout.setContentsMargins(24, 2, 0, 0)
-        self._issues_layout.setSpacing(2)
+        self._issues_layout.setSpacing(3)
         inner.addWidget(self._issues_widget)
         self._issues_widget.hide()
 
@@ -122,60 +147,109 @@ class ReadinessWidget(QWidget):
             ready (bool), issues (list of {code, message}).
         """
         issues = snapshot.get("issues", [])
-        ready  = snapshot.get("ready", False)
 
         if not issues:
             self._apply_state("ready", "READY TO ACQUIRE", [])
         else:
             n = len(issues)
             label = f"NOT READY  —  {n} {'issue' if n == 1 else 'issues'}"
-            msgs  = [i["message"] for i in issues]
-            self._apply_state("warn", label, msgs)
+            self._apply_state("warn", label, issues)
 
     # ================================================================ #
     #  Internal rendering                                               #
     # ================================================================ #
 
-    def _apply_state(self, state: str, title: str, messages: list[str]) -> None:
+    def _apply_state(self, state: str, title: str, issues: list) -> None:
         """Re-render the widget for the given state."""
         if state == "ready":
-            bg, border, fg = _READY_BG, _READY_BORDER, _READY_TEXT
+            bg, border, fg = (PALETTE["readyBg"],
+                              PALETTE["readyBorder"],
+                              PALETTE["success"])
             dot = "●"
         elif state == "warn":
-            bg, border, fg = _WARN_BG, _WARN_BORDER, _WARN_TEXT
+            bg, border, fg = (PALETTE["warnBg"],
+                              PALETTE["warnBorder"],
+                              PALETTE["warning"])
             dot = "⚠"
         elif state == "error":
-            bg, border, fg = _ERROR_BG, _ERROR_BORDER, _ERROR_TEXT
+            bg, border, fg = (PALETTE["errorBg"],
+                              PALETTE["errorBorder"],
+                              PALETTE["danger"])
             dot = "✗"
         else:  # unknown
-            bg, border, fg = _UNKNOWN_BG, _UNKNOWN_BORDER, _UNKNOWN_TEXT
+            bg, border, fg = (PALETTE["unknownBg"],
+                              PALETTE["unknownBorder"],
+                              PALETTE["textDim"])
             dot = "○"
 
         self._frame.setStyleSheet(
             f"QFrame {{ background: {bg}; border: 1px solid {border}; "
             f"border-radius: 4px; }}")
-        self._dot.setStyleSheet(f"color: {fg}; font-size: 14pt;")
+        self._dot.setStyleSheet(f"color: {fg}; font-size: {FONT['label']}pt;")
         self._dot.setText(dot)
         self._title.setStyleSheet(
-            f"font-family: Menlo, monospace; font-size: 13pt; "
-            f"font-weight: bold; color: {fg};")
+            f"font-family: Menlo, monospace; "
+            f"font-size: {FONT['label']}pt; font-weight: bold; color: {fg};")
         self._title.setText(title)
 
-        # Rebuild the issue labels
+        # Rebuild the issue rows
         self._clear_issues()
-        if messages:
-            for msg in messages:
-                lbl = QLabel(f"✗  {msg}")
-                lbl.setStyleSheet(f"color: {_ISSUE_TEXT}; {_ISSUE_FONT}")
-                lbl.setWordWrap(True)
-                self._issues_layout.addWidget(lbl)
+        if issues:
+            for issue in issues:
+                msg  = issue.get("message", str(issue)) if isinstance(issue, dict) else str(issue)
+                code = issue.get("code", "")            if isinstance(issue, dict) else ""
+                nav  = _nav_target_for(code)
+                self._issues_layout.addLayout(self._issue_row(msg, nav))
             self._issues_widget.show()
         else:
             self._issues_widget.hide()
 
+    def _issue_row(self, message: str, nav_target: str | None) -> QHBoxLayout:
+        """Build one issue row: ✗ message text  [Fix it →]."""
+        row = QHBoxLayout()
+        row.setSpacing(8)
+
+        lbl = QLabel(f"✗  {message}")
+        lbl.setStyleSheet(
+            f"color: {PALETTE['text']}; "
+            f"font-family: Menlo, monospace; font-size: {FONT['sublabel']}pt;")
+        lbl.setWordWrap(True)
+        row.addWidget(lbl, 1)
+
+        if nav_target:
+            fix_btn = QPushButton(f"Fix it →")
+            fix_btn.setFixedHeight(20)
+            fix_btn.setCursor(Qt.PointingHandCursor)
+            fix_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: transparent;
+                    color: {PALETTE["accent"]};
+                    border: none;
+                    font-size: {FONT["caption"]}pt;
+                    font-weight: 600;
+                    padding: 0 4px;
+                }}
+                QPushButton:hover {{ color: #fff; }}
+            """)
+            fix_btn.setToolTip(f"Open {nav_target} tab")
+            fix_btn.clicked.connect(
+                lambda _, t=nav_target: self.navigate_requested.emit(t))
+            row.addWidget(fix_btn)
+
+        return row
+
     def _clear_issues(self) -> None:
-        """Remove all existing issue labels from the issues layout."""
+        """Remove all existing issue rows from the issues layout."""
         while self._issues_layout.count():
             item = self._issues_layout.takeAt(0)
-            if item and item.widget():
+            if item is None:
+                break
+            # item may be a layout (QHBoxLayout) or a widget
+            if item.layout():
+                sub = item.layout()
+                while sub.count():
+                    child = sub.takeAt(0)
+                    if child and child.widget():
+                        child.widget().deleteLater()
+            elif item.widget():
                 item.widget().deleteLater()

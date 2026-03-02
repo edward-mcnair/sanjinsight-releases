@@ -19,16 +19,18 @@ from PyQt5.QtGui   import (
     QPainterPath, QFontMetrics,
 )
 
-# ── Palette ────────────────────────────────────────────────────────
-_BG         = "#1a1a1a"
+# ── Palette — sourced from ui.theme (single source of truth) ───────
+from ui.theme import PALETTE, FONT as _FONT
+
+_BG         = PALETTE["surface"]
 _BG_HOVER   = "#222222"
 _BG_ACTIVE  = "#0d2520"
-_ACCENT     = "#00d4aa"
-_TEXT_DIM   = "#777777"
-_TEXT_NORM  = "#c0c0c0"
+_ACCENT     = PALETTE["accent"]
+_TEXT_DIM   = PALETTE["textDim"]
+_TEXT_NORM  = PALETTE["text"]
 _TEXT_WHITE = "#ffffff"
-_DIVIDER    = "#2a2a2a"
-_HDR_BG     = "#111111"
+_DIVIDER    = PALETTE["border"]
+_HDR_BG     = PALETTE["surface3"]
 
 # ── Sizes ──────────────────────────────────────────────────────────
 _ITEM_H    = 30    # menu row height
@@ -39,9 +41,9 @@ _W_FULL    = 240   # expanded width
 _W_MINI    = 22    # collapsed — thin blue bar
 
 # ── Fonts ──────────────────────────────────────────────────────────
-_ITEM_FONT_PT    = 14   # menu item label
-_SECTION_FONT_PT = 11   # section header caps label (slightly bigger feel via weight+spacing)
-_ICON_FONT_PT    = 13   # icon glyphs
+_ITEM_FONT_PT    = _FONT["body"]      # 13 pt — reduced from 14
+_SECTION_FONT_PT = _FONT["sublabel"]  # 11 pt — section header caps
+_ICON_FONT_PT    = _FONT["label"]     # 12 pt — icon glyphs (reduced from 13)
 
 
 class NavItem(NamedTuple):
