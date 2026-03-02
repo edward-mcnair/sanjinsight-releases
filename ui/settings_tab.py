@@ -22,7 +22,7 @@ from PyQt5.QtGui     import QDesktopServices
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QCheckBox, QComboBox, QGroupBox, QFrame, QSizePolicy,
-    QScrollArea, QSpinBox, QLineEdit, QFileDialog, QProgressBar,
+    QScrollArea, QSlider, QLineEdit, QFileDialog, QProgressBar,
 )
 
 import config as cfg_mod
@@ -465,37 +465,60 @@ class SettingsTab(QWidget):
         path_row.addWidget(browse_btn)
         lay.addLayout(path_row)
 
-        # ── GPU layers row ────────────────────────────────────────────────
-        gpu_row = QHBoxLayout()
-        gpu_lbl = QLabel("GPU layers (0 = CPU only):")
-        gpu_lbl.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
-        gpu_row.addWidget(gpu_lbl)
+        # ── GPU acceleration slider ───────────────────────────────────────
+        gpu_section_lbl = QLabel("GPU acceleration")
+        gpu_section_lbl.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
+        lay.addWidget(gpu_section_lbl)
 
-        self._ai_gpu_spin = QSpinBox()
-        self._ai_gpu_spin.setRange(0, 999)
-        self._ai_gpu_spin.setValue(cfg_mod.get_pref("ai.n_gpu_layers", 0))
-        self._ai_gpu_spin.setFixedWidth(80)
-        self._ai_gpu_spin.setStyleSheet(
-            f"QSpinBox {{ background:{_BG2}; color:{_TEXT}; "
-            f"border:1px solid {_BORDER}; border-radius:4px; "
-            f"font-size:12pt; padding:4px; }}"
-        )
-        self._ai_gpu_spin.setToolTip(
-            "Number of model layers to offload to GPU.\n"
-            "Set to 0 for CPU-only inference (slower, no GPU required).\n"
-            "Set to a large number (e.g. 999) to offload as much as possible.")
-        self._ai_gpu_spin.valueChanged.connect(
-            lambda v: cfg_mod.set_pref("ai.n_gpu_layers", v))
-        gpu_row.addWidget(self._ai_gpu_spin)
-        gpu_row.addStretch(1)
-        lay.addLayout(gpu_row)
+        _init_n_layers = MODEL_CATALOG[self._ai_model_ids[rec_idx]].get("n_layers", 32)
 
-        # Auto-fill GPU layers from hardware probe if user hasn't set a value yet
-        saved_layers = cfg_mod.get_pref("ai.n_gpu_layers", 0)
-        if saved_layers == 0 and hasattr(self, "_ai_probe_gpu_layers") \
-                and self._ai_probe_gpu_layers > 0:
-            self._ai_gpu_spin.setValue(self._ai_probe_gpu_layers)
-            cfg_mod.set_pref("ai.n_gpu_layers", self._ai_probe_gpu_layers)
+        self._ai_gpu_slider = QSlider(Qt.Horizontal)
+        self._ai_gpu_slider.setMinimum(0)
+        self._ai_gpu_slider.setMaximum(_init_n_layers)
+        self._ai_gpu_slider.setStyleSheet(f"""
+            QSlider::groove:horizontal {{
+                background:{_BG2}; border:1px solid {_BORDER};
+                height:6px; border-radius:3px;
+            }}
+            QSlider::handle:horizontal {{
+                background:{_ACCENT}; border:none;
+                width:16px; height:16px; margin:-5px 0;
+                border-radius:8px;
+            }}
+            QSlider::sub-page:horizontal {{
+                background:{_ACCENT}55; border-radius:3px;
+            }}
+            QSlider:disabled::handle:horizontal {{ background:{_BORDER}; }}
+            QSlider:disabled::sub-page:horizontal {{ background:{_BG2}; }}
+        """)
+
+        slider_row = QHBoxLayout()
+        cpu_end = QLabel("CPU")
+        cpu_end.setStyleSheet(f"font-size:10pt; color:{_MUTED};")
+        cpu_end.setFixedWidth(36)
+        slider_row.addWidget(cpu_end)
+        slider_row.addWidget(self._ai_gpu_slider, 1)
+        gpu_end = QLabel("Full GPU")
+        gpu_end.setStyleSheet(f"font-size:10pt; color:{_MUTED};")
+        gpu_end.setFixedWidth(60)
+        gpu_end.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        slider_row.addWidget(gpu_end)
+        lay.addLayout(slider_row)
+
+        self._ai_gpu_label = QLabel("")
+        self._ai_gpu_label.setStyleSheet(f"font-size:11pt; color:{_MUTED};")
+        lay.addWidget(self._ai_gpu_label)
+
+        # Initial slider value: saved preference, or hardware probe recommendation
+        _saved_layers = cfg_mod.get_pref("ai.n_gpu_layers", 0)
+        _probe_layers  = getattr(self, "_ai_probe_gpu_layers", 0)
+        if _saved_layers == 0 and _probe_layers > 0:
+            _init_val = min(_probe_layers, _init_n_layers)
+        else:
+            _init_val = min(_saved_layers, _init_n_layers)
+        self._ai_gpu_slider.setValue(_init_val)
+        self._on_gpu_slider_changed(_init_val)          # set initial label
+        self._ai_gpu_slider.valueChanged.connect(self._on_gpu_slider_changed)
 
         lay.addWidget(_sep())
 
@@ -605,7 +628,7 @@ class SettingsTab(QWidget):
             self._ai_status_lbl.setText("No model file selected")
             self._ai_status_lbl.setStyleSheet(f"font-size:12pt; color:#ff5555;")
             return
-        n_gpu = self._ai_gpu_spin.value()
+        n_gpu = self._ai_gpu_slider.value()
         self._ai_apply_btn.setEnabled(False)
         self._ai_status_lbl.setText("Loading…")
         self._ai_status_lbl.setStyleSheet(f"font-size:12pt; color:#ffaa44;")
@@ -629,13 +652,51 @@ class SettingsTab(QWidget):
             self._ai_apply_btn.setEnabled(status not in ("loading", "thinking"))
 
     def _on_model_combo_changed(self, idx: int) -> None:
-        """Update description label when user changes model selection."""
+        """Update description label and slider range when user changes model selection."""
         from ai.model_catalog import MODEL_CATALOG
         if not hasattr(self, "_ai_model_ids") or idx >= len(self._ai_model_ids):
             return
         mid = self._ai_model_ids[idx]
+        m   = MODEL_CATALOG[mid]
         if hasattr(self, "_ai_model_desc_lbl"):
-            self._ai_model_desc_lbl.setText(MODEL_CATALOG[mid]["description"])
+            self._ai_model_desc_lbl.setText(m["description"])
+        # Update slider range and label for the newly selected model
+        if hasattr(self, "_ai_gpu_slider"):
+            n_layers    = m.get("n_layers", 32)
+            current_val = self._ai_gpu_slider.value()
+            self._ai_gpu_slider.setMaximum(n_layers)
+            clamped = min(current_val, n_layers)
+            if clamped != current_val:
+                self._ai_gpu_slider.setValue(clamped)   # triggers _on_gpu_slider_changed
+            else:
+                self._on_gpu_slider_changed(clamped)    # re-render label for new model
+
+    def _on_gpu_slider_changed(self, val: int) -> None:
+        """Update GPU layer label and persist preference when slider moves."""
+        from ai.model_catalog import MODEL_CATALOG
+        if not hasattr(self, "_ai_model_ids") or not hasattr(self, "_ai_gpu_label"):
+            return
+        idx = self._ai_model_combo.currentIndex() \
+              if hasattr(self, "_ai_model_combo") else 0
+        mid      = self._ai_model_ids[idx] if idx < len(self._ai_model_ids) \
+                   else "phi35_mini_q4"
+        m        = MODEL_CATALOG[mid]
+        n_layers = m.get("n_layers", 32)
+        vram_gb  = val * (m["size_gb"] / n_layers)
+
+        if val == 0:
+            text  = "CPU only — no GPU required"
+            color = _MUTED
+        elif val >= n_layers:
+            text  = f"Full GPU — all {n_layers} layers  ·  ~{vram_gb:.1f} GB VRAM"
+            color = _GREEN
+        else:
+            text  = f"{val} / {n_layers} layers on GPU  ·  ~{vram_gb:.1f} GB VRAM"
+            color = _AMBER
+
+        self._ai_gpu_label.setText(text)
+        self._ai_gpu_label.setStyleSheet(f"font-size:11pt; color:{color};")
+        cfg_mod.set_pref("ai.n_gpu_layers", val)
 
     def _on_download_clicked(self) -> None:
         from ai.model_downloader import DEFAULT_MODELS_DIR
@@ -660,15 +721,18 @@ class SettingsTab(QWidget):
         """Called by MainWindow during model download."""
         if not hasattr(self, "_ai_progress_bar"):
             return
-        pct = int(done / total * 100) if total > 0 else 0
-        self._ai_progress_bar.setValue(pct)
-        done_mb  = done  / 1024 / 1024
-        total_mb = total / 1024 / 1024 if total > 0 else 0
+        done_mb   = done  / 1024 / 1024
         speed_str = f"  {speed_mbps:.1f} MB/s" if speed_mbps > 0 else ""
-        if total_mb > 0:
+        if total > 0:
+            # Content-Length known — determinate progress
+            self._ai_progress_bar.setRange(0, 100)
+            self._ai_progress_bar.setValue(int(done / total * 100))
+            total_mb = total / 1024 / 1024
             self._ai_dl_status_lbl.setText(
                 f"Downloading… {done_mb:.0f} / {total_mb:.0f} MB{speed_str}")
         else:
+            # Content-Length unknown (CDN redirect) — indeterminate animation
+            self._ai_progress_bar.setRange(0, 0)
             self._ai_dl_status_lbl.setText(
                 f"Downloading… {done_mb:.0f} MB{speed_str}")
 
@@ -676,6 +740,7 @@ class SettingsTab(QWidget):
         """Called by MainWindow when model download finishes successfully."""
         if not hasattr(self, "_ai_progress_bar"):
             return
+        self._ai_progress_bar.setRange(0, 100)  # restore from indeterminate if needed
         self._ai_progress_bar.setValue(100)
         self._ai_cancel_btn.setVisible(False)
         self._ai_download_btn.setEnabled(True)
@@ -709,8 +774,8 @@ class SettingsTab(QWidget):
             self._ai_download_widget.setVisible(enabled)
         if hasattr(self, "_ai_path_edit"):
             self._ai_path_edit.setEnabled(enabled)
-        if hasattr(self, "_ai_gpu_spin"):
-            self._ai_gpu_spin.setEnabled(enabled)
+        if hasattr(self, "_ai_gpu_slider"):
+            self._ai_gpu_slider.setEnabled(enabled)
         if hasattr(self, "_ai_apply_btn"):
             self._ai_apply_btn.setEnabled(enabled)
 

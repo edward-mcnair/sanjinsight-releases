@@ -28,6 +28,7 @@ MODEL_CATALOG: dict[str, dict] = {
         ),
         "size_gb":     1.0,
         "min_ram_gb":  4,
+        "n_layers":    28,
         "description": (
             "Fastest and smallest model. Good for older PCs or systems "
             "with limited available memory (4–6 GB)."
@@ -42,6 +43,7 @@ MODEL_CATALOG: dict[str, dict] = {
         ),
         "size_gb":     2.4,
         "min_ram_gb":  6,
+        "n_layers":    32,
         "description": (
             "Best balance of speed and quality. Runs well on most modern "
             "PCs (6–16 GB RAM or 4+ GB VRAM)."
@@ -56,6 +58,7 @@ MODEL_CATALOG: dict[str, dict] = {
         ),
         "size_gb":     4.5,
         "min_ram_gb":  10,
+        "n_layers":    28,
         "description": (
             "Highest quality responses. Recommended for high-end PCs with "
             "16 GB+ RAM or 8+ GB VRAM."
