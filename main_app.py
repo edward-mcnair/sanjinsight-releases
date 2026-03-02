@@ -2715,8 +2715,8 @@ class StatusHeader(QWidget):
                 svg.setStyleSheet("background:transparent;")
                 logo_col_lay.addWidget(svg)
                 logo_loaded = True
-            except Exception:
-                pass
+            except Exception as _e:
+                log.debug("Logo SVG load failed — using text fallback: %s", _e)
 
         if not logo_loaded:
             fallback = QLabel("MICROSANJ")
@@ -3386,7 +3386,7 @@ class MainWindow(QMainWindow):
             try:
                 _cfg.reload()
             except Exception:
-                pass
+                log.warning("Config reload after hardware setup failed", exc_info=True)
             QMessageBox.information(
                 self, "Hardware Setup",
                 "Configuration saved.\n\n"
@@ -3523,8 +3523,8 @@ class MainWindow(QMainWindow):
         if not advanced:
             try:
                 self._wizard._step1.refresh()
-            except Exception:
-                pass
+            except Exception as _e:
+                log.debug("Wizard step1 refresh: %s", _e)
 
     def _on_profile_applied(self, profile):
         """
@@ -3544,28 +3544,28 @@ class MainWindow(QMainWindow):
                 cam.set_gain(profile.gain_db)
             self._camera_tab.set_exposure(profile.exposure_us)
             self._camera_tab.set_gain(profile.gain_db)
-        except Exception:
-            pass
+        except Exception as _e:
+            log.warning("Profile apply — camera settings: %s", _e)
 
         # 3. Push acquisition frame count to acquire tab
         try:
             self._acquire_tab.set_n_frames(profile.n_frames)
-        except Exception:
-            pass
+        except Exception as _e:
+            log.debug("Profile apply — acquire n_frames: %s", _e)
 
         # 4. Push live tab accumulation depth + frames per half
         try:
             self._live_tab._frames_per_half.setValue(
                 max(2, profile.n_frames // 4))
             self._live_tab._accum.setValue(profile.accumulation)
-        except Exception:
-            pass
+        except Exception as _e:
+            log.debug("Profile apply — live tab settings: %s", _e)
 
         # 5. Push scan frames per tile
         try:
             self._scan_tab._n_frames.setValue(profile.n_frames)
-        except Exception:
-            pass
+        except Exception as _e:
+            log.debug("Profile apply — scan n_frames: %s", _e)
 
         # 6. Log
         self._log_tab.append(
@@ -3600,7 +3600,8 @@ class MainWindow(QMainWindow):
         if cal and cal.valid:
             try:
                 r.delta_t = cal.apply(r.delta_r_over_r)
-            except Exception:
+            except Exception as _e:
+                log.debug("Calibration apply to acquisition result failed: %s", _e)
                 r.delta_t = None
         self._acquire_tab.update_result(r)
 
@@ -3779,6 +3780,13 @@ class MainWindow(QMainWindow):
 if __name__ == "__main__":
     import sys as _sys
 
+    # ── Configure rotating log file before anything else ──────────────
+    # This must run before config is reloaded or QApplication is created
+    # so that every log message (including hardware init) is captured.
+    import logging_config as _lc
+    import config as _cfg_boot
+    _lc.setup(level=_cfg_boot.get("logging.level", "INFO"))
+
     # ── Determine launch mode ─────────────────────────────────────────
     # Demo mode activates when:
     #   1.  --demo flag is passed on the command line
@@ -3820,8 +3828,8 @@ if __name__ == "__main__":
         from PyQt5.QtGui  import QTextCursor
         from PyQt5.QtCore import QMetaType
         QMetaType.type("QTextCursor")   # ensures the type is registered
-    except Exception:
-        pass
+    except Exception as _e:
+        log.debug("QMetaType QTextCursor registration skipped: %s", _e)
 
     # ── First-run wizard (Windows + real hardware only) ───────────────
     if not _FORCE_DEMO:

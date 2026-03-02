@@ -68,7 +68,7 @@ class ApplicationState:
         self._active_modality    = "thermoreflectance"  # str
 
         # ── Demo mode ───────────────────────────────────────────────
-        self.demo_mode: bool = False      # True when running on simulated hardware
+        self._demo_mode: bool = False     # True when running on simulated hardware
 
     # ── Context manager (use for compound operations) ───────────────
 
@@ -78,6 +78,18 @@ class ApplicationState:
 
     def __exit__(self, *_):
         self._lock.release()
+
+    # ── Demo mode property ───────────────────────────────────────────
+
+    @property
+    def demo_mode(self) -> bool:
+        with self._lock:
+            return self._demo_mode
+
+    @demo_mode.setter
+    def demo_mode(self, value: bool) -> None:
+        with self._lock:
+            self._demo_mode = bool(value)
 
     # ── Hardware driver properties ───────────────────────────────────
 

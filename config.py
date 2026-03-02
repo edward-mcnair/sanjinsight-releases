@@ -135,6 +135,7 @@ from pathlib import Path as _Path
 
 _PREFS_PATH = _Path.home() / ".microsanj" / "preferences.json"
 _prefs: dict = {}
+_prefs_log = logging.getLogger(__name__ + ".prefs")
 
 
 def _load_prefs() -> dict:
@@ -143,7 +144,9 @@ def _load_prefs() -> dict:
             with open(_PREFS_PATH) as f:
                 return json.load(f)
     except Exception:
-        pass
+        _prefs_log.exception(
+            "Preferences load failed (%s) — using defaults", _PREFS_PATH
+        )
     return {}
 
 
@@ -153,7 +156,7 @@ def _save_prefs():
         with open(_PREFS_PATH, "w") as f:
             json.dump(_prefs, f, indent=2)
     except Exception:
-        pass
+        _prefs_log.exception("Preferences save failed (%s)", _PREFS_PATH)
 
 
 _prefs = _load_prefs()
