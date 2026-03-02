@@ -64,3 +64,49 @@ jobs:
               f'CHANGELOG.md has no entry for v{__version__} — add one before releasing'
           print(f'✓ CHANGELOG.md has entry for v{__version__}')
           "
+
+  # ── Job 2: Test suite ────────────────────────────────────────────────────────
+  test:
+    name: pytest
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install system dependencies (headless Qt)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libgl1 libglib2.0-0 \
+            libxcb-xinerama0 libxkbcommon-x11-0 \
+            libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+            libxcb-randr0 libxcb-render-util0 \
+            libxcb-shape0 libxcb-xfixes0
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # Only packages needed for the pure-Python / AI test suite.
+          # Hardware-dependent packages (nifpga, ni_imaqdx) are unavailable on
+          # CI runners; tests that require them skip themselves automatically.
+          pip install PyQt5 numpy pytest PyYAML matplotlib h5py scipy
+
+      - name: Run tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          python -m pytest tests/ -q --tb=short

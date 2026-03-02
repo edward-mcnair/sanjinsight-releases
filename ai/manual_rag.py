@@ -45,13 +45,66 @@ _MAX_WORDS_PER_SECTION: int = 250
 _MIN_SCORE: float = 0.01
 
 
+# ── Synonym normalisation ─────────────────────────────────────────────────────
+#
+# Maps inflected / variant forms to their canonical token so that a query
+# like "camera clipping" still matches manual sections that only say
+# "saturation", and "calibrate temperature" matches "calibration".
+#
+# Applied symmetrically to *both* query tokens and section tokens, so
+# Jaccard scores remain meaningful (the sets are normalised the same way).
+
+_SYNONYMS: dict[str, str] = {
+    # Camera / saturation
+    "saturated":    "saturation",
+    "saturating":   "saturation",
+    "clipped":      "saturation",
+    "clipping":     "saturation",
+    "overexposed":  "saturation",
+    # Temperature / thermal
+    "overheating":  "thermal",
+    "overheat":     "thermal",
+    "overheated":   "thermal",
+    # Calibration
+    "calibrate":    "calibration",
+    "calibrating":  "calibration",
+    "calibrated":   "calibration",
+    # Acquisition
+    "acquire":      "acquisition",
+    "acquiring":    "acquisition",
+    "acquired":     "acquisition",
+    # Troubleshooting
+    "troubleshoot": "troubleshooting",
+    "debug":        "troubleshooting",
+    # Connection
+    "disconnect":   "connection",
+    "disconnected": "connection",
+    "reconnect":    "connection",
+    "reconnecting": "connection",
+    # Export
+    "exporting":    "export",
+    "exported":     "export",
+    # Analysis
+    "analyze":      "analysis",
+    "analyzed":     "analysis",
+    "analyzing":    "analysis",
+}
+
+
 # ── Tokenisation ──────────────────────────────────────────────────────────────
 
 def _tokenize(text: str) -> frozenset[str]:
-    """Lowercase alphanumeric tokens of length ≥ 3."""
-    return frozenset(
-        w for w in re.findall(r"[a-z0-9]+", text.lower()) if len(w) >= 3
-    )
+    """Lowercase alphanumeric tokens of length ≥ 3, with synonym normalisation.
+
+    Inflected or variant forms (e.g. "clipping", "calibrate") are mapped to
+    their canonical form before being added to the token set, so Jaccard
+    similarity is computed over normalised vocabulary on both sides.
+    """
+    tokens: set[str] = set()
+    for w in re.findall(r"[a-z0-9]+", text.lower()):
+        if len(w) >= 3:
+            tokens.add(_SYNONYMS.get(w, w))
+    return frozenset(tokens)
 
 
 # ── Section parsing ───────────────────────────────────────────────────────────

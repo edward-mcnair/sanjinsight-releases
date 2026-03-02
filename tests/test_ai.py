@@ -259,3 +259,92 @@ class TestTemplateRagIntegration:
         user_content = msgs[-1]["content"]
         assert "Relevant User Manual sections" in user_content
         assert snippet in user_content
+
+
+# ================================================================== #
+#  4. Synonym normalisation                                           #
+# ================================================================== #
+
+class TestSynonymNormalisation:
+    """Verify that _SYNONYMS are applied symmetrically in _tokenize()."""
+
+    def test_synonyms_dict_exists(self):
+        """_SYNONYMS must be a non-empty dict."""
+        from ai.manual_rag import _SYNONYMS
+        assert isinstance(_SYNONYMS, dict)
+        assert len(_SYNONYMS) > 0
+
+    def test_clipped_maps_to_saturation(self):
+        """'clipped' and 'clipping' must both tokenise to 'saturation'."""
+        from ai.manual_rag import _tokenize
+        tokens = _tokenize("clipped image clipping")
+        assert "saturation" in tokens
+        assert "clipped" not in tokens
+        assert "clipping" not in tokens
+
+    def test_overexposed_maps_to_saturation(self):
+        """'overexposed' must tokenise to 'saturation'."""
+        from ai.manual_rag import _tokenize
+        tokens = _tokenize("overexposed frame")
+        assert "saturation" in tokens
+
+    def test_calibrate_maps_to_calibration(self):
+        """'calibrate' and 'calibrating' must both map to 'calibration'."""
+        from ai.manual_rag import _tokenize
+        t1 = _tokenize("calibrate the stage")
+        t2 = _tokenize("calibrating now")
+        assert "calibration" in t1
+        assert "calibration" in t2
+        assert "calibrate" not in t1
+        assert "calibrating" not in t2
+
+    def test_acquire_maps_to_acquisition(self):
+        """'acquire', 'acquiring', 'acquired' must all map to 'acquisition'."""
+        from ai.manual_rag import _tokenize
+        for word in ("acquire", "acquiring", "acquired"):
+            tokens = _tokenize(word)
+            assert "acquisition" in tokens, f"'{word}' did not map to 'acquisition'"
+            assert word not in tokens
+
+    def test_debug_maps_to_troubleshooting(self):
+        """'debug' must map to 'troubleshooting'."""
+        from ai.manual_rag import _tokenize
+        tokens = _tokenize("how to debug connection issue")
+        assert "troubleshooting" in tokens
+
+    def test_disconnected_maps_to_connection(self):
+        """'disconnected' and 'reconnect' must map to 'connection'."""
+        from ai.manual_rag import _tokenize
+        t1 = _tokenize("camera disconnected")
+        t2 = _tokenize("reconnect device")
+        assert "connection" in t1
+        assert "connection" in t2
+
+    def test_unknown_word_unchanged(self):
+        """A word not in _SYNONYMS must pass through unchanged."""
+        from ai.manual_rag import _tokenize
+        tokens = _tokenize("exposure gain frame")
+        assert "exposure" in tokens
+        assert "gain" in tokens
+        assert "frame" in tokens
+
+    def test_synonyms_applied_to_sections(self):
+        """Section token sets must not contain raw synonym keys — only canonical forms."""
+        from ai.manual_rag import _load_sections, _SYNONYMS
+        sections = _load_sections()
+        if not sections:
+            pytest.skip("UserManual.md not found")
+        for heading, body, tokens in sections:
+            for raw_form in _SYNONYMS:
+                assert raw_form not in tokens, (
+                    f"Section '{heading}' contains raw synonym key '{raw_form}' "
+                    f"— _tokenize() should have mapped it to '{_SYNONYMS[raw_form]}'"
+                )
+
+    def test_retrieve_clipped_finds_saturation_section(self):
+        """A query using 'clipped' must return a str (synonym bridges the gap)."""
+        from ai.manual_rag import _load_sections, retrieve
+        if not _load_sections():
+            pytest.skip("UserManual.md not found")
+        result = retrieve("camera clipped pixels")
+        assert isinstance(result, str)
