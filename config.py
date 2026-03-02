@@ -2,14 +2,73 @@
 config.py
 Loads and provides access to system configuration from config.yaml.
 All hardware modules pull their settings from here — no hardcoded values anywhere.
+
+User-writable paths
+-------------------
+When running as a frozen PyInstaller bundle (installed via the Windows installer)
+the app cannot write to Program Files.  All mutable files are redirected:
+
+  Windows  : %LOCALAPPDATA%\\Microsanj\\SanjINSIGHT\\
+  macOS    : ~/Library/Application Support/Microsanj/SanjINSIGHT/
+  Linux    : ~/.local/share/Microsanj/SanjINSIGHT/
+
+When running from source (development) all paths remain next to config.py.
 """
 
+import sys
 import yaml
 import logging
 import os
 from pathlib import Path
 
-CONFIG_PATH = Path(__file__).parent / "config.yaml"
+
+def _user_data_dir() -> Path:
+    """
+    Returns the per-user writable directory for SanjINSIGHT data (logs, config).
+
+    Frozen (installed app):
+      Windows : %LOCALAPPDATA%\\Microsanj\\SanjINSIGHT
+      macOS   : ~/Library/Application Support/Microsanj/SanjINSIGHT
+      Linux   : ~/.local/share/Microsanj/SanjINSIGHT
+    Development (running from source):
+      Always  : the project root directory (next to config.py)
+    """
+    if getattr(sys, 'frozen', False):
+        if sys.platform == 'win32':
+            base = Path(os.environ.get('LOCALAPPDATA', Path.home()))
+        elif sys.platform == 'darwin':
+            base = Path.home() / 'Library' / 'Application Support'
+        else:
+            base = Path(os.environ.get(
+                'XDG_DATA_HOME', Path.home() / '.local' / 'share'))
+        return base / 'Microsanj' / 'SanjINSIGHT'
+    return Path(__file__).parent
+
+
+def _resolve_config_path() -> Path:
+    """
+    When frozen, config.yaml lives in the user data dir so it is editable
+    without admin rights.  On first run the bundled default is copied there
+    automatically so the user starts with real hardware settings rather than
+    the minimal built-in defaults.
+    """
+    if getattr(sys, 'frozen', False):
+        user_cfg = _user_data_dir() / 'config.yaml'
+        if not user_cfg.exists():
+            # First run: seed from the bundled config shipped with the installer
+            bundled = Path(sys.executable).parent / 'config.yaml'
+            try:
+                user_cfg.parent.mkdir(parents=True, exist_ok=True)
+                if bundled.exists():
+                    import shutil
+                    shutil.copy2(bundled, user_cfg)
+            except Exception:
+                pass  # _write_default_config() will handle it if still missing
+        return user_cfg
+    return Path(__file__).parent / 'config.yaml'
+
+
+CONFIG_PATH = _resolve_config_path()
 
 
 _DEFAULT_CONFIG: dict = {
@@ -88,6 +147,10 @@ def setup_logging(cfg: dict):
 
     if log_cfg.get("log_to_file"):
         log_file = Path(log_cfg.get("log_file", "logs/microsanj.log"))
+        # Relative paths are resolved against the user-writable data directory
+        # so the app never tries to write logs into read-only Program Files.
+        if not log_file.is_absolute():
+            log_file = _user_data_dir() / log_file
         log_file.parent.mkdir(parents=True, exist_ok=True)
         handlers.append(logging.FileHandler(log_file))
 
