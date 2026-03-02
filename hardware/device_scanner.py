@@ -10,6 +10,7 @@ against the device registry where possible.
 """
 
 from __future__ import annotations
+import sys
 import time
 import socket
 import threading
@@ -19,8 +20,8 @@ from typing       import List, Optional, Callable
 from .device_registry import (
     DeviceDescriptor, DEVICE_REGISTRY,
     find_by_usb, find_by_serial_pattern, find_by_ni_pattern,
-    CONN_SERIAL, CONN_USB, CONN_ETHERNET, CONN_PCIE,
-    DTYPE_UNKNOWN)
+    CONN_SERIAL, CONN_USB, CONN_ETHERNET, CONN_PCIE, CONN_CAMERA,
+    DTYPE_CAMERA, DTYPE_UNKNOWN)
 
 
 # ------------------------------------------------------------------ #
@@ -381,14 +382,184 @@ class NiScanner:
 
 
 # ------------------------------------------------------------------ #
+#  Camera SDK scanner                                                  #
+# ------------------------------------------------------------------ #
+
+class CameraScanner:
+    """
+    Enumerates cameras via the Basler Pylon SDK (pypylon) and NI IMAQdx DLL.
+
+    Falls back gracefully if neither SDK is installed or no cameras are
+    connected.  Results use CONN_CAMERA so first_run.py can distinguish
+    them from generic USB devices reported by UsbScanner.
+    """
+
+    def scan(self) -> tuple[List[DiscoveredDevice], Optional[str]]:
+        results: List[DiscoveredDevice] = []
+        errors:  list[str]              = []
+
+        devs, err = self._scan_pylon()
+        results.extend(devs)
+        if err:
+            errors.append(err)
+
+        devs, err = self._scan_imaqdx()
+        results.extend(devs)
+        if err:
+            errors.append(err)
+
+        return results, ("; ".join(errors) if errors else None)
+
+    # ---------------------------------------------------------------- #
+    #  Basler Pylon                                                     #
+    # ---------------------------------------------------------------- #
+
+    def _scan_pylon(self) -> tuple[List[DiscoveredDevice], Optional[str]]:
+        try:
+            from pypylon import pylon
+        except ImportError:
+            return [], "pypylon not installed (pip install pypylon)"
+
+        try:
+            factory = pylon.TlFactory.GetInstance()
+            di_list = factory.EnumerateDevices()
+        except Exception as e:
+            return [], f"pypylon EnumerateDevices error: {e}"
+
+        results = []
+        for di in di_list:
+            try:
+                model  = di.GetModelName()
+                serial = di.GetSerialNumber()
+                try:
+                    ip = di.GetIpAddress()
+                except Exception:
+                    ip = ""
+
+                conn    = CONN_ETHERNET if ip else CONN_CAMERA
+                address = ip if ip else f"Basler:{serial}"
+
+                # Match against camera entries in the registry
+                descriptor = None
+                for d in DEVICE_REGISTRY.values():
+                    if d.device_type != DTYPE_CAMERA:
+                        continue
+                    for pat in d.serial_patterns:
+                        if pat.lower() in model.lower():
+                            descriptor = d
+                            break
+                    if descriptor:
+                        break
+
+                desc = f"Basler {model}" + (f"  s/n {serial}" if serial else "")
+                results.append(DiscoveredDevice(
+                    connection_type = conn,
+                    address         = address,
+                    description     = desc,
+                    serial_number   = serial,
+                    manufacturer    = "Basler AG",
+                    descriptor      = descriptor,
+                ))
+            except Exception:
+                continue   # skip malformed device info
+
+        return results, None
+
+    # ---------------------------------------------------------------- #
+    #  NI IMAQdx (Windows only)                                        #
+    # ---------------------------------------------------------------- #
+
+    def _scan_imaqdx(self) -> tuple[List[DiscoveredDevice], Optional[str]]:
+        if sys.platform != "win32":
+            return [], None   # silently skip on macOS / Linux
+
+        import ctypes
+
+        # IMAQdxCameraInformation struct layout (from niimaqdx.h)
+        # IMAQDX_MAX_API_STRING_LENGTH = 512
+        _S = 512
+
+        class _CamInfo(ctypes.Structure):
+            _fields_ = [
+                ("Type",             ctypes.c_uint32),
+                ("Version",          ctypes.c_uint32),
+                ("InterfaceName",    ctypes.c_char * _S),
+                ("AttributeType",    ctypes.c_uint32),   # IMAQdxAttributeType enum
+                ("CameraName",       ctypes.c_char * _S),
+                ("BusType",          ctypes.c_uint32),   # IMAQdxBusType enum
+                ("VendorName",       ctypes.c_char * _S),
+                ("ModelName",        ctypes.c_char * _S),
+                ("SerialNumberHigh", ctypes.c_uint32),
+                ("SerialNumberLow",  ctypes.c_uint32),
+                ("Flags",            ctypes.c_uint32),
+            ]
+
+        try:
+            lib = ctypes.windll.LoadLibrary("niimaqdx.dll")
+        except OSError:
+            return [], "NI IMAQdx not found (install NI Vision Acquisition Software)"
+
+        try:
+            # First call: get count of connected cameras
+            count = ctypes.c_uint32(0)
+            rc = lib.IMAQdxEnumerateCameras(
+                None, ctypes.byref(count), ctypes.c_uint32(1))
+            if rc != 0 or count.value == 0:
+                return [], None
+
+            # Second call: fill the array
+            arr = (_CamInfo * count.value)()
+            rc = lib.IMAQdxEnumerateCameras(
+                arr, ctypes.byref(count), ctypes.c_uint32(1))
+            if rc != 0:
+                return [], f"IMAQdxEnumerateCameras error code {rc}"
+
+            results = []
+            for i in range(count.value):
+                cam = arr[i]
+
+                def _s(b: bytes) -> str:
+                    return b.rstrip(b"\x00").decode("utf-8", errors="replace").strip()
+
+                cam_name   = _s(cam.CameraName)
+                model_name = _s(cam.ModelName)
+                vendor     = _s(cam.VendorName)
+
+                descriptor = find_by_serial_pattern(f"{vendor} {model_name}")
+                serial_str = (f"{cam.SerialNumberHigh:08X}{cam.SerialNumberLow:08X}"
+                              if (cam.SerialNumberHigh or cam.SerialNumberLow) else "")
+
+                results.append(DiscoveredDevice(
+                    connection_type = CONN_CAMERA,
+                    address         = cam_name,   # e.g. "cam4" — the NI MAX name
+                    description     = f"{vendor} {model_name} ({cam_name})",
+                    serial_number   = serial_str,
+                    manufacturer    = vendor,
+                    descriptor      = descriptor,
+                ))
+            return results, None
+
+        except Exception as e:
+            return [], f"NI IMAQdx scan error: {e}"
+
+
+# ------------------------------------------------------------------ #
 #  Main scanner                                                        #
 # ------------------------------------------------------------------ #
 
 class DeviceScanner:
     """
-    Runs all four sub-scanners and returns a consolidated ScanReport.
+    Runs all five sub-scanners and returns a consolidated ScanReport.
     Each sub-scanner runs in its own thread; total scan time is
     bounded by the network timeout (≈3 seconds).
+
+    Scanners
+    --------
+    serial   — pyserial COM/ttyUSB port enumeration with VID/PID matching
+    usb      — pyusb raw USB enumeration (non-serial devices)
+    camera   — Basler pypylon SDK + NI IMAQdx DLL enumeration
+    pcie     — NI-FPGA / NI-VISA resource enumeration
+    ethernet — subnet TCP probe (opt-in, disabled by default)
 
     Network scanning notes
     ----------------------
@@ -428,10 +599,12 @@ class DeviceScanner:
             target=run, args=("serial", SerialScanner().scan), daemon=True)
         usb_t    = threading.Thread(
             target=run, args=("usb",    UsbScanner().scan), daemon=True)
+        camera_t = threading.Thread(
+            target=run, args=("camera", CameraScanner().scan), daemon=True)
         ni_t     = threading.Thread(
             target=run, args=("pcie",   NiScanner().scan), daemon=True)
 
-        threads = [serial_t, usb_t, ni_t]
+        threads = [serial_t, usb_t, camera_t, ni_t]
 
         if include_network:
             net_t = threading.Thread(

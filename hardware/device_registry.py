@@ -43,6 +43,7 @@ CONN_SERIAL   = "serial"
 CONN_USB      = "usb"
 CONN_ETHERNET = "ethernet"
 CONN_PCIE     = "pcie"
+CONN_CAMERA   = "camera"   # cameras enumerated via SDK (pypylon, NI IMAQdx)
 
 
 # ------------------------------------------------------------------ #

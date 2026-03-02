@@ -3,32 +3,39 @@ ui/first_run.py
 
 First-Run Hardware Setup Wizard
 --------------------------------
-Shown automatically the first time SanjINSIGHT is launched (or when the user
-chooses  Help → Hardware Setup from the menu).
+Shown automatically the first time SanjINSIGHT is launched, and accessible
+at any time from  Settings → Hardware Setup.
 
 Walks the user through:
-  Page 1 — Welcome / overview
-  Page 2 — TEC controllers  (Meerstetter COM port + ATEC COM port)
-  Page 3 — Camera           (driver + NI camera name / Basler serial)
-  Page 4 — FPGA             (bitfile path + resource string)
+  Page 1 — Welcome / overview  (auto-scan runs in background)
+  Page 2 — TEC controllers     (Meerstetter COM port + ATEC COM port)
+  Page 3 — Camera              (driver + NI camera name / Basler serial)
+  Page 4 — FPGA                (bitfile path + resource string)
   Page 5 — Done / summary
 
-On Finish it writes the confirmed values into config.yaml and returns.
-If the user cancels, config.yaml is left unchanged.
+As soon as the dialog opens, a background DeviceScanner thread enumerates all
+connected hardware.  When it finishes, driver and port fields are
+pre-populated for any devices that are found in the device registry.  The user
+can review, adjust, and confirm — then click Finish to write config.yaml.
+
+If the user cancels (or clicks Skip Setup), config.yaml is left unchanged.
 
 Usage in main_app.py
 --------------------
     from ui.first_run import should_show_first_run, FirstRunWizard
 
-    if should_show_first_run():
+    if should_show_first_run(config_path):
         dlg = FirstRunWizard(config_path, parent=window)
         dlg.exec_()
+
+    # Re-run from Settings menu (no sentinel check needed):
+    dlg = FirstRunWizard(config_path, parent=window)
+    dlg.exec_()
 """
 
 from __future__ import annotations
 
 import os
-import re
 import sys
 import glob
 import logging
@@ -37,17 +44,18 @@ from typing import Optional
 import yaml
 
 from PyQt5.QtCore    import Qt, QThread, pyqtSignal
-from PyQt5.QtGui     import QFont, QColor
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QComboBox, QStackedWidget, QWidget, QFrame,
-    QFileDialog, QCheckBox, QGroupBox, QFormLayout, QScrollArea,
-    QSizePolicy, QApplication, QMessageBox,
+    QFileDialog, QGroupBox, QFormLayout,
+    QSizePolicy, QMessageBox,
 )
 
 log = logging.getLogger(__name__)
 
+
 # ── Sentinel file placed in the config folder after first-run ────────────────
+
 _SENTINEL_FILENAME = ".first_run_complete"
 
 
@@ -106,6 +114,43 @@ def _list_serial_ports() -> list[str]:
     return sorted(set(ports))
 
 
+# ── Background scan worker ────────────────────────────────────────────────────
+
+class _ScanWorker(QThread):
+    """
+    Runs DeviceScanner.scan() in a background thread so the wizard UI stays
+    responsive.
+
+    Signals
+    -------
+    status_update(str)    — emitted periodically with a progress message
+    completed(object)     — emitted once with a ScanReport (or None on failure)
+    """
+
+    status_update = pyqtSignal(str)
+    completed     = pyqtSignal(object)   # ScanReport | None
+
+    def run(self):
+        try:
+            from hardware.device_scanner import DeviceScanner
+        except Exception as e:
+            log.warning("_ScanWorker: cannot import DeviceScanner: %s", e)
+            self.completed.emit(None)
+            return
+
+        def on_progress(msg: str):
+            self.status_update.emit(msg)
+
+        try:
+            scanner = DeviceScanner()
+            report  = scanner.scan(include_network=False,
+                                   progress_cb=on_progress)
+            self.completed.emit(report)
+        except Exception as e:
+            log.warning("_ScanWorker: scan raised: %s", e)
+            self.completed.emit(None)
+
+
 # ── Shared style helpers ──────────────────────────────────────────────────────
 
 _BTN_PRIMARY = """
@@ -135,10 +180,12 @@ _INPUT_SS = """
     QComboBox::drop-down { border:none; }
     QComboBox QAbstractItemView { background:#13172a; color:#ddd; border:1px solid #2a3249; }
 """
-_LABEL_H1 = "font-size:20pt; font-weight:700; color:#fff;"
-_LABEL_H2 = "font-size:14pt; font-weight:600; color:#c0c8e0;"
+_LABEL_H1   = "font-size:20pt; font-weight:700; color:#fff;"
 _LABEL_BODY = "font-size:12pt; color:#8892a4;"
 _LABEL_HINT = "font-size:10pt; color:#5a6480; font-style:italic;"
+
+_SS_BADGE_OK   = "font-size:10pt; color:#00d4aa;"
+_SS_BADGE_WARN = "font-size:10pt; color:#e8a020;"
 
 
 def _sep() -> QFrame:
@@ -211,31 +258,76 @@ class _PageWelcome(_PageBase):
         tip.setWordWrap(True)
         self._content.addWidget(tip)
 
+        # Live scan-status line — updated by _ScanWorker signals
+        self._scan_label = QLabel("🔍  Scanning for connected hardware…")
+        self._scan_label.setStyleSheet(
+            "font-size:11pt; color:#8892a4; font-style:italic; padding:4px 0;")
+        self._content.addWidget(self._scan_label)
 
-class _PortRow(QHBoxLayout):
-    """A label + combo + refresh-button row for a single serial port."""
+    def set_scan_status(self, msg: str):
+        """Called by _ScanWorker.status_update signal."""
+        self._scan_label.setText(f"🔍  {msg}")
+
+    def set_scan_done(self, known_count: int):
+        """Called by _ScanWorker.completed signal after pages are updated."""
+        if known_count > 0:
+            self._scan_label.setText(
+                f"✓  Scan complete — {known_count} known device(s) detected. "
+                "Settings have been pre-filled on the following pages.")
+            self._scan_label.setStyleSheet(
+                "font-size:11pt; color:#00d4aa; padding:4px 0;")
+        else:
+            self._scan_label.setText(
+                "⚠  Scan complete — no known devices found. "
+                "Select drivers and ports manually, or check USB connections.")
+            self._scan_label.setStyleSheet(
+                "font-size:11pt; color:#e8a020; padding:4px 0;")
+
+
+class _PortRow(QWidget):
+    """
+    A label + editable combo + refresh-button row for a single serial port,
+    with an optional detection badge shown below after auto-scan.
+
+    Replaces the previous QHBoxLayout subclass; QFormLayout.addRow(QWidget)
+    behaves identically (widget spans both label and field columns).
+    """
 
     def __init__(self, label: str, default_port: str):
         super().__init__()
-        self.setSpacing(8)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(3)
+
+        row = QHBoxLayout()
+        row.setSpacing(8)
+
         lbl = QLabel(label)
         lbl.setStyleSheet("font-size:12pt; color:#8892a4;")
         lbl.setFixedWidth(220)
-        self.addWidget(lbl)
+        row.addWidget(lbl)
 
         self.combo = QComboBox()
         self.combo.setEditable(True)
         self.combo.setStyleSheet(_INPUT_SS)
         self.combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.combo.setFixedHeight(34)
-        self.addWidget(self.combo, 1)
+        row.addWidget(self.combo, 1)
 
         refresh = QPushButton("⟳")
         refresh.setFixedSize(34, 34)
         refresh.setToolTip("Refresh port list")
         refresh.setStyleSheet(_BTN_SECONDARY.replace("padding:8px 22px", "padding:0"))
         refresh.clicked.connect(self._refresh)
-        self.addWidget(refresh)
+        row.addWidget(refresh)
+
+        outer.addLayout(row)
+
+        # Badge — hidden until set_detected / set_not_detected is called
+        self._badge = QLabel("")
+        self._badge.setStyleSheet(_SS_BADGE_OK + " padding-left:228px;")
+        self._badge.setVisible(False)
+        outer.addWidget(self._badge)
 
         self._default = default_port
         self._refresh()
@@ -259,6 +351,19 @@ class _PortRow(QHBoxLayout):
         if self.combo.findText(v) == -1:
             self.combo.addItem(v)
         self.combo.setCurrentText(v)
+
+    def set_detected(self, port: str, device_name: str):
+        """Auto-select *port* and show a green ✓ badge."""
+        self._set_value(port)
+        self._badge.setText(f"✓  Detected: {device_name}")
+        self._badge.setStyleSheet(_SS_BADGE_OK + " padding-left:228px;")
+        self._badge.setVisible(True)
+
+    def set_not_detected(self):
+        """Show an amber ⚠ badge when auto-detection found nothing."""
+        self._badge.setText("⚠  Not detected — select port manually")
+        self._badge.setStyleSheet(_SS_BADGE_WARN + " padding-left:228px;")
+        self._badge.setVisible(True)
 
     @property
     def value(self) -> str:
@@ -324,6 +429,39 @@ class _PageTEC(_PageBase):
         self._content.addWidget(g2)
         self._content.addStretch(1)
 
+    def apply_scan(self, report) -> int:
+        """
+        Pre-fill TEC driver and COM port from scan results.
+        Returns the number of TEC devices successfully detected.
+        """
+        try:
+            from hardware.device_registry import DTYPE_TEC
+            tec_devs = [d for d in report.devices
+                        if d.is_known and d.descriptor.device_type == DTYPE_TEC]
+        except Exception:
+            tec_devs = []
+
+        meer_found = atec_found = False
+        for dev in tec_devs:
+            uid = dev.descriptor.uid
+            if uid.startswith("meerstetter") and not meer_found:
+                self._meer_driver.setCurrentText("meerstetter")
+                self._meer_port.set_detected(dev.address,
+                                             dev.descriptor.display_name)
+                meer_found = True
+            elif uid.startswith("atec") and not atec_found:
+                self._atec_driver.setCurrentText("atec")
+                self._atec_port.set_detected(dev.address,
+                                             dev.descriptor.display_name)
+                atec_found = True
+
+        if not meer_found:
+            self._meer_port.set_not_detected()
+        if not atec_found:
+            self._atec_port.set_not_detected()
+
+        return (1 if meer_found else 0) + (1 if atec_found else 0)
+
     def values(self) -> dict:
         return {
             "tec_meerstetter.driver": self._meer_driver.currentText(),
@@ -342,7 +480,7 @@ class _PageCamera(_PageBase):
             "The Basler acA1920-155um uses the  pypylon  driver.",
             parent)
 
-        g = QGroupBox("Basler acA1920-155um")
+        g = QGroupBox("Camera")
         g.setStyleSheet(
             "QGroupBox { color:#8892a4; font-size:12pt; border:1px solid #2a3249; "
             "border-radius:5px; margin-top:8px; padding:12px; }"
@@ -373,6 +511,13 @@ class _PageCamera(_PageBase):
         self._hint.setWordWrap(True)
         fl.addRow(self._hint)
 
+        # Detection badge — hidden until apply_scan() runs
+        self._detection_label = QLabel("")
+        self._detection_label.setStyleSheet(_SS_BADGE_OK)
+        self._detection_label.setWordWrap(True)
+        self._detection_label.setVisible(False)
+        fl.addRow(self._detection_label)
+
         self._content.addWidget(g)
         self._content.addStretch(1)
         self._update_hints(self._drv.currentText())
@@ -380,11 +525,69 @@ class _PageCamera(_PageBase):
     def _update_hints(self, driver: str):
         hints = {
             "pypylon":    "Uses Basler Pylon SDK. Install from basler.com, then: pip install pypylon",
-            "ni_imaqdx":  "Uses NI IMAQdx. Install NI Vision Acquisition Software and set the camera name in NI MAX.",
+            "ni_imaqdx":  "Uses NI IMAQdx. Install NI Vision Acquisition Software; "
+                          "camera name comes from NI MAX (auto-detected if connected).",
             "directshow": "Generic Windows DirectShow camera (development/fallback only).",
             "simulated":  "No real camera required. Generates synthetic frames.",
         }
         self._hint.setText(hints.get(driver, ""))
+
+    def apply_scan(self, report) -> int:
+        """
+        Pre-fill camera driver / serial # / NI camera name from scan results.
+        Returns 1 if a camera was detected, 0 otherwise.
+        """
+        try:
+            from hardware.device_registry import DTYPE_CAMERA, CONN_CAMERA
+        except ImportError:
+            try:
+                from hardware.device_registry import DTYPE_CAMERA
+                CONN_CAMERA = "camera"
+            except Exception:
+                return 0
+
+        # Prefer SDK-enumerated devices (CONN_CAMERA) — they carry richer info
+        cam_devs = [d for d in report.devices
+                    if d.connection_type == CONN_CAMERA]
+        if not cam_devs:
+            # Fall back to USB-matched camera devices (e.g. from UsbScanner)
+            cam_devs = [d for d in report.devices
+                        if d.is_known
+                        and d.descriptor.device_type == DTYPE_CAMERA]
+
+        if not cam_devs:
+            self._detection_label.setText(
+                "⚠  No camera detected — check USB/GigE connection and SDK installation")
+            self._detection_label.setStyleSheet(_SS_BADGE_WARN)
+            self._detection_label.setVisible(True)
+            return 0
+
+        cam    = cam_devs[0]
+        module = cam.descriptor.driver_module if cam.descriptor else ""
+
+        if "pypylon" in module or (
+                not module and "basler" in cam.description.lower()):
+            self._drv.setCurrentText("pypylon")
+            if cam.serial_number:
+                self._serial.setText(cam.serial_number)
+            label = (cam.descriptor.display_name
+                     if cam.descriptor else cam.description)
+
+        elif "ni_imaqdx" in module or "imaqdx" in cam.description.lower():
+            self._drv.setCurrentText("ni_imaqdx")
+            # For NI IMAQdx, the address field holds the NI MAX camera name
+            if cam.address:
+                self._cam_name.setText(cam.address)
+            label = cam.description
+
+        else:
+            label = cam.description or cam.address
+
+        self._detection_label.setText(f"✓  Detected: {label}")
+        self._detection_label.setStyleSheet(_SS_BADGE_OK)
+        self._detection_label.setVisible(True)
+        self._update_hints(self._drv.currentText())
+        return 1
 
     def values(self) -> dict:
         return {
@@ -443,6 +646,13 @@ class _PageFPGA(_PageBase):
         hint.setWordWrap(True)
         fl.addRow(hint)
 
+        # Detection badge — hidden until apply_scan() runs
+        self._detection_label = QLabel("")
+        self._detection_label.setStyleSheet(_SS_BADGE_OK)
+        self._detection_label.setWordWrap(True)
+        self._detection_label.setVisible(False)
+        fl.addRow(self._detection_label)
+
         self._content.addWidget(g)
         self._content.addStretch(1)
 
@@ -452,6 +662,34 @@ class _PageFPGA(_PageBase):
             "FPGA Bitfiles (*.lvbitx);;All Files (*)")
         if path:
             self._bitfile.setText(path)
+
+    def apply_scan(self, report) -> int:
+        """
+        Pre-fill FPGA driver and resource string from scan results.
+        Returns 1 if an FPGA was detected, 0 otherwise.
+        """
+        try:
+            from hardware.device_registry import DTYPE_FPGA
+            fpga_devs = [d for d in report.devices
+                         if d.is_known and d.descriptor.device_type == DTYPE_FPGA]
+        except Exception:
+            fpga_devs = []
+
+        if not fpga_devs:
+            self._detection_label.setText(
+                "⚠  NI FPGA not detected — check NI-RIO drivers and cRIO connection")
+            self._detection_label.setStyleSheet(_SS_BADGE_WARN)
+            self._detection_label.setVisible(True)
+            return 0
+
+        fpga = fpga_devs[0]
+        self._drv.setCurrentText("ni9637")
+        self._resource.setText(fpga.address)
+        self._detection_label.setText(
+            f"✓  Detected: {fpga.descriptor.display_name}  ({fpga.address})")
+        self._detection_label.setStyleSheet(_SS_BADGE_OK)
+        self._detection_label.setVisible(True)
+        return 1
 
     def values(self) -> dict:
         return {
@@ -505,6 +743,11 @@ class FirstRunWizard(QDialog):
     Multi-page hardware setup wizard.
 
     On accept, writes updated values into config.yaml and marks first-run done.
+
+    Can be shown at any time — not only on first launch.  When opened from
+    Settings → Hardware Setup the sentinel check is bypassed and the wizard
+    always shows.  The background scan runs every time the dialog opens so
+    newly connected devices are always detected.
     """
 
     def __init__(self, config_path: str, parent=None):
@@ -514,7 +757,7 @@ class FirstRunWizard(QDialog):
 
         self.setWindowTitle("SanjINSIGHT — Hardware Setup")
         self.setModal(True)
-        self.resize(680, 560)
+        self.resize(700, 600)
         self.setStyleSheet("""
             QDialog   { background:#0e1120; }
             QGroupBox { background:#13172a; }
@@ -528,7 +771,7 @@ class FirstRunWizard(QDialog):
                 raw = yaml.safe_load(f) or {}
             self._cfg_hw = raw.get("hardware", {})
         except Exception as e:
-            log.warning(f"FirstRunWizard: could not read config: {e}")
+            log.warning("FirstRunWizard: could not read config: %s", e)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -594,6 +837,28 @@ class FirstRunWizard(QDialog):
 
         self._go_to(0)
 
+        # ── Start background hardware scan ────────────────────────────
+        self._scan_worker = _ScanWorker(self)
+        self._scan_worker.status_update.connect(self._on_scan_status)
+        self._scan_worker.completed.connect(self._on_scan_complete)
+        self._scan_worker.start()
+
+    # ── Background scan callbacks ──────────────────────────────────────
+
+    def _on_scan_status(self, msg: str):
+        self._page_welcome.set_scan_status(msg)
+
+    def _on_scan_complete(self, report):
+        if report is None:
+            self._page_welcome.set_scan_done(0)
+            return
+        # Distribute results to each page; they update their own fields
+        self._page_tec.apply_scan(report)
+        self._page_camera.apply_scan(report)
+        self._page_fpga.apply_scan(report)
+        # Use known_only() for the welcome-page count
+        self._page_welcome.set_scan_done(len(report.known_only()))
+
     # ── Navigation ────────────────────────────────────────────────────
 
     def _go_to(self, idx: int):
@@ -614,12 +879,11 @@ class FirstRunWizard(QDialog):
 
     def _on_next(self):
         idx = self._stack.currentIndex()
-        # Collect values from current page
         page = self._stack.currentWidget()
         self._all_values.update(page.values())
 
         if idx == self._stack.count() - 1:
-            # Finish
+            # Finish button
             self._write_config()
             self.accept()
         else:
@@ -644,6 +908,13 @@ class FirstRunWizard(QDialog):
             _mark_first_run_done(self._config_path)
             self.reject()
 
+    def closeEvent(self, event):
+        """Stop the scan worker if the dialog is closed while scanning."""
+        if self._scan_worker.isRunning():
+            self._scan_worker.quit()
+            self._scan_worker.wait(1000)
+        super().closeEvent(event)
+
     # ── Config writer ─────────────────────────────────────────────────
 
     def _write_config(self):
@@ -655,7 +926,7 @@ class FirstRunWizard(QDialog):
             with open(self._config_path, "r") as f:
                 raw = yaml.safe_load(f) or {}
         except Exception as e:
-            log.error(f"FirstRunWizard: cannot read config for writing: {e}")
+            log.error("FirstRunWizard: cannot read config for writing: %s", e)
             return
 
         hw = raw.setdefault("hardware", {})
@@ -670,9 +941,9 @@ class FirstRunWizard(QDialog):
             with open(self._config_path, "w") as f:
                 yaml.dump(raw, f, default_flow_style=False, sort_keys=False,
                           allow_unicode=True)
-            log.info(f"FirstRunWizard: config written to {self._config_path}")
+            log.info("FirstRunWizard: config written to %s", self._config_path)
         except Exception as e:
-            log.error(f"FirstRunWizard: cannot write config: {e}")
+            log.error("FirstRunWizard: cannot write config: %s", e)
             QMessageBox.warning(
                 self, "Config Write Error",
                 f"Could not save to {self._config_path}:\n{e}\n\n"

@@ -3317,6 +3317,12 @@ class MainWindow(QMainWindow):
 
         help_menu.addSeparator()
 
+        act_hw_setup = help_menu.addAction("Hardware Setup…")
+        act_hw_setup.setShortcut(QKeySequence("Ctrl+Shift+H"))
+        act_hw_setup.setToolTip(
+            "Re-run the hardware setup wizard to detect or reconfigure devices")
+        act_hw_setup.triggered.connect(self._open_hardware_setup)
+
         act_settings = help_menu.addAction("Settings")
         act_settings.setShortcut(QKeySequence("Ctrl+,"))
         act_settings.triggered.connect(
@@ -3332,6 +3338,27 @@ class MainWindow(QMainWindow):
         from ui.update_dialog import AboutDialog
         dlg = AboutDialog(self)
         dlg.exec_()
+
+    def _open_hardware_setup(self):
+        """Open the hardware setup wizard at any time (no sentinel check)."""
+        from ui.first_run import FirstRunWizard
+        import config as _cfg
+        config_path = (
+            _cfg._path if hasattr(_cfg, "_path")
+            else os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "config.yaml"))
+        dlg = FirstRunWizard(config_path, parent=self)
+        if dlg.exec_() == dlg.Accepted:
+            # Reload config so values are fresh if the app re-connects hardware
+            try:
+                _cfg.reload()
+            except Exception:
+                pass
+            QMessageBox.information(
+                self, "Hardware Setup",
+                "Configuration saved.\n\n"
+                "Restart the application (or reconnect hardware from the "
+                "Device Manager) to apply the new driver settings.")
 
     # ── Update checker ─────────────────────────────────────────────
 
