@@ -1250,7 +1250,11 @@ if __name__ == "__main__":
     app.setStyle("Fusion")
     app.setStyleSheet(STYLE)
 
-    _icon_path = os.path.join(os.path.dirname(__file__), "assets", "app-icon.png")
+    _assets = os.path.join(os.path.dirname(__file__), "assets")
+    # Prefer .icns on macOS (multi-resolution bundle icon); fall back to PNG
+    _icon_path = os.path.join(_assets, "app-icon.icns")
+    if not os.path.exists(_icon_path):
+        _icon_path = os.path.join(_assets, "app-icon.png")
     if os.path.exists(_icon_path):
         app.setWindowIcon(QIcon(_icon_path))
 
@@ -1279,7 +1283,7 @@ if __name__ == "__main__":
 
     window = MainWindow()
     if os.path.exists(_icon_path):
-        window.setWindowIcon(QIcon(_icon_path))
+        window.setWindowIcon(QIcon(_icon_path))   # title-bar / taskbar icon
 
     # ── Demo mode: activate immediately, skip the startup dialog ──────
     if _FORCE_DEMO:
