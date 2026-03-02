@@ -135,3 +135,6 @@ class SimulatedDriver(CameraDriver):
 
     def gain_range(self) -> tuple:
         return (0.0, 24.0)
+
+# Backward-compatible alias used by tests and legacy tooling
+SimulatedCamera = SimulatedDriver

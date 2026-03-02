@@ -74,14 +74,20 @@ class AcquisitionResult:
 
     @property
     def snr_db(self) -> Optional[float]:
-        """Signal-to-noise ratio of the ΔR/R image in dB."""
+        """Signal-to-noise ratio of the ΔR/R image in dB.
+
+        Dark pixels are stored as NaN and excluded from both the signal
+        mean and the noise standard deviation.
+        """
         if self.delta_r_over_r is None:
             return None
-        sig  = float(np.abs(self.delta_r_over_r).mean())
-        noise = float(self.delta_r_over_r.std())
+        sig   = float(np.nanmean(np.abs(self.delta_r_over_r)))
+        noise = float(np.nanstd(self.delta_r_over_r))
+        if not np.isfinite(sig) or sig <= 0:
+            return None
         if noise == 0:
             return float('inf')
-        return 20 * np.log10(sig / noise) if sig > 0 else -float('inf')
+        return float(20 * np.log10(sig / noise))
 
 
 @dataclass

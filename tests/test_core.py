@@ -61,9 +61,10 @@ class TestCalibration:
             drr = TRUE_CT * dT
             I   = I_REF * (1 + drr)
             frame = np.full((H, W), I, dtype=np.float32)
-            # Add tiny reproducible noise
+            # Add tiny reproducible noise (0.05 counts ≪ weakest ΔT signal of
+            # 2 counts at 5 °C step, giving SNR ~40 and R² reliably > 0.99)
             rng   = np.random.default_rng(seed=int(T * 100))
-            frame += rng.normal(0, 0.5, (H, W)).astype(np.float32)
+            frame += rng.normal(0, 0.05, (H, W)).astype(np.float32)
             cal.add_point(temperature=T, frame=frame)
 
         return cal, TRUE_CT, H, W
