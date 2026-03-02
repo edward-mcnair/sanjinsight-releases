@@ -73,12 +73,16 @@ class SerialStageDriver(StageDriver):
         self._port_lock.release()
 
     def _send(self, cmd: str) -> str:
+        """Write cmd and return the response line.
+
+        Uses read_until('\r') so the existing serial timeout governs how long
+        we wait — no fixed sleep, no missed slow responses.
+        reset_input_buffer() prevents stale bytes from a previous command
+        contaminating the response.
+        """
+        self._serial.reset_input_buffer()
         self._serial.write((cmd + "\r").encode())
-        time.sleep(0.02)
-        resp = b""
-        while self._serial.in_waiting:
-            resp += self._serial.read(self._serial.in_waiting)
-            time.sleep(0.01)
+        resp = self._serial.read_until(b"\r", size=256)
         return resp.decode(errors="ignore").strip()
 
     def home(self, axes: str = "xyz") -> None:

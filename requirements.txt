@@ -16,6 +16,8 @@ matplotlib>=3.7.0             # 3D surface plots, analysis charts
 # ── Data export ───────────────────────────────────────────────────────────────
 h5py>=3.8.0                   # HDF5 export format
 scipy>=1.10.0                 # optional: additional analysis utilities
+reportlab>=3.6.0              # PDF report generation (required for PDF export)
+Pillow>=9.0.0                 # PIL — image thumbnail generation in session save
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 PyYAML>=6.0

@@ -15,10 +15,13 @@ Progress and completion are reported via callbacks so any UI can subscribe.
 
 import time
 import threading
+import logging
 import numpy as np
 from dataclasses import dataclass, field
 from typing import Optional, Callable, List
 from enum import Enum, auto
+
+log = logging.getLogger(__name__)
 
 
 # ------------------------------------------------------------------ #
@@ -332,10 +335,12 @@ class AcquisitionPipeline:
         """
         if self._fpga is not None:
             try:
-                self._fpga.set_output(active)
-            except Exception:
-                pass
-            return
+                self._fpga.set_stimulus(active)
+            except Exception as e:
+                log.warning("FPGA set_stimulus(%s) failed: %s — "
+                            "falling through to bias source", active, e)
+            else:
+                return   # FPGA handled it — don't also toggle bias
 
         if self._bias is not None:
             try:
