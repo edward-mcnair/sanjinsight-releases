@@ -75,7 +75,7 @@ def rule_camera_connected(snap: dict) -> RuleResult:
         severity     = "ok" if connected else "fail",
         observed     = "Connected" if connected else "Not connected",
         threshold    = "Must be connected",
-        hint         = "Check USB cable and camera power; reconnect in the Hardware panel.",
+        hint         = "Check USB cable and camera power; reconnect in the Camera panel (Hardware group).",
     )
 
 
@@ -91,7 +91,7 @@ def rule_stage_homed(snap: dict) -> Optional[RuleResult]:
         severity     = "ok" if homed else "warn",
         observed     = "Homed" if homed else "Not homed",
         threshold    = "Should be homed for automated moves",
-        hint         = "Click Home Stage in the Stage panel before running a scan.",
+        hint         = "Open the Stage panel (Hardware group, left sidebar) and click 'Home All' at the bottom to set the home reference position.",
     )
 
 
@@ -124,8 +124,9 @@ def rule_tec_stable(snap: dict) -> list[RuleResult]:
                 f"Δ> {_TEC_FAIL_C}°C = fail"
             ),
             hint = (
-                f"Wait for TEC {idx + 1} to stabilise at {target:.1f}°C, "
-                "or reduce acquisition duty cycle to lower sample heating."
+                f"Wait for TEC {idx + 1} to stabilise at {target:.1f}°C "
+                f"(Temperature panel), or reduce the duty cycle in the FPGA panel "
+                "to lower sample heating."
             ),
         ))
     return results
@@ -153,7 +154,7 @@ def rule_saturation(snap: dict) -> Optional[RuleResult]:
         severity     = severity,
         observed     = f"{pct:.2f}% clipped",
         threshold    = f"Warn > {_SAT_WARN_PCT}%   Fail > {_SAT_FAIL_PCT}%",
-        hint         = "Reduce exposure time or illumination to eliminate clipped pixels.",
+        hint         = "Reduce exposure time in the Camera panel, or lower the illumination intensity, to eliminate clipped pixels.",
     )
 
 
@@ -175,7 +176,7 @@ def rule_underexposure(snap: dict) -> Optional[RuleResult]:
         severity     = severity,
         observed     = f"{pct:.1f}% near-black pixels",
         threshold    = f"Warn > {_UNDER_WARN_PCT}%   Fail > {_UNDER_FAIL_PCT}%",
-        hint         = "Increase exposure or illumination; recentre the ROI over the sample.",
+        hint         = "Increase exposure in the Camera panel or raise illumination; use the ROI panel to recentre over the sample.",
     )
 
 
@@ -262,7 +263,7 @@ def rule_fpga_running(snap: dict) -> Optional[RuleResult]:
         severity     = "ok" if running else "warn",
         observed     = "Running" if running else "Stopped",
         threshold    = "Should be running for lock-in acquisition",
-        hint         = "Start modulation in the FPGA panel before acquiring.",
+        hint         = "Click the 'Start' button in the FPGA panel (Hardware group) to begin modulation before acquiring.",
     )
 
 
@@ -279,8 +280,8 @@ def rule_fpga_locked(snap: dict) -> Optional[RuleResult]:
         observed     = "Locked" if locked else "Not locked",
         threshold    = "Sync should be locked for stable modulation",
         hint         = (
-            "Check the FPGA sync source and reference cable; "
-            "try a lower modulation frequency if lock cannot be achieved."
+            "In the FPGA panel, check the sync source and reference cable; "
+            "try a lower modulation frequency if sync lock cannot be achieved."
         ),
     )
 
@@ -310,7 +311,7 @@ def rule_duty_cycle_thermal(snap: dict) -> Optional[RuleResult]:
         severity     = sev,
         observed     = f"{dc_pct:.0f}%",
         threshold    = f"Warn ≥{_DC_WARN_PCT:.0f}%   Fail ≥{_DC_FAIL_PCT:.0f}%",
-        hint         = "Reduce FPGA duty cycle to lower average power delivered to the DUT.",
+        hint         = "Reduce the duty cycle in the FPGA panel (Hardware group) to lower average power delivered to the DUT.",
     )
 
 
@@ -339,8 +340,8 @@ def rule_pixel_headroom(snap: dict) -> Optional[RuleResult]:
         observed     = obs,
         threshold    = f"Warn ≥{_PIX_WARN}   Fail ={_PIX_FAIL}",
         hint         = (
-            "Reduce exposure or illumination to keep pixel values "
-            "below the 12-bit saturation limit (4095)."
+            "Reduce exposure in the Camera panel or lower illumination "
+            "to keep pixel values below the 12-bit saturation limit (4095)."
         ),
     )
 
@@ -364,8 +365,8 @@ def rule_tec_temp_range(snap: dict) -> list[RuleResult]:
             observed     = f"{sp:.1f} °C",
             threshold    = f"{_TEMP_MIN_C}–{_TEMP_MAX_C} °C",
             hint         = (
-                f"Keep TEC {idx + 1} setpoint between "
-                f"{_TEMP_MIN_C:.0f} and {_TEMP_MAX_C:.0f} °C."
+                f"Adjust TEC {idx + 1} setpoint in the Temperature panel "
+                f"to be between {_TEMP_MIN_C:.0f} and {_TEMP_MAX_C:.0f} °C."
             ),
         ))
     return results
