@@ -35,6 +35,7 @@ class AcquireTab(QWidget):
         left = QVBoxLayout()
         left.setSpacing(8)
         root.addLayout(left, 2)
+        self._left_layout = left   # exposed for ReadinessWidget injection
 
         # Live feed
         live_box = QGroupBox("Live Feed")
@@ -202,6 +203,13 @@ class AcquireTab(QWidget):
         self._run_btn.clicked.connect(self._run)
         self._abort_btn.clicked.connect(self._abort)
         self._export_btn.clicked.connect(self._export)
+
+    def insert_readiness_widget(self, widget) -> None:
+        """
+        Insert *widget* at the top of the left column.
+        Called by MainWindow after constructing MetricsService.
+        """
+        self._left_layout.insertWidget(0, widget)
 
     def _sub(self, text):
         l = QLabel(text)

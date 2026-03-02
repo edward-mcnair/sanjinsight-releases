@@ -315,6 +315,8 @@ from ui.tabs.stage_tab        import StageTab
 from ui.tabs.roi_tab          import RoiTab
 from ui.tabs.autofocus_tab    import AutofocusTab, FocusPlot
 from ui.tabs.log_tab          import LogTab
+from ai.metrics_service       import MetricsService
+from ui.widgets.readiness_widget import ReadinessWidget
 
 
 # ------------------------------------------------------------------ #
@@ -406,6 +408,13 @@ class MainWindow(QMainWindow):
         self._data_tab     = DataTab(session_mgr)
         self._log_tab      = LogTab()
         self._settings_tab = SettingsTab()
+
+        # ── Metrics service + readiness banner ───────────────────
+        self._metrics = MetricsService(hw_service, parent=self)
+        self._readiness_widget = ReadinessWidget()
+        self._metrics.metrics_updated.connect(
+            self._readiness_widget.update_metrics)
+        self._acquire_tab.insert_readiness_widget(self._readiness_widget)
 
         # ── New enhancement tabs ──────────────────────────────────
         self._compare_tab  = ComparisonTab(session_manager=session_mgr)

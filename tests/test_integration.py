@@ -346,3 +346,216 @@ class TestHardwareServiceLifecycle:
 
         svc = HardwareService()
         svc.shutdown()   # nothing started — should be a clean no-op
+
+
+# ================================================================== #
+#  4. MetricsService — deterministic quality metrics                  #
+# ================================================================== #
+
+class TestMetricsService:
+    """
+    Verify that MetricsService correctly computes and emits quality metrics
+    and issues from simulated hardware signal data.
+
+    Uses a minimal stub QObject that exposes the same signals as
+    HardwareService so no real hardware is needed.
+    """
+
+    @pytest.fixture(scope="class")
+    def qapp(self):
+        from PyQt5.QtWidgets import QApplication
+        return QApplication.instance() or QApplication([])
+
+    @pytest.fixture
+    def hw_stub(self, qapp):
+        """Minimal HardwareService stub that exposes the required signals."""
+        from PyQt5.QtCore import QObject, pyqtSignal
+
+        class HwStub(QObject):
+            camera_frame     = pyqtSignal(object)
+            tec_status       = pyqtSignal(int, object)
+            fpga_status      = pyqtSignal(object)
+            stage_status     = pyqtSignal(object)
+            device_connected = pyqtSignal(str, bool)
+
+        return HwStub()
+
+    @pytest.fixture
+    def svc(self, hw_stub):
+        from ai.metrics_service import MetricsService
+        return MetricsService(hw_stub)
+
+    @staticmethod
+    def _make_frame(data: np.ndarray, bit_depth: int = 12):
+        """Wrap a numpy array in a minimal CameraFrame-like object."""
+        class Frame:
+            pass
+        f = Frame()
+        f.data        = data.astype(np.uint16)
+        f.frame_index = 0
+        f.exposure_us = 5000.0
+        f.gain_db     = 0.0
+        f.timestamp   = time.time()
+        return f
+
+    # ----------------------------------------------------------------
+
+    def test_initial_state_has_no_issues(self, svc):
+        """Before any signals arrive, there must be no active issues."""
+        assert len(svc.active_issue_codes) == 0
+
+    def test_camera_disconnected_issue_on_device_disconnected(
+            self, hw_stub, svc):
+        """device_connected('camera', False) → camera_disconnected issue."""
+        from ai.metrics_service import CAM_DISCONNECTED
+        detected = []
+        svc.issue_detected.connect(lambda code, msg: detected.append(code))
+
+        hw_stub.device_connected.emit("camera", False)
+
+        assert CAM_DISCONNECTED in svc.active_issue_codes
+        assert CAM_DISCONNECTED in detected
+
+    def test_camera_disconnected_clears_on_reconnect(self, hw_stub, svc):
+        """device_connected('camera', True) → camera_disconnected issue clears."""
+        from ai.metrics_service import CAM_DISCONNECTED
+        hw_stub.device_connected.emit("camera", False)   # set it
+        assert CAM_DISCONNECTED in svc.active_issue_codes
+
+        cleared = []
+        svc.issue_cleared.connect(lambda code: cleared.append(code))
+        hw_stub.device_connected.emit("camera", True)    # clear it
+
+        assert CAM_DISCONNECTED not in svc.active_issue_codes
+        assert CAM_DISCONNECTED in cleared
+
+    def test_saturation_issue_detected_on_bright_frame(self, hw_stub, svc):
+        """A frame with >2% saturated pixels triggers camera_saturated."""
+        from ai.metrics_service import CAM_SATURATED
+        # 12-bit sensor, fill 10% of pixels to saturation (value = 4095)
+        data        = np.zeros((100, 100), dtype=np.uint16)
+        data[:10, :] = 4095   # 10 rows × 100 cols = 10% saturated
+        hw_stub.camera_frame.emit(self._make_frame(data))
+
+        assert CAM_SATURATED in svc.active_issue_codes
+
+    def test_saturation_issue_clears_on_normal_frame(self, hw_stub, svc):
+        """After saturation detected, a normal frame must clear the issue."""
+        from ai.metrics_service import CAM_SATURATED
+        # First: emit a saturated frame
+        sat_data = np.full((100, 100), 4095, dtype=np.uint16)
+        hw_stub.camera_frame.emit(self._make_frame(sat_data))
+        assert CAM_SATURATED in svc.active_issue_codes
+
+        # Then: emit a normal mid-range frame
+        cleared = []
+        svc.issue_cleared.connect(lambda code: cleared.append(code))
+        normal_data = np.full((100, 100), 2000, dtype=np.uint16)
+        hw_stub.camera_frame.emit(self._make_frame(normal_data))
+
+        assert CAM_SATURATED not in svc.active_issue_codes
+        assert CAM_SATURATED in cleared
+
+    def test_tec_stability_tracks_in_band_duration(self, hw_stub, svc):
+        """
+        TEC issue clears only after TEC_DWELL_S seconds in-band.
+        We shorten TEC_DWELL_S to near-zero for a fast test.
+        """
+        from ai.metrics_service import TEC_NOT_STABLE
+        from hardware.tec.base import TecStatus
+
+        svc.TEC_DWELL_S = 0.05   # 50 ms dwell for test speed
+
+        # Emit in-band status multiple times over > 50 ms
+        stable_status = TecStatus(
+            actual_temp=25.05, target_temp=25.0,
+            enabled=True, stable=False)
+        hw_stub.tec_status.emit(0, stable_status)
+        time.sleep(0.07)
+        hw_stub.tec_status.emit(0, stable_status)
+
+        assert f"{TEC_NOT_STABLE}_0" not in svc.active_issue_codes
+
+    def test_tec_not_stable_while_out_of_band(self, hw_stub, svc):
+        """TEC with |actual - target| > tolerance must flag tec_not_stable."""
+        from ai.metrics_service import TEC_NOT_STABLE
+        from hardware.tec.base import TecStatus
+
+        svc.TEC_DWELL_S = 30.0   # restore default so issue is raised
+
+        unstable = TecStatus(
+            actual_temp=26.5, target_temp=25.0,
+            enabled=True, stable=False)
+        hw_stub.tec_status.emit(0, unstable)
+
+        assert f"{TEC_NOT_STABLE}_0" in svc.active_issue_codes
+
+    def test_fpga_not_running_issue(self, hw_stub, svc):
+        """FPGA status with running=False triggers fpga_not_running."""
+        from ai.metrics_service import FPGA_NOT_RUNNING
+        from hardware.fpga.base import FpgaStatus
+
+        hw_stub.fpga_status.emit(FpgaStatus(running=False, sync_locked=True))
+
+        assert FPGA_NOT_RUNNING in svc.active_issue_codes
+
+    def test_fpga_issues_clear_when_running_and_locked(self, hw_stub, svc):
+        """FPGA running + locked must clear both FPGA issues."""
+        from ai.metrics_service import FPGA_NOT_RUNNING, FPGA_NOT_LOCKED
+        from hardware.fpga.base import FpgaStatus
+
+        # Set issues first
+        hw_stub.fpga_status.emit(FpgaStatus(running=False, sync_locked=False))
+        assert FPGA_NOT_RUNNING in svc.active_issue_codes
+
+        # Clear them
+        hw_stub.fpga_status.emit(FpgaStatus(running=True, sync_locked=True))
+        assert FPGA_NOT_RUNNING not in svc.active_issue_codes
+        assert FPGA_NOT_LOCKED  not in svc.active_issue_codes
+
+    def test_stage_not_homed_issue(self, hw_stub, svc):
+        """Stage status with homed=False triggers stage_not_homed."""
+        from ai.metrics_service import STAGE_NOT_HOMED
+        from hardware.stage.base import StageStatus
+
+        hw_stub.stage_status.emit(StageStatus(homed=False))
+
+        assert STAGE_NOT_HOMED in svc.active_issue_codes
+
+    def test_ready_flag_false_when_issues_present(self, hw_stub, svc):
+        """snapshot['ready'] must be False when any issue is active."""
+        from hardware.stage.base import StageStatus
+        hw_stub.stage_status.emit(StageStatus(homed=False))
+
+        snap = svc.current_snapshot()
+        assert snap["ready"] is False
+        assert len(snap["issues"]) > 0
+
+    def test_ready_flag_true_with_no_issues(self, svc):
+        """A freshly constructed service with no signals has ready=True."""
+        snap = svc.current_snapshot()
+        assert snap["ready"] is True
+        assert snap["issues"] == []
+
+    def test_snapshot_structure(self, svc):
+        """current_snapshot() must contain all required top-level keys."""
+        snap = svc.current_snapshot()
+        for key in ("camera", "tec", "fpga", "stage", "issues", "ready"):
+            assert key in snap, f"Missing key {key!r} in snapshot"
+
+    def test_focus_computation_nonzero_for_sharp_image(self):
+        """_compute_focus() must return a positive value for a non-uniform image."""
+        from ai.metrics_service import MetricsService
+        # Sharp vertical step edge — creates a non-zero second derivative that
+        # survives the 4× downsampling (unlike a 2-pixel-period checkerboard).
+        data = np.zeros((64, 64), dtype=np.float32)
+        data[:, 32:] = 4000   # left half dark, right half at full scale
+        score = MetricsService._compute_focus(data)
+        assert score > 0.0
+
+    def test_focus_computation_zero_for_flat_image(self):
+        """_compute_focus() must return 0 for a completely flat image."""
+        from ai.metrics_service import MetricsService
+        flat = np.full((64, 64), 2000.0, dtype=np.float32)
+        score = MetricsService._compute_focus(flat)
+        assert score == 0.0
