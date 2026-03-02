@@ -90,3 +90,70 @@ def free_ask(
             ),
         },
     ]
+
+
+def session_report(
+    result_data: dict,
+    context_json: str,
+    system_prompt: str = SYSTEM_PROMPT,
+) -> list[dict]:
+    """
+    Ask the model to generate a one-paragraph post-acquisition quality report.
+
+    result_data keys (all optional, use whatever is available):
+      grade           str   instrument grade at acquisition start (A/B/C/D)
+      issues          list  dicts with keys name, sev, obs
+      n_frames        int   total frames requested
+      cold_captured   int   cold frames captured
+      hot_captured    int   hot frames captured
+      duration_s      float wall-clock duration
+      exposure_us     float camera exposure in µs
+      gain_db         float camera gain in dB
+      snr_db          float ΔR/R signal-to-noise ratio in dB (None if unavailable)
+      dark_pixel_pct  float percentage of dark/masked pixels
+      complete        bool  whether ΔR/R computation succeeded
+
+    Returns a messages list ready for create_chat_completion().
+    """
+    grade     = result_data.get("grade", "?")
+    issues    = result_data.get("issues", [])
+    n_frames  = result_data.get("n_frames", "?")
+    cold      = result_data.get("cold_captured", "?")
+    hot       = result_data.get("hot_captured", "?")
+    dur       = result_data.get("duration_s", None)
+    exp_us    = result_data.get("exposure_us", None)
+    gain      = result_data.get("gain_db", None)
+    snr       = result_data.get("snr_db", None)
+    dark_pct  = result_data.get("dark_pixel_pct", None)
+    complete  = result_data.get("complete", False)
+
+    issue_lines = ""
+    if issues:
+        issue_lines = "Active issues at start:\n" + "\n".join(
+            f"  {i.get('sev','?').upper()}: {i.get('name','?')} — {i.get('obs','?')}"
+            for i in issues
+        ) + "\n"
+
+    metrics = [f"Frames: {cold} cold + {hot} hot (of {n_frames} requested)"]
+    if dur    is not None: metrics.append(f"Duration: {dur:.1f} s")
+    if exp_us is not None: metrics.append(f"Exposure: {exp_us:.0f} µs")
+    if gain   is not None: metrics.append(f"Gain: {gain:.1f} dB")
+    if snr    is not None: metrics.append(f"SNR: {snr:.1f} dB")
+    if dark_pct is not None: metrics.append(f"Dark pixels: {dark_pct:.1f}%")
+    metrics.append(f"Status: {'Complete' if complete else 'Incomplete'}")
+
+    content = (
+        f"Instrument state: {context_json}\n\n"
+        f"Acquisition just completed. Pre-acquisition grade: {grade}.\n"
+        f"{issue_lines}"
+        f"Result metrics:\n" + "\n".join(f"  {m}" for m in metrics) + "\n\n"
+        "In 3-4 sentences, give a quality assessment of this acquisition. "
+        "Comment on SNR, dark pixel fraction, and any pre-existing issues that "
+        "may have affected the result. Suggest one concrete improvement for the "
+        "next acquisition if warranted. Plain text only."
+    )
+
+    return [
+        {"role": "system", "content": system_prompt},
+        {"role": "user",   "content": content},
+    ]

@@ -423,7 +423,9 @@ class MainWindow(QMainWindow):
         self._acquire_tab.insert_readiness_widget(self._readiness_widget)
 
         # ── AI service + model downloader + dockable panel ────────
-        self._last_grade: str = ""     # tracks grade for change notifications
+        self._last_grade: str = ""         # tracks grade for change notifications
+        self._acq_start_grade: str = "A"  # grade snapshot at acquisition start
+        self._acq_start_issues: list = [] # issue snapshot at acquisition start
         self._diagnostic_engine = DiagnosticEngine(self._metrics)
         self._ai_service = AIService(parent=self)
         self._ai_service.set_metrics(self._metrics)
@@ -1069,6 +1071,34 @@ class MainWindow(QMainWindow):
                 signals.log_message.emit(f"Session save failed: {e}")
         threading.Thread(target=_save, daemon=True).start()
 
+        # AI session quality report — silently skips if model not loaded
+        if self._ai_service.status == "ready":
+            snr = None
+            try:
+                snr = r.snr_db
+            except Exception:
+                pass
+            result_data = {
+                "grade":         self._acq_start_grade,
+                "issues":        [
+                    {"name": i.display_name, "sev": i.severity, "obs": i.observed}
+                    for i in self._acq_start_issues
+                ],
+                "n_frames":      r.n_frames,
+                "cold_captured": r.cold_captured,
+                "hot_captured":  r.hot_captured,
+                "duration_s":    r.duration_s,
+                "exposure_us":   r.exposure_us,
+                "gain_db":       r.gain_db,
+                "snr_db":        snr,
+                "dark_pixel_pct": round(r.dark_pixel_fraction * 100, 1),
+                "complete":      r.is_complete,
+            }
+            self._ai_service.session_report(result_data)
+            if not self._ai_dock.isVisible():
+                self._status.showMessage(
+                    "AI quality report ready — click ◉ to view", 6000)
+
     def _on_acq_saved(self, session):
         """New session was saved — refresh data tab immediately."""
         self._data_tab.add_session(session)
@@ -1193,21 +1223,28 @@ class MainWindow(QMainWindow):
         Grade A/B → proceed immediately.
         Grade C   → warning dialog, user can override.
         Grade D   → critical dialog, user can still override but is strongly warned.
+
+        Always captures the pre-acquisition grade and issue snapshot so the
+        post-acquisition session report can reference conditions at start time.
         """
         try:
             results = self._diagnostic_engine.evaluate()
             grade   = self._compute_grade(results)
         except Exception:
-            grade = "A"   # if engine fails, don't block acquisition
+            results = []
+            grade   = "A"   # if engine fails, don't block acquisition
 
-        if grade == "A" or grade == "B":
+        # Snapshot for session report regardless of whether we proceed
+        self._acq_start_grade  = grade
+        self._acq_start_issues = [r for r in results if r.severity in ("fail", "warn")]
+
+        if grade in ("A", "B"):
             self._acquire_tab.start_acquisition(n_frames, delay)
             return
 
-        issues = [r for r in results if r.severity in ("fail", "warn")]
         issue_lines = "\n".join(
             f"  {'⊗' if r.severity == 'fail' else '⚠'}  {r.display_name}: {r.observed}"
-            for r in issues[:6]
+            for r in self._acq_start_issues[:6]
         )
 
         if grade == "C":

@@ -133,6 +133,19 @@ class AIService(QObject):
         sp = self._active_system_prompt()
         self._run(tmpl.free_ask(question, self._ctx.build(), sp))
 
+    def session_report(self, result_data: dict) -> None:
+        """
+        Generate a post-acquisition quality report.
+
+        result_data is a dict of acquisition metrics plus pre-acquisition grade
+        and issue snapshot — see prompt_templates.session_report() for keys.
+        Silently skips if the model is not ready.
+        """
+        if self._status != "ready":
+            return
+        sp = self._active_system_prompt()
+        self._run(tmpl.session_report(result_data, self._ctx.build(), sp))
+
     # ------------------------------------------------------------------ #
     #  Persona helpers                                                     #
     # ------------------------------------------------------------------ #
