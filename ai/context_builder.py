@@ -75,10 +75,11 @@ class ContextBuilder:
             stage = app_state.stage
             if stage is not None:
                 pos = getattr(stage, "position", None)
+                pos_dict = {k: v for k, v in vars(pos).items()} if pos is not None else None
                 data["stage"] = {
                     "connected": True,
                     "homed": getattr(stage, "homed", None),
-                    "pos_mm": pos,
+                    "pos_um": pos_dict,
                 }
             else:
                 data["stage"] = {"connected": False}
