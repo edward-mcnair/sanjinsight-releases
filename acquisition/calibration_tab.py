@@ -11,6 +11,8 @@ import os, time
 import numpy as np
 from typing import Optional
 
+from ui.button_utils import RunningButton, apply_hand_cursor
+
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QDoubleSpinBox, QSpinBox, QGroupBox, QGridLayout, QProgressBar,
@@ -306,6 +308,9 @@ class CalibrationTab(QWidget):
         self._run_btn.clicked.connect(self._run)
         self._abort_btn.clicked.connect(self._abort)
 
+        self._btn_runner = RunningButton(self._run_btn, idle_text="▶  Run Calibration")
+        apply_hand_cursor(self._abort_btn)
+
         self._progress = QProgressBar()
         self._progress.setRange(0, 100)
 
@@ -445,6 +450,7 @@ class CalibrationTab(QWidget):
             self._show_result(prog.result)
 
     def update_complete(self, result: CalibrationResult):
+        self._btn_runner.set_running(False)
         self._run_btn.setEnabled(True)
         self._abort_btn.setEnabled(False)
         self._progress.setValue(100 if result.valid else 0)
@@ -556,6 +562,7 @@ class CalibrationTab(QWidget):
         except Exception:
             pass
 
+        self._btn_runner.set_running(True, "Calibrating")
         self._run_btn.setEnabled(False)
         self._abort_btn.setEnabled(True)
         self._progress.setValue(0)

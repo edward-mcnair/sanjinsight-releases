@@ -16,6 +16,8 @@ from __future__ import annotations
 import time
 import numpy as np
 
+from ui.button_utils import RunningButton, apply_hand_cursor
+
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QDoubleSpinBox, QSpinBox, QGroupBox, QGridLayout,
@@ -352,6 +354,10 @@ class LiveTab(QWidget):
         self._stop_btn.setObjectName("danger")
         self._stop_btn.setEnabled(False)
 
+        self._btn_runner = RunningButton(self._start_btn, idle_text="▶  Start")
+        apply_hand_cursor(self._stop_btn, self._freeze_btn,
+                          self._capture_btn, self._reset_btn)
+
         for b in [self._start_btn, self._stop_btn, self._freeze_btn,
                   self._capture_btn, self._reset_btn]:
             b.setFixedHeight(30)
@@ -602,6 +608,7 @@ class LiveTab(QWidget):
         self._proc.start()
 
         self._timer.start()
+        self._btn_runner.set_running(True, "Streaming")
         self._start_btn.setEnabled(False)
         self._stop_btn.setEnabled(True)
         self._frozen = False
@@ -613,6 +620,7 @@ class LiveTab(QWidget):
         if self._proc:
             self._proc.stop()
             self._proc = None
+        self._btn_runner.set_running(False)
         self._start_btn.setEnabled(True)
         self._stop_btn.setEnabled(False)
         self._set_state("STOPPED", "#555")

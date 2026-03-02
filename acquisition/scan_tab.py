@@ -14,6 +14,8 @@ from __future__ import annotations
 import os, time
 import numpy as np
 
+from ui.button_utils import RunningButton, apply_hand_cursor
+
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QDoubleSpinBox, QSpinBox, QGroupBox, QGridLayout, QProgressBar,
@@ -266,6 +268,9 @@ class ScanTab(QWidget):
         self._abort_btn.setFixedHeight(30)
         self._abort_btn.setEnabled(False)
 
+        self._btn_runner = RunningButton(self._run_btn, idle_text="▶  Start Scan")
+        apply_hand_cursor(self._abort_btn)
+
         self._progress = QProgressBar()
         self._progress.setRange(0, 100)
 
@@ -432,6 +437,7 @@ class ScanTab(QWidget):
 
     def update_complete(self, result: ScanResult):
         self._result = result
+        self._btn_runner.set_running(False)
         self._run_btn.setEnabled(True)
         self._abort_btn.setEnabled(False)
 
@@ -507,6 +513,7 @@ class ScanTab(QWidget):
         self._stat_fields["fov"]._val.setText(
             f"{fov_x:.0f}×{fov_y:.0f} μm")
 
+        self._btn_runner.set_running(True, "Scanning")
         self._run_btn.setEnabled(False)
         self._abort_btn.setEnabled(True)
         self._progress.setValue(0)
