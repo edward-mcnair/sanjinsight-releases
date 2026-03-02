@@ -129,17 +129,14 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
-        # Things we definitely don't need — keeps the bundle smaller
-        'tkinter',
-        'unittest',
-        'email',
-        'xml',
-        'pydoc',
-        'doctest',
-        'difflib',
-        'ftplib',
-        'getpass',
-        'fnmatch',
+        # Safe to exclude — not used at runtime by our app or its dependencies.
+        # Do NOT add stdlib modules that are imported transitively (e.g. fnmatch,
+        # difflib, xml): PyInstaller's own bootstrap and many libraries need them.
+        'tkinter',      # we use PyQt5, not tkinter
+        'unittest',     # testing framework — not needed at runtime
+        'pydoc',        # interactive help — not needed at runtime
+        'doctest',      # inline tests — not needed at runtime
+        'ftplib',       # FTP client — we use no FTP
     ],
     noarchive=False,
 )
