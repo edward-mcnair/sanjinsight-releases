@@ -127,6 +127,11 @@ class NiImaqdxDriver(CameraDriver):
     # ---------------------------------------------------------------- #
 
     def grab(self, timeout_ms: int = 2000) -> Optional[CameraFrame]:
+        # Note: timeout_ms is accepted for interface compatibility with other
+        # camera drivers but IMAQdxGetImageData does not expose a per-call
+        # timeout.  Blocking duration is governed by the ring-buffer acquisition
+        # mode configured in start().  Reduce exposure_us if grab latency is
+        # too high, or switch to mode_Last (0) for non-blocking polls.
         with self._session_lock:
             status = self._dll.IMAQdxGetImageData(
                 self._session,

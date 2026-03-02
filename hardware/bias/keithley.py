@@ -75,6 +75,18 @@ class KeithleyDriver(BiasDriver):
         try:
             self.disable()
             if self._inst:
+                # Block until OUTPUT OFF is fully executed before closing VISA.
+                # Without this the session closes while the command is still
+                # queued in the instrument's buffer, leaving the output active.
+                # TSP: waitcomplete() blocks until all pending Lua ops finish.
+                # SCPI: *OPC? returns "1" when all pending commands complete.
+                try:
+                    if self._tsp:
+                        self._write("waitcomplete()")
+                    else:
+                        self._query("*OPC?")
+                except Exception:
+                    pass   # Best-effort; close even if sync fails
                 self._inst.close()
             if self._rm:
                 self._rm.close()

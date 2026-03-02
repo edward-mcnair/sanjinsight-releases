@@ -35,12 +35,18 @@ hardware:
     enabled: true
     driver: "ni_imaqdx"    # ni_imaqdx | pypylon | directshow | simulated
     # --- NI IMAQdx settings (driver: ni_imaqdx) ---
-    camera_name: "cam4"     # Name shown in NI MAX
+    # camera_name: Open NI MAX → Devices and Interfaces → NI-IMAQdx Devices
+    #              The name displayed there (e.g. "cam0", "cam4") goes here.
+    #              Names are assigned by enumeration order and can change if
+    #              cameras are reconnected — verify after any USB change.
+    camera_name: "cam4"
     width: 1920
     height: 1200
     model: "Basler acA1920-155um"
     # --- pypylon settings (driver: pypylon) ---
     # serial: ""            # Leave blank for first found Basler camera
+    #                       # Find serial: printed on camera label, or run
+    #                       #   python -c "from pypylon import pylon; [print(d.GetSerialNumber()) for d in pylon.TlFactory.GetInstance().EnumerateDevices()]"
     # --- DirectShow settings (driver: directshow) ---
     # device_index: 0       # Run find_camera.py to identify index
     # fourcc: "Y16 "        # Pixel format (Y16 for 16-bit mono)
@@ -53,8 +59,14 @@ hardware:
     enabled: true
     driver: "simulated"   # simulated | ni9637
     bitfile: "C:/Software/1. EZ500 New Set Up/EZ500_V1.2/Source/RIO_Source_32Bit/FPGA Bitfiles/ez500firmware_FPGATarget_FPGACODE_wPlAxJTjkzE.lvbitx"
+    # resource: Found in NI MAX → Remote Systems → right-click target → Properties
+    #           Format: "RIO0" (local chassis) or "rio://169.254.x.x/RIO0" (Ethernet)
     resource: "rio://169.254.19.194/RIO0"
-    reset_on_open: false
+    # reset_on_open: true  (default, recommended) — FPGA resets on session open
+    #               and on app exit/crash, stopping stimulus output automatically.
+    #               Set to false ONLY if you need the FPGA to continue running
+    #               across software restarts (e.g. during extended soak tests).
+    reset_on_open: true
     initial_freq_hz: 1000.0
     initial_duty: 0.5
 
@@ -83,6 +95,10 @@ hardware:
     speed_z:  100.0         # μm/s focus speed
     noise:    0.05          # simulated position noise (μm)
     # --- Thorlabs settings ---
+    # serial_x / serial_y / serial_z: 8-digit serial number printed on the
+    #   controller label (e.g. "27xxxxxx" for BBD/TDC/KDC, "45xxxxxx" for BSC).
+    #   Also visible in Thorlabs Kinesis → Simulation Manager → Serial Number,
+    #   or in Device Manager → Ports → Thorlabs APT Controller (COMx).
     # serial_x: "27000001"
     # serial_y: "27000002"
     # serial_z: "27000003"
@@ -99,8 +115,13 @@ hardware:
     compliance: 0.1          # current limit (A) when voltage mode, or V limit when current mode
     noise: 0.001             # simulated readback noise
     # --- Keithley settings ---
-    # address: "GPIB::24"   # VISA resource string
-    # model: "2400"         # 2400 | 2450 | 2601 | 2611
+    # address: VISA resource string — find in NI MAX → Instruments or
+    #          run: python -c "import pyvisa; print(pyvisa.ResourceManager().list_resources())"
+    #   GPIB:    "GPIB0::24::INSTR"   (24 = GPIB address on rear panel)
+    #   USB:     "USB0::0x05E6::0x2400::xxxxxxx::INSTR"  (copy from NI MAX)
+    #   Ethernet:"TCPIP0::192.168.1.5::inst0::INSTR"
+    # address: "GPIB0::24::INSTR"
+    # model: "2400"         # 2400 | 2450 | 2601 | 2602 | 2611 | 2612 | 2635 | 2636
     # --- Generic VISA settings ---
     # address: "TCPIP::192.168.1.10::INSTR"
     # channel: 1
