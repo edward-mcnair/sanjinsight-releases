@@ -320,6 +320,7 @@ from ai.metrics_service          import MetricsService
 from ui.widgets.readiness_widget import ReadinessWidget
 from ai.ai_service               import AIService
 from ai.model_runner             import llama_available
+from ai.model_downloader         import ModelDownloader, RECOMMENDED_MODEL, DEFAULT_MODELS_DIR
 from ui.widgets.ai_panel_widget  import AIPanelWidget
 
 
@@ -420,9 +421,10 @@ class MainWindow(QMainWindow):
             self._readiness_widget.update_metrics)
         self._acquire_tab.insert_readiness_widget(self._readiness_widget)
 
-        # ── AI service + dockable panel ───────────────────────────
+        # ── AI service + model downloader + dockable panel ────────
         self._ai_service = AIService(parent=self)
         self._ai_service.set_metrics(self._metrics)
+        self._model_downloader = ModelDownloader(parent=self)
 
         self._ai_panel = AIPanelWidget(llama_installed=llama_available())
         self._ai_dock = QDockWidget("AI Assistant", self)
@@ -454,6 +456,17 @@ class MainWindow(QMainWindow):
         # Wire Settings tab → AI service
         self._settings_tab.ai_enable_requested.connect(self._on_ai_enable)
         self._settings_tab.ai_disable_requested.connect(self._ai_service.disable)
+
+        # Wire Settings tab ↔ ModelDownloader
+        self._settings_tab.download_model_requested.connect(
+            self._on_download_model_requested)
+        self._settings_tab.download_cancel_requested.connect(
+            self._model_downloader.cancel)
+        self._model_downloader.progress.connect(
+            self._settings_tab.set_download_progress)
+        self._model_downloader.complete.connect(self._on_download_complete)
+        self._model_downloader.failed.connect(
+            self._settings_tab.set_download_failed)
 
         # ── Register panels with the Bootstrap-style sidebar ─────
         from ui.sidebar_nav import NavItem as NI
@@ -1157,6 +1170,19 @@ class MainWindow(QMainWindow):
         self._ai_service.enable(model_path, n_gpu_layers)
         # Show the panel automatically when loading starts
         self._ai_dock.show()
+
+    def _on_download_model_requested(self, url: str, dest_path: str) -> None:
+        """Start a background model download requested by the Settings tab."""
+        self._model_downloader.download(url, dest_path)
+
+    def _on_download_complete(self, path: str) -> None:
+        """Model download finished — update prefs and auto-load if AI is enabled."""
+        import config as cfg_mod
+        self._settings_tab.set_download_complete(path)
+        cfg_mod.set_pref("ai.model_path", path)
+        if cfg_mod.get_pref("ai.enabled", False):
+            n_gpu = cfg_mod.get_pref("ai.n_gpu_layers", 0)
+            self._on_ai_enable(path, n_gpu)
 
     def closeEvent(self, event):
         """

@@ -9,7 +9,8 @@
 
 import sys
 import os
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+import importlib.util
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules, collect_dynamic_libs
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 # This spec file lives in installer/ — project root is one level up
@@ -73,6 +74,13 @@ hidden_imports = [
     # ── Optional hardware packages (import gracefully if missing) ────
     # nifpga, pypylon, pyMeCom, pyvisa — these are installed separately
     # on the instrument PC. PyInstaller won't fail if they're absent.
+
+    # ── AI assistant — llama-cpp-python (optional, graceful if missing) ──
+    # These are imported conditionally in ai/model_runner.py.
+    # PyInstaller needs them listed here so they are bundled when present.
+    'llama_cpp',
+    'llama_cpp.llama',
+    'llama_cpp.llama_cpp',
 ]
 
 # ── Data files (non-Python assets bundled alongside the exe) ─────────────────
@@ -99,13 +107,21 @@ datas = [
 
     # h5py data files
     *collect_data_files('h5py'),
+
+    # llama_cpp data files (only when installed — gracefully skipped if absent)
+    *( collect_data_files('llama_cpp')
+       if importlib.util.find_spec('llama_cpp') else [] ),
 ]
 
 # ── Analysis ──────────────────────────────────────────────────────────────────
 a = Analysis(
     [os.path.join(PROJECT_DIR, 'main_app.py')],   # entry point
     pathex=[PROJECT_DIR],
-    binaries=[],
+    binaries=[
+        # llama_cpp native shared library (.dll/.dylib/.so) — skipped if not installed
+        *( collect_dynamic_libs('llama_cpp')
+           if importlib.util.find_spec('llama_cpp') else [] ),
+    ],
     datas=datas,
     hiddenimports=hidden_imports,
     hookspath=[os.path.join(SPEC_DIR, 'hooks')],  # custom hooks folder

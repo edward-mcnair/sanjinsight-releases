@@ -22,7 +22,7 @@ from PyQt5.QtGui     import QDesktopServices
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QCheckBox, QComboBox, QGroupBox, QFrame, QSizePolicy,
-    QScrollArea, QSpinBox, QLineEdit, QFileDialog,
+    QScrollArea, QSpinBox, QLineEdit, QFileDialog, QProgressBar,
 )
 
 import config as cfg_mod
@@ -126,14 +126,18 @@ class SettingsTab(QWidget):
 
     Signals
     -------
-    check_for_updates_requested   — emitted when user clicks "Check Now"
-    ai_enable_requested(str, int) — (model_path, n_gpu_layers) when user enables AI
-    ai_disable_requested          — emitted when user disables AI
+    check_for_updates_requested       — emitted when user clicks "Check Now"
+    ai_enable_requested(str, int)     — (model_path, n_gpu_layers) when user enables AI
+    ai_disable_requested              — emitted when user disables AI
+    download_model_requested(str,str) — (url, dest_path) to start a model download
+    download_cancel_requested         — emitted when user cancels a download
     """
 
     check_for_updates_requested = pyqtSignal()
     ai_enable_requested         = pyqtSignal(str, int)
     ai_disable_requested        = pyqtSignal()
+    download_model_requested    = pyqtSignal(str, str)
+    download_cancel_requested   = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -285,24 +289,100 @@ class SettingsTab(QWidget):
         return g
 
     def _build_ai_group(self) -> QGroupBox:
+        from ai.model_downloader import (
+            find_existing_model, DEFAULT_MODELS_DIR, RECOMMENDED_MODEL)
+
         g = _group("AI Assistant  (local, offline)")
         lay = QVBoxLayout(g)
         lay.setSpacing(14)
 
-        intro = _body(
-            "Enable an on-device AI assistant powered by a local GGUF model "
-            "(e.g. Phi-3.5-mini, Qwen2.5-3B). All inference runs on this machine — "
-            "no data ever leaves your network.")
-        lay.addWidget(intro)
+        # ── Privacy guarantee frame ──────────────────────────────────────────
+        privacy_frame = QFrame()
+        privacy_frame.setStyleSheet(
+            f"QFrame {{ background:#0a1f18; border:1px solid {_GREEN}55; "
+            f"border-radius:5px; }}"
+        )
+        pf_lay = QHBoxLayout(privacy_frame)
+        pf_lay.setContentsMargins(10, 8, 10, 8)
+        pf_lay.setSpacing(10)
 
-        # Enable toggle
+        lock_lbl = QLabel("🔒")
+        lock_lbl.setStyleSheet("font-size:16pt; border:none;")
+        lock_lbl.setFixedWidth(28)
+        pf_lay.addWidget(lock_lbl)
+
+        privacy_text = QLabel(
+            "<b>Privacy guarantee:</b> the AI assistant runs 100% locally on "
+            "this machine. It never communicates with external servers, cloud "
+            "services, or the internet under any circumstances."
+        )
+        privacy_text.setWordWrap(True)
+        privacy_text.setStyleSheet(f"font-size:11pt; color:{_GREEN}; border:none;")
+        pf_lay.addWidget(privacy_text, 1)
+        lay.addWidget(privacy_frame)
+
+        # ── "AI disabled" notice (hidden when enabled) ────────────────────
+        self._ai_disabled_notice = _body(
+            "AI Assistant is currently disabled. Enable the checkbox below "
+            "and download a model to get started."
+        )
+        lay.addWidget(self._ai_disabled_notice)
+
+        # ── Enable toggle ─────────────────────────────────────────────────
         self._ai_enable_chk = QCheckBox("Enable AI Assistant")
         self._ai_enable_chk.setStyleSheet(_CHECK)
         self._ai_enable_chk.setChecked(cfg_mod.get_pref("ai.enabled", False))
         self._ai_enable_chk.toggled.connect(self._on_ai_enable_changed)
         lay.addWidget(self._ai_enable_chk)
 
-        # Model path row
+        # ── Download section (visible when enabled) ───────────────────────
+        self._ai_download_widget = QWidget()
+        dl_lay = QVBoxLayout(self._ai_download_widget)
+        dl_lay.setContentsMargins(0, 0, 0, 0)
+        dl_lay.setSpacing(8)
+
+        rec_lbl = _body(
+            f"Recommended model: {RECOMMENDED_MODEL['filename']}  "
+            f"(~{RECOMMENDED_MODEL['size_gb']:.1f} GB, runs entirely locally)"
+        )
+        dl_lay.addWidget(rec_lbl)
+
+        dl_btn_row = QHBoxLayout()
+        self._ai_download_btn = QPushButton("Download Recommended Model")
+        self._ai_download_btn.setStyleSheet(_BTN_PRIMARY)
+        self._ai_download_btn.clicked.connect(self._on_download_clicked)
+        dl_btn_row.addWidget(self._ai_download_btn)
+
+        self._ai_cancel_btn = QPushButton("Cancel")
+        self._ai_cancel_btn.setStyleSheet(_BTN_SECONDARY)
+        self._ai_cancel_btn.setFixedWidth(80)
+        self._ai_cancel_btn.setVisible(False)
+        self._ai_cancel_btn.clicked.connect(self.download_cancel_requested)
+        dl_btn_row.addWidget(self._ai_cancel_btn)
+        dl_btn_row.addStretch(1)
+        dl_lay.addLayout(dl_btn_row)
+
+        self._ai_progress_bar = QProgressBar()
+        self._ai_progress_bar.setRange(0, 100)
+        self._ai_progress_bar.setValue(0)
+        self._ai_progress_bar.setTextVisible(True)
+        self._ai_progress_bar.setVisible(False)
+        self._ai_progress_bar.setFixedHeight(16)
+        self._ai_progress_bar.setStyleSheet(
+            f"QProgressBar {{ background:{_BG2}; border:1px solid {_BORDER}; "
+            f"border-radius:4px; font-size:10pt; color:{_TEXT}; }}"
+            f"QProgressBar::chunk {{ background:{_GREEN}; border-radius:3px; }}"
+        )
+        dl_lay.addWidget(self._ai_progress_bar)
+
+        self._ai_dl_status_lbl = QLabel("")
+        self._ai_dl_status_lbl.setStyleSheet(f"font-size:11pt; color:{_MUTED};")
+        self._ai_dl_status_lbl.setVisible(False)
+        dl_lay.addWidget(self._ai_dl_status_lbl)
+
+        lay.addWidget(self._ai_download_widget)
+
+        # ── Model path row ────────────────────────────────────────────────
         path_row = QHBoxLayout()
         path_lbl = QLabel("Model file (.gguf):")
         path_lbl.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
@@ -327,7 +407,7 @@ class SettingsTab(QWidget):
         path_row.addWidget(browse_btn)
         lay.addLayout(path_row)
 
-        # GPU layers row
+        # ── GPU layers row ────────────────────────────────────────────────
         gpu_row = QHBoxLayout()
         gpu_lbl = QLabel("GPU layers (0 = CPU only):")
         gpu_lbl.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
@@ -354,7 +434,7 @@ class SettingsTab(QWidget):
 
         lay.addWidget(_sep())
 
-        # Apply / status row
+        # ── Load Model / status row ───────────────────────────────────────
         apply_row = QHBoxLayout()
         self._ai_apply_btn = QPushButton("Load Model")
         self._ai_apply_btn.setStyleSheet(_BTN_PRIMARY)
@@ -367,11 +447,13 @@ class SettingsTab(QWidget):
         apply_row.addWidget(self._ai_status_lbl, 1)
         lay.addLayout(apply_row)
 
-        note = _body(
-            "Good free models: Phi-3.5-mini-instruct-Q4_K_M.gguf (~2.4 GB), "
-            "Qwen2.5-3B-Instruct-Q4_K_M.gguf (~2.0 GB). "
-            "Download from Hugging Face (GGUF format, Q4_K_M recommended).")
-        lay.addWidget(note)
+        # Auto-detect existing model from ~/.microsanj/models/
+        existing = find_existing_model(DEFAULT_MODELS_DIR)
+        if existing and not cfg_mod.get_pref("ai.model_path", ""):
+            self._ai_path_edit.setText(existing)
+            cfg_mod.set_pref("ai.model_path", existing)
+            self._ai_status_lbl.setText("Model found — click Load Model to enable")
+            self._ai_status_lbl.setStyleSheet(f"font-size:12pt; color:{_GREEN};")
 
         self._update_ai_controls()
         return g
@@ -481,8 +563,69 @@ class SettingsTab(QWidget):
         if hasattr(self, "_ai_apply_btn"):
             self._ai_apply_btn.setEnabled(status not in ("loading", "thinking"))
 
+    def _on_download_clicked(self) -> None:
+        from ai.model_downloader import RECOMMENDED_MODEL, DEFAULT_MODELS_DIR
+        dest = str(DEFAULT_MODELS_DIR / RECOMMENDED_MODEL["filename"])
+        self._ai_download_btn.setEnabled(False)
+        self._ai_cancel_btn.setVisible(True)
+        self._ai_progress_bar.setValue(0)
+        self._ai_progress_bar.setVisible(True)
+        self._ai_dl_status_lbl.setVisible(True)
+        self._ai_dl_status_lbl.setText("Starting download…")
+        self._ai_dl_status_lbl.setStyleSheet(f"font-size:11pt; color:{_MUTED};")
+        self.download_model_requested.emit(RECOMMENDED_MODEL["url"], dest)
+
+    def set_download_progress(self, done: int, total: int, speed_mbps: float) -> None:
+        """Called by MainWindow during model download."""
+        if not hasattr(self, "_ai_progress_bar"):
+            return
+        pct = int(done / total * 100) if total > 0 else 0
+        self._ai_progress_bar.setValue(pct)
+        done_mb  = done  / 1024 / 1024
+        total_mb = total / 1024 / 1024 if total > 0 else 0
+        speed_str = f"  {speed_mbps:.1f} MB/s" if speed_mbps > 0 else ""
+        if total_mb > 0:
+            self._ai_dl_status_lbl.setText(
+                f"Downloading… {done_mb:.0f} / {total_mb:.0f} MB{speed_str}")
+        else:
+            self._ai_dl_status_lbl.setText(
+                f"Downloading… {done_mb:.0f} MB{speed_str}")
+
+    def set_download_complete(self, path: str) -> None:
+        """Called by MainWindow when model download finishes successfully."""
+        if not hasattr(self, "_ai_progress_bar"):
+            return
+        self._ai_progress_bar.setValue(100)
+        self._ai_cancel_btn.setVisible(False)
+        self._ai_download_btn.setEnabled(True)
+        self._ai_download_btn.setText("Re-download Model")
+        self._ai_dl_status_lbl.setText("Download complete — model is ready")
+        self._ai_dl_status_lbl.setStyleSheet(f"font-size:11pt; color:{_GREEN};")
+        self._ai_path_edit.setText(path)
+        self._ai_status_lbl.setText("Model ready — click Load Model")
+        self._ai_status_lbl.setStyleSheet(f"font-size:12pt; color:{_GREEN};")
+
+    def set_download_failed(self, msg: str) -> None:
+        """Called by MainWindow when model download fails or is cancelled."""
+        if not hasattr(self, "_ai_progress_bar"):
+            return
+        self._ai_progress_bar.setVisible(False)
+        self._ai_cancel_btn.setVisible(False)
+        self._ai_download_btn.setEnabled(True)
+        self._ai_dl_status_lbl.setVisible(True)
+        if msg == "Cancelled":
+            self._ai_dl_status_lbl.setText("Download cancelled")
+            self._ai_dl_status_lbl.setStyleSheet(f"font-size:11pt; color:{_MUTED};")
+        else:
+            self._ai_dl_status_lbl.setText(f"Download failed: {msg}")
+            self._ai_dl_status_lbl.setStyleSheet(f"font-size:11pt; color:#ff5555;")
+
     def _update_ai_controls(self):
         enabled = self._ai_enable_chk.isChecked()
+        if hasattr(self, "_ai_disabled_notice"):
+            self._ai_disabled_notice.setVisible(not enabled)
+        if hasattr(self, "_ai_download_widget"):
+            self._ai_download_widget.setVisible(enabled)
         if hasattr(self, "_ai_path_edit"):
             self._ai_path_edit.setEnabled(enabled)
         if hasattr(self, "_ai_gpu_spin"):
