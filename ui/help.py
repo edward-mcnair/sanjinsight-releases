@@ -310,13 +310,14 @@ HELP_CONTENT: dict[str, dict] = {
         "what":    "Thermoreflectance coefficient linking ΔR/R to ΔT. "
                    "It is specific to each material and illumination wavelength.",
         "do":      ("Select a profile matching your material and LED wavelength. "
-                    "Si/532 nm: 1.5×10⁻⁴  |  GaAs/532 nm: 2.0×10⁻⁴  |  "
+                    "Si/470 nm: 1.5×10⁻⁴  |  GaAs/470 nm: 2.0×10⁻⁴  |  "
                     "Au/530 nm: 2.5×10⁻⁴  |  Al: use 780 nm LED only "
-                    "(Cth too small at 532/470 nm)."),
-        "range":   "Typical: 1×10⁻⁵ to 3×10⁻⁴ K⁻¹",
+                    "(Cth too small at shorter wavelengths).  "
+                    "See the LED Wavelength Selection help topic for per-material guidance."),
+        "range":   "Valid range: 1×10⁻⁵ to 1×10⁻² K⁻¹",
         "warning": ("Aluminium and dielectric-coated surfaces require 780 nm. "
                     "Changing LED wavelength requires a new calibration."),
-        "docs":    "EZ-Therm User Manual §C_T Coefficients; NanoTherm Rev.A §Calibration",
+        "docs":    "AN-003 §C_T Coefficients; EZ-Therm Manual §Calibration",
     },
 
     "startup_sequence": {
@@ -333,6 +334,117 @@ HELP_CONTENT: dict[str, dict] = {
                     "Never run the cooling pump without coolant in the reservoir — "
                     "dry-running voids the warranty."),
         "docs":    "EZ-Therm User Manual §System Startup",
+    },
+
+    # ---- Optics & Technique reference --------------------------------
+
+    "led_wavelength_selection": {
+        "title":   "LED Wavelength Selection",
+        "what":    "The thermoreflectance coefficient (Cth) is strongly "
+                   "wavelength-dependent. Choosing the wrong LED for your "
+                   "surface material will severely reduce signal strength.",
+        "do":      ("Match your LED to the surface material of the hot-spot "
+                    "region:  Si / GaAs / InP → 470 nm Blue (optimal)  |  "
+                    "GaN → 365 nm UV, 470 nm Blue, or 530 nm Green  |  "
+                    "Au → 470 nm Blue or 530 nm Green  |  "
+                    "Al → 780 nm N-IR ONLY  |  "
+                    "Ni / Ti → 585 nm Yellow or 660 nm Red  |  "
+                    "Flip-chip / backside → 1050–1500 nm NIR."),
+        "range":   "Visible top-side: 365–700 nm  |  Thru-substrate NIR: 1050–1500 nm",
+        "warning": ("Aluminium surfaces require 780 nm — Cth is negligibly small at "
+                    "532/470 nm.  For devices with mixed surface materials, select the "
+                    "wavelength that optimises Cth for the material at the defect site.  "
+                    "Changing LED wavelength requires a new calibration."),
+        "docs":    "AN-003 §Optimal LED Wavelength; AN-005 §Wavelength Selection",
+    },
+
+    "objective_fov": {
+        "title":   "Objective Magnification & Field of View",
+        "what":    "Higher magnification gives better spatial resolution "
+                   "but reduces the field of view (FOV). The FOV also "
+                   "determines the maximum useful scan tile step size.",
+        "do":      ("Start with a low-magnification objective (5× or 20×) to "
+                    "locate the device, then switch to higher magnification for "
+                    "sub-micron hot-spot analysis.  "
+                    "Approximate FOVs: 5× ≈ 2.5 mm  |  20× ≈ 0.6 mm  |  "
+                    "50× ≈ 250 µm  |  100× ≈ 120 µm."),
+        "range":   "Set scan step ≤ FOV for full coverage; 10–20 % overlap for stitching",
+        "warning": ("At NA > 0.5, the thermoreflectance coefficient Cth becomes "
+                    "NA-dependent.  High-NA objectives may require a dedicated "
+                    "calibration for accurate absolute temperature measurements."),
+        "docs":    "AN-002 §Objective Selection; AN-003 §Numerical Aperture Effects",
+    },
+
+    "technique_comparison": {
+        "title":   "TTI vs IR vs EMMI vs OBIRCH",
+        "what":    "Four imaging techniques are used for semiconductor failure "
+                   "analysis. Each has different strengths, limitations, and "
+                   "spatial resolution capabilities.",
+        "do":      ("Use Thermoreflectance (TTI) when: sub-micron resolution is "
+                    "needed, the defect is in a metal interconnect (invisible to "
+                    "EMMI), time resolution below 1 ms is required, or budget is "
+                    "limited.  "
+                    "Use IR when: the highest temperature resolution (< 1 mK) is "
+                    "needed and black-paint coating of the device is acceptable.  "
+                    "Use EMMI when: detecting junction-level photon emission from "
+                    "ESD, hot carriers, or bandgap recombination events.  "
+                    "Use OBIRCH when: resistance changes in metal lines are too "
+                    "small for thermal mapping."),
+        "range":   ("TTI: 250 nm spatial, 0.25–0.5 °C (2 min), < 1 ns time  |  "
+                    "IR: 2–5 µm spatial, 25 mK, tens of ms  |  "
+                    "EMMI: 2–3 µm, light-emitting defects only  |  "
+                    "OBIRCH: 1–1.5 µm, resistance change only"),
+        "warning": ("IR requires heating the device to 50–70 °C for adequate "
+                    "sensitivity, and metals have low emissivity.  "
+                    "EMMI cannot detect heating in metal interconnects — metals "
+                    "do not emit detectable photons.  "
+                    "OBIRCH can miss small resistance changes entirely."),
+        "docs":    "AN-004 §Technique Comparison",
+    },
+
+    "transient_imaging": {
+        "title":   "Transient (Time-Resolved) Thermal Imaging",
+        "what":    "Time-resolved mode sweeps the LED illumination delay "
+                   "relative to the device bias pulse, building a movie of "
+                   "temperature vs. time with nanosecond resolution.",
+        "do":      ("Set DUT bias pulse duty cycle to 25–35 % — high enough to "
+                    "reach peak temperature, low enough to allow full cool-down "
+                    "between pulses.  "
+                    "Use a LED pulse width of ~100 µs as a starting point.  "
+                    "If the thermal response is delayed relative to the bias onset, "
+                    "the heat source is sub-surface — do not assume it is at the "
+                    "top surface.  "
+                    "For < 10 ns measurements, use impedance-matched 100 MHz+ cabling."),
+        "range":   ("Time resolution: < 1 ns to ~100 ns typical; 800 ps best achieved.  "
+                    "Duty cycle: 25–35 % recommended."),
+        "warning": ("At 100 MHz pulsing rates, impedance mismatches on signal cables "
+                    "cause reflections that corrupt lock-in timing and alter bias "
+                    "conditions — use matched transmission lines.  "
+                    "A time-delayed thermal response is diagnostic of a sub-surface "
+                    "heat source, not a surface defect."),
+        "docs":    "AN-006 §Transient Thermal Imaging",
+    },
+
+    "thru_substrate": {
+        "title":   "Thru-the-Substrate (Backside) Imaging",
+        "what":    "Flip-chip and face-down assemblies have the active junctions "
+                   "blocked by bump bonds and metal layers. Back-side NIR imaging "
+                   "passes through the silicon substrate to reach the active layer.",
+        "do":      ("Use NIR illumination (1050, 1200, 1300, or 1500 nm) with an "
+                    "InGaAs camera — silicon is virtually transparent above 1100 nm.  "
+                    "Image from the back side of the die.  "
+                    "The silicon back surface is smooth and uniform, which simplifies "
+                    "Cth calibration compared to the metallised top surface.  "
+                    "Optical alignment and signal processing are otherwise identical "
+                    "to standard visible-light thermoreflectance."),
+        "range":   ("Spatial resolution: ~800 nm–2 µm (NIR) vs. 250–600 nm (visible).  "
+                    "Available NIR wavelengths: 1050, 1200, 1300, 1500 nm."),
+        "warning": ("NIR wavelengths reduce spatial resolution compared to visible "
+                    "illumination — accept this trade-off for flip-chip access.  "
+                    "Devices with complex top-side surfaces (multiple dissimilar "
+                    "materials) also benefit from back-side imaging because the "
+                    "back surface has a single uniform Cth for calibration."),
+        "docs":    "AN-007 §Through-the-Substrate Imaging",
     },
 
     # ---- Scan --------------------------------------------------------
