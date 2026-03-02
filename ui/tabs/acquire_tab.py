@@ -16,6 +16,7 @@ from PyQt5.QtWidgets import (
     QWidget, QLabel, QPushButton, QSpinBox, QDoubleSpinBox,
     QProgressBar, QVBoxLayout, QHBoxLayout, QGridLayout,
     QGroupBox, QComboBox, QTextEdit, QFileDialog)
+from PyQt5.QtCore import pyqtSignal
 
 from hardware.app_state import app_state
 from acquisition        import AcquisitionProgress, AcqState
@@ -24,6 +25,9 @@ from ui.widgets.image_pane import ImagePane
 
 
 class AcquireTab(QWidget):
+    # Emitted when the user clicks Run — MainWindow intercepts for readiness gate
+    acquire_requested = pyqtSignal(int, float)   # (n_frames, inter_phase_delay)
+
     def __init__(self):
         super().__init__()
         self._result = None
@@ -324,6 +328,19 @@ class AcquireTab(QWidget):
         threading.Thread(target=_run, daemon=True).start()
 
     def _run(self):
+        """Called by the Run button. Emits acquire_requested for readiness gate."""
+        if app_state.pipeline is None:
+            self.log("No acquisition pipeline — is hardware connected?")
+            return
+        self.acquire_requested.emit(self._frames.value(), self._delay.value())
+
+    def start_acquisition(self, n_frames: int, inter_phase_delay: float = 0.0) -> None:
+        """
+        Actually start the acquisition pipeline.
+
+        Called by MainWindow after the readiness gate is satisfied (or bypassed).
+        Also used by the recipe system.
+        """
         pl = app_state.pipeline
         if pl is None:
             self.log("No acquisition pipeline — is hardware connected?")
@@ -331,8 +348,7 @@ class AcquireTab(QWidget):
         self._set_busy(True)
         self._progress.setValue(0)
         self.log("Starting acquisition sequence...")
-        pl.start(n_frames=self._frames.value(),
-                 inter_phase_delay=self._delay.value())
+        pl.start(n_frames=n_frames, inter_phase_delay=inter_phase_delay)
 
     def _abort(self):
         pl = app_state.pipeline

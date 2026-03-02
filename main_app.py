@@ -423,6 +423,7 @@ class MainWindow(QMainWindow):
         self._acquire_tab.insert_readiness_widget(self._readiness_widget)
 
         # ── AI service + model downloader + dockable panel ────────
+        self._last_grade: str = ""     # tracks grade for change notifications
         self._diagnostic_engine = DiagnosticEngine(self._metrics)
         self._ai_service = AIService(parent=self)
         self._ai_service.set_metrics(self._metrics)
@@ -602,6 +603,9 @@ class MainWindow(QMainWindow):
         # Sidebar tab changes → AI context
         self._nav.panel_changed.connect(
             lambda p: self._ai_service.set_active_tab(type(p).__name__))
+
+        # Acquisition readiness gate
+        self._acquire_tab.acquire_requested.connect(self._on_acquire_requested)
 
         # Evidence panel — refresh every 3 s while the app is running
         self._evidence_timer = QTimer(self)
@@ -1152,13 +1156,90 @@ class MainWindow(QMainWindow):
 
     # ── AI assistant handlers ──────────────────────────────────────────
 
+    @staticmethod
+    def _compute_grade(results: list) -> str:
+        """Derive A/B/C/D grade string from a list of RuleResult objects."""
+        fails = sum(1 for r in results if r.severity == "fail")
+        warns = sum(1 for r in results if r.severity == "warn")
+        if fails >= 2:  return "D"
+        if fails >= 1:  return "C"
+        if warns >= 3:  return "C"
+        if warns >= 1:  return "B"
+        return "A"
+
     def _refresh_evidence_panel(self) -> None:
         """Push latest diagnostic results to the AI panel evidence section."""
         try:
             results = self._diagnostic_engine.evaluate()
             self._ai_panel.refresh_evidence(results)
+
+            grade = self._compute_grade(results)
+            if grade != self._last_grade:
+                prev, self._last_grade = self._last_grade, grade
+                if grade in ("C", "D") and prev not in ("C", "D"):
+                    self._status.showMessage(
+                        f"⚠  Instrument grade dropped to {grade} — "
+                        f"review AI panel before acquiring", 8000)
+                elif grade == "A" and prev in ("C", "D"):
+                    self._status.showMessage(
+                        "✓  Instrument grade restored to A — ready for acquisition", 5000)
         except Exception:
             pass
+
+    def _on_acquire_requested(self, n_frames: int, delay: float) -> None:
+        """
+        Readiness gate: intercept acquisition start, warn or block on C/D grades.
+
+        Grade A/B → proceed immediately.
+        Grade C   → warning dialog, user can override.
+        Grade D   → critical dialog, user can still override but is strongly warned.
+        """
+        try:
+            results = self._diagnostic_engine.evaluate()
+            grade   = self._compute_grade(results)
+        except Exception:
+            grade = "A"   # if engine fails, don't block acquisition
+
+        if grade == "A" or grade == "B":
+            self._acquire_tab.start_acquisition(n_frames, delay)
+            return
+
+        issues = [r for r in results if r.severity in ("fail", "warn")]
+        issue_lines = "\n".join(
+            f"  {'⊗' if r.severity == 'fail' else '⚠'}  {r.display_name}: {r.observed}"
+            for r in issues[:6]
+        )
+
+        if grade == "C":
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Readiness Warning — Grade C")
+            msg.setIcon(QMessageBox.Warning)
+            msg.setText(
+                f"The instrument has active warnings (Grade C).\n\n"
+                f"{issue_lines}\n\n"
+                f"Proceeding may affect data quality."
+            )
+            msg.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+            msg.button(QMessageBox.Ok).setText("Proceed anyway")
+            msg.setDefaultButton(QMessageBox.Cancel)
+            if msg.exec_() == QMessageBox.Ok:
+                self._acquire_tab.start_acquisition(n_frames, delay)
+
+        else:   # grade == "D"
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Readiness Failure — Grade D")
+            msg.setIcon(QMessageBox.Critical)
+            msg.setText(
+                f"The instrument has critical failures (Grade D).\n\n"
+                f"{issue_lines}\n\n"
+                f"Acquisition results will likely be unreliable.\n"
+                f"Resolve failures before proceeding if possible."
+            )
+            msg.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+            msg.button(QMessageBox.Ok).setText("Proceed despite failures")
+            msg.setDefaultButton(QMessageBox.Cancel)
+            if msg.exec_() == QMessageBox.Ok:
+                self._acquire_tab.start_acquisition(n_frames, delay)
 
     def _toggle_ai_panel(self):
         """Show or hide the AI assistant dock widget."""
