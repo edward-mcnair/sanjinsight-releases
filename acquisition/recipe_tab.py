@@ -231,7 +231,7 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QListWidget,
     QListWidgetItem, QPushButton, QLabel, QLineEdit, QTextEdit,
     QGroupBox, QFormLayout, QDoubleSpinBox, QSpinBox, QCheckBox,
-    QMessageBox, QFrame, QComboBox,
+    QMessageBox, QFrame, QComboBox, QDialog,
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QColor, QFont
@@ -301,6 +301,15 @@ class RecipeTab(QWidget):
         self._delete_btn.clicked.connect(self._on_delete)
         self._run_btn.clicked.connect(self._on_run)
         left_lay.addLayout(btn_row)
+
+        self._preset_btn = QPushButton("Load Preset…")
+        self._preset_btn.setFixedHeight(28)
+        self._preset_btn.setToolTip(
+            "Load a factory preset into the editor as a starting point.\n"
+            "Rename and save it to create your own recipe."
+        )
+        self._preset_btn.clicked.connect(self._on_load_preset)
+        left_lay.addWidget(self._preset_btn)
 
         splitter.addWidget(left)
 
@@ -540,6 +549,93 @@ class RecipeTab(QWidget):
             r.uid = self._current.uid
         self._current = r
         self._populate_editor(r)
+
+    def _on_load_preset(self):
+        """Open a preset picker dialog and load the chosen preset into the editor."""
+        # Lazy import avoids a circular dependency (recipe_presets imports from here)
+        from acquisition.recipe_presets import PRESETS
+        import copy
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Load Preset")
+        dlg.setMinimumSize(500, 340)
+        dlg.setStyleSheet("background:#1a1a1a; color:#ccc;")
+
+        lay = QVBoxLayout(dlg)
+        lay.setSpacing(8)
+
+        hdr = QLabel(
+            "Choose a preset to load into the Recipe Editor.\n"
+            "Rename and save it to create your own recipe."
+        )
+        hdr.setStyleSheet("color:#aaa; font-size:11pt;")
+        lay.addWidget(hdr)
+
+        lst = QListWidget()
+        lst.setStyleSheet("""
+            QListWidget { background:#141414; color:#ccc; border:1px solid #2a2a2a;
+                          font-size:12pt; font-family:Menlo,monospace; }
+            QListWidget::item:selected { background:#0d3a52; color:#fff; }
+            QListWidget::item:hover    { background:#1a2a2a; }
+        """)
+        for preset in PRESETS:
+            item = QListWidgetItem(preset.label)
+            item.setData(Qt.UserRole, preset)
+            lst.addItem(item)
+        if PRESETS:
+            lst.setCurrentRow(0)
+        lay.addWidget(lst, 1)
+
+        desc_lbl = QLabel(PRESETS[0].description if PRESETS else "")
+        desc_lbl.setStyleSheet(
+            "color:#888; font-size:11pt; font-style:italic; padding:4px 0;")
+        desc_lbl.setWordWrap(True)
+        lay.addWidget(desc_lbl)
+
+        def _on_row_changed(row: int) -> None:
+            item = lst.item(row)
+            if item:
+                preset = item.data(Qt.UserRole)
+                if preset:
+                    desc_lbl.setText(preset.description)
+
+        lst.currentRowChanged.connect(_on_row_changed)
+        lst.doubleClicked.connect(dlg.accept)
+
+        btn_row = QHBoxLayout()
+        load_btn   = QPushButton("Load")
+        load_btn.setFixedHeight(28)
+        load_btn.setStyleSheet(
+            "background:#006b40; color:#fff; font-weight:600; border-radius:3px;")
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.setFixedHeight(28)
+        btn_row.addStretch(1)
+        btn_row.addWidget(cancel_btn)
+        btn_row.addWidget(load_btn)
+        lay.addLayout(btn_row)
+
+        load_btn.clicked.connect(dlg.accept)
+        cancel_btn.clicked.connect(dlg.reject)
+
+        if dlg.exec_() != QDialog.Accepted:
+            return
+
+        item = lst.currentItem()
+        if item is None:
+            return
+        preset = item.data(Qt.UserRole)
+        if preset is None:
+            return
+
+        # Deep-copy so the PRESETS list stays pristine; give it a fresh uid
+        r            = copy.deepcopy(preset)
+        r.uid        = str(uuid.uuid4())[:8]
+        r.created_at = time.strftime("%Y-%m-%d %H:%M:%S")
+        self._current = r
+        self._populate_editor(r)
+        self._set_editor_enabled(True)
+        self._label_edit.selectAll()
+        self._label_edit.setFocus()
 
     def _on_run(self):
         if self._current is None:
