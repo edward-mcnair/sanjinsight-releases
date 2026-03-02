@@ -5,21 +5,73 @@ System prompt and per-query message templates for the SanjINSIGHT assistant.
 
 Design goals
 ------------
-  • Keep the total prompt (system + context JSON + question) under ~600 tokens so
-    every context snapshot fits within a 2 048-token context window on small (3B)
-    models.  The system prompt itself is ~300 tokens; context JSON ~250 tokens;
-    questions ~30 tokens.
+  • The Quickstart Guide is ALWAYS embedded in the system prompt so every
+    user gets workflow and navigation answers out of the box.
+  • Out-of-scope questions (topics not in the Quickstart Guide) receive a
+    polite canned response with a link to the full User Manual online.
   • Use unambiguous formatting — model produces plain text, not markdown.
   • Ground every response in the JSON instrument state injected at runtime.
   • Include UI_NAV_MAP so the AI can answer "where is X?" with the correct
     sidebar panel name rather than a generic non-answer.
+
+Token budget (approximate)
+--------------------------
+  System prompt  ≈ 2 600 tokens  (persona base + domain knowledge +
+                                   UI nav map + Quickstart Guide)
+  Context JSON   ≈   250 tokens
+  Question       ≈    30 tokens
+  ─────────────────────────────
+  Total          ≈ 2 880 tokens  → fits in any 4 096-token context window
 """
 
 from __future__ import annotations
 
+import pathlib
+
+from version import DOCS_URL
 from ai.instrument_knowledge import AI_DOMAIN_KNOWLEDGE, UI_NAV_MAP
 
-SYSTEM_PROMPT = (
+
+# ── Load Quickstart Guide from disk ───────────────────────────────────────────
+#
+# Resolved relative to this file so it works regardless of working directory.
+# Falls back to an empty string if the file is missing (packaged builds).
+
+_DOCS_DIR = pathlib.Path(__file__).parent.parent / "docs"
+
+QUICKSTART_GUIDE: str = (
+    (_DOCS_DIR / "QuickstartGuide.md").read_text(encoding="utf-8")
+    if (_DOCS_DIR / "QuickstartGuide.md").exists() else ""
+)
+
+# URL shown in out-of-scope responses  (canonical source: version.py)
+USER_MANUAL_URL: str = DOCS_URL
+
+# Default llama-cpp n_ctx — fits the Quickstart prompt comfortably.
+DEFAULT_N_CTX: int = 4_096
+
+# ── Response instructions ──────────────────────────────────────────────────────
+
+# Guides the model to return a canned response for out-of-scope questions.
+_OUT_OF_SCOPE_INSTRUCTION: str = (
+    "Your documentation knowledge is limited to the Quickstart Guide above "
+    "and the live instrument state provided with each query. "
+    "If a user asks about something not covered in the Quickstart Guide "
+    "(such as detailed calibration math, configuration file syntax, advanced "
+    "scan settings, or hardware specifications), respond with exactly: "
+    "\"Due to my current token limit, I can only access the Quickstart Guide. "
+    "In future updates, with more CPU or GPU allotments, I will have access to "
+    "the full manual. You can find the User Manual here: "
+    f"{USER_MANUAL_URL}\" "
+    "Do not attempt to guess or infer information not present in the "
+    "Quickstart Guide."
+)
+
+
+# ── Prompt builder ─────────────────────────────────────────────────────────────
+
+# Default base string used when no persona is active (e.g. tests, direct calls).
+_DEFAULT_BASE: str = (
     "You are the SanjINSIGHT instrument assistant for thermoreflectance microscopy. "
     "Give concise, accurate guidance about instrument settings, acquisition quality, "
     "and troubleshooting. "
@@ -27,10 +79,40 @@ SYSTEM_PROMPT = (
     "When users ask where to find a control, name the exact sidebar panel. "
     "Keep responses 2-4 sentences. Plain text only — no markdown. "
     "Say so honestly if you cannot help. Never invent hardware readings. "
-    + AI_DOMAIN_KNOWLEDGE
-    + " "
-    + UI_NAV_MAP
 )
+
+def build_system_prompt(base: str) -> str:
+    """
+    Assemble a complete system prompt from a persona base string.
+
+    Always appends AI_DOMAIN_KNOWLEDGE, UI_NAV_MAP, the Quickstart Guide,
+    and the out-of-scope canned-response instruction.
+
+    Parameters
+    ----------
+    base : str
+        The persona-specific tone / style instructions (e.g. from PERSONAS).
+
+    Returns
+    -------
+    str
+        The assembled system prompt ready for create_chat_completion().
+    """
+    prompt = base + " " + AI_DOMAIN_KNOWLEDGE + " " + UI_NAV_MAP
+
+    if QUICKSTART_GUIDE:
+        prompt += (
+            "\n\n=== SanjINSIGHT Quickstart Guide ===\n"
+            + QUICKSTART_GUIDE
+            + "=== End of Quickstart Guide ===\n\n"
+        )
+
+    prompt += _OUT_OF_SCOPE_INSTRUCTION
+    return prompt
+
+
+# Convenience constant for callers that don't use a persona (tests, CLI, etc.)
+SYSTEM_PROMPT: str = build_system_prompt(_DEFAULT_BASE)
 
 
 # ── Per-query templates ────────────────────────────────────────────────────────
@@ -84,11 +166,23 @@ def free_ask(
     question: str,
     context_json: str,
     system_prompt: str = SYSTEM_PROMPT,
+    manual_context: str = "",
 ) -> list[dict]:
     """
     Free-form question with instrument context.
+
+    Parameters
+    ----------
+    manual_context : str
+        Optional snippet from the User Manual retrieved by manual_rag.retrieve().
+        Injected after the question so the model can cite manual details.
+
     Returns a messages list.
     """
+    extra = (
+        f"\n\nRelevant User Manual sections:\n{manual_context}"
+        if manual_context else ""
+    )
     return [
         {"role": "system", "content": system_prompt},
         {
@@ -96,6 +190,7 @@ def free_ask(
             "content": (
                 f"Instrument state: {context_json}\n\n"
                 f"Question: {question}"
+                + extra
             ),
         },
     ]

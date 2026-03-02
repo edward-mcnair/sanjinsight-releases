@@ -162,6 +162,32 @@ def _save_prefs():
 _prefs = _load_prefs()
 
 
+# ── Preference migration ───────────────────────────────────────────────────────
+# Keys removed in v1.1.0 — delete them from persisted preferences so stale
+# data does not confuse future code that might reuse the same key names.
+_STALE_PREF_KEYS: dict[str, list[str]] = {
+    "ai": ["include_quickstart", "include_manual"],
+}
+
+
+def _migrate_prefs() -> None:
+    changed = False
+    for section, keys in _STALE_PREF_KEYS.items():
+        node = _prefs.get(section)
+        if not isinstance(node, dict):
+            continue
+        for k in keys:
+            if k in node:
+                del node[k]
+                _prefs_log.info("Removed stale preference: %s.%s", section, k)
+                changed = True
+    if changed:
+        _save_prefs()
+
+
+_migrate_prefs()
+
+
 def get_pref(key: str, default=None):
     """Read a user preference.  e.g. get_pref('ui.mode', 'standard')"""
     keys = key.split(".")

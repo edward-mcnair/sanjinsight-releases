@@ -34,6 +34,7 @@ import config as cfg_mod
 from ai.model_runner import ModelRunner, llama_available
 from ai.context_builder import ContextBuilder
 from ai import prompt_templates as tmpl
+from ai import manual_rag
 from ai.personas import PERSONAS, DEFAULT_PERSONA_ID
 
 log = logging.getLogger(__name__)
@@ -104,7 +105,8 @@ class AIService(QObject):
         if self._status in ("loading", "thinking"):
             return
         self._set_status("loading")
-        self._runner.load(model_path, n_gpu_layers=n_gpu_layers)
+        self._runner.load(model_path, n_gpu_layers=n_gpu_layers,
+                          n_ctx=tmpl.DEFAULT_N_CTX)
 
     def disable(self) -> None:
         """Unload the model and transition to 'off'."""
@@ -129,9 +131,10 @@ class AIService(QObject):
         self._run(tmpl.diagnose(self._ctx.build(), sp))
 
     def ask(self, question: str) -> None:
-        """Send a free-form question with instrument context."""
-        sp = self._active_system_prompt()
-        self._run(tmpl.free_ask(question, self._ctx.build(), sp))
+        """Send a free-form question with instrument context and manual RAG."""
+        sp         = self._active_system_prompt()
+        manual_ctx = manual_rag.retrieve(question)
+        self._run(tmpl.free_ask(question, self._ctx.build(), sp, manual_ctx))
 
     def session_report(self, result_data: dict) -> None:
         """
@@ -151,9 +154,15 @@ class AIService(QObject):
     # ------------------------------------------------------------------ #
 
     def _active_system_prompt(self) -> str:
-        """Return the system prompt for the currently selected persona."""
-        pid = cfg_mod.get_pref("ai.persona", DEFAULT_PERSONA_ID)
-        return PERSONAS.get(pid, PERSONAS[DEFAULT_PERSONA_ID]).system_prompt
+        """
+        Build the system prompt for the current persona.
+
+        Always includes: persona tone/style + AI_DOMAIN_KNOWLEDGE + UI_NAV_MAP
+                         + Quickstart Guide + out-of-scope canned instruction.
+        """
+        pid     = cfg_mod.get_pref("ai.persona", DEFAULT_PERSONA_ID)
+        persona = PERSONAS.get(pid, PERSONAS[DEFAULT_PERSONA_ID])
+        return tmpl.build_system_prompt(persona.system_prompt)
 
     # ------------------------------------------------------------------ #
     #  Internal                                                            #

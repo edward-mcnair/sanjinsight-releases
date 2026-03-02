@@ -1,7 +1,7 @@
 # SanjINSIGHT User Manual
 
 **Microsanj SanjINSIGHT v1.0.0**
-**Document revision: 2026-03-01**
+**Document revision: 2026-03-02**
 
 ---
 
@@ -16,14 +16,16 @@
 7. [Acquisition](#7-acquisition)
 8. [Grid Scan](#8-grid-scan)
 9. [Calibration](#9-calibration)
-10. [Saving and Exporting Data](#10-saving-and-exporting-data)
-11. [Device Manager](#11-device-manager)
-12. [Settings](#12-settings)
-13. [Supported Hardware](#13-supported-hardware)
-14. [Configuration File Reference](#14-configuration-file-reference)
-15. [Keyboard Shortcuts](#15-keyboard-shortcuts)
-16. [Troubleshooting](#16-troubleshooting)
-17. [Technical Reference](#17-technical-reference)
+10. [Hardware Panels](#10-hardware-panels)
+11. [AI Assistant](#11-ai-assistant)
+12. [Saving and Exporting Data](#12-saving-and-exporting-data)
+13. [Device Manager](#13-device-manager)
+14. [Settings](#14-settings)
+15. [Supported Hardware](#15-supported-hardware)
+16. [Configuration File Reference](#16-configuration-file-reference)
+17. [Keyboard Shortcuts](#17-keyboard-shortcuts)
+18. [Troubleshooting](#18-troubleshooting)
+19. [Technical Reference](#19-technical-reference)
 
 ---
 
@@ -31,12 +33,13 @@
 
 ### 1.1 What is SanjINSIGHT?
 
-SanjINSIGHT is the instrument control and data-acquisition software for the **Microsanj EZ-500** and related thermoreflectance imaging systems. It provides a complete workflow for:
+SanjINSIGHT is the instrument control and data-acquisition software for the **Microsanj EZ-Therm** and **Nano-THERM** thermoreflectance imaging systems. It provides a complete workflow for:
 
 - **Real-time thermoreflectance streaming** — continuous live ΔR/R display with EMA smoothing
 - **Single-shot acquisition** — averaged hot/cold frame capture with instant ΔR/R computation
 - **Large-area grid scanning** — automated stage-driven multi-tile mapping stitched into a single composite image
 - **Thermoreflectance calibration** — TEC-stepped measurement of the C_T coefficient map, enabling conversion of ΔR/R into temperature change (ΔT)
+- **AI-assisted diagnostics** — a local language model monitors all instrument parameters in real time, grades readiness (A–D), and answers instrument questions in plain language
 
 ### 1.2 Underlying Physics
 
@@ -53,6 +56,23 @@ Thermoreflectance imaging exploits the fact that a material's optical reflectanc
 | ΔT | Temperature change | °C or K |
 
 The application measures ΔR/R by alternating the device under test (DUT) between two bias states ("cold" and "hot") synchronised with the camera via an FPGA lock-in reference signal. C_T is determined by the Calibration workflow (Section 9). Once C_T is known, ΔT = ΔR/R ÷ C_T.
+
+**Thermoreflectance coefficient reference values (C_T [K⁻¹]):**
+
+| Material | Optimal LED | C_T |
+|---|---|---|
+| Silicon | 470 nm Blue | 1.5 × 10⁻⁴ |
+| GaAs | 470 nm Blue | 2.0 × 10⁻⁴ |
+| GaN | 365 / 470 / 530 nm | 1.8 × 10⁻⁴ |
+| InP | 470 nm Blue | 2.5 × 10⁻⁴ |
+| Gold (pulsed) | 470 / 530 nm | 1.6–2.5 × 10⁻⁴ |
+| Aluminum | **780 nm NIR only** | 0.8 × 10⁻⁴ |
+| Nickel | 585 / 660 nm | 0.9–1.0 × 10⁻⁴ |
+| Titanium | 585 / 660 nm | 0.7–0.8 × 10⁻⁴ |
+
+> **Aluminum note:** C_T at 532 nm and 470 nm is negligibly small for aluminum. Always use the 780 nm NIR LED when measuring aluminum surfaces. Changing LED wavelength requires recalibration.
+
+> **Flip-chip / thru-substrate:** Silicon is transparent at wavelengths ≥ 1100 nm. Use 1050–1500 nm NIR illumination (InGaAs sensor) for backside or flip-chip thermal imaging.
 
 ### 1.3 Modes of Operation
 
@@ -72,7 +92,7 @@ The application measures ΔR/R by alternating the device under test (DUT) betwee
 | OS | Windows 10 (64-bit) | Windows 11 (64-bit) |
 | CPU | 4-core, 2.5 GHz | 8-core, 3.5 GHz |
 | RAM | 8 GB | 32 GB |
-| Disk | 2 GB free | SSD with 50 GB free |
+| Disk | 2 GB free (+ ~5 GB for AI model) | SSD with 50 GB free |
 | USB | USB 3.0 | USB 3.1 Gen 1 |
 | Display | 1920×1080 | 2560×1440 |
 
@@ -196,21 +216,56 @@ After finishing, hardware drivers are initialised. Status dots in the top bar re
 | **■ STOP** | Emergency stop button — see Section 5 |
 | **[v] badge** | Version update available — click to download |
 
-### 4.2 Sidebar (Advanced Mode)
+### 4.2 Left Sidebar
 
-The sidebar on the left lists all available panels. Click a panel name to open it:
+The sidebar on the left organises all panels into functional groups. Click any item to open it in the main area.
+
+**MEASURE section**
 
 | Panel | Shortcut | Purpose |
 |---|---|---|
-| **Acquire** | Ctrl+1 | Single-shot acquisition and result display |
-| **Live** | Ctrl+2 (or Ctrl+L) | Real-time ΔR/R streaming |
-| **Scan** | Ctrl+3 (or Ctrl+Shift+S) | Automated grid scan mapping |
-| **Calibration** | Ctrl+4 | C_T coefficient measurement |
-| **Camera** | Ctrl+2 | Camera settings and raw preview |
-| **Temperature** | Ctrl+3 | TEC setpoints and temperature history |
-| **Stage** | Ctrl+4 | Manual stage jogging and position readout |
-| **Analysis** | Ctrl+5 | Post-acquisition analysis tools |
-| **Device Manager** | Ctrl+D | Hardware connection management |
+| **Live** | Ctrl+L | Real-time ΔR/R streaming with EMA smoothing |
+| **Acquire** | Ctrl+1 | Single-shot acquisition with readiness gate |
+| **Scan** | Ctrl+Shift+S | Automated grid scan mapping |
+
+**ANALYSIS section**
+
+| Panel | Purpose |
+|---|---|
+| **Calibration** | TEC-stepped C_T coefficient measurement |
+| **Analysis** | Post-acquisition ΔR/R and ΔT analysis tools |
+| **Compare** | Side-by-side session comparison |
+| **3D Surface** | 3D rendering of ΔR/R or ΔT map |
+
+**Hardware group** *(collapsible — click ▸ arrow to expand/collapse)*
+
+| Panel | Shortcut | Purpose |
+|---|---|---|
+| **Camera** | Ctrl+2 | Exposure, gain, live preview, saturation readout |
+| **Temperature** | Ctrl+3 | TEC setpoints, enable/disable, temperature history |
+| **FPGA** | — | Lock-in frequency, duty cycle, Start/Stop modulation |
+| **Bias Source** | — | Output port selection, voltage/current level, Output ON/OFF |
+| **Stage** | Ctrl+4 | XYZ position readout, absolute move, jog pad, Home buttons |
+| **ROI** | — | Region-of-interest selection for focused acquisition |
+| **Autofocus** | — | Automated focus sweep controls |
+
+**SETUP section**
+
+| Panel | Purpose |
+|---|---|
+| **Profiles** | Material / wavelength / C_T coefficient profiles |
+| **Recipes** | Saved acquisition parameter sets |
+
+**TOOLS section**
+
+| Panel | Shortcut | Purpose |
+|---|---|---|
+| **Data** | — | Browse and re-open saved sessions |
+| **Console** | — | Python console for scripting |
+| **Log** | — | Application event log |
+| **Settings** | Ctrl+, | Application preferences and AI model management |
+
+**AI Assistant** — a dockable panel showing live readiness grade and instrument chat (see Section 11).
 
 ### 4.3 Menu Bar
 
@@ -221,7 +276,7 @@ The sidebar on the left lists all available panels. Click a panel name to open i
 - **Scan Mode** (Ctrl+Shift+S) — Switch to the Scan panel
 
 **View**
-- Panels Ctrl+1 through Ctrl+5 (see sidebar list above)
+- **Acquire** (Ctrl+1), **Camera** (Ctrl+2), **Temperature** (Ctrl+3), **Stage** (Ctrl+4), **Analysis** (Ctrl+5)
 - **Device Manager** (Ctrl+D)
 
 **Help**
@@ -354,7 +409,19 @@ A **FROZEN** badge overlays the canvas when Freeze is active.
 
 The Acquire panel captures a complete measurement: N cold frames and N hot frames are averaged, ΔR/R is computed, and the result is displayed. This is the standard workflow for a single measurement point.
 
-### 7.2 Controls
+### 7.2 Readiness Banner
+
+A compact readiness banner appears at the very top of the Acquire tab. It runs all diagnostic rules continuously and summarises the result:
+
+| State | Appearance | Meaning |
+|---|---|---|
+| **READY TO ACQUIRE** | Green ● | All checks passed; safe to acquire |
+| **NOT READY — N issues** | Amber ⚠ | One or more problems require attention |
+| **Checking…** | Grey ○ | MetricsService still initialising |
+
+When issues are shown, each one has a **Fix it →** button that navigates directly to the hardware panel responsible. For example, a "Stage not homed" issue links to the Stage panel, where you can click **⌂ Home All**.
+
+### 7.3 Controls
 
 **Trigger & Modulation**
 
@@ -381,17 +448,18 @@ The Acquire panel captures a complete measurement: N cold frames and N hot frame
 | **Averaging** | Enabled | Activates frame-to-frame averaging |
 | **SNR threshold** | 0 dB | Frames with SNR below this threshold are discarded |
 
-### 7.3 Running an Acquisition
+### 7.4 Running an Acquisition
 
-1. Configure exposure, gain, and frames/half in the left panel.
-2. Click **▶ Run Sequence** or press **Ctrl+R**.
-3. The status bar shows progress (frame N of M).
-4. When complete, the ΔR/R map appears in the right panel.
-5. If a calibration is applied, the ΔT map tab is also populated.
+1. Check the readiness banner. Resolve any "NOT READY" issues before proceeding.
+2. Configure exposure, gain, and frames/half in the left panel.
+3. Click **▶ Run Sequence** or press **Ctrl+R**.
+4. The status bar shows progress (frame N of M).
+5. When complete, the ΔR/R map appears in the right panel.
+6. If a calibration is applied, the ΔT map tab is also populated.
 
 Press **Esc** or click **■ Abort** to cancel a running acquisition.
 
-### 7.4 Result Display
+### 7.5 Result Display
 
 | Tab | Content |
 |---|---|
@@ -495,19 +563,23 @@ Once applied, C_T is used by all other panels (Live, Acquire, Scan) to display �
 
 Click a preset to populate the list quickly:
 
-| Preset | Points | Range (°C) |
-|---|---|---|
-| **3-pt** | 3 | 25, 35, 45 |
-| **5-pt** | 5 | 25, 30, 35, 40, 45 |
-| **7-pt** | 7 | 25, 28, 31, 34, 37, 40, 43 |
+| Preset | Points | Range (°C) | Notes |
+|---|---|---|---|
+| **3-pt** | 3 | 25, 35, 45 | Quick check for known samples |
+| **5-pt** | 5 | 25, 30, 35, 40, 45 | Standard starting point |
+| **7-pt** | 7 | 25–43 (equal spacing) | Higher accuracy for variable-C_T samples |
+| **TR Std** | 6 | 20, 40, 60, 80, 100, 120 | Microsanj standard TR protocol (~12 min total) |
+| **IR Std** | 7 | 85, 90, 95, 100, 105, 110, 115 | Standard for IR camera calibration |
 
 Or build a custom sequence:
-- Adjust the value in any row's spinbox (−20 to +100 °C).
+- Adjust the value in any row's spinbox (−20 to +150 °C).
 - Click **+ Add** to append a new point.
 - Click **✕** on any row to delete it.
 - Temperatures are automatically sorted before the run begins.
 
 > **Minimum 2 temperature points required.** For best accuracy, use at least 5 points spanning ≥ 15 °C.
+
+**Estimated time label** — Displayed below the preset buttons. Updates live as you add or remove temperature steps and adjust **Avg frames/step** and **Max settle time**, giving a projected run time before you start.
 
 #### Capture Settings (Group Box)
 
@@ -524,7 +596,7 @@ Or build a custom sequence:
 | Control | Description |
 |---|---|
 | **▶ Run Calibration** | Start the temperature sequence. Button animates (⠙ Calibrating…) while running. |
-| **■ Abort** | Stop after the current temperature step. |
+| **■ Abort** | Stop after the current temperature step. If valid results already exist, a confirmation dialog appears: "Valid calibration results exist but have not been saved. Abort anyway?" |
 | **Progress bar** | 0–100 % across all steps |
 | **Step label** | "Step N / M — [state]" |
 
@@ -587,14 +659,188 @@ Click ▶ Run Calibration
 
 ---
 
-## 10. Saving and Exporting Data
+## 10. Hardware Panels
 
-### 10.1 Session Storage
+All hardware panels are located in the collapsible **Hardware** group in the left sidebar.
+
+### 10.1 Camera Panel (Ctrl+2)
+
+Controls camera exposure, gain, and live preview.
+
+**Frame Statistics (Group Box)**
+
+| Readout | Description |
+|---|---|
+| **MIN** | Minimum pixel value in the latest frame |
+| **MAX** | Maximum pixel value (12-bit sensor: 0–4095) |
+| **MEAN** | Mean pixel value |
+| **FRAME** | Frame counter |
+| **SATURATION** | Percentage of pixels at or near the 12-bit ceiling |
+
+**Saturation Guard:**
+- **OK** (green) — Maximum pixel value < 3900; full dynamic range available
+- **N.NN%** (amber) — Maximum pixel value ≥ 3900; some pixels near saturation
+- **CLIPPED ✗** (red) — One or more pixels at 4095 (hard saturation); ΔR/R measurements in those pixels are invalid
+
+> **What to do when clipped:** Reduce exposure in the Camera panel or lower the illumination intensity until the SATURATION readout returns to "OK".
+
+### 10.2 Temperature Panel (Ctrl+3)
+
+Controls TEC setpoints and displays real-time temperature history for all connected TEC channels.
+
+**TEC Setpoint Range:** 10 °C to 150 °C (hardware limit from EZ-Therm / Nano-THERM specs).
+
+### 10.3 FPGA Panel
+
+Controls FPGA lock-in modulation frequency, duty cycle, and Start/Stop.
+
+**Duty Cycle Warning:**
+
+When the duty cycle is set to ≥ 50 %, a warning label appears below the duty cycle controls:
+
+> ⚠ Duty cycle ≥ 50 % increases average power delivered to the DUT. Monitor device temperature closely — risk of overheating.
+
+The label color escalates based on severity:
+
+| Duty Cycle | Label color | Risk |
+|---|---|---|
+| < 50 % | Hidden | Normal |
+| 50–79 % | Amber | Elevated thermal risk |
+| ≥ 80 % | Red | High overheating risk — reduce immediately |
+
+> **Transient imaging:** For time-resolved thermoreflectance measurements, keep the DUT duty cycle between 25 % and 35 % to allow adequate cool-down between pulses while still reaching maximum operating temperature.
+
+**Quick-action buttons** — Preset duty cycles: 10 %, 25 %, 50 %, 75 %, 90 %.
+
+**Start / Stop** — Begin or halt FPGA modulation. Modulation must be running (L1 check) for lock-in acquisition.
+
+### 10.4 Bias Source Panel
+
+Controls the electrical output to the device under test (DUT).
+
+**Output Port Selector:**
+
+| Port | Type | Range | Notes |
+|---|---|---|---|
+| **VO INT — pulsed ±10 V** | Pulsed (bipolar) | ±10 V | Internal DAC; synchronised with FPGA modulation |
+| **AUX INT — DC ±10 V** | DC (bipolar) | ±10 V | Secondary DC output; independent of modulation |
+| **VO EXT — pulsed ≤+60 V** | Pulsed (unipolar) | 0–+60 V | Passthrough from external supply |
+
+When **VO EXT** is selected, a safety warning appears:
+
+> ⚠ VO EXT routes the external supply directly to the DUT. Confirm external supply current limit before enabling output.
+
+**20 mA Range Mode checkbox:**
+- **Checked** (default) — Current is limited to ≤ 20 mA. Appropriate for most device types.
+- **Unchecked** — Removes the 20 mA limit. Required for IR camera FA (Fault Analysis) and Movie mode, which needs > 20 mA. Always verify the device thermal budget before unchecking.
+
+> **Compliance limit:** Always set the Compliance Limit to the maximum safe current (or voltage) for your DUT before enabling output.
+
+### 10.5 Stage Panel (Ctrl+4)
+
+Controls the XYZ motorised stage with absolute move, relative jogging, and home/stop operations.
+
+**Position Readouts** — Shows current X, Y, Z position in µm and a STATUS indicator:
+- **READY ✓** (green) — Stage is homed and stationary
+- **MOVING ↔** (amber) — Stage is currently moving
+- **NOT HOMED** (dim) — Stage has not been homed; automated moves may be inaccurate
+
+**Home buttons** (at the bottom of the Stage panel):
+
+| Button | Action |
+|---|---|
+| **⌂ Home All** | Home all three axes (X, Y, and Z) to their reference positions |
+| **⌂ Home XY** | Home X and Y axes only |
+| **⌂ Home Z** | Home Z axis only |
+
+> **Always home the stage before running automated scans or recipes.** The "Stage homed" diagnostic rule (R3) will show a warning in the AI Assistant and Readiness Banner until homing is complete.
+
+**Jog Pad** — Directional arrows (N/S/E/W and diagonals) for manual XY positioning. Step size: 0.1 / 1 / 10 / 100 / 1000 / 5000 µm.
+
+**■ STOP** — Immediately halts all stage motion.
+
+---
+
+## 11. AI Assistant
+
+### 11.1 Overview
+
+The AI Assistant is a dockable panel that provides real-time instrument intelligence powered by a local language model running entirely on your PC (no internet connection required after setup).
+
+Key capabilities:
+- **Readiness grading** — Evaluates all diagnostic rules every few seconds and assigns a letter grade (A–D)
+- **Issue navigation** — Lists active problems with one-click "Fix it →" links to the relevant hardware panel
+- **Tab explanation** — Explains what the currently visible panel does and what to check given live instrument state
+- **Free-form chat** — Answers questions about instrument settings, measurement technique, and troubleshooting
+
+### 11.2 Grade System
+
+The AI panel shows a large letter grade based on the current diagnostic rule results:
+
+| Grade | Condition | Colour | Meaning |
+|---|---|---|---|
+| **A** | No issues | Green | All checks passed; instrument is ready |
+| **B** | 1–2 warnings | Light green | Minor warnings; review but can proceed |
+| **C** | 1 fail, or ≥ 3 warnings | Amber | Significant issue; address before acquiring |
+| **D** | ≥ 2 fails | Red | Critical failures detected; results will be unreliable |
+
+The grade badge (36 pt, bold) is accompanied by a brief summary such as "Instrument ready" or "1 fail · 2 warn".
+
+### 11.3 Issue Rows
+
+Up to 5 active issues are listed below the grade badge. Each row shows:
+- **⊗** (red) for a fail, **⚠** (amber) for a warning
+- The rule's display name and observed value (e.g. "TEC 1 stable · Δ0.18°C")
+- Clicking the row navigates to the hint text for that rule
+
+### 11.4 Quick Actions
+
+| Button | Action |
+|---|---|
+| **Explain this tab** | Asks the AI to describe the currently visible panel and what to check given the live instrument state. Enabled only when a model is loaded. |
+| **Diagnose** | Asks the AI to review all active issues and suggest a concrete fix for each. |
+
+### 11.5 Free-Form Chat
+
+Type any question in the chat box and press **Ask** (or Enter). Example questions:
+- "What LED wavelength should I use for GaAs?"
+- "Why is my ΔR/R signal noisy?"
+- "Where is the Home All button?"
+- "Is a duty cycle of 75% safe?"
+- "What does the R² map tell me?"
+
+The AI grounds every answer in the live JSON instrument state, so it can reference your current exposure, TEC temperature, focus score, and so on.
+
+**Token rate** — Displayed below the response as "N tok/s · X.Xs". On a typical desktop CPU this is 15–50 tokens/second depending on model size.
+
+### 11.6 AI Model Setup
+
+The AI Assistant requires a local language model (~2–5 GB). On first use, the response area shows installation instructions.
+
+To download the model:
+1. Open **Settings** (Ctrl+,) → **AI Assistant** tab.
+2. Click **Download Model**. Progress is shown in the Settings panel.
+3. Once complete, the AI Assistant panel activates automatically.
+
+The model is stored locally and never sends data to any external server.
+
+### 11.7 Readiness Widget (Acquire Tab)
+
+A compact readiness banner appears at the top of the Acquire tab independently of the AI Assistant panel. It provides the same pass/fail assessment as the AI grade system in a minimal form factor optimised for the acquisition workflow:
+
+- **● READY TO ACQUIRE** (green) — All checks passed
+- **⚠ NOT READY — N issues** (amber) — Shows each issue with a **Fix it →** navigation button
+
+---
+
+## 12. Saving and Exporting Data
+
+### 12.1 Session Storage
 
 When you save a session, a folder is created under `~\.microsanj_sessions\` containing:
 
 ```
-20260301_143022_device_A/
+20260302_143022_device_A/
   session.json      — Human-readable metadata (exposure, gain, TEC temp, etc.)
   cold_avg.npy      — Averaged cold frames (float32)
   hot_avg.npy       — Averaged hot frames (float32)
@@ -603,7 +849,7 @@ When you save a session, a folder is created under `~\.microsanj_sessions\` cont
   thumbnail.png     — Small PNG preview
 ```
 
-### 10.2 Export Formats
+### 12.2 Export Formats
 
 | Format | Extension | Description | Compatible with |
 |---|---|---|---|
@@ -615,7 +861,7 @@ When you save a session, a folder is created under `~\.microsanj_sessions\` cont
 | **PNG** | `.png` | 8-bit colormapped raster image | Any image viewer |
 | **PDF** | `.pdf` | Multi-page report with maps and statistics | Adobe Reader, any PDF viewer |
 
-### 10.3 Calibration Files
+### 12.3 Calibration Files
 
 Calibration files (`.npz`) contain:
 
@@ -629,7 +875,7 @@ Load a calibration with **📂 Load .cal** in the Calibration panel, then click 
 
 ---
 
-## 11. Device Manager
+## 13. Device Manager
 
 Open with **⚙** (top bar) or **Ctrl+D**.
 
@@ -650,7 +896,7 @@ The Device Manager shows the current connection state and driver details for eac
 
 ---
 
-## 12. Settings
+## 14. Settings
 
 Open with **Help → Settings** or **Ctrl+,**.
 
@@ -661,9 +907,17 @@ Open with **Help → Settings** or **Ctrl+,**.
 | **Log level** | `INFO` (default) or `DEBUG` (verbose; for troubleshooting) |
 | **Mode on startup** | Standard or Advanced |
 
+**AI Assistant tab**
+
+| Setting | Description |
+|---|---|
+| **Download Model** | Download the local language model (~2–5 GB). Shows progress bar during download. |
+| **Model status** | Displays whether a model is installed and its file size. |
+| **AI enabled** | Enable or disable the AI Assistant panel globally. |
+
 ---
 
-## 13. Supported Hardware
+## 15. Supported Hardware
 
 ### Cameras
 
@@ -709,7 +963,7 @@ Open with **Help → Settings** or **Ctrl+,**.
 
 ---
 
-## 14. Configuration File Reference
+## 16. Configuration File Reference
 
 `config.yaml` is located in the application installation directory. Edit it with a plain-text editor if you need to make changes outside the wizard.
 
@@ -758,7 +1012,7 @@ logging:
 
 ---
 
-## 15. Keyboard Shortcuts
+## 17. Keyboard Shortcuts
 
 | Shortcut | Action |
 |---|---|
@@ -778,7 +1032,7 @@ logging:
 
 ---
 
-## 16. Troubleshooting
+## 18. Troubleshooting
 
 ### Status dot stays red after startup
 
@@ -793,6 +1047,12 @@ logging:
 - On USB cameras, try a different USB 3.0 port or cable.
 - Ensure no other application (e.g. Pylon Viewer) has exclusive access to the camera.
 
+### Camera shows SATURATION warning or CLIPPED
+
+- The **SATURATION** readout in the Camera panel is amber (near saturation, > 3900 / 4095) or red "CLIPPED ✗" (at full 12-bit saturation, 4095).
+- Reduce **Exposure** in the Camera panel, or lower the illumination intensity.
+- Pixel values at 4095 are clipped; ΔR/R data in those pixels is invalid.
+
 ### TEC not stabilising during calibration
 
 - Increase **Max settle time** (up to 300 s for slow thermals).
@@ -806,6 +1066,19 @@ logging:
 - Match the **resource string** exactly to NI MAX (right-click the device → Properties).
 - Ensure the `.lvbitx` bitfile was compiled for the correct FPGA model and NI-RIO version.
 
+### Stage shows "NOT HOMED"
+
+- Open the **Stage** panel (Hardware group in the left sidebar).
+- Click **⌂ Home All** at the bottom of the Stage panel to set the reference position on all axes.
+- Use **⌂ Home XY** or **⌂ Home Z** if you only need to home specific axes.
+- The Readiness Banner in the Acquire tab will show a "Stage homed" warning until homing is complete; click its **Fix it →** button to jump directly to the Stage panel.
+
+### FPGA duty cycle warning appears
+
+- The duty cycle warning (amber label) appears when duty cycle ≥ 50 %.
+- It turns red when duty cycle ≥ 80 % — reduce the duty cycle immediately to prevent DUT overheating.
+- For time-resolved measurements, the recommended range is 25–35 %.
+
 ### ΔT shows "—" or is absent
 
 - No calibration is applied. Go to **Calibration → 📂 Load .cal → ✓ Apply to Acquisitions**.
@@ -816,6 +1089,12 @@ logging:
 - Increase **EMA depth** in Live view.
 - Check for vibration (reduce stage settle time if overshooting, or increase settle time if under-damped).
 - Verify illumination stability — laser power fluctuations add noise.
+
+### AI Assistant shows no response / no model
+
+- Go to **Settings** (Ctrl+,) → **AI Assistant** tab and click **Download Model**.
+- The download is ~2–5 GB and runs in the background. Progress is displayed in the Settings panel.
+- Once complete, the AI Assistant activates automatically.
 
 ### PDF report fails to generate
 
@@ -828,9 +1107,9 @@ logging:
 
 ---
 
-## 17. Technical Reference
+## 19. Technical Reference
 
-### 17.1 Acquisition Data Structures
+### 19.1 Acquisition Data Structures
 
 **AcquisitionResult**
 
@@ -876,7 +1155,49 @@ logging:
 | `timestamp` | float | Unix timestamp |
 | `valid` | bool | True if fit succeeded |
 
-### 17.2 LiveConfig Parameters
+### 19.2 Diagnostic Rules
+
+The diagnostic engine evaluates the following rules on every `MetricsService` snapshot. Rules are organised in evaluation order.
+
+**R-series — Readiness gates**
+
+| Rule ID | Name | Trigger |
+|---|---|---|
+| R1 | Camera connected | Camera not connected |
+| R3 | Stage homed | Stage present but not homed |
+| R4 | TEC N stable | Enabled TEC Δ > 0.10 °C (warn) or Δ > 0.20 °C (fail) |
+| R5 | TEC N temp range | TEC setpoint outside 10–150 °C |
+
+**C-series — Camera signal quality**
+
+| Rule ID | Name | Trigger |
+|---|---|---|
+| C1 | Pixel saturation | Clipped pixels > 0.2 % (warn) or > 1.0 % (fail) |
+| C2 | Underexposure | Near-black pixels > 5 % (warn) or > 15 % (fail) |
+| C3 | Pixel headroom | Max pixel ≥ 3900 (warn) or = 4095 (fail) |
+
+**F-series — Focus and motion**
+
+| Rule ID | Name | Trigger |
+|---|---|---|
+| F1 | Focus quality | Laplacian variance < 100 (warn) or < 40 (fail) |
+| F2 | Frame drift | Normalised inter-frame drift > 0.02 (warn) or > 0.05 (fail) |
+| M1 | Stage stationary | Stage is moving during acquisition |
+
+**L-series — FPGA / modulation**
+
+| Rule ID | Name | Trigger |
+|---|---|---|
+| L1 | Modulation running | FPGA not running |
+| L2 | Sync locked | FPGA running but sync not locked |
+
+**T-series — Thermal safety**
+
+| Rule ID | Name | Trigger |
+|---|---|---|
+| T1 | Duty cycle thermal risk | FPGA duty cycle ≥ 50 % (warn) or ≥ 80 % (fail) |
+
+### 19.3 LiveConfig Parameters
 
 | Parameter | Range | Default | Description |
 |---|---|---|---|
@@ -888,7 +1209,7 @@ logging:
 | `roi_x, roi_y` | 0–(W−1), 0–(H−1) | 0, 0 | ROI top-left origin |
 | `roi_w, roi_h` | 0–W, 0–H | 0, 0 | ROI size (0 = full frame) |
 
-### 17.3 File Locations
+### 19.4 File Locations
 
 | Item | Location |
 |---|---|
@@ -896,9 +1217,10 @@ logging:
 | Sessions | `%USERPROFILE%\.microsanj_sessions\` |
 | Material profiles | `%USERPROFILE%\.microsanj\profiles\` |
 | Application log | `logs\microsanj.log` (if enabled in Settings) |
+| AI model | `%USERPROFILE%\.microsanj\models\` |
 | First-run sentinel | `.first_run_complete` (application directory) |
 
-### 17.4 Thread Architecture
+### 19.5 Thread Architecture
 
 | Thread | Purpose | Poll rate |
 |---|---|---|
@@ -908,9 +1230,11 @@ logging:
 | FPGA thread | Lock-in status and frequency readback | 0.25 Hz |
 | Bias thread | Output voltage/current readback | 0.25 Hz |
 | Stage thread | Position readback and move command queue | 10 Hz |
+| **MetricsService thread** | Aggregates all hardware state into a unified snapshot for diagnostic rules and AI context | 2 Hz |
 | Acquisition thread | Hot/cold frame capture (daemon) | Per acquisition |
 | Scan thread | Multi-tile scan loop (daemon) | Per tile |
 | Calibration thread | TEC stepping and capture loop (daemon) | Per temperature step |
+| AI inference thread | Language model token generation (daemon) | Per query |
 
 All cross-thread communication uses Qt signals (queued connections) or `app_state` context managers. Hardware drivers are never called from the GUI thread directly.
 
