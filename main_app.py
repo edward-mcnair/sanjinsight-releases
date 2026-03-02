@@ -29,7 +29,8 @@ from PyQt5.QtWidgets import (
     QFileDialog, QFrame, QSizePolicy, QSlider, QButtonGroup,
     QRadioButton, QSplitter, QStatusBar, QAction, QMenuBar,
     QMessageBox, QStackedWidget, QCheckBox, QScrollArea,
-    QAbstractItemView, QHeaderView, QTableWidget, QTableWidgetItem)
+    QAbstractItemView, QHeaderView, QTableWidget, QTableWidgetItem,
+    QDockWidget)
 from PyQt5.QtCore  import Qt, QTimer, pyqtSignal, QObject, QSize
 from PyQt5.QtGui   import (QImage, QPixmap, QFont, QColor, QPainter,
                            QPen, QBrush, QPalette, QIcon)
@@ -315,8 +316,11 @@ from ui.tabs.stage_tab        import StageTab
 from ui.tabs.roi_tab          import RoiTab
 from ui.tabs.autofocus_tab    import AutofocusTab, FocusPlot
 from ui.tabs.log_tab          import LogTab
-from ai.metrics_service       import MetricsService
+from ai.metrics_service          import MetricsService
 from ui.widgets.readiness_widget import ReadinessWidget
+from ai.ai_service               import AIService
+from ai.model_runner             import llama_available
+from ui.widgets.ai_panel_widget  import AIPanelWidget
 
 
 # ------------------------------------------------------------------ #
@@ -416,6 +420,24 @@ class MainWindow(QMainWindow):
             self._readiness_widget.update_metrics)
         self._acquire_tab.insert_readiness_widget(self._readiness_widget)
 
+        # ── AI service + dockable panel ───────────────────────────
+        self._ai_service = AIService(parent=self)
+        self._ai_service.set_metrics(self._metrics)
+
+        self._ai_panel = AIPanelWidget(llama_installed=llama_available())
+        self._ai_dock = QDockWidget("AI Assistant", self)
+        self._ai_dock.setWidget(self._ai_panel)
+        self._ai_dock.setMinimumWidth(300)
+        self._ai_dock.setFeatures(
+            QDockWidget.DockWidgetClosable |
+            QDockWidget.DockWidgetMovable  |
+            QDockWidget.DockWidgetFloatable)
+        self._ai_dock.setAllowedAreas(
+            Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
+        self.addDockWidget(Qt.RightDockWidgetArea, self._ai_dock)
+        self._ai_dock.hide()
+        self._ai_dock.visibilityChanged.connect(self._on_ai_dock_visibility)
+
         # ── New enhancement tabs ──────────────────────────────────
         self._compare_tab  = ComparisonTab(session_manager=session_mgr)
         self._surface_tab  = SurfacePlotTab()
@@ -428,6 +450,10 @@ class MainWindow(QMainWindow):
         # Wire Settings tab → manual update check
         self._settings_tab.check_for_updates_requested.connect(
             self._on_manual_update_check)
+
+        # Wire Settings tab → AI service
+        self._settings_tab.ai_enable_requested.connect(self._on_ai_enable)
+        self._settings_tab.ai_disable_requested.connect(self._ai_service.disable)
 
         # ── Register panels with the Bootstrap-style sidebar ─────
         from ui.sidebar_nav import NavItem as NI
@@ -500,6 +526,16 @@ class MainWindow(QMainWindow):
         self._update_badge = self._header.add_update_badge()
         self._update_badge.clicked_with_info.connect(self._show_update_dialog)
 
+        # AI toggle button in header
+        self._ai_btn = self._header.add_ai_button(self._toggle_ai_panel)
+        # Restore AI enabled state from preferences
+        import config as _cfg_ai
+        if _cfg_ai.get_pref("ai.enabled", False):
+            model_path = _cfg_ai.get_pref("ai.model_path", "")
+            if model_path:
+                n_gpu = _cfg_ai.get_pref("ai.n_gpu_layers", 0)
+                self._ai_service.enable(model_path, n_gpu)
+
         # Help menu
         self._build_menu_bar()
 
@@ -533,6 +569,22 @@ class MainWindow(QMainWindow):
         hw_service.tec_alarm.connect(self._on_tec_alarm)
         hw_service.tec_warning.connect(self._on_tec_warning)
         hw_service.tec_alarm_clear.connect(self._on_tec_alarm_clear)
+
+        # ── AI service signals ────────────────────────────────────
+        self._ai_service.status_changed.connect(self._on_ai_status)
+        self._ai_service.response_token.connect(self._ai_panel.on_token)
+        self._ai_service.response_complete.connect(self._ai_panel.on_response_complete)
+        self._ai_service.ai_error.connect(self._ai_panel.on_error)
+
+        # AI panel → service
+        self._ai_panel.explain_requested.connect(self._ai_service.explain_tab)
+        self._ai_panel.diagnose_requested.connect(self._ai_service.diagnose)
+        self._ai_panel.ask_requested.connect(self._ai_service.ask)
+        self._ai_panel.close_requested.connect(self._toggle_ai_panel)
+
+        # Sidebar tab changes → AI context
+        self._nav.panel_changed.connect(
+            lambda p: self._ai_service.set_active_tab(type(p).__name__))
 
     def _on_frame(self, frame):
         self._camera_tab.update_frame(frame)
@@ -1074,6 +1126,37 @@ class MainWindow(QMainWindow):
         self._header.set_estop_armed()
         self._status.showMessage("Emergency stop cleared — hardware ready", 4000)
         self._log_tab.append("✓ Emergency stop cleared — outputs can be re-enabled")
+
+    # ── AI assistant handlers ──────────────────────────────────────────
+
+    def _toggle_ai_panel(self):
+        """Show or hide the AI assistant dock widget."""
+        if self._ai_dock.isVisible():
+            self._ai_dock.hide()
+        else:
+            self._ai_dock.show()
+
+    def _on_ai_dock_visibility(self, visible: bool):
+        """Keep the header AI button checked state in sync with dock visibility."""
+        if hasattr(self, "_ai_btn"):
+            self._ai_btn.setChecked(visible)
+
+    def _on_ai_status(self, status: str):
+        """Propagate AIService status to header and settings."""
+        self._ai_panel.on_status_changed(status)
+        self._header.set_ai_status(status)
+        self._settings_tab.set_ai_status(status)
+        if status == "ready":
+            self._status.showMessage("AI Assistant ready", 3000)
+        elif status == "error":
+            self._status.showMessage("AI Assistant error — see AI panel", 5000)
+
+    def _on_ai_enable(self, model_path: str, n_gpu_layers: int):
+        """Called when Settings tab emits ai_enable_requested."""
+        self._ai_panel.clear_display()
+        self._ai_service.enable(model_path, n_gpu_layers)
+        # Show the panel automatically when loading starts
+        self._ai_dock.show()
 
     def closeEvent(self, event):
         """

@@ -22,7 +22,7 @@ from PyQt5.QtGui     import QDesktopServices
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QCheckBox, QComboBox, QGroupBox, QFrame, QSizePolicy,
-    QScrollArea,
+    QScrollArea, QSpinBox, QLineEdit, QFileDialog,
 )
 
 import config as cfg_mod
@@ -127,9 +127,13 @@ class SettingsTab(QWidget):
     Signals
     -------
     check_for_updates_requested   — emitted when user clicks "Check Now"
+    ai_enable_requested(str, int) — (model_path, n_gpu_layers) when user enables AI
+    ai_disable_requested          — emitted when user disables AI
     """
 
     check_for_updates_requested = pyqtSignal()
+    ai_enable_requested         = pyqtSignal(str, int)
+    ai_disable_requested        = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -165,6 +169,9 @@ class SettingsTab(QWidget):
 
         # ── Software updates ──────────────────────────────────────────
         lay.addWidget(self._build_updates_group())
+
+        # ── AI Assistant ──────────────────────────────────────────────
+        lay.addWidget(self._build_ai_group())
 
         # ── Support ───────────────────────────────────────────────────
         lay.addWidget(self._build_support_group())
@@ -277,6 +284,98 @@ class SettingsTab(QWidget):
         self._update_freq_enabled()
         return g
 
+    def _build_ai_group(self) -> QGroupBox:
+        g = _group("AI Assistant  (local, offline)")
+        lay = QVBoxLayout(g)
+        lay.setSpacing(14)
+
+        intro = _body(
+            "Enable an on-device AI assistant powered by a local GGUF model "
+            "(e.g. Phi-3.5-mini, Qwen2.5-3B). All inference runs on this machine — "
+            "no data ever leaves your network.")
+        lay.addWidget(intro)
+
+        # Enable toggle
+        self._ai_enable_chk = QCheckBox("Enable AI Assistant")
+        self._ai_enable_chk.setStyleSheet(_CHECK)
+        self._ai_enable_chk.setChecked(cfg_mod.get_pref("ai.enabled", False))
+        self._ai_enable_chk.toggled.connect(self._on_ai_enable_changed)
+        lay.addWidget(self._ai_enable_chk)
+
+        # Model path row
+        path_row = QHBoxLayout()
+        path_lbl = QLabel("Model file (.gguf):")
+        path_lbl.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
+        path_row.addWidget(path_lbl)
+
+        self._ai_path_edit = QLineEdit()
+        self._ai_path_edit.setPlaceholderText("Path to .gguf model file…")
+        self._ai_path_edit.setText(cfg_mod.get_pref("ai.model_path", ""))
+        self._ai_path_edit.setStyleSheet(
+            f"QLineEdit {{ background:{_BG2}; color:{_TEXT}; "
+            f"border:1px solid {_BORDER}; border-radius:4px; "
+            f"font-size:12pt; padding:5px 8px; }}"
+        )
+        self._ai_path_edit.textChanged.connect(
+            lambda t: cfg_mod.set_pref("ai.model_path", t))
+        path_row.addWidget(self._ai_path_edit, 1)
+
+        browse_btn = QPushButton("Browse…")
+        browse_btn.setStyleSheet(_BTN_SECONDARY)
+        browse_btn.setFixedWidth(90)
+        browse_btn.clicked.connect(self._browse_model)
+        path_row.addWidget(browse_btn)
+        lay.addLayout(path_row)
+
+        # GPU layers row
+        gpu_row = QHBoxLayout()
+        gpu_lbl = QLabel("GPU layers (0 = CPU only):")
+        gpu_lbl.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
+        gpu_row.addWidget(gpu_lbl)
+
+        self._ai_gpu_spin = QSpinBox()
+        self._ai_gpu_spin.setRange(0, 999)
+        self._ai_gpu_spin.setValue(cfg_mod.get_pref("ai.n_gpu_layers", 0))
+        self._ai_gpu_spin.setFixedWidth(80)
+        self._ai_gpu_spin.setStyleSheet(
+            f"QSpinBox {{ background:{_BG2}; color:{_TEXT}; "
+            f"border:1px solid {_BORDER}; border-radius:4px; "
+            f"font-size:12pt; padding:4px; }}"
+        )
+        self._ai_gpu_spin.setToolTip(
+            "Number of model layers to offload to GPU.\n"
+            "Set to 0 for CPU-only inference (slower, no GPU required).\n"
+            "Set to a large number (e.g. 999) to offload as much as possible.")
+        self._ai_gpu_spin.valueChanged.connect(
+            lambda v: cfg_mod.set_pref("ai.n_gpu_layers", v))
+        gpu_row.addWidget(self._ai_gpu_spin)
+        gpu_row.addStretch(1)
+        lay.addLayout(gpu_row)
+
+        lay.addWidget(_sep())
+
+        # Apply / status row
+        apply_row = QHBoxLayout()
+        self._ai_apply_btn = QPushButton("Load Model")
+        self._ai_apply_btn.setStyleSheet(_BTN_PRIMARY)
+        self._ai_apply_btn.setFixedWidth(120)
+        self._ai_apply_btn.clicked.connect(self._on_ai_apply)
+        apply_row.addWidget(self._ai_apply_btn)
+
+        self._ai_status_lbl = QLabel("")
+        self._ai_status_lbl.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
+        apply_row.addWidget(self._ai_status_lbl, 1)
+        lay.addLayout(apply_row)
+
+        note = _body(
+            "Good free models: Phi-3.5-mini-instruct-Q4_K_M.gguf (~2.4 GB), "
+            "Qwen2.5-3B-Instruct-Q4_K_M.gguf (~2.0 GB). "
+            "Download from Hugging Face (GGUF format, Q4_K_M recommended).")
+        lay.addWidget(note)
+
+        self._update_ai_controls()
+        return g
+
     def _build_support_group(self) -> QGroupBox:
         g = _group("Support & About")
         lay = QVBoxLayout(g)
@@ -338,6 +437,58 @@ class SettingsTab(QWidget):
         if color:
             self._update_status_lbl.setStyleSheet(
                 f"font-size:11pt; color:{color};")
+
+    def _on_ai_enable_changed(self, checked: bool):
+        cfg_mod.set_pref("ai.enabled", checked)
+        self._update_ai_controls()
+        if not checked:
+            self.ai_disable_requested.emit()
+
+    def _browse_model(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select GGUF model file", "",
+            "GGUF models (*.gguf);;All files (*)")
+        if path:
+            self._ai_path_edit.setText(path)
+            cfg_mod.set_pref("ai.model_path", path)
+
+    def _on_ai_apply(self):
+        path = self._ai_path_edit.text().strip()
+        if not path:
+            self._ai_status_lbl.setText("No model file selected")
+            self._ai_status_lbl.setStyleSheet(f"font-size:12pt; color:#ff5555;")
+            return
+        n_gpu = self._ai_gpu_spin.value()
+        self._ai_apply_btn.setEnabled(False)
+        self._ai_status_lbl.setText("Loading…")
+        self._ai_status_lbl.setStyleSheet(f"font-size:12pt; color:#ffaa44;")
+        self.ai_enable_requested.emit(path, n_gpu)
+
+    def set_ai_status(self, status: str) -> None:
+        """Called by MainWindow when AIService.status_changed fires."""
+        if not hasattr(self, "_ai_status_lbl"):
+            return
+        _msgs = {
+            "off":      ("Off", _MUTED),
+            "loading":  ("Loading model…", "#ffaa44"),
+            "ready":    ("Ready", _GREEN),
+            "thinking": ("Thinking…", "#8888ff"),
+            "error":    ("Error — see AI panel", "#ff5555"),
+        }
+        msg, color = _msgs.get(status, (status, _MUTED))
+        self._ai_status_lbl.setText(msg)
+        self._ai_status_lbl.setStyleSheet(f"font-size:12pt; color:{color};")
+        if hasattr(self, "_ai_apply_btn"):
+            self._ai_apply_btn.setEnabled(status not in ("loading", "thinking"))
+
+    def _update_ai_controls(self):
+        enabled = self._ai_enable_chk.isChecked()
+        if hasattr(self, "_ai_path_edit"):
+            self._ai_path_edit.setEnabled(enabled)
+        if hasattr(self, "_ai_gpu_spin"):
+            self._ai_gpu_spin.setEnabled(enabled)
+        if hasattr(self, "_ai_apply_btn"):
+            self._ai_apply_btn.setEnabled(enabled)
 
     def _open_about(self):
         from ui.update_dialog import AboutDialog

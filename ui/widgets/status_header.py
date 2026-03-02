@@ -406,6 +406,65 @@ class StatusHeader(QWidget):
         self.layout().addWidget(self._update_badge)
         return self._update_badge
 
+    def add_ai_button(self, callback) -> QPushButton:
+        """Add the AI assistant toggle button and return it."""
+        btn = QPushButton("AI")
+        btn.setFixedSize(36, 30)
+        btn.setCheckable(True)
+        btn.setToolTip(
+            "AI Assistant — toggle the on-device AI assistant panel.\n"
+            "Explains tabs, diagnoses instrument state, answers questions.\n"
+            "Requires a GGUF model file (configured in Settings → AI Assistant).")
+        btn.setStyleSheet("""
+            QPushButton {
+                background:#1a1a1a; color:#444;
+                border:1px solid #2a2a2a; border-radius:4px;
+                font-size:12pt; font-weight:600; letter-spacing:1px;
+            }
+            QPushButton:hover   { color:#888; background:#222; }
+            QPushButton:checked {
+                background:#1e2a28; color:#00d4aa;
+                border:1px solid #00d4aa66;
+            }
+            QPushButton:checked:hover { background:#254d42; }
+        """)
+        btn.clicked.connect(callback)
+        self.layout().addWidget(btn)
+        self._ai_btn = btn
+        return btn
+
+    def set_ai_status(self, status: str) -> None:
+        """Update the AI button appearance to reflect the current AI status."""
+        if not hasattr(self, "_ai_btn"):
+            return
+        _colors = {
+            "off":      "#444",
+            "loading":  "#ffaa44",
+            "ready":    "#00d4aa",
+            "thinking": "#8888ff",
+            "error":    "#ff5555",
+        }
+        color = _colors.get(status, "#444")
+        checked = self._ai_btn.isChecked()
+        self._ai_btn.setToolTip(
+            f"AI Assistant ({status}) — click to toggle panel.\n"
+            "Explains tabs, diagnoses instrument state, answers questions."
+        )
+        # Re-apply style with status colour
+        self._ai_btn.setStyleSheet(f"""
+            QPushButton {{
+                background:#1a1a1a; color:#444;
+                border:1px solid #2a2a2a; border-radius:4px;
+                font-size:12pt; font-weight:600; letter-spacing:1px;
+            }}
+            QPushButton:hover   {{ color:#888; background:#222; }}
+            QPushButton:checked {{
+                background:#1e2a28; color:{color};
+                border:1px solid {color}66;
+            }}
+            QPushButton:checked:hover {{ background:#254d42; }}
+        """)
+
     def set_connected(self, which: str, ok: bool, tooltip: str = ""):
         color  = "#00d4aa" if ok else "#ff4444"
         target = {"camera": self._cam_dot,
