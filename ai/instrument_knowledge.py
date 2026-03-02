@@ -215,6 +215,33 @@ CAL_IR_TEMPS_C: list[float] = [85.0, 90.0, 95.0, 100.0, 105.0, 110.0, 115.0]
 # Injected verbatim into the LLM system prompt.  Keep under ~80 tokens so the
 # combined SYSTEM_PROMPT stays within the 200-token budget for 3 B models.
 
+# ── SanjINSIGHT UI Navigation Map ────────────────────────────────────────────
+#
+# Compact sidebar structure injected into the system prompt so the AI can
+# answer "where is X?" questions with the correct panel and section names.
+# Update this whenever the sidebar structure changes.
+
+UI_NAV_MAP: str = (
+    "SanjINSIGHT left sidebar layout — "
+    "MEASURE section: Live, Acquire, Scan. "
+    "ANALYSIS section: Calibration, Analysis, Compare, 3D Surface. "
+    "Hardware group (collapsible): Camera, Temperature, FPGA, Bias Source, Stage, ROI, Autofocus. "
+    "SETUP section: Profiles, Recipes. "
+    "TOOLS section: Data, Console, Log, Settings. "
+    "Key buttons by panel: "
+    "Stage→Home All / Home XY / Home Z at the bottom of the Stage panel; "
+    "FPGA→Start, Stop, frequency presets, duty-cycle presets; "
+    "Camera→exposure, gain, saturation readout; "
+    "Temperature→TEC setpoints and enable; "
+    "Bias Source→output port, level, compliance, Output ON/OFF; "
+    "Profiles→material, wavelength, C_T selection and calibration."
+)
+
+
+# ── Compact AI Knowledge String ───────────────────────────────────────────────
+#
+# Injected verbatim into the LLM system prompt alongside UI_NAV_MAP.
+
 AI_DOMAIN_KNOWLEDGE: str = (
     "Hardware limits: pixel sat=4095 (12-bit); stage temp 10–150 °C; "
     "VO INT ±10 V pulsed, VO EXT ≤60 V, AUX INT ±10 V DC; "

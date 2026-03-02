@@ -5,24 +5,31 @@ System prompt and per-query message templates for the SanjINSIGHT assistant.
 
 Design goals
 ------------
-  • Keep the system prompt short (< 200 tokens) so every context snapshot fits
-    within a 2 048-token context window on small (3B) models.
+  • Keep the total prompt (system + context JSON + question) under ~600 tokens so
+    every context snapshot fits within a 2 048-token context window on small (3B)
+    models.  The system prompt itself is ~300 tokens; context JSON ~250 tokens;
+    questions ~30 tokens.
   • Use unambiguous formatting — model produces plain text, not markdown.
   • Ground every response in the JSON instrument state injected at runtime.
+  • Include UI_NAV_MAP so the AI can answer "where is X?" with the correct
+    sidebar panel name rather than a generic non-answer.
 """
 
 from __future__ import annotations
 
-from ai.instrument_knowledge import AI_DOMAIN_KNOWLEDGE
+from ai.instrument_knowledge import AI_DOMAIN_KNOWLEDGE, UI_NAV_MAP
 
 SYSTEM_PROMPT = (
     "You are the SanjINSIGHT instrument assistant for thermoreflectance microscopy. "
     "Give concise, accurate guidance about instrument settings, acquisition quality, "
     "and troubleshooting. "
     "Use the JSON instrument state to ground every answer. "
+    "When users ask where to find a control, name the exact sidebar panel. "
     "Keep responses 2-4 sentences. Plain text only — no markdown. "
     "Say so honestly if you cannot help. Never invent hardware readings. "
     + AI_DOMAIN_KNOWLEDGE
+    + " "
+    + UI_NAV_MAP
 )
 
 
