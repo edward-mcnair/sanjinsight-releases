@@ -8,6 +8,10 @@ Layout
   ┌─────────────────────────────────────────┐
   │ [●] AI Assistant     status           ✕ │  ← header row
   ├─────────────────────────────────────────┤
+  │  [A] Instrument ready                   │  ← evidence panel (grade + issues)
+  │   ⊗ TEC 1 stable     Δ0.25°C  fail     │
+  │   ⚠ Focus quality    42       warn     │
+  ├─────────────────────────────────────────┤
   │  [Explain this tab]   [Diagnose]         │  ← quick actions
   ├─────────────────────────────────────────┤
   │                                         │
@@ -143,6 +147,42 @@ class AIPanelWidget(QWidget):
             self._build_not_installed_view(lay)
             return
 
+        # ── Evidence panel ──
+        self._evidence_frame = QFrame()
+        self._evidence_frame.setStyleSheet(
+            f"QFrame {{ background:{_BG2}; border:1px solid {_BORDER}; border-radius:4px; }}"
+        )
+        ev_lay = QVBoxLayout(self._evidence_frame)
+        ev_lay.setContentsMargins(8, 6, 8, 6)
+        ev_lay.setSpacing(3)
+
+        grade_row = QHBoxLayout()
+        self._grade_lbl = QLabel("—")
+        self._grade_lbl.setStyleSheet(
+            f"font-size:16pt; font-weight:700; color:{_MUTED}; "
+            f"background:#1a1a1a; border-radius:3px; padding:1px 7px;"
+        )
+        self._grade_lbl.setFixedWidth(36)
+        self._grade_lbl.setAlignment(Qt.AlignCenter)
+        self._grade_summary_lbl = QLabel("No model loaded")
+        self._grade_summary_lbl.setStyleSheet(f"font-size:11pt; color:{_MUTED};")
+        grade_row.addWidget(self._grade_lbl)
+        grade_row.addSpacing(8)
+        grade_row.addWidget(self._grade_summary_lbl)
+        grade_row.addStretch()
+        ev_lay.addLayout(grade_row)
+
+        # Up to 5 issue rows; extras collapsed by default
+        self._issue_rows: list[QLabel] = []
+        for _ in range(5):
+            lbl = QLabel("")
+            lbl.setStyleSheet(f"font-size:10pt; color:{_MUTED}; padding-left:4px;")
+            lbl.setVisible(False)
+            ev_lay.addWidget(lbl)
+            self._issue_rows.append(lbl)
+
+        lay.addWidget(self._evidence_frame)
+
         # ── Quick action buttons ──
         action_row = QHBoxLayout()
         self._explain_btn = QPushButton("Explain this tab")
@@ -257,6 +297,71 @@ class AIPanelWidget(QWidget):
             self._display.clear()
         if hasattr(self, "_rate_lbl"):
             self._rate_lbl.setText("")
+
+    def refresh_evidence(self, results: list) -> None:
+        """
+        Update the evidence panel from a list of RuleResult objects.
+
+        Called periodically by MainWindow with DiagnosticEngine.evaluate() output.
+        Safe to call from the main thread at any time.
+        """
+        if not hasattr(self, "_grade_lbl"):
+            return
+
+        fails = [r for r in results if r.severity == "fail"]
+        warns = [r for r in results if r.severity == "warn"]
+        n_fail, n_warn = len(fails), len(warns)
+
+        # ── Grade ──
+        if n_fail >= 2:
+            grade, color = "D", _RED
+        elif n_fail == 1:
+            grade, color = "C", _AMBER
+        elif n_warn >= 3:
+            grade, color = "C", _AMBER
+        elif n_warn >= 1:
+            grade, color = "B", "#88cc88"
+        else:
+            grade, color = "A", _GREEN
+
+        self._grade_lbl.setText(grade)
+        self._grade_lbl.setStyleSheet(
+            f"font-size:16pt; font-weight:700; color:{color}; "
+            f"background:#1a1a1a; border-radius:3px; padding:1px 7px;"
+        )
+
+        parts: list[str] = []
+        if n_fail:
+            parts.append(f"{n_fail} fail")
+        if n_warn:
+            parts.append(f"{n_warn} warn")
+        summary = "Instrument ready" if not parts else "  ·  ".join(parts)
+        self._grade_summary_lbl.setText(summary)
+        self._grade_summary_lbl.setStyleSheet(
+            f"font-size:11pt; color:{color if parts else _GREEN};"
+        )
+
+        # ── Issue rows (fail first, then warn) ──
+        active = fails + warns
+        for i, row_lbl in enumerate(self._issue_rows):
+            if i < min(len(active), 5):
+                # Last slot: show "…and N more" when list is truncated
+                if i == 4 and len(active) > 5:
+                    row_lbl.setText(f"  …and {len(active) - 4} more issues")
+                    row_lbl.setStyleSheet(
+                        f"font-size:10pt; color:{_MUTED}; padding-left:4px;"
+                    )
+                else:
+                    r = active[i]
+                    icon = "⊗" if r.severity == "fail" else "⚠"
+                    clr  = _RED if r.severity == "fail" else _AMBER
+                    row_lbl.setText(f"{icon}  {r.display_name}  ·  {r.observed}")
+                    row_lbl.setStyleSheet(
+                        f"font-size:10pt; color:{clr}; padding-left:4px;"
+                    )
+                row_lbl.setVisible(True)
+            else:
+                row_lbl.setVisible(False)
 
     # ------------------------------------------------------------------ #
     #  Internal                                                            #

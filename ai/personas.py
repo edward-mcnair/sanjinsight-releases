@@ -11,7 +11,7 @@ Personas
 --------
 lab_tech          Numbered steps and checklists for routine operation.
 failure_analyst   Evidence-first root-cause diagnosis for engineers.
-new_grad          Guided explanations with context for learners.
+new_grad          Guided explanations with context for researchers.
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ PERSONAS: dict[str, Persona] = {
 
     "lab_tech": Persona(
         id="lab_tech",
-        display_name="Lab Tech",
+        display_name="Technician",
         description="Numbered steps and checklists. Best for routine operation.",
         system_prompt=(
             "You are the SanjINSIGHT instrument assistant for a lab technician. "
@@ -65,8 +65,8 @@ PERSONAS: dict[str, Persona] = {
 
     "new_grad": Persona(
         id="new_grad",
-        display_name="New Grad",
-        description="Guided explanations with context. Best for learning the instrument.",
+        display_name="Research",
+        description="Guided explanations with context. Best for researchers and students.",
         system_prompt=(
             "You are the SanjINSIGHT instrument assistant helping a graduate student. "
             "Explain what is happening and why it matters before suggesting actions. "

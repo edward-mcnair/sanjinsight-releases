@@ -602,6 +602,12 @@ class MainWindow(QMainWindow):
         self._nav.panel_changed.connect(
             lambda p: self._ai_service.set_active_tab(type(p).__name__))
 
+        # Evidence panel — refresh every 3 s while the app is running
+        self._evidence_timer = QTimer(self)
+        self._evidence_timer.setInterval(3000)
+        self._evidence_timer.timeout.connect(self._refresh_evidence_panel)
+        self._evidence_timer.start()
+
     def _on_frame(self, frame):
         self._camera_tab.update_frame(frame)
         self._acquire_tab.update_live(frame)
@@ -1145,12 +1151,21 @@ class MainWindow(QMainWindow):
 
     # ── AI assistant handlers ──────────────────────────────────────────
 
+    def _refresh_evidence_panel(self) -> None:
+        """Push latest diagnostic results to the AI panel evidence section."""
+        try:
+            results = self._diagnostic_engine.evaluate()
+            self._ai_panel.refresh_evidence(results)
+        except Exception:
+            pass
+
     def _toggle_ai_panel(self):
         """Show or hide the AI assistant dock widget."""
         if self._ai_dock.isVisible():
             self._ai_dock.hide()
         else:
             self._ai_dock.show()
+            self._refresh_evidence_panel()  # immediate refresh on open
 
     def _on_ai_dock_visibility(self, visible: bool):
         """Keep the header AI button checked state in sync with dock visibility."""
