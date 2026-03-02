@@ -97,8 +97,10 @@ class KeithleyDriver(BiasDriver):
     def set_mode(self, mode: str) -> None:
         self._mode = mode
         if self._tsp:
-            fn = "smua.SOURCE_DCVOLTS" if mode == "voltage" \
-                 else "smua.SOURCE_DCAMPS"
+            # Correct TSP Lua constants for 2600-series source function
+            # (smua.SOURCE_DCVOLTS / SOURCE_DCAMPS do not exist in TSP)
+            fn = "smua.FUNC_DC_VOLTS" if mode == "voltage" \
+                 else "smua.FUNC_DC_AMPS"
             self._write(f"smua.source.func = {fn}")
         else:
             fn = "VOLT" if mode == "voltage" else "CURR"
@@ -143,7 +145,9 @@ class KeithleyDriver(BiasDriver):
 
             out_raw = self._query(
                 "print(smua.source.output)" if self._tsp else ":OUTP?")
-            output_on = out_raw.strip() in ("1", "ON", "smua.OUTPUT_ON")
+            # TSP print() returns Lua floats: smua.OUTPUT_ON == 1 → "1.0"
+            # SCPI :OUTP? returns "1" or "0"; include both forms
+            output_on = out_raw.strip() in ("1", "1.0", "ON", "smua.OUTPUT_ON")
 
             return BiasStatus(
                 output_on      = output_on,

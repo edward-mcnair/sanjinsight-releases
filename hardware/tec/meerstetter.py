@@ -12,10 +12,9 @@ Config keys (under hardware.tec_meerstetter):
 """
 
 import logging
+import threading
 from .base import TecDriver, TecStatus
 from hardware.port_lock import PortLock
-
-log = logging.getLogger(__name__)
 
 log = logging.getLogger(__name__)
 
@@ -30,6 +29,10 @@ class MeerstetterDriver(TecDriver):
         self._tec       = None
         self._target    = 25.0
         self._port_lock = PortLock(self._port)
+        # pyMeCom MeComAPI is not thread-safe; the poll thread and control
+        # threads (set_target, enable, disable) must not call it concurrently
+        # or they will corrupt each other's serial frames and cause CRC errors.
+        self._api_lock  = threading.Lock()
 
     def connect(self) -> None:
         try:
@@ -60,33 +63,37 @@ class MeerstetterDriver(TecDriver):
 
     def enable(self) -> None:
         # Parameter 2010: Output Enable (1 = on)
-        self._tec.set_parameter(parameter_id=2010, value=1,
-                                address=self._address, instance=1)
+        with self._api_lock:
+            self._tec.set_parameter(parameter_id=2010, value=1,
+                                    address=self._address, instance=1)
 
     def disable(self) -> None:
-        self._tec.set_parameter(parameter_id=2010, value=0,
-                                address=self._address, instance=1)
+        with self._api_lock:
+            self._tec.set_parameter(parameter_id=2010, value=0,
+                                    address=self._address, instance=1)
 
     def set_target(self, temperature_c: float) -> None:
         self._target = temperature_c
         # Parameter 3000: Target Object Temperature
-        self._tec.set_parameter(parameter_id=3000, value=temperature_c,
-                                address=self._address, instance=1)
+        with self._api_lock:
+            self._tec.set_parameter(parameter_id=3000, value=temperature_c,
+                                    address=self._address, instance=1)
 
     def get_status(self) -> TecStatus:
         try:
-            # Parameter 1000: Object Temperature
-            actual = self._tec.get_parameter(
-                parameter_id=1000, address=self._address, instance=1)
-            # Parameter 1001: Output Current
-            current = self._tec.get_parameter(
-                parameter_id=1001, address=self._address, instance=1)
-            # Parameter 1002: Output Voltage
-            voltage = self._tec.get_parameter(
-                parameter_id=1002, address=self._address, instance=1)
-            # Parameter 2010: Output Enable status
-            enabled = bool(self._tec.get_parameter(
-                parameter_id=2010, address=self._address, instance=1))
+            with self._api_lock:
+                # Parameter 1000: Object Temperature
+                actual = self._tec.get_parameter(
+                    parameter_id=1000, address=self._address, instance=1)
+                # Parameter 1001: Output Current
+                current = self._tec.get_parameter(
+                    parameter_id=1001, address=self._address, instance=1)
+                # Parameter 1002: Output Voltage
+                voltage = self._tec.get_parameter(
+                    parameter_id=1002, address=self._address, instance=1)
+                # Parameter 2010: Output Enable status
+                enabled = bool(self._tec.get_parameter(
+                    parameter_id=2010, address=self._address, instance=1))
 
             stable = abs(actual - self._target) <= self.stability_tolerance()
 

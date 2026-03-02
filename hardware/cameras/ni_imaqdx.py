@@ -126,8 +126,8 @@ class NiImaqdxDriver(CameraDriver):
             self._session,
             self._buf,
             ctypes.c_uint32(self._buf_size),
-            ctypes.c_int32(3),               # mode: GetNext
-            ctypes.c_uint32(0),
+            ctypes.c_int32(1),               # IMAQdxBufferNumberMode_Next (1)
+            ctypes.c_uint32(0),              # bufferNumber ignored for mode_Next
             ctypes.byref(self._frame_num))
 
         if status != _NO_ERROR:

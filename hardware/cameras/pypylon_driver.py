@@ -94,7 +94,9 @@ class PylonDriver(CameraDriver):
         self._open = False
 
     def grab(self, timeout_ms: int = 2000) -> Optional[CameraFrame]:
-        from pypylon import pylon
+        if self._cam is None:
+            return None
+        from pypylon import pylon, genicam
         try:
             result = self._cam.RetrieveResult(
                 timeout_ms, pylon.TimeoutHandling_ThrowException)
@@ -110,8 +112,13 @@ class PylonDriver(CameraDriver):
                     timestamp   = time.time(),
                 )
             result.Release()
-        except Exception:
-            pass
+        except genicam.TimeoutException:
+            # Normal during low-frame-rate acquisition; not an error
+            log.debug("pypylon grab timeout (%d ms)", timeout_ms)
+        except Exception as e:
+            # Device disconnect, CRC error, or other hardware fault —
+            # log it so the user can see what happened
+            log.warning("pypylon grab error: %s", e)
         return None
 
     def set_exposure(self, microseconds: float) -> None:

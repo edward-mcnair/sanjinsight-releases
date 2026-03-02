@@ -32,6 +32,8 @@ class ThorlabsDriver(StageDriver):
 
     def __init__(self, cfg: dict):
         super().__init__(cfg)
+        # Store as str for display / logging; convert to int at connect() time
+        # because APTDevice.serial_number must be an int (not str)
         self._serial = {
             "x": str(cfg.get("serial_x", "")),
             "y": str(cfg.get("serial_y", "")),
@@ -53,7 +55,8 @@ class ThorlabsDriver(StageDriver):
             if not serial:
                 continue
             try:
-                dev = APTDevice(serial_port=None, serial_number=serial)
+                # APTDevice requires serial_number as int, not str
+                dev = APTDevice(serial_port=None, serial_number=int(serial))
                 self._controllers[axis] = dev
                 log.info("Thorlabs stage %s connected: %s", axis.upper(), serial)
             except Exception as e:

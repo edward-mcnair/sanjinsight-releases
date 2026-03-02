@@ -42,7 +42,11 @@ class Ni9637Driver(FpgaDriver):
         self._session     = None
         self._bitfile     = cfg.get("bitfile", "")
         self._resource    = cfg.get("resource", "RIO0")
-        self._reset       = cfg.get("reset_on_open", False)
+        # reset_if_last_session_on_exit defaults True so that if the application
+        # crashes the FPGA resets automatically and stops driving the DUT.
+        # Override with  hardware.fpga.reset_on_open: false  only if you need
+        # the FPGA to continue running across software restarts.
+        self._reset       = cfg.get("reset_on_open", True)
         self._freq        = 1000.0
         self._duty        = 0.5
         self._running     = False
@@ -127,6 +131,7 @@ class Ni9637Driver(FpgaDriver):
                 self._session.close()
             except Exception:
                 pass
+            self._session = None   # prevent double-close
         self._open    = False
         self._running = False
 
