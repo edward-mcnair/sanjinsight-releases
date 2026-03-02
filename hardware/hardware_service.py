@@ -110,6 +110,16 @@ class HardwareService(QObject):
     _BIAS_POLL_S:  float = 0.25
     _STAGE_POLL_S: float = 0.10
 
+    # ── Auto-reconnect policy ─────────────────────────────────────────
+    # Consecutive poll failures before the device is declared offline
+    # and a reconnect attempt begins.
+    _MAX_CONSECUTIVE_ERRORS: int   = 3
+    # First reconnect retry delay (subsequent delays double, capped at max)
+    _RECONNECT_INITIAL_S:    float = 2.0
+    _RECONNECT_MAX_S:        float = 30.0
+    # Camera-specific: seconds without a frame before reconnect triggers
+    _CAMERA_RECONNECT_TIMEOUT_S: float = 10.0
+
     def __init__(self, parent=None):
         super().__init__(parent)
 
@@ -635,6 +645,40 @@ class HardwareService(QObject):
         t.start()
         return t
 
+    def _reconnect_loop(self, device_key: str, reconnect_fn, label: str) -> bool:
+        """
+        Repeatedly call *reconnect_fn()* with exponential back-off until it
+        succeeds or the service stops.
+
+        Parameters
+        ----------
+        device_key  : signal key ('camera', 'tec0', 'fpga', 'bias', 'stage')
+        reconnect_fn: callable — must raise on failure, return on success
+        label       : human-readable name for log messages
+
+        Returns
+        -------
+        True  — reconnected successfully
+        False — _stop_event was set; caller should return without reconnecting
+        """
+        delay   = self._RECONNECT_INITIAL_S
+        attempt = 0
+        while not self._stop_event.is_set():
+            attempt += 1
+            try:
+                reconnect_fn()
+                log.info("[%s] Auto-reconnect succeeded (attempt %d)", label, attempt)
+                self.device_connected.emit(device_key, True)
+                self.log_message.emit(f"{label}: reconnected automatically")
+                return True
+            except Exception as exc:
+                log.warning("[%s] Reconnect attempt %d failed: %s — retry in %.0f s",
+                            label, attempt, exc, delay)
+            # Interruptible sleep: wakes instantly when service shuts down
+            self._stop_event.wait(timeout=delay)
+            delay = min(delay * 1.5, self._RECONNECT_MAX_S)
+        return False
+
     # ── Camera + pipeline ─────────────────────────────────────────────
 
     def _run_camera(self):
@@ -674,22 +718,56 @@ class HardwareService(QObject):
             return
 
         # Live-frame grab loop
-        while not self._stop_event.is_set():
-            pipeline = app_state.pipeline
-            if pipeline and _HAS_PIPELINE and pipeline.state == AcqState.CAPTURING:
-                time.sleep(0.05)
-                continue
-            cam = app_state.cam
-            if cam is None:
-                time.sleep(0.1)
-                continue
-            try:
-                frame = cam.grab(timeout_ms=500)
-                if frame:
-                    self.camera_frame.emit(frame)
-            except Exception as e:
-                log.debug(f"HardwareService camera grab: {e}")
-                time.sleep(0.1)
+        last_frame_t = time.monotonic()
+        try:
+            while not self._stop_event.is_set():
+                pipeline = app_state.pipeline
+                if pipeline and _HAS_PIPELINE and pipeline.state == AcqState.CAPTURING:
+                    last_frame_t = time.monotonic()   # acquisition is producing frames
+                    time.sleep(0.05)
+                    continue
+                cam = app_state.cam
+                if cam is None:
+                    time.sleep(0.1)
+                    continue
+                try:
+                    frame = cam.grab(timeout_ms=500)
+                    if frame:
+                        self.camera_frame.emit(frame)
+                        last_frame_t = time.monotonic()
+                    elif (time.monotonic() - last_frame_t
+                            > self._CAMERA_RECONNECT_TIMEOUT_S):
+                        raise RuntimeError(
+                            f"No frame received for "
+                            f"{self._CAMERA_RECONNECT_TIMEOUT_S:.0f} s")
+                except Exception as e:
+                    if (time.monotonic() - last_frame_t
+                            > self._CAMERA_RECONNECT_TIMEOUT_S):
+                        log.warning("Camera: %s — triggering reconnect", e)
+                        self.device_connected.emit("camera", False)
+                        self.error.emit(
+                            "Camera: no frames received — reconnecting"
+                            " automatically…")
+                        def _cam_reconnect(cam=cam):
+                            try:
+                                cam.stop()
+                                cam.close()
+                            except Exception:
+                                pass
+                            cam.open()
+                            cam.start()
+                        if not self._reconnect_loop(
+                                "camera", _cam_reconnect, "camera"):
+                            return
+                        last_frame_t = time.monotonic()
+                    else:
+                        log.debug("HardwareService camera grab: %s", e)
+                    time.sleep(0.1)
+        except Exception as e:
+            log.error("[camera] Poll thread died unexpectedly: %s",
+                      e, exc_info=True)
+            self.error.emit(f"Camera: poll thread crashed — {e}")
+            self.device_connected.emit("camera", False)
 
     # ── TEC ───────────────────────────────────────────────────────────
 
@@ -722,15 +800,38 @@ class HardwareService(QObject):
         # Expose guard so UI can call acknowledge() and update_limits()
         app_state.set_tec_guard(idx, guard)
 
-        while not self._stop_event.is_set():
-            try:
-                status = tec.get_status()
-                guard.check(status)          # safety check every poll
-                self.tec_status.emit(idx, status)
-            except Exception as e:
-                from hardware.tec.base import TecStatus
-                self.tec_status.emit(idx, TecStatus(error=str(e)))
-            time.sleep(self._TEC_POLL_S)
+        consecutive_errors = 0
+        try:
+            while not self._stop_event.is_set():
+                try:
+                    status = tec.get_status()
+                    guard.check(status)          # safety check every poll
+                    self.tec_status.emit(idx, status)
+                    consecutive_errors = 0
+                except Exception as e:
+                    consecutive_errors += 1
+                    from hardware.tec.base import TecStatus
+                    self.tec_status.emit(idx, TecStatus(error=str(e)))
+                    if consecutive_errors >= self._MAX_CONSECUTIVE_ERRORS:
+                        self.device_connected.emit(tec_key, False)
+                        self.error.emit(
+                            f"{key}: device went offline after "
+                            f"{consecutive_errors} errors"
+                            " — reconnecting automatically…")
+                        def _do_reconnect(tec=tec):
+                            try:
+                                tec.disconnect()
+                            except Exception:
+                                pass
+                            tec.connect()
+                        if not self._reconnect_loop(tec_key, _do_reconnect, key):
+                            return
+                        consecutive_errors = 0
+                self._stop_event.wait(timeout=self._TEC_POLL_S)
+        except Exception as e:
+            log.error("[%s] Poll thread died unexpectedly: %s", key, e, exc_info=True)
+            self.error.emit(f"{key}: poll thread crashed — {e}")
+            self.device_connected.emit(tec_key, False)
 
     # ── FPGA ──────────────────────────────────────────────────────────
 
@@ -752,14 +853,39 @@ class HardwareService(QObject):
             log.error(f"HardwareService FPGA init: {e}")
             return
 
-        while not self._stop_event.is_set():
-            try:
-                status = fpga.get_status()
-                self.fpga_status.emit(status)
-            except Exception as e:
-                from hardware.fpga.base import FpgaStatus
-                self.fpga_status.emit(FpgaStatus(error=str(e)))
-            time.sleep(self._FPGA_POLL_S)
+        consecutive_errors = 0
+        try:
+            while not self._stop_event.is_set():
+                try:
+                    status = fpga.get_status()
+                    self.fpga_status.emit(status)
+                    consecutive_errors = 0
+                except Exception as e:
+                    consecutive_errors += 1
+                    from hardware.fpga.base import FpgaStatus
+                    self.fpga_status.emit(FpgaStatus(error=str(e)))
+                    if consecutive_errors >= self._MAX_CONSECUTIVE_ERRORS:
+                        self.device_connected.emit("fpga", False)
+                        self.error.emit(
+                            f"FPGA: device went offline after "
+                            f"{consecutive_errors} errors"
+                            " — reconnecting automatically…")
+                        def _do_reconnect(fpga=fpga):
+                            try:
+                                fpga.stop()
+                                fpga.close()
+                            except Exception:
+                                pass
+                            fpga.open()
+                            fpga.start()
+                        if not self._reconnect_loop("fpga", _do_reconnect, "fpga"):
+                            return
+                        consecutive_errors = 0
+                self._stop_event.wait(timeout=self._FPGA_POLL_S)
+        except Exception as e:
+            log.error("[fpga] Poll thread died unexpectedly: %s", e, exc_info=True)
+            self.error.emit(f"FPGA: poll thread crashed — {e}")
+            self.device_connected.emit("fpga", False)
 
     # ── Bias source ───────────────────────────────────────────────────
 
@@ -780,14 +906,37 @@ class HardwareService(QObject):
             log.error(f"HardwareService bias init: {e}")
             return
 
-        while not self._stop_event.is_set():
-            try:
-                status = bias.get_status()
-                self.bias_status.emit(status)
-            except Exception as e:
-                from hardware.bias.base import BiasStatus
-                self.bias_status.emit(BiasStatus(error=str(e)))
-            time.sleep(self._BIAS_POLL_S)
+        consecutive_errors = 0
+        try:
+            while not self._stop_event.is_set():
+                try:
+                    status = bias.get_status()
+                    self.bias_status.emit(status)
+                    consecutive_errors = 0
+                except Exception as e:
+                    consecutive_errors += 1
+                    from hardware.bias.base import BiasStatus
+                    self.bias_status.emit(BiasStatus(error=str(e)))
+                    if consecutive_errors >= self._MAX_CONSECUTIVE_ERRORS:
+                        self.device_connected.emit("bias", False)
+                        self.error.emit(
+                            f"Bias: device went offline after "
+                            f"{consecutive_errors} errors"
+                            " — reconnecting automatically…")
+                        def _do_reconnect(bias=bias):
+                            try:
+                                bias.disconnect()
+                            except Exception:
+                                pass
+                            bias.connect()
+                        if not self._reconnect_loop("bias", _do_reconnect, "bias"):
+                            return
+                        consecutive_errors = 0
+                self._stop_event.wait(timeout=self._BIAS_POLL_S)
+        except Exception as e:
+            log.error("[bias] Poll thread died unexpectedly: %s", e, exc_info=True)
+            self.error.emit(f"Bias: poll thread crashed — {e}")
+            self.device_connected.emit("bias", False)
 
     # ── Stage ─────────────────────────────────────────────────────────
 
@@ -806,14 +955,38 @@ class HardwareService(QObject):
             log.error(f"HardwareService stage init: {e}")
             return
 
-        while not self._stop_event.is_set():
-            try:
-                status = stage.get_status()
-                self.stage_status.emit(status)
-            except Exception as e:
-                from hardware.stage.base import StageStatus
-                self.stage_status.emit(StageStatus(error=str(e)))
-            time.sleep(self._STAGE_POLL_S)
+        consecutive_errors = 0
+        try:
+            while not self._stop_event.is_set():
+                try:
+                    status = stage.get_status()
+                    self.stage_status.emit(status)
+                    consecutive_errors = 0
+                except Exception as e:
+                    consecutive_errors += 1
+                    from hardware.stage.base import StageStatus
+                    self.stage_status.emit(StageStatus(error=str(e)))
+                    if consecutive_errors >= self._MAX_CONSECUTIVE_ERRORS:
+                        self.device_connected.emit("stage", False)
+                        self.error.emit(
+                            f"Stage: device went offline after "
+                            f"{consecutive_errors} errors"
+                            " — reconnecting automatically…")
+                        def _do_reconnect(stage=stage):
+                            try:
+                                stage.stop()
+                                stage.disconnect()
+                            except Exception:
+                                pass
+                            stage.connect()
+                        if not self._reconnect_loop("stage", _do_reconnect, "stage"):
+                            return
+                        consecutive_errors = 0
+                self._stop_event.wait(timeout=self._STAGE_POLL_S)
+        except Exception as e:
+            log.error("[stage] Poll thread died unexpectedly: %s", e, exc_info=True)
+            self.error.emit(f"Stage: poll thread crashed — {e}")
+            self.device_connected.emit("stage", False)
 
     # ================================================================ #
     #  Safe close helpers                                               #
