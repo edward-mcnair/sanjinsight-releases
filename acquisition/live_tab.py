@@ -596,10 +596,10 @@ class LiveTab(QWidget):
 
     def _start(self):
         try:
-            import main_app
-            _cam   = main_app.cam
-            _fpga  = main_app.fpga
-            _cal   = getattr(main_app, "active_calibration", None)
+            from hardware.app_state import app_state
+            _cam   = app_state.cam
+            _fpga  = app_state.fpga
+            _cal   = app_state.active_calibration
         except Exception:
             _cam = _fpga = _cal = None
 

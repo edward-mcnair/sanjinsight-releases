@@ -246,26 +246,9 @@ QMenu::separator { height: 1px; background: #333; margin: 4px 0; }
 #  Signals                                                           #
 # ------------------------------------------------------------------ #
 
-class AppSignals(QObject):
-    new_live_frame = pyqtSignal(object)
-    tec_status     = pyqtSignal(int, object)    # index, TecStatus
-    fpga_status    = pyqtSignal(object)         # FpgaStatus
-    bias_status    = pyqtSignal(object)         # BiasStatus
-    stage_status   = pyqtSignal(object)         # StageStatus
-    af_progress    = pyqtSignal(object)         # AfResult (mid-run)
-    af_complete    = pyqtSignal(object)         # AfResult (final)
-    cal_progress   = pyqtSignal(object)         # CalibrationProgress
-    cal_complete   = pyqtSignal(object)         # CalibrationResult
-    scan_progress  = pyqtSignal(object)         # ScanProgress
-    scan_complete  = pyqtSignal(object)         # ScanResult
-    profile_applied = pyqtSignal(object)        # MaterialProfile
-    acq_progress   = pyqtSignal(object)
-    acq_complete   = pyqtSignal(object)
-    acq_saved      = pyqtSignal(object)         # Session (just saved)
-    log_message    = pyqtSignal(str)
-    error          = pyqtSignal(str)
-
-signals = AppSignals()
+# AppSignals and its singleton live in ui/app_signals.py so that any module
+# can import `signals` without depending on this file.
+from ui.app_signals import AppSignals, signals
 
 # ------------------------------------------------------------------ #
 #  Shared state — all hardware refs live in the thread-safe AppState  #

@@ -557,8 +557,8 @@ class AnalysisTab(QWidget):
 
         # Log to main app
         try:
-            import main_app as _ma
-            _ma.signals.log_message.emit(
+            from ui.app_signals import signals
+            signals.log_message.emit(
                 f"Analysis: {result.verdict}  ·  "
                 f"{result.n_hotspots} hotspot(s)  ·  "
                 f"peak {result.max_peak_k:.1f} °C  ·  "

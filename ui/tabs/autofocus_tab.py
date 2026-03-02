@@ -195,7 +195,7 @@ class AutofocusTab(QWidget):
 
         cfg = self._build_cfg()
         af_driver = create_autofocus(cfg, cam, stage)
-        from main_app import signals
+        from ui.app_signals import signals
         af_driver.on_progress = lambda r: signals.af_progress.emit(r)
         af_driver.on_complete = lambda r: signals.af_complete.emit(r)
 

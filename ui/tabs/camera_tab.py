@@ -173,7 +173,7 @@ class CameraTab(QWidget):
             if f:
                 name = f"frame_{int(time.time())}.png"
                 cv2.imwrite(name, f.data)
-                from main_app import signals
+                from ui.app_signals import signals
                 signals.log_message.emit(f"Saved: {name}")
 
     def set_exposure(self, us: float):

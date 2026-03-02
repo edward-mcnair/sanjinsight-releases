@@ -696,9 +696,9 @@ class DataTab(QWidget):
             return
 
         try:
-            import main_app
-            cal      = getattr(main_app, "active_calibration", None)
-            analysis = getattr(main_app, "active_analysis",    None)
+            from hardware.app_state import app_state
+            cal      = app_state.active_calibration
+            analysis = app_state.active_analysis
         except Exception:
             cal, analysis = None, None
 

@@ -481,12 +481,12 @@ class ScanTab(QWidget):
         import threading
 
         try:
-            import main_app
-            _stage    = main_app.stage
-            _cam      = main_app.cam
-            _tecs     = main_app.tecs
-            _pipeline = main_app.pipeline
-            _cal      = getattr(main_app, "active_calibration", None)
+            from hardware.app_state import app_state
+            _stage    = app_state.stage
+            _cam      = app_state.cam
+            _tecs     = app_state.tecs
+            _pipeline = app_state.pipeline
+            _cal      = app_state.active_calibration
         except Exception:
             _stage = _cam = _pipeline = None
             _tecs  = []
@@ -496,11 +496,11 @@ class ScanTab(QWidget):
         self._runner = ScanEngine(_stage, _cam, _tecs, _pipeline, cfg, _cal)
 
         try:
-            import main_app as _ma
+            from ui.app_signals import signals
             self._runner.on_progress = \
-                lambda p: _ma.signals.scan_progress.emit(p)
+                lambda p: signals.scan_progress.emit(p)
             self._runner.on_complete = \
-                lambda r: _ma.signals.scan_complete.emit(r)
+                lambda r: signals.scan_complete.emit(r)
         except Exception:
             pass
 
@@ -564,8 +564,8 @@ class ScanTab(QWidget):
         try:
             from .report       import generate_report
             from .session      import Session, SessionMeta
-            import main_app
-            cal = getattr(main_app, "active_calibration", None)
+            from hardware.app_state import app_state
+            cal = app_state.active_calibration
 
             # Wrap ScanResult in a minimal Session for the report engine
             class _FakeResult:
@@ -612,10 +612,10 @@ class ScanTab(QWidget):
         # Gather current settings
         cfg = self._build_cfg()
         try:
-            import main_app as _ma
-            exp  = _ma.cam.get_status().exposure_us if _ma.cam else 5000.0
-            gain = _ma.cam.get_status().gain_db     if _ma.cam else 0.0
-            cal  = getattr(_ma, "active_calibration", None)
+            from hardware.app_state import app_state
+            exp  = app_state.cam.get_status().exposure_us if app_state.cam else 5000.0
+            gain = app_state.cam.get_status().gain_db     if app_state.cam else 0.0
+            cal  = app_state.active_calibration
             ct   = float(cal.ct_map.mean()) if (cal and cal.valid) else 1.5e-4
         except Exception:
             exp, gain, ct = 5000.0, 0.0, 1.5e-4
@@ -657,8 +657,8 @@ class ScanTab(QWidget):
             return
 
         try:
-            import main_app as _ma
-            _ma._window._profile_tab.save_from_settings(
+            from hardware.app_state import app_state
+            app_state._window._profile_tab.save_from_settings(
                 name         = name_edit.text().strip() or "Scan Profile",
                 material     = mat_edit.text().strip(),
                 category     = cat_cb.currentText(),

@@ -534,11 +534,11 @@ class CalibrationTab(QWidget):
         from .calibration_runner import CalibrationRunner
         import threading
 
-        # Import globals from main_app at runtime to avoid circular imports
+        # Import globals from app_state at runtime to avoid circular imports
         try:
-            import main_app
-            _cam  = main_app.cam
-            _tecs = main_app.tecs
+            from hardware.app_state import app_state
+            _cam  = app_state.cam
+            _tecs = app_state.tecs
         except Exception:
             _cam  = None
             _tecs = []
@@ -552,13 +552,13 @@ class CalibrationTab(QWidget):
 
         self._runner = CalibrationRunner(_cam, _tecs, cfg)
 
-        # Connect progress via main_app signals to stay on GUI thread
+        # Connect progress via signals to stay on GUI thread
         try:
-            import main_app as _ma
+            from ui.app_signals import signals
             self._runner.on_progress = \
-                lambda p: _ma.signals.cal_progress.emit(p)
+                lambda p: signals.cal_progress.emit(p)
             self._runner.on_complete = \
-                lambda r: _ma.signals.cal_complete.emit(r)
+                lambda r: signals.cal_complete.emit(r)
         except Exception:
             pass
 

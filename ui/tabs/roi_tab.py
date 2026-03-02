@@ -183,7 +183,7 @@ class RoiTab(QWidget):
         self._acq_status.setText(f"Active: {msg}")
         self._acq_status.setStyleSheet(
             "font-family:Menlo,monospace; font-size:14pt; color:#00d4aa;")
-        from main_app import signals
+        from ui.app_signals import signals
         signals.log_message.emit(f"ROI applied to acquisition: {msg}")
 
     def _clear_acq(self):
@@ -194,5 +194,5 @@ class RoiTab(QWidget):
         self._acq_status.setText("No ROI active (full frame)")
         self._acq_status.setStyleSheet(
             "font-family:Menlo,monospace; font-size:14pt; color:#555;")
-        from main_app import signals
+        from ui.app_signals import signals
         signals.log_message.emit("ROI cleared — acquisition using full frame")

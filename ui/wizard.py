@@ -625,10 +625,10 @@ class Step2Focus(QWidget):
 
     def _poll_frame(self):
         try:
-            import main_app as _ma
-            if _ma.cam is None:
+            from hardware.app_state import app_state
+            if app_state.cam is None:
                 return
-            frame = _ma.cam.grab(timeout_ms=50)
+            frame = app_state.cam.grab(timeout_ms=50)
             if frame is None:
                 return
             d = frame.data
@@ -653,10 +653,10 @@ class Step2Focus(QWidget):
         self._af_btn.setEnabled(False)
         self._af_btn.setText("Focusing…")
         try:
-            import main_app as _ma
-            if _ma.autofocus:
-                _ma.autofocus.run_async(
-                    cam=_ma.cam,
+            from hardware.app_state import app_state
+            if app_state.autofocus:
+                app_state.autofocus.run_async(
+                    cam=app_state.cam,
                     on_complete=self._on_af_done)
                 return
         except Exception:
@@ -692,13 +692,13 @@ class Step2Focus(QWidget):
         """
         dist = 0.1 if fine else self._step_um()
         try:
-            import main_app as _ma
-            if _ma.stage is None:
+            from hardware.app_state import app_state
+            if app_state.stage is None:
                 return
             import threading
             def _run():
                 try:
-                    _ma.stage.move_z(dist * direction)
+                    app_state.stage.move_z(dist * direction)
                     QTimer.singleShot(120, self._update_z_readout)
                 except Exception:
                     pass
@@ -708,10 +708,10 @@ class Step2Focus(QWidget):
 
     def _update_z_readout(self):
         try:
-            import main_app as _ma
-            if _ma.stage is None:
+            from hardware.app_state import app_state
+            if app_state.stage is None:
                 return
-            pos = _ma.stage.get_position()
+            pos = app_state.stage.get_position()
             z   = getattr(pos, "z_um", None)
             if z is not None:
                 self._z_pos_lbl.setText(f"Z: {z:.2f} µm")
@@ -1014,7 +1014,7 @@ class Step4Results(QWidget):
 
     def _export_report(self):
         try:
-            import main_app as _ma
+            from hardware.app_state import app_state
             path, _ = QFileDialog.getSaveFileName(
                 self, "Save Report", "report.pdf",
                 "PDF files (*.pdf)")
@@ -1022,8 +1022,8 @@ class Step4Results(QWidget):
                 return
             out_dir  = str(path.rsplit("/", 1)[0])
             from acquisition.report import generate_report
-            session  = getattr(_ma, "_last_session", None)
-            cal      = getattr(_ma, "active_calibration", None)
+            session  = app_state._last_session
+            cal      = app_state.active_calibration
             if session is None:
                 QMessageBox.warning(
                     self, "No Session",
@@ -1316,17 +1316,18 @@ class StandardWizard(QWidget):
 
         # Apply profile to the system immediately
         try:
-            import main_app as _ma
+            from hardware.app_state import app_state
+            from ui.app_signals import signals
             h, w = 256, 320
-            if _ma.cam:
+            if app_state.cam:
                 try:
-                    st = _ma.cam.get_status()
+                    st = app_state.cam.get_status()
                     h, w = st.height or 256, st.width or 320
                 except Exception:
                     pass
-            _ma.active_calibration = profile.make_calibration(h, w)
-            _ma.active_profile     = profile
-            _ma.signals.profile_applied.emit(profile)
+            app_state.active_calibration = profile.make_calibration(h, w)
+            app_state.active_profile     = profile
+            signals.profile_applied.emit(profile)
         except Exception:
             pass
 
@@ -1336,25 +1337,26 @@ class StandardWizard(QWidget):
 
     def _start_acquisition(self):
         try:
-            import main_app as _ma
+            from hardware.app_state import app_state
+            from ui.app_signals import signals
             n_frames = (self._active_profile.n_frames
                         if self._active_profile else 64)
 
             def _progress_cb(prog):
                 pct = int(prog.frame_index / max(prog.total_frames, 1) * 100)
-                _ma.signals.acq_progress.emit(prog)
+                signals.acq_progress.emit(prog)
                 # Update step 3 directly on main thread via timer
                 QTimer.singleShot(0, lambda: self._step3.update_progress(
                     pct, f"Frame {prog.frame_index} / {prog.total_frames}"))
 
             def _complete_cb(result):
-                _ma.signals.acq_complete.emit(result)
+                signals.acq_complete.emit(result)
                 QTimer.singleShot(0, lambda: self._step3.on_complete(result))
 
             import threading
             def _run():
                 try:
-                    _ma.app_state.pipeline.start(
+                    app_state.pipeline.start(
                         n_frames      = n_frames,
                         on_progress   = _progress_cb,
                         on_complete   = _complete_cb)
@@ -1372,7 +1374,7 @@ class StandardWizard(QWidget):
 
         # Run analysis — use profile's expected ΔT range as threshold
         try:
-            import main_app as _ma
+            from hardware.app_state import app_state
             from acquisition.analysis import ThermalAnalysisEngine, AnalysisConfig
 
             # Inherit threshold from the active profile's expected ΔT range
@@ -1386,7 +1388,7 @@ class StandardWizard(QWidget):
             dt_map  = getattr(result, "delta_t",        None)
             drr_map = getattr(result, "delta_r_over_r", None)
             analysis = engine.run(dt_map=dt_map, drr_map=drr_map)
-            _ma.app_state.active_analysis = analysis
+            app_state.active_analysis = analysis
             self._step4.update_result(analysis, result)
             self._go_to(3)
         except Exception as e:
