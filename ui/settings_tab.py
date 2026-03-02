@@ -289,8 +289,16 @@ class SettingsTab(QWidget):
         return g
 
     def _build_ai_group(self) -> QGroupBox:
-        from ai.model_downloader import (
-            find_existing_model, DEFAULT_MODELS_DIR, RECOMMENDED_MODEL)
+        from ai.model_downloader import find_existing_model, DEFAULT_MODELS_DIR
+        from ai.model_catalog   import MODEL_CATALOG, MODEL_ORDER
+        from ai.hardware_probe  import probe_hardware
+
+        # Probe runs synchronously but is fast (<300 ms)
+        try:
+            _hw = probe_hardware()
+        except Exception:
+            from ai.hardware_probe import HardwareProfile
+            _hw = HardwareProfile(ram_gb=8.0)
 
         g = _group("AI Assistant  (local, offline)")
         lay = QVBoxLayout(g)
@@ -341,14 +349,64 @@ class SettingsTab(QWidget):
         dl_lay.setContentsMargins(0, 0, 0, 0)
         dl_lay.setSpacing(8)
 
-        rec_lbl = _body(
-            f"Recommended model: {RECOMMENDED_MODEL['filename']}  "
-            f"(~{RECOMMENDED_MODEL['size_gb']:.1f} GB, runs entirely locally)"
+        # Hardware summary card
+        hw_frame = QFrame()
+        hw_frame.setStyleSheet(
+            f"QFrame {{ background:{_BG2}; border:1px solid {_BORDER}; "
+            f"border-radius:4px; }}"
         )
-        dl_lay.addWidget(rec_lbl)
+        hw_lay = QHBoxLayout(hw_frame)
+        hw_lay.setContentsMargins(10, 6, 10, 6)
+        hw_icon = QLabel("💻")
+        hw_icon.setStyleSheet("font-size:14pt; border:none;")
+        hw_icon.setFixedWidth(24)
+        hw_lay.addWidget(hw_icon)
+        hw_lbl = QLabel(_hw.hw_summary or "Hardware details unavailable")
+        hw_lbl.setStyleSheet(f"font-size:11pt; color:{_TEXT}; border:none;")
+        hw_lbl.setWordWrap(True)
+        hw_lay.addWidget(hw_lbl, 1)
+        dl_lay.addWidget(hw_frame)
 
+        # Model selector combo
+        combo_row = QHBoxLayout()
+        combo_lbl = QLabel("Select model:")
+        combo_lbl.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
+        combo_row.addWidget(combo_lbl)
+
+        self._ai_model_ids = list(MODEL_ORDER)
+        self._ai_model_combo = QComboBox()
+        self._ai_model_combo.setStyleSheet(_COMBO)
+        for mid in self._ai_model_ids:
+            m   = MODEL_CATALOG[mid]
+            tag = "  ✓ Recommended" if mid == _hw.recommended_model_id else ""
+            self._ai_model_combo.addItem(
+                f"{m['name']}  ·  {m['size_gb']:.1f} GB{tag}")
+        # Pre-select the recommended model
+        try:
+            rec_idx = self._ai_model_ids.index(_hw.recommended_model_id)
+        except ValueError:
+            rec_idx = 0
+        self._ai_model_combo.setCurrentIndex(rec_idx)
+        self._ai_model_combo.currentIndexChanged.connect(self._on_model_combo_changed)
+        combo_row.addWidget(self._ai_model_combo, 1)
+        dl_lay.addLayout(combo_row)
+
+        # Model description + recommendation reason
+        self._ai_model_desc_lbl = _body(
+            MODEL_CATALOG[self._ai_model_ids[rec_idx]]["description"])
+        dl_lay.addWidget(self._ai_model_desc_lbl)
+
+        self._ai_rec_reason_lbl = _body(_hw.rec_reason)
+        self._ai_rec_reason_lbl.setStyleSheet(f"font-size:10pt; color:{_GREEN};")
+        dl_lay.addWidget(self._ai_rec_reason_lbl)
+
+        # Auto-fill GPU layers with hardware recommendation
+        # (applied after the spinner is built, stored here for deferred use)
+        self._ai_probe_gpu_layers = _hw.recommended_n_gpu_layers
+
+        # Download / Cancel buttons
         dl_btn_row = QHBoxLayout()
-        self._ai_download_btn = QPushButton("Download Recommended Model")
+        self._ai_download_btn = QPushButton("Download Selected Model")
         self._ai_download_btn.setStyleSheet(_BTN_PRIMARY)
         self._ai_download_btn.clicked.connect(self._on_download_clicked)
         dl_btn_row.addWidget(self._ai_download_btn)
@@ -431,6 +489,13 @@ class SettingsTab(QWidget):
         gpu_row.addWidget(self._ai_gpu_spin)
         gpu_row.addStretch(1)
         lay.addLayout(gpu_row)
+
+        # Auto-fill GPU layers from hardware probe if user hasn't set a value yet
+        saved_layers = cfg_mod.get_pref("ai.n_gpu_layers", 0)
+        if saved_layers == 0 and hasattr(self, "_ai_probe_gpu_layers") \
+                and self._ai_probe_gpu_layers > 0:
+            self._ai_gpu_spin.setValue(self._ai_probe_gpu_layers)
+            cfg_mod.set_pref("ai.n_gpu_layers", self._ai_probe_gpu_layers)
 
         lay.addWidget(_sep())
 
@@ -563,17 +628,33 @@ class SettingsTab(QWidget):
         if hasattr(self, "_ai_apply_btn"):
             self._ai_apply_btn.setEnabled(status not in ("loading", "thinking"))
 
+    def _on_model_combo_changed(self, idx: int) -> None:
+        """Update description label when user changes model selection."""
+        from ai.model_catalog import MODEL_CATALOG
+        if not hasattr(self, "_ai_model_ids") or idx >= len(self._ai_model_ids):
+            return
+        mid = self._ai_model_ids[idx]
+        if hasattr(self, "_ai_model_desc_lbl"):
+            self._ai_model_desc_lbl.setText(MODEL_CATALOG[mid]["description"])
+
     def _on_download_clicked(self) -> None:
-        from ai.model_downloader import RECOMMENDED_MODEL, DEFAULT_MODELS_DIR
-        dest = str(DEFAULT_MODELS_DIR / RECOMMENDED_MODEL["filename"])
+        from ai.model_downloader import DEFAULT_MODELS_DIR
+        from ai.model_catalog   import MODEL_CATALOG
+        # Use selected model from combo, fall back to first entry
+        idx = self._ai_model_combo.currentIndex() \
+              if hasattr(self, "_ai_model_combo") else 0
+        mid = self._ai_model_ids[idx] if hasattr(self, "_ai_model_ids") \
+              and idx < len(self._ai_model_ids) else "phi35_mini_q4"
+        m    = MODEL_CATALOG[mid]
+        dest = str(DEFAULT_MODELS_DIR / m["filename"])
         self._ai_download_btn.setEnabled(False)
         self._ai_cancel_btn.setVisible(True)
         self._ai_progress_bar.setValue(0)
         self._ai_progress_bar.setVisible(True)
         self._ai_dl_status_lbl.setVisible(True)
-        self._ai_dl_status_lbl.setText("Starting download…")
+        self._ai_dl_status_lbl.setText(f"Starting download of {m['name']}…")
         self._ai_dl_status_lbl.setStyleSheet(f"font-size:11pt; color:{_MUTED};")
-        self.download_model_requested.emit(RECOMMENDED_MODEL["url"], dest)
+        self.download_model_requested.emit(m["url"], dest)
 
     def set_download_progress(self, done: int, total: int, speed_mbps: float) -> None:
         """Called by MainWindow during model download."""
