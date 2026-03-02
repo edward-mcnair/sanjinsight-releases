@@ -7,7 +7,6 @@ CameraTab — live camera preview with exposure/gain controls and frame statisti
 from __future__ import annotations
 
 import time
-import threading
 import logging
 
 log = logging.getLogger(__name__)
@@ -29,8 +28,10 @@ def hline():
 
 
 class CameraTab(QWidget):
-    def __init__(self, cam_info=None):
+    def __init__(self, cam_info=None, hw_service=None):
         super().__init__()
+        self._hw = hw_service
+        self._last_frame = None
         root = QVBoxLayout(self)
         root.setContentsMargins(10, 10, 10, 10)
         root.setSpacing(8)
@@ -135,6 +136,7 @@ class CameraTab(QWidget):
         return w
 
     def update_frame(self, frame):
+        self._last_frame = frame
         d = frame.data
         mode = "auto" if self._bg.checkedId() == 0 else "fixed"
         self._pane.show_array(d, mode=mode)
@@ -151,30 +153,30 @@ class CameraTab(QWidget):
         self._do_exp(self._exp_slider.value())
 
     def _do_exp(self, val):
-        cam = app_state.cam
-        if cam:
-            threading.Thread(
-                target=cam.set_exposure, args=(float(val),),
-                daemon=True).start()
+        if self._hw:
+            self._hw.cam_set_exposure(float(val))
+        else:
+            cam = app_state.cam
+            if cam:
+                cam.set_exposure(float(val))
 
     def _on_gain(self):
-        cam = app_state.cam
-        if cam:
-            val = self._gain_slider.value() / 10.0
-            threading.Thread(
-                target=cam.set_gain, args=(val,),
-                daemon=True).start()
+        val = self._gain_slider.value() / 10.0
+        if self._hw:
+            self._hw.cam_set_gain(val)
+        else:
+            cam = app_state.cam
+            if cam:
+                cam.set_gain(val)
 
     def _save(self):
         import cv2
-        cam = app_state.cam
-        if cam:
-            f = cam.grab()
-            if f:
-                name = f"frame_{int(time.time())}.png"
-                cv2.imwrite(name, f.data)
-                from ui.app_signals import signals
-                signals.log_message.emit(f"Saved: {name}")
+        frame = self._last_frame
+        if frame is not None:
+            name = f"frame_{int(time.time())}.png"
+            cv2.imwrite(name, frame.data)
+            from ui.app_signals import signals
+            signals.log_message.emit(f"Saved: {name}")
 
     def set_exposure(self, us: float):
         """Push a new exposure value from an external source (e.g. profile)."""
@@ -186,7 +188,9 @@ class CameraTab(QWidget):
         """Push a new gain value from an external source (e.g. profile)."""
         val = int(max(0, min(239, db * 10)))
         self._gain_slider.setValue(val)
-        cam = app_state.cam
-        if cam:
-            threading.Thread(
-                target=cam.set_gain, args=(db,), daemon=True).start()
+        if self._hw:
+            self._hw.cam_set_gain(db)
+        else:
+            cam = app_state.cam
+            if cam:
+                cam.set_gain(db)

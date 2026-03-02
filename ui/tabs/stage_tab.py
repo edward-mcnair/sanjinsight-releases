@@ -6,7 +6,6 @@ StageTab — XYZ stage control with absolute move, relative jog, and home/stop b
 
 from __future__ import annotations
 
-import threading
 import logging
 
 log = logging.getLogger(__name__)
@@ -20,8 +19,9 @@ from hardware.app_state import app_state
 
 
 class StageTab(QWidget):
-    def __init__(self):
+    def __init__(self, hw_service=None):
         super().__init__()
+        self._hw = hw_service
         root = QVBoxLayout(self)
         root.setContentsMargins(10, 10, 10, 10)
         root.setSpacing(10)
@@ -169,35 +169,38 @@ class StageTab(QWidget):
         return self._step_combo.currentData()
 
     def _jog(self, x=0.0, y=0.0, z=0.0):
-        stage = app_state.stage
-        if stage:
-            threading.Thread(
-                target=stage.move_by,
-                kwargs={"x": x, "y": y, "z": z, "wait": False},
-                daemon=True).start()
+        if self._hw:
+            self._hw.stage_move_by(x=x, y=y, z=z)
+        else:
+            stage = app_state.stage
+            if stage:
+                stage.move_by(x=x, y=y, z=z, wait=False)
 
     def _move_to(self):
-        stage = app_state.stage
-        if stage:
-            threading.Thread(
-                target=stage.move_to,
-                kwargs={"x": self._ax.value(),
-                        "y": self._ay.value(),
-                        "z": self._az.value(),
-                        "wait": False},
-                daemon=True).start()
+        if self._hw:
+            self._hw.stage_move_to(
+                self._ax.value(), self._ay.value(), self._az.value())
+        else:
+            stage = app_state.stage
+            if stage:
+                stage.move_to(x=self._ax.value(), y=self._ay.value(),
+                               z=self._az.value(), wait=False)
 
     def _home(self, axes: str):
-        stage = app_state.stage
-        if stage:
-            threading.Thread(
-                target=stage.home, args=(axes,),
-                daemon=True).start()
+        if self._hw:
+            self._hw.stage_home(axes)
+        else:
+            stage = app_state.stage
+            if stage:
+                stage.home(axes)
 
     def _stop(self):
-        stage = app_state.stage
-        if stage:
-            threading.Thread(target=stage.stop, daemon=True).start()
+        if self._hw:
+            self._hw.stage_stop()
+        else:
+            stage = app_state.stage
+            if stage:
+                stage.stop()
 
     def update_status(self, status):
         if status.error:

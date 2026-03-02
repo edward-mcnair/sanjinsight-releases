@@ -6,7 +6,6 @@ BiasTab — source-measure unit control with voltage/current mode and compliance
 
 from __future__ import annotations
 
-import threading
 import logging
 
 log = logging.getLogger(__name__)
@@ -28,8 +27,9 @@ def hline():
 
 
 class BiasTab(QWidget):
-    def __init__(self):
+    def __init__(self, hw_service=None):
         super().__init__()
+        self._hw = hw_service
         root = QVBoxLayout(self)
         root.setContentsMargins(10, 10, 10, 10)
         root.setSpacing(10)
@@ -194,40 +194,49 @@ class BiasTab(QWidget):
         self._comp_spin.setRange(
             *( (0.000001, 1.0) if mode == "voltage" else (0.001, 200) ))
         self._show_presets(mode)
-        bias = app_state.bias
-        if bias:
-            threading.Thread(
-                target=bias.set_mode, args=(mode,),
-                daemon=True).start()
+        if self._hw:
+            self._hw.bias_set_mode(mode)
+        else:
+            bias = app_state.bias
+            if bias:
+                bias.set_mode(mode)
 
     def _apply(self):
         self._set_level(self._level_spin.value())
         self._set_compliance(self._comp_spin.value())
 
     def _set_level(self, val):
-        bias = app_state.bias
-        if bias:
-            threading.Thread(
-                target=bias.set_level, args=(val,),
-                daemon=True).start()
+        if self._hw:
+            self._hw.bias_set_level(val)
+        else:
+            bias = app_state.bias
+            if bias:
+                bias.set_level(val)
 
     def _set_compliance(self, val):
-        bias = app_state.bias
-        if bias:
-            threading.Thread(
-                target=bias.set_compliance, args=(val,),
-                daemon=True).start()
+        if self._hw:
+            self._hw.bias_set_compliance(val)
+        else:
+            bias = app_state.bias
+            if bias:
+                bias.set_compliance(val)
 
     def _enable(self):
         self._apply()
-        bias = app_state.bias
-        if bias:
-            threading.Thread(target=bias.enable, daemon=True).start()
+        if self._hw:
+            self._hw.bias_enable()
+        else:
+            bias = app_state.bias
+            if bias:
+                bias.enable()
 
     def _disable(self):
-        bias = app_state.bias
-        if bias:
-            threading.Thread(target=bias.disable, daemon=True).start()
+        if self._hw:
+            self._hw.bias_disable()
+        else:
+            bias = app_state.bias
+            if bias:
+                bias.disable()
 
     def update_status(self, status):
         if status.error:

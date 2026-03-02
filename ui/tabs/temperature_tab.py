@@ -6,7 +6,6 @@ TemperatureTab — TEC temperature control with live readouts, plots, and safety
 
 from __future__ import annotations
 
-import threading
 import logging
 
 log = logging.getLogger(__name__)
@@ -21,8 +20,9 @@ from ui.widgets.temp_plot  import TempPlot
 
 
 class TemperatureTab(QWidget):
-    def __init__(self, n_tecs: int):
+    def __init__(self, n_tecs: int, hw_service=None):
         super().__init__()
+        self._hw = hw_service
         root = QVBoxLayout(self)
         root.setContentsMargins(10, 10, 10, 10)
         root.setSpacing(10)
@@ -311,24 +311,30 @@ class TemperatureTab(QWidget):
 
     def _set_target(self, box, val):
         idx = self._panels.index(box)
-        _tecs = app_state.tecs
-        if _tecs and idx < len(_tecs):
-            threading.Thread(
-                target=_tecs[idx].set_target, args=(val,),
-                daemon=True).start()
+        if self._hw:
+            self._hw.tec_set_target(idx, val)
+        else:
+            _tecs = app_state.tecs
+            if _tecs and idx < len(_tecs):
+                _tecs[idx].set_target(val)
 
     def _enable(self, box):
         idx   = self._panels.index(box)
         guard = app_state.get_tec_guard(idx)
         if guard and guard.is_alarmed:
-            # Don't allow re-enable while alarm is active
             return
-        _tecs = app_state.tecs
-        if _tecs and idx < len(_tecs):
-            threading.Thread(target=_tecs[idx].enable, daemon=True).start()
+        if self._hw:
+            self._hw.tec_enable(idx)
+        else:
+            _tecs = app_state.tecs
+            if _tecs and idx < len(_tecs):
+                _tecs[idx].enable()
 
     def _disable(self, box):
         idx = self._panels.index(box)
-        _tecs = app_state.tecs
-        if _tecs and idx < len(_tecs):
-            threading.Thread(target=_tecs[idx].disable, daemon=True).start()
+        if self._hw:
+            self._hw.tec_disable(idx)
+        else:
+            _tecs = app_state.tecs
+            if _tecs and idx < len(_tecs):
+                _tecs[idx].disable()

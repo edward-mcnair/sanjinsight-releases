@@ -6,7 +6,6 @@ FpgaTab — FPGA control tab with frequency, duty cycle, and stimulus controls.
 
 from __future__ import annotations
 
-import threading
 import logging
 
 log = logging.getLogger(__name__)
@@ -27,8 +26,9 @@ def hline():
 
 
 class FpgaTab(QWidget):
-    def __init__(self):
+    def __init__(self, hw_service=None):
         super().__init__()
+        self._hw = hw_service
         root = QVBoxLayout(self)
         root.setContentsMargins(10, 10, 10, 10)
         root.setSpacing(10)
@@ -178,33 +178,42 @@ class FpgaTab(QWidget):
         self._set_duty(self._duty_spin.value() / 100.0)
 
     def _set_freq(self, val):
-        fpga = app_state.fpga
-        if fpga:
-            threading.Thread(
-                target=fpga.set_frequency, args=(val,),
-                daemon=True).start()
+        if self._hw:
+            self._hw.fpga_set_frequency(val)
+        else:
+            fpga = app_state.fpga
+            if fpga:
+                fpga.set_frequency(val)
 
     def _set_duty(self, val):
-        fpga = app_state.fpga
-        if fpga:
-            threading.Thread(
-                target=fpga.set_duty_cycle, args=(val,),
-                daemon=True).start()
+        if self._hw:
+            self._hw.fpga_set_duty_cycle(val)
+        else:
+            fpga = app_state.fpga
+            if fpga:
+                fpga.set_duty_cycle(val)
 
     def _start(self):
-        fpga = app_state.fpga
-        if fpga:
-            self._apply()
-            threading.Thread(target=fpga.start, daemon=True).start()
+        self._apply()
+        if self._hw:
+            self._hw.fpga_start()
+        else:
+            fpga = app_state.fpga
+            if fpga:
+                fpga.start()
 
     def _stop(self):
-        fpga = app_state.fpga
-        if fpga:
-            threading.Thread(target=fpga.stop, daemon=True).start()
+        if self._hw:
+            self._hw.fpga_stop()
+        else:
+            fpga = app_state.fpga
+            if fpga:
+                fpga.stop()
 
     def _set_stimulus(self, on: bool):
-        fpga = app_state.fpga
-        if fpga:
-            threading.Thread(
-                target=fpga.set_stimulus, args=(on,),
-                daemon=True).start()
+        if self._hw:
+            self._hw.fpga_set_stimulus(on)
+        else:
+            fpga = app_state.fpga
+            if fpga:
+                fpga.set_stimulus(on)

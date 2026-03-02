@@ -437,6 +437,157 @@ class HardwareService(QObject):
             log.warning(f"HardwareService.reconnect_device: unknown key {key!r}")
 
     # ================================================================ #
+    #  Control Surface — public API for UI to command hardware          #
+    #  All methods are non-blocking: driver calls run on daemon threads #
+    #  and errors are reported via self.error signal.                   #
+    # ================================================================ #
+
+    def _dispatch(self, fn, *args, **kwargs) -> None:
+        """Execute fn(*args, **kwargs) on a daemon thread; emit error on failure."""
+        name = getattr(fn, '__name__', 'ctrl')
+        def _run():
+            try:
+                fn(*args, **kwargs)
+            except Exception as e:
+                log.exception("HardwareService control call failed: %s", name)
+                self.error.emit(str(e))
+        threading.Thread(target=_run, daemon=True, name=f"hw.ctrl.{name}").start()
+
+    # ── Camera ────────────────────────────────────────────────────────
+
+    def cam_set_exposure(self, us: float) -> None:
+        """Set camera exposure time in microseconds."""
+        cam = app_state.cam
+        if cam:
+            self._dispatch(cam.set_exposure, float(us))
+
+    def cam_set_gain(self, db: float) -> None:
+        """Set camera gain in dB."""
+        cam = app_state.cam
+        if cam:
+            self._dispatch(cam.set_gain, float(db))
+
+    # ── TEC ───────────────────────────────────────────────────────────
+
+    def tec_enable(self, idx: int) -> None:
+        """Enable TEC channel idx."""
+        tecs = app_state.tecs
+        if idx < len(tecs):
+            self._dispatch(tecs[idx].enable)
+
+    def tec_disable(self, idx: int) -> None:
+        """Disable TEC channel idx."""
+        tecs = app_state.tecs
+        if idx < len(tecs):
+            self._dispatch(tecs[idx].disable)
+
+    def tec_set_target(self, idx: int, temp_c: float) -> None:
+        """Set TEC channel idx target temperature in °C."""
+        tecs = app_state.tecs
+        if idx < len(tecs):
+            self._dispatch(tecs[idx].set_target, temp_c)
+
+    # ── FPGA ──────────────────────────────────────────────────────────
+
+    def fpga_set_frequency(self, hz: float) -> None:
+        """Set FPGA modulation frequency in Hz."""
+        fpga = app_state.fpga
+        if fpga:
+            self._dispatch(fpga.set_frequency, hz)
+
+    def fpga_set_duty_cycle(self, fraction: float) -> None:
+        """Set FPGA duty cycle (0.0–1.0)."""
+        fpga = app_state.fpga
+        if fpga:
+            self._dispatch(fpga.set_duty_cycle, fraction)
+
+    def fpga_start(self) -> None:
+        """Start FPGA modulation output."""
+        fpga = app_state.fpga
+        if fpga:
+            self._dispatch(fpga.start)
+
+    def fpga_stop(self) -> None:
+        """Stop FPGA modulation output."""
+        fpga = app_state.fpga
+        if fpga:
+            self._dispatch(fpga.stop)
+
+    def fpga_set_stimulus(self, on: bool) -> None:
+        """Enable or disable FPGA stimulus output."""
+        fpga = app_state.fpga
+        if fpga:
+            self._dispatch(fpga.set_stimulus, on)
+
+    # ── Bias source ───────────────────────────────────────────────────
+
+    def bias_set_mode(self, mode: str) -> None:
+        """Set bias source mode ('voltage' or 'current')."""
+        bias = app_state.bias
+        if bias:
+            self._dispatch(bias.set_mode, mode)
+
+    def bias_set_level(self, value: float) -> None:
+        """Set bias source output level (V or A depending on mode)."""
+        bias = app_state.bias
+        if bias:
+            self._dispatch(bias.set_level, value)
+
+    def bias_set_compliance(self, value: float) -> None:
+        """Set bias source compliance limit."""
+        bias = app_state.bias
+        if bias:
+            self._dispatch(bias.set_compliance, value)
+
+    def bias_enable(self) -> None:
+        """Enable bias source output."""
+        bias = app_state.bias
+        if bias:
+            self._dispatch(bias.enable)
+
+    def bias_disable(self) -> None:
+        """Disable bias source output."""
+        bias = app_state.bias
+        if bias:
+            self._dispatch(bias.disable)
+
+    # ── Stage ─────────────────────────────────────────────────────────
+
+    def stage_move_by(self, x: float = 0.0, y: float = 0.0,
+                      z: float = 0.0) -> None:
+        """Move stage by relative distances in μm."""
+        stage = app_state.stage
+        if stage:
+            self._dispatch(stage.move_by, x=x, y=y, z=z, wait=False)
+
+    def stage_move_to(self, x: float, y: float, z: float) -> None:
+        """Move stage to absolute position in μm."""
+        stage = app_state.stage
+        if stage:
+            self._dispatch(stage.move_to, x=x, y=y, z=z, wait=False)
+
+    def stage_home(self, axes: str = "xyz") -> None:
+        """Home stage axes ('xyz', 'xy', or 'z')."""
+        stage = app_state.stage
+        if stage:
+            self._dispatch(stage.home, axes)
+
+    def stage_stop(self) -> None:
+        """Stop all stage motion immediately."""
+        stage = app_state.stage
+        if stage:
+            self._dispatch(stage.stop)
+
+    def stage_move_z(self, distance_um: float) -> None:
+        """Move Z stage by distance_um (positive = up, negative = down)."""
+        stage = app_state.stage
+        if stage:
+            if hasattr(stage, 'move_z'):
+                self._dispatch(stage.move_z, distance_um)
+            else:
+                self._dispatch(stage.move_by, z=distance_um, wait=False)
+
+    # ================================================================ #
     #  Internal thread launchers                                        #
     # ================================================================ #
 

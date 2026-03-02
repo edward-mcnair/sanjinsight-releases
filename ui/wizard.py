@@ -467,8 +467,10 @@ class Step1Profile(QWidget):
 class Step2Focus(QWidget):
     """Step 2 — live camera preview, autofocus, and manual Z control."""
 
-    def __init__(self):
+    def __init__(self, hw_service=None):
         super().__init__()
+        self._hw = hw_service
+        self._last_stage_pos = None
         lay = QVBoxLayout(self)
         lay.setContentsMargins(24, 16, 24, 16)
         lay.setSpacing(14)
@@ -607,30 +609,29 @@ class Step2Focus(QWidget):
         content.addWidget(right, 0)
         lay.addLayout(content, 1)
 
-        # Poll timer for live frames + Z position
-        self._timer = QTimer()
-        self._timer.setInterval(80)
-        self._timer.timeout.connect(self._poll_frame)
-
     def start_preview(self):
-        self._timer.start()
-        self._update_z_readout()
+        if self._hw:
+            self._hw.camera_frame.connect(self._on_camera_frame)
+            self._hw.stage_status.connect(self._on_stage_status)
 
     def stop_preview(self):
-        self._timer.stop()
+        if self._hw:
+            try:
+                self._hw.camera_frame.disconnect(self._on_camera_frame)
+            except Exception:
+                pass
+            try:
+                self._hw.stage_status.disconnect(self._on_stage_status)
+            except Exception:
+                pass
 
     # ---------------------------------------------------------------- #
     #  Live feed                                                        #
     # ---------------------------------------------------------------- #
 
-    def _poll_frame(self):
+    def _on_camera_frame(self, frame):
+        """Receive a frame from HardwareService and update the preview."""
         try:
-            from hardware.app_state import app_state
-            if app_state.cam is None:
-                return
-            frame = app_state.cam.grab(timeout_ms=50)
-            if frame is None:
-                return
             d = frame.data
             normed = ((d.astype(np.float32) - d.min()) /
                       (d.max() - d.min() + 1e-9) * 255).astype(np.uint8)
@@ -642,6 +643,15 @@ class Step2Focus(QWidget):
                 Qt.KeepAspectRatio,
                 Qt.SmoothTransformation)
             self._feed.setPixmap(pix)
+        except Exception:
+            pass
+
+    def _on_stage_status(self, status):
+        """Cache the latest stage position for display."""
+        try:
+            if not status.error:
+                self._last_stage_pos = status.position
+                self._update_z_readout()
         except Exception:
             pass
 
@@ -691,32 +701,27 @@ class Step2Focus(QWidget):
         direction: +1 = up (away from sample), -1 = down (toward sample).
         """
         dist = 0.1 if fine else self._step_um()
-        try:
-            from hardware.app_state import app_state
-            if app_state.stage is None:
-                return
-            import threading
-            def _run():
-                try:
-                    app_state.stage.move_z(dist * direction)
-                    QTimer.singleShot(120, self._update_z_readout)
-                except Exception:
-                    pass
-            threading.Thread(target=_run, daemon=True).start()
-        except Exception:
-            pass
+        if self._hw:
+            self._hw.stage_move_z(dist * direction)
+        else:
+            try:
+                from hardware.app_state import app_state
+                import threading
+                if app_state.stage:
+                    threading.Thread(
+                        target=app_state.stage.move_z,
+                        args=(dist * direction,),
+                        daemon=True).start()
+            except Exception:
+                pass
 
     def _update_z_readout(self):
-        try:
-            from hardware.app_state import app_state
-            if app_state.stage is None:
-                return
-            pos = app_state.stage.get_position()
-            z   = getattr(pos, "z_um", None)
+        """Update Z position display from cached stage status."""
+        pos = self._last_stage_pos
+        if pos is not None:
+            z = getattr(pos, "z_um", None)
             if z is not None:
                 self._z_pos_lbl.setText(f"Z: {z:.2f} µm")
-        except Exception:
-            pass
 
 # ------------------------------------------------------------------ #
 #  Step 3 — Acquire                                                   #
@@ -1065,9 +1070,10 @@ class StandardWizard(QWidget):
 
     switch_to_advanced = pyqtSignal()
 
-    def __init__(self, profile_manager):
+    def __init__(self, profile_manager, hw_service=None):
         super().__init__()
         self._mgr            = profile_manager
+        self._hw             = hw_service
         self._current_step   = 0
         self._active_profile = None
         self._acq_result     = None
@@ -1164,7 +1170,7 @@ class StandardWizard(QWidget):
         # fits on small screens (e.g. 14" MacBook) without clipping
         self._stack = QStackedWidget()
         self._step1 = Step1Profile(profile_manager)
-        self._step2 = Step2Focus()
+        self._step2 = Step2Focus(hw_service=hw_service)
         self._step3 = Step3Acquire()
         self._step4 = Step4Results()
 

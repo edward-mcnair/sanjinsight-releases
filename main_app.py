@@ -35,12 +35,6 @@ from PyQt5.QtGui   import (QImage, QPixmap, QFont, QColor, QPainter,
                            QPen, QBrush, QPalette, QIcon)
 
 import config
-from hardware.cameras    import create_camera
-from hardware.tec        import create_tec
-from hardware.fpga       import create_fpga
-from hardware.bias       import create_bias
-from hardware.stage      import create_stage
-from hardware.autofocus  import create_autofocus, AfState
 from hardware.app_state  import app_state                   # ← thread-safe state
 from acquisition         import (AcquisitionPipeline, AcquisitionResult,
                                 AcquisitionProgress, AcqState,
@@ -295,91 +289,6 @@ def __getattr__(name: str):
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-# ------------------------------------------------------------------ #
-#  Background threads                                                 #
-# ------------------------------------------------------------------ #
-
-# ------------------------------------------------------------------ #
-#  Background threads                                                 #
-# ------------------------------------------------------------------ #
-
-def camera_thread():
-    cfg = config.get("hardware").get("camera", {})
-    try:
-        cam = create_camera(cfg)
-        cam.open()
-        cam.start()
-        pipeline = AcquisitionPipeline(cam,
-                                        fpga=app_state.fpga,
-                                        bias=app_state.bias)
-        pipeline.on_progress = lambda p: signals.acq_progress.emit(p)
-        pipeline.on_complete = lambda r: signals.acq_complete.emit(r)
-        pipeline.on_error    = lambda e: signals.error.emit(e)
-        with app_state:
-            app_state.cam      = cam
-            app_state.pipeline = pipeline
-        signals.log_message.emit(
-            f"Camera: {cam.info.driver} | {cam.info.model} "
-            f"| {cam.info.width}×{cam.info.height}")
-    except Exception as e:
-        signals.error.emit(f"Camera: {e}")
-        return
-
-    while running:
-        if app_state.pipeline and app_state.pipeline.state == AcqState.CAPTURING:
-            time.sleep(0.05)
-            continue
-        cam = app_state.cam
-        if cam is None:
-            time.sleep(0.1)
-            continue
-        frame = cam.grab(timeout_ms=500)
-        if frame:
-            signals.new_live_frame.emit(frame)
-
-
-def tec_thread(index: int, tec):
-    while running:
-        try:
-            status = tec.get_status()
-            signals.tec_status.emit(index, status)
-        except Exception as e:
-            from hardware.tec import TecStatus
-            signals.tec_status.emit(index, TecStatus(error=str(e)))
-        time.sleep(0.5)
-
-
-def fpga_thread(fpga_driver):
-    while running:
-        try:
-            status = fpga_driver.get_status()
-            signals.fpga_status.emit(status)
-        except Exception as e:
-            from hardware.fpga import FpgaStatus
-            signals.fpga_status.emit(FpgaStatus(error=str(e)))
-        time.sleep(0.25)
-
-
-def bias_thread(bias_driver):
-    while running:
-        try:
-            status = bias_driver.get_status()
-            signals.bias_status.emit(status)
-        except Exception as e:
-            from hardware.bias import BiasStatus
-            signals.bias_status.emit(BiasStatus(error=str(e)))
-        time.sleep(0.25)
-
-
-def stage_thread(stage_driver):
-    while running:
-        try:
-            status = stage_driver.get_status()
-            signals.stage_status.emit(status)
-        except Exception as e:
-            from hardware.stage import StageStatus
-            signals.stage_status.emit(StageStatus(error=str(e)))
-        time.sleep(0.1)
 
 
 # ------------------------------------------------------------------ #
@@ -484,11 +393,11 @@ class MainWindow(QMainWindow):
         self._acquire_tab  = AcquireTab()
         self._live_tab     = LiveTab()
         self._analysis_tab = AnalysisTab()
-        self._camera_tab   = CameraTab()
-        self._temp_tab     = TemperatureTab(max(n_tecs, 1))
-        self._fpga_tab     = FpgaTab()
-        self._bias_tab     = BiasTab()
-        self._stage_tab    = StageTab()
+        self._camera_tab   = CameraTab(hw_service=hw_service)
+        self._temp_tab     = TemperatureTab(max(n_tecs, 1), hw_service=hw_service)
+        self._fpga_tab     = FpgaTab(hw_service=hw_service)
+        self._bias_tab     = BiasTab(hw_service=hw_service)
+        self._stage_tab    = StageTab(hw_service=hw_service)
         self._roi_tab      = RoiTab()
         self._af_tab       = AutofocusTab()
         self._cal_tab      = CalibrationTab()
@@ -548,7 +457,7 @@ class MainWindow(QMainWindow):
         self._nav.select_first()
 
         # Build wizard (Standard mode)
-        self._wizard = StandardWizard(self._profile_mgr)
+        self._wizard = StandardWizard(self._profile_mgr, hw_service=hw_service)
 
         # Add both to mode stack — Standard first (index 0)
         self._mode_stack.addWidget(self._wizard)
@@ -886,13 +795,11 @@ class MainWindow(QMainWindow):
         log.info("Applying recipe: %s", recipe.label)
 
         # ── Camera settings ───────────────────────────────────────
-        cam = app_state.cam
-        if cam:
-            try:
-                cam.set_exposure(recipe.camera.exposure_us)
-                cam.set_gain(recipe.camera.gain_db)
-            except Exception as e:
-                log.warning("Recipe: failed to set camera params: %s", e)
+        try:
+            hw_service.cam_set_exposure(recipe.camera.exposure_us)
+            hw_service.cam_set_gain(recipe.camera.gain_db)
+        except Exception as e:
+            log.warning("Recipe: failed to set camera params: %s", e)
 
         # ── Modality ──────────────────────────────────────────────
         app_state.active_modality = recipe.acquisition.modality
@@ -910,9 +817,9 @@ class MainWindow(QMainWindow):
 
         # ── TEC setpoint ──────────────────────────────────────────
         if recipe.tec.enabled:
-            for tec in app_state.tecs:
+            for idx in range(len(app_state.tecs)):
                 try:
-                    tec.set_setpoint(recipe.tec.setpoint_c)
+                    hw_service.tec_set_target(idx, recipe.tec.setpoint_c)
                 except Exception as e:
                     log.warning("Recipe: TEC setpoint failed: %s", e)
 
@@ -967,10 +874,8 @@ class MainWindow(QMainWindow):
 
         # 2. Push camera settings
         try:
-            cam = app_state.cam
-            if cam:
-                cam.set_exposure(profile.exposure_us)
-                cam.set_gain(profile.gain_db)
+            hw_service.cam_set_exposure(profile.exposure_us)
+            hw_service.cam_set_gain(profile.gain_db)
             self._camera_tab.set_exposure(profile.exposure_us)
             self._camera_tab.set_gain(profile.gain_db)
         except Exception as _e:
