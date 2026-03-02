@@ -30,6 +30,8 @@ import numpy as np
 from dataclasses import dataclass, field, asdict
 from typing import Optional
 
+from acquisition.schema_migrations import CURRENT_SCHEMA, migrate
+
 
 @dataclass
 class SessionMeta:
@@ -84,10 +86,14 @@ class SessionMeta:
     def to_dict(self) -> dict:
         d = asdict(self)
         d.pop("path", None)
+        d["schema_version"] = CURRENT_SCHEMA
         return d
 
     @staticmethod
     def from_dict(d: dict, path: str = "") -> "SessionMeta":
+        version = d.get("schema_version", 0)
+        if version < CURRENT_SCHEMA:
+            d = migrate(d, from_version=version)
         m = SessionMeta(path=path)
         for k, v in d.items():
             if hasattr(m, k):
