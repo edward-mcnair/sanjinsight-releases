@@ -85,9 +85,10 @@ hidden_imports = [
 
 # ── Data files (non-Python assets bundled alongside the exe) ─────────────────
 datas = [
-    # SVG logo
+    # SVG logos
     (os.path.join(PROJECT_DIR, 'assets', 'microsanj-logo.svg'),        'assets'),
     (os.path.join(PROJECT_DIR, 'assets', 'microsanj-logo-print.svg'),  'assets'),
+    (os.path.join(PROJECT_DIR, 'assets', 'microsanj-bug.svg'),         'assets'),
 
     # Default config — user can edit this after installation
     (os.path.join(PROJECT_DIR, 'config.yaml'), '.'),

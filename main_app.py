@@ -602,6 +602,22 @@ class MainWindow(QMainWindow):
         self._ai_panel.close_requested.connect(self._toggle_ai_panel)
         self._ai_panel.clear_requested.connect(self._ai_service.clear_history)
 
+        # Settings tab → AI service (enable / disable)
+        self._settings_tab.ai_enable_requested.connect(self._on_ai_enable)
+        self._settings_tab.ai_disable_requested.connect(
+            self._ai_service.disable)
+
+        # Settings tab ↔ model downloader (download, cancel, progress)
+        self._settings_tab.download_model_requested.connect(
+            self._on_download_model_requested)
+        self._settings_tab.download_cancel_requested.connect(
+            self._model_downloader.cancel)
+        self._model_downloader.progress.connect(
+            self._settings_tab.set_download_progress)
+        self._model_downloader.complete.connect(self._on_download_complete)
+        self._model_downloader.failed.connect(
+            self._settings_tab.set_download_failed)
+
         # Sidebar tab changes → AI context
         self._nav.panel_changed.connect(
             lambda p: self._ai_service.set_active_tab(type(p).__name__))

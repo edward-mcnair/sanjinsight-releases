@@ -314,10 +314,25 @@ class SettingsTab(QWidget):
         pf_lay.setContentsMargins(10, 8, 10, 8)
         pf_lay.setSpacing(10)
 
-        lock_lbl = QLabel("🔒")
-        lock_lbl.setStyleSheet("font-size:16pt; border:none;")
-        lock_lbl.setFixedWidth(28)
-        pf_lay.addWidget(lock_lbl)
+        import os as _os
+        _bug_svg = _os.path.join(
+            _os.path.dirname(__file__), "..", "assets", "microsanj-bug.svg")
+        _bug_loaded = False
+        if _os.path.exists(_bug_svg):
+            try:
+                from PyQt5.QtSvg import QSvgWidget
+                _bug_w = QSvgWidget(_bug_svg)
+                _bug_w.setFixedSize(40, 40)
+                _bug_w.setStyleSheet("background:transparent; border:none;")
+                pf_lay.addWidget(_bug_w)
+                _bug_loaded = True
+            except Exception:
+                pass
+        if not _bug_loaded:
+            lock_lbl = QLabel("🔒")
+            lock_lbl.setStyleSheet("font-size:16pt; border:none;")
+            lock_lbl.setFixedWidth(28)
+            pf_lay.addWidget(lock_lbl)
 
         privacy_text = QLabel(
             "<b>Privacy guarantee:</b> the AI assistant runs 100% locally on "
