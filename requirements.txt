@@ -22,6 +22,23 @@ Pillow>=9.0.0                 # PIL — image thumbnail generation in session sa
 # ── Configuration ─────────────────────────────────────────────────────────────
 PyYAML>=6.0
 
+# ── AI inference (install the variant that matches your hardware) ─────────────
+# llama-cpp-python powers the local AI assistant.  Install ONE variant:
+#
+#   CPU only (works everywhere, slowest):
+#     pip install llama-cpp-python
+#
+#   Apple Silicon (Metal GPU acceleration):
+#     CMAKE_ARGS="-DLLAMA_METAL=on" pip install llama-cpp-python --force-reinstall --no-cache-dir
+#
+#   NVIDIA GPU (CUDA acceleration):
+#     CMAKE_ARGS="-DLLAMA_CUDA=on" pip install llama-cpp-python --force-reinstall --no-cache-dir
+#
+# The application runs without llama-cpp-python; the AI assistant will be
+# disabled until the package is installed and a model file is downloaded.
+#
+# llama-cpp-python>=0.2.0
+
 # ── Hardware (install only what applies to your system) ───────────────────────
 # Basler camera (pypylon driver):
 #   pip install pypylon
