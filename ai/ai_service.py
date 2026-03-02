@@ -151,8 +151,10 @@ class AIService(QObject):
         """
         if self._status != "ready":
             return
-        sp = self._active_system_prompt()
-        self._run(tmpl.session_report(result_data, self._ctx.build(), sp))
+        sp         = self._active_system_prompt()
+        manual_ctx = manual_rag.retrieve(
+            "acquisition quality SNR dark pixels exposure gain result analysis")
+        self._run(tmpl.session_report(result_data, self._ctx.build(), sp, manual_ctx))
 
     # ------------------------------------------------------------------ #
     #  Persona helpers                                                     #

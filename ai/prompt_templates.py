@@ -227,6 +227,7 @@ def session_report(
     result_data: dict,
     context_json: str,
     system_prompt: str = SYSTEM_PROMPT,
+    manual_context: str = "",
 ) -> list[dict]:
     """
     Ask the model to generate a one-paragraph post-acquisition quality report.
@@ -243,6 +244,10 @@ def session_report(
       snr_db          float ΔR/R signal-to-noise ratio in dB (None if unavailable)
       dark_pixel_pct  float percentage of dark/masked pixels
       complete        bool  whether ΔR/R computation succeeded
+
+    manual_context : str
+        Optional User Manual snippet retrieved by manual_rag for acquisition
+        quality topics (SNR, dark pixels, exposure, calibration).
 
     Returns a messages list ready for create_chat_completion().
     """
@@ -273,6 +278,11 @@ def session_report(
     if dark_pct is not None: metrics.append(f"Dark pixels: {dark_pct:.1f}%")
     metrics.append(f"Status: {'Complete' if complete else 'Incomplete'}")
 
+    extra = (
+        f"\n\nRelevant User Manual sections:\n{manual_context}"
+        if manual_context else ""
+    )
+
     content = (
         f"Instrument state: {context_json}\n\n"
         f"Acquisition just completed. Pre-acquisition grade: {grade}.\n"
@@ -282,6 +292,7 @@ def session_report(
         "Comment on SNR, dark pixel fraction, and any pre-existing issues that "
         "may have affected the result. Suggest one concrete improvement for the "
         "next acquisition if warranted. Plain text only."
+        + extra
     )
 
     return [

@@ -243,3 +243,19 @@ class TestTemplateRagIntegration:
         """The out-of-scope instruction must mention 'selected sections' (v1.1.0+)."""
         from ai.prompt_templates import SYSTEM_PROMPT
         assert "selected sections" in SYSTEM_PROMPT
+
+    def test_session_report_no_manual_context(self):
+        """session_report without manual_context must not include the Manual header."""
+        from ai.prompt_templates import session_report
+        msgs = session_report({}, self._ctx())
+        user_content = msgs[-1]["content"]
+        assert "Relevant User Manual sections" not in user_content
+
+    def test_session_report_with_manual_context(self):
+        """session_report with manual_context must inject the manual snippet."""
+        from ai.prompt_templates import session_report
+        snippet = "## Acquisition Quality\nSNR above 20 dB indicates good signal."
+        msgs = session_report({}, self._ctx(), manual_context=snippet)
+        user_content = msgs[-1]["content"]
+        assert "Relevant User Manual sections" in user_content
+        assert snippet in user_content
