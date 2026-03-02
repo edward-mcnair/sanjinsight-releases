@@ -54,17 +54,20 @@ DEFAULT_N_CTX: int = 4_096
 
 # Guides the model to return a canned response for out-of-scope questions.
 _OUT_OF_SCOPE_INSTRUCTION: str = (
-    "Your documentation knowledge is limited to the Quickstart Guide above "
-    "and the live instrument state provided with each query. "
-    "If a user asks about something not covered in the Quickstart Guide "
+    "Your documentation knowledge comes from: the Quickstart Guide above, "
+    "any relevant User Manual sections provided with a question, "
+    "and the live instrument state. "
+    "If a user asks about something covered in neither the Quickstart Guide "
+    "nor the provided manual sections "
     "(such as detailed calibration math, configuration file syntax, advanced "
-    "scan settings, or hardware specifications), respond with exactly: "
-    "\"Due to my current token limit, I can only access the Quickstart Guide. "
-    "In future updates, with more CPU or GPU allotments, I will have access to "
-    "the full manual. You can find the User Manual here: "
+    "scan settings, or hardware specifications not listed above), "
+    "respond with exactly: "
+    "\"Due to my current token limit, I can only access selected sections of "
+    "the documentation. "
+    "You can find the complete User Manual here: "
     f"{USER_MANUAL_URL}\" "
     "Do not attempt to guess or infer information not present in the "
-    "Quickstart Guide."
+    "documentation provided."
 )
 
 
@@ -121,11 +124,22 @@ def explain_tab(
     tab_name: str,
     context_json: str,
     system_prompt: str = SYSTEM_PROMPT,
+    manual_context: str = "",
 ) -> list[dict]:
     """
     Ask the model to explain the active tab and what the user should do next.
+
+    Parameters
+    ----------
+    manual_context : str
+        Optional User Manual snippet retrieved by manual_rag for this tab.
+
     Returns a messages list ready for create_chat_completion().
     """
+    extra = (
+        f"\n\nRelevant User Manual sections:\n{manual_context}"
+        if manual_context else ""
+    )
     return [
         {"role": "system", "content": system_prompt},
         {
@@ -135,6 +149,7 @@ def explain_tab(
                 f"I am looking at the '{tab_name}' tab. "
                 "In 2-3 sentences, explain what this tab does and what I should "
                 "check or adjust given the current instrument state."
+                + extra
             ),
         },
     ]
@@ -143,11 +158,22 @@ def explain_tab(
 def diagnose(
     context_json: str,
     system_prompt: str = SYSTEM_PROMPT,
+    manual_context: str = "",
 ) -> list[dict]:
     """
     Ask the model to review current issues and suggest fixes.
+
+    Parameters
+    ----------
+    manual_context : str
+        Optional User Manual snippet retrieved by manual_rag for the active tab.
+
     Returns a messages list.
     """
+    extra = (
+        f"\n\nRelevant User Manual sections:\n{manual_context}"
+        if manual_context else ""
+    )
     return [
         {"role": "system", "content": system_prompt},
         {
@@ -157,6 +183,7 @@ def diagnose(
                 "Review the instrument state above. List any problems you see and, "
                 "for each, suggest one concrete fix. Be specific about settings or "
                 "actions. If everything looks good, say so briefly."
+                + extra
             ),
         },
     ]

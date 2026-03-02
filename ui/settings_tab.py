@@ -594,14 +594,29 @@ class SettingsTab(QWidget):
         scope_lbl.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
         lay.addWidget(scope_lbl)
 
+        from version import DOCS_URL
+        from ai.manual_rag import _load_sections
+
         qs_always_lbl = QLabel(
             "✓  Quickstart Guide — always included in every AI response.")
         qs_always_lbl.setStyleSheet(f"font-size:11pt; color:{_GREEN};")
         lay.addWidget(qs_always_lbl)
 
+        n_manual_sections = len(_load_sections())
+        if n_manual_sections:
+            rag_lbl = QLabel(
+                f"✓  User Manual — {n_manual_sections} sections indexed for "
+                "context-aware answers.")
+        else:
+            rag_lbl = QLabel(
+                "⚠  User Manual not found — docs/ directory missing or not bundled.")
+        rag_lbl.setStyleSheet(
+            f"font-size:11pt; color:{_GREEN if n_manual_sections else _AMBER};")
+        lay.addWidget(rag_lbl)
+
         qs_note_lbl = QLabel(
             "Out-of-scope questions receive a link to the full User Manual at "
-            + "https://docs.microsanj.com/sanjinsight")
+            + DOCS_URL)
         qs_note_lbl.setWordWrap(True)
         qs_note_lbl.setStyleSheet(f"font-size:10pt; color:{_MUTED};")
         lay.addWidget(qs_note_lbl)
@@ -731,59 +746,6 @@ class SettingsTab(QWidget):
         if hasattr(self, "_ai_persona_desc_lbl"):
             self._ai_persona_desc_lbl.setText(PERSONAS[pid].description)
 
-    def _update_manual_checkbox_state(self) -> None:
-        """
-        Enable the 'Include Full User Manual' checkbox only when the AI is on
-        and at least USER_MANUAL_MIN_GPU_LAYERS layers are offloaded to GPU.
-
-        Below the threshold the 32K KV-cache would exhaust VRAM on typical
-        lab GPUs.  When disabled the preference is cleared so the AI service
-        does not load a 32K context unexpectedly.
-        """
-        if not hasattr(self, "_ai_include_manual_chk"):
-            return
-        from ai.prompt_templates import USER_MANUAL_MIN_GPU_LAYERS
-        ai_on   = self._ai_enable_chk.isChecked()
-        gpu_val = self._ai_gpu_slider.value() \
-                  if hasattr(self, "_ai_gpu_slider") else 0
-        can_use = ai_on and gpu_val >= USER_MANUAL_MIN_GPU_LAYERS
-
-        self._ai_include_manual_chk.setEnabled(can_use)
-        if hasattr(self, "_ai_include_manual_note"):
-            self._ai_include_manual_note.setEnabled(can_use)
-
-        if not can_use:
-            # Clear both the checkbox and the saved preference so the AI
-            # service does not load a 32K context unexpectedly.
-            self._ai_include_manual_chk.blockSignals(True)
-            self._ai_include_manual_chk.setChecked(False)
-            self._ai_include_manual_chk.blockSignals(False)
-            cfg_mod.set_pref("ai.include_manual", False)
-
-            if ai_on and gpu_val < USER_MANUAL_MIN_GPU_LAYERS:
-                tip = (
-                    f"Move the GPU slider to ≥ {USER_MANUAL_MIN_GPU_LAYERS} layers "
-                    "to unlock the Full User Manual option.")
-            else:
-                tip = "Enable the AI Assistant to use this option."
-            self._ai_include_manual_chk.setToolTip(tip)
-        else:
-            self._ai_include_manual_chk.setToolTip(
-                "When checked, the model reloads with a 32K context window and "
-                "the full User Manual is embedded in every query.  "
-                "Allows detailed technical answers beyond the Quickstart Guide.")
-
-    def _on_manual_chk_changed(self, checked: bool) -> None:
-        """Persist the 'Include Full User Manual' preference and reload model."""
-        cfg_mod.set_pref("ai.include_manual", checked)
-        # Reload the model so n_ctx takes effect immediately
-        model_path = cfg_mod.get_pref("ai.model_path", "")
-        if model_path and self._ai_enable_chk.isChecked():
-            self.ai_enable_requested.emit(
-                model_path,
-                cfg_mod.get_pref("ai.n_gpu_layers", 0),
-            )
-
     def _on_model_combo_changed(self, idx: int) -> None:
         """Update description label and slider range when user changes model selection."""
         from ai.model_catalog import MODEL_CATALOG
@@ -830,7 +792,6 @@ class SettingsTab(QWidget):
         self._ai_gpu_label.setText(text)
         self._ai_gpu_label.setStyleSheet(f"font-size:11pt; color:{color};")
         cfg_mod.set_pref("ai.n_gpu_layers", val)
-        self._update_manual_checkbox_state()
 
     def _on_download_clicked(self) -> None:
         from ai.model_downloader import DEFAULT_MODELS_DIR
@@ -914,8 +875,6 @@ class SettingsTab(QWidget):
             self._ai_apply_btn.setEnabled(enabled)
         for btn in getattr(self, "_ai_persona_btns", {}).values():
             btn.setEnabled(enabled)
-        # Manual checkbox has its own threshold logic on top of ai_enabled
-        self._update_manual_checkbox_state()
 
     def _open_about(self):
         from ui.update_dialog import AboutDialog

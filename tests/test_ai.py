@@ -179,3 +179,67 @@ class TestManualRag:
             assert len(words) <= _MAX_WORDS_PER_SECTION + 2, (
                 f"Section body exceeds word limit: {len(words)} words"
             )
+
+
+# ================================================================== #
+#  3. Template RAG integration                                         #
+# ================================================================== #
+
+class TestTemplateRagIntegration:
+    """Verify that manual_context is injected correctly into all three templates."""
+
+    def _ctx(self) -> str:
+        return '{"camera": {"connected": true}}'
+
+    def test_free_ask_no_manual_context(self):
+        """free_ask without manual_context must not include the Manual header."""
+        from ai.prompt_templates import free_ask
+        msgs = free_ask("What is the exposure?", self._ctx())
+        user_content = msgs[-1]["content"]
+        assert "Relevant User Manual sections" not in user_content
+
+    def test_free_ask_with_manual_context(self):
+        """free_ask with manual_context must inject the manual snippet."""
+        from ai.prompt_templates import free_ask
+        snippet = "## Camera\nThe camera tab controls exposure and gain."
+        msgs = free_ask("What is the exposure?", self._ctx(), manual_context=snippet)
+        user_content = msgs[-1]["content"]
+        assert "Relevant User Manual sections" in user_content
+        assert snippet in user_content
+
+    def test_explain_tab_no_manual_context(self):
+        """explain_tab without manual_context must not include the Manual header."""
+        from ai.prompt_templates import explain_tab
+        msgs = explain_tab("Camera", self._ctx())
+        user_content = msgs[-1]["content"]
+        assert "Relevant User Manual sections" not in user_content
+
+    def test_explain_tab_with_manual_context(self):
+        """explain_tab with manual_context must inject the manual snippet."""
+        from ai.prompt_templates import explain_tab
+        snippet = "## Camera\nThe camera tab controls exposure and gain."
+        msgs = explain_tab("Camera", self._ctx(), manual_context=snippet)
+        user_content = msgs[-1]["content"]
+        assert "Relevant User Manual sections" in user_content
+        assert snippet in user_content
+
+    def test_diagnose_no_manual_context(self):
+        """diagnose without manual_context must not include the Manual header."""
+        from ai.prompt_templates import diagnose
+        msgs = diagnose(self._ctx())
+        user_content = msgs[-1]["content"]
+        assert "Relevant User Manual sections" not in user_content
+
+    def test_diagnose_with_manual_context(self):
+        """diagnose with manual_context must inject the manual snippet."""
+        from ai.prompt_templates import diagnose
+        snippet = "## Troubleshooting\nCheck connections if status dot is red."
+        msgs = diagnose(self._ctx(), manual_context=snippet)
+        user_content = msgs[-1]["content"]
+        assert "Relevant User Manual sections" in user_content
+        assert snippet in user_content
+
+    def test_out_of_scope_instruction_updated(self):
+        """The out-of-scope instruction must mention 'selected sections' (v1.1.0+)."""
+        from ai.prompt_templates import SYSTEM_PROMPT
+        assert "selected sections" in SYSTEM_PROMPT

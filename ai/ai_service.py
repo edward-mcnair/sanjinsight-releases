@@ -122,13 +122,18 @@ class AIService(QObject):
 
     def explain_tab(self) -> None:
         """Ask the AI to explain the current active tab."""
-        sp = self._active_system_prompt()
-        self._run(tmpl.explain_tab(self._ctx._active_tab, self._ctx.build(), sp))
+        tab        = self._ctx._active_tab
+        sp         = self._active_system_prompt()
+        manual_ctx = manual_rag.retrieve(f"{tab} panel settings controls")
+        self._run(tmpl.explain_tab(tab, self._ctx.build(), sp, manual_ctx))
 
     def diagnose(self) -> None:
         """Ask the AI to diagnose the current instrument state."""
-        sp = self._active_system_prompt()
-        self._run(tmpl.diagnose(self._ctx.build(), sp))
+        tab        = self._ctx._active_tab
+        sp         = self._active_system_prompt()
+        manual_ctx = manual_rag.retrieve(
+            f"{tab} troubleshooting problems issues fixes")
+        self._run(tmpl.diagnose(self._ctx.build(), sp, manual_ctx))
 
     def ask(self, question: str) -> None:
         """Send a free-form question with instrument context and manual RAG."""
