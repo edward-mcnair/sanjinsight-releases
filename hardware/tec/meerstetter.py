@@ -17,6 +17,8 @@ from hardware.port_lock import PortLock
 
 log = logging.getLogger(__name__)
 
+log = logging.getLogger(__name__)
+
 
 class MeerstetterDriver(TecDriver):
 

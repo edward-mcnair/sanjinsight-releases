@@ -20,6 +20,8 @@ from hardware.port_lock import PortLock, exclusive_serial_kwargs
 
 log = logging.getLogger(__name__)
 
+log = logging.getLogger(__name__)
+
 
 class AtecDriver(TecDriver):
     """

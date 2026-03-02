@@ -9,6 +9,8 @@ Tabs: Acquire | Camera | Temperature | Log
 Run:  python3 main_app.py
 """
 
+from __future__ import annotations
+
 import sys
 import os
 import time
