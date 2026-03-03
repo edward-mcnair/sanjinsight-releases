@@ -27,8 +27,33 @@ Layout
 """
 
 from __future__ import annotations
+import re
+import sys
 import threading
 from typing import Optional, Dict
+
+
+def _pt(css: str) -> str:
+    """Scale explicit pt font-size values upward for Windows.
+
+    Device Manager stylesheets use compact pt values (7–11 pt) designed
+    for macOS.  On macOS Qt renders 1 pt ≈ 1 px (72 DPI baseline).
+    On Windows 96 DPI, 1 pt = 96/72 ≈ 1.33 px — fonts are already
+    slightly larger — but the dialog was designed with very small text
+    that still looks too small on typical Windows/Parallels setups.
+
+    Multiply all pt values by 4/3 to bring them into a comfortably
+    readable range on Windows while keeping macOS unaffected.
+
+    Contrast with main_app.py's STYLE scaling which goes ×3/4 (DOWN) for
+    large body-text values that otherwise appear too big on Windows.
+    """
+    if sys.platform != 'win32':
+        return css
+    return re.sub(
+        r'font-size:([\d.]+)pt',
+        lambda m: f"font-size:{round(float(m.group(1)) * 4 / 3)}pt",
+        css)
 
 from PyQt5.QtWidgets import (
     QDialog, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
@@ -88,21 +113,24 @@ class _DeviceRow(QWidget):
         lay.setSpacing(8)
 
         self._dot = QLabel("●")
-        self._dot.setFixedWidth(12)
+        # On Windows, the ● glyph is rendered larger (96 DPI), so reserve
+        # extra width to prevent clipping after _pt() font scaling.
+        self._dot.setFixedWidth(18 if sys.platform == 'win32' else 12)
 
         self._name = QLabel(entry.display_name)
-        self._name.setStyleSheet("font-size:8.5pt;")
+        self._name.setStyleSheet(_pt("font-size:8.5pt;"))
 
         self._addr = QLabel("")
         self._addr.setStyleSheet(
-            "font-family:Menlo,monospace; font-size:7.5pt; color:#444;")
+            _pt("font-family:Menlo,monospace; font-size:7.5pt; color:#555;"))
         self._addr.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
         conn_icon = CONN_ICONS.get(
             entry.descriptor.connection_type, "?")
         icon_lbl = QLabel(conn_icon)
-        icon_lbl.setStyleSheet("font-size:8pt; color:#333;")
-        icon_lbl.setFixedWidth(14)
+        # color:#777 — visible against the dark background (#333 was near-invisible)
+        icon_lbl.setStyleSheet(_pt("font-size:8pt; color:#777;"))
+        icon_lbl.setFixedWidth(18 if sys.platform == 'win32' else 14)
 
         lay.addWidget(self._dot)
         lay.addWidget(icon_lbl)
@@ -114,10 +142,11 @@ class _DeviceRow(QWidget):
 
     def update_entry(self, entry: DeviceEntry):
         self._dot.setStyleSheet(
-            f"color:{entry.status_color}; font-size:8pt;")
+            _pt(f"color:{entry.status_color}; font-size:8pt;"))
         self._name.setStyleSheet(
-            f"font-size:8.5pt; "
-            f"color:{'#ccc' if entry.state != DeviceState.ABSENT else '#444'};")
+            _pt(f"font-size:8.5pt; "
+                f"color:{'#ccc' if entry.state != DeviceState.ABSENT else '#444'};"
+                ))
         addr = entry.address
         if len(addr) > 22:
             addr = "…" + addr[-20:]
@@ -863,12 +892,12 @@ class DeviceManagerDialog(QDialog):
         self.setWindowTitle("Device Manager")
         self.setMinimumSize(920, 580)
         self.resize(1080, 660)
-        self.setStyleSheet("""
+        self.setStyleSheet(_pt("""
             QDialog {
                 background:#111;
             }
             QGroupBox {
-                color:#444; font-size:8pt; letter-spacing:1px;
+                color:#555; font-size:8pt; letter-spacing:1px;
                 border:1px solid #1e1e1e; border-radius:4px;
                 margin-top:10px; padding-top:10px;
             }
@@ -876,7 +905,7 @@ class DeviceManagerDialog(QDialog):
                 subcontrol-origin:margin; left:8px;
                 padding:0 4px;
             }
-            QLabel { color:#888; }
+            QLabel { color:#888; font-size:8pt; }
             QComboBox, QLineEdit, QSpinBox, QDoubleSpinBox {
                 background:#1a1a1a; color:#aaa;
                 border:1px solid #2a2a2a; border-radius:3px;
@@ -901,7 +930,7 @@ class DeviceManagerDialog(QDialog):
             QScrollBar::handle:vertical {
                 background:#2a2a2a; border-radius:3px;
             }
-        """)
+        """))
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)

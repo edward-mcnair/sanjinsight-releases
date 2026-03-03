@@ -8,6 +8,7 @@ StatusHeader — top header bar with logo, mode toggle, device status dots, and 
 from __future__ import annotations
 
 import os
+import sys
 import logging
 
 log = logging.getLogger(__name__)
@@ -15,44 +16,68 @@ log = logging.getLogger(__name__)
 from PyQt5.QtWidgets import (
     QWidget, QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QFrame)
 from PyQt5.QtCore    import Qt, QTimer, pyqtSignal
-from PyQt5.QtGui     import QPainter, QColor, QPen, QFont, QBrush
 
 from ui.theme import FONT, PALETTE
 
 
 class _ModeToggle(QWidget):
     """
-    Compact iOS-style toggle switch with STANDARD / ADVANCED labels.
+    Simple two-button segmented control — Standard / Advanced mode selector.
 
-    Left  (unchecked) = Standard   teal pill
-    Right (checked)   = Advanced   blue pill
+    Clicking STANDARD always activates Standard mode; clicking ADVANCED
+    always activates Advanced mode (not a raw XOR toggle).
 
     Emits toggled(bool) — True means Advanced.
     """
 
     toggled = pyqtSignal(bool)
 
-    _W, _H   = 160, 26          # total widget size
-    _PAD     = 2                 # padding around pill
-    _RADIUS  = 11                # pill corner radius
-
-    _COL_STANDARD = QColor(0,  212, 170)   # teal
-    _COL_ADVANCED = QColor(80, 120, 220)   # blue
-    _COL_TRACK    = QColor(30,  30,  30)
-    _COL_BORDER   = QColor(50,  50,  50)
+    _COL_STD = "#00d4aa"   # teal  — Standard active
+    _COL_ADV = "#5078dc"   # blue  — Advanced active
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._advanced  = False
-        self._anim_pos  = 0.0      # 0.0 = standard, 1.0 = advanced
-        self._timer     = QTimer(self)
-        self._timer.setInterval(12)
-        self._timer.timeout.connect(self._tick)
-        self.setFixedSize(self._W, self._H)
-        self.setCursor(Qt.PointingHandCursor)
+        self._advanced = False
+
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+
+        self._std_btn = QPushButton("STANDARD")
+        self._adv_btn = QPushButton("ADVANCED")
+
+        # Font size: Windows renders pt at 96 DPI vs macOS 72 DPI, so
+        # use a slightly smaller point value to keep the buttons compact.
+        _fp = 8 if sys.platform == 'win32' else 10
+
+        _base = (
+            f"font: bold {_fp}pt 'Helvetica Neue', Arial; "
+            "letter-spacing:1px; border:1px solid #333; padding:0 10px;")
+
+        self._std_btn.setStyleSheet(
+            f"QPushButton {{ {_base} border-top-left-radius:6px; "
+            "border-bottom-left-radius:6px; border-right:none; }}")
+        self._adv_btn.setStyleSheet(
+            f"QPushButton {{ {_base} border-top-right-radius:6px; "
+            "border-bottom-right-radius:6px; }}")
+
+        for b in (self._std_btn, self._adv_btn):
+            b.setFixedHeight(26)
+            b.setMinimumWidth(70)
+            b.setCursor(Qt.PointingHandCursor)
+
+        lay.addWidget(self._std_btn)
+        lay.addWidget(self._adv_btn)
+
+        self._std_btn.clicked.connect(lambda: self.set_checked(False))
+        self._adv_btn.clicked.connect(lambda: self.set_checked(True))
+
+        self.setFixedHeight(26)
         self.setToolTip(
             "Standard: guided 4-step wizard\n"
             "Advanced: full expert tab interface")
+
+        self._refresh_style()
 
     # ---------------------------------------------------------------- #
     #  Public API                                                       #
@@ -65,84 +90,36 @@ class _ModeToggle(QWidget):
         if advanced == self._advanced:
             return
         self._advanced = advanced
-        self._timer.start()
+        self._refresh_style()
         if emit:
             self.toggled.emit(advanced)
 
     # ---------------------------------------------------------------- #
-    #  Animation                                                        #
+    #  Internal                                                         #
     # ---------------------------------------------------------------- #
 
-    def _tick(self):
-        target = 1.0 if self._advanced else 0.0
-        step   = 0.12
-        if abs(self._anim_pos - target) < step:
-            self._anim_pos = target
-            self._timer.stop()
-        else:
-            self._anim_pos += step if target > self._anim_pos else -step
-        self.update()
+    def _refresh_style(self):
+        """Update button colours to reflect the current active mode."""
+        std_active = not self._advanced
+        adv_active = self._advanced
 
-    # ---------------------------------------------------------------- #
-    #  Painting                                                         #
-    # ---------------------------------------------------------------- #
+        std_bg  = self._COL_STD if std_active else "#1e1e1e"
+        std_col = "white"       if std_active else "rgba(255,255,255,100)"
+        adv_bg  = self._COL_ADV if adv_active else "#1e1e1e"
+        adv_col = "white"       if adv_active else "rgba(255,255,255,100)"
 
-    def paintEvent(self, _):
-        p  = QPainter(self)
-        p.setRenderHint(QPainter.Antialiasing)
+        _fp = 8 if sys.platform == 'win32' else 10
+        _base = (
+            f"font: bold {_fp}pt 'Helvetica Neue', Arial; "
+            "letter-spacing:1px; border:1px solid #333; padding:0 10px;")
 
-        W, H   = self._W, self._H
-        pad    = self._PAD
-        r      = self._RADIUS
-
-        # Track
-        p.setPen(QPen(self._COL_BORDER, 1))
-        p.setBrush(self._COL_TRACK)
-        p.drawRoundedRect(0, 0, W, H, r + pad, r + pad)
-
-        # Interpolate pill colour
-        t   = self._anim_pos
-        sc  = self._COL_STANDARD
-        ac  = self._COL_ADVANCED
-        col = QColor(
-            int(sc.red()   + (ac.red()   - sc.red())   * t),
-            int(sc.green() + (ac.green() - sc.green()) * t),
-            int(sc.blue()  + (ac.blue()  - sc.blue())  * t))
-
-        # Pill position — travels from left half to right half
-        half      = W // 2
-        pill_x    = pad + int((half - pad) * t)
-        pill_w    = half - pad
-        pill_rect = (pill_x, pad, pill_w, H - pad * 2)
-
-        p.setPen(Qt.NoPen)
-        p.setBrush(col)
-        p.drawRoundedRect(*pill_rect, r, r)
-
-        # Labels
-        p.setPen(Qt.NoPen)   # reset
-        font = QFont("Helvetica", 11, QFont.Bold)
-        p.setFont(font)
-
-        # STANDARD label (left half)
-        std_active = t < 0.5
-        p.setPen(QColor(255, 255, 255, 220 if std_active else 60))
-        p.drawText(0, 0, half, H, Qt.AlignCenter, "STANDARD")
-
-        # ADVANCED label (right half)
-        adv_active = t >= 0.5
-        p.setPen(QColor(255, 255, 255, 220 if adv_active else 60))
-        p.drawText(half, 0, half, H, Qt.AlignCenter, "ADVANCED")
-
-        p.end()
-
-    # ---------------------------------------------------------------- #
-    #  Interaction                                                      #
-    # ---------------------------------------------------------------- #
-
-    def mousePressEvent(self, e):
-        if e.button() == Qt.LeftButton:
-            self.set_checked(not self._advanced)
+        self._std_btn.setStyleSheet(
+            f"QPushButton {{ {_base} background:{std_bg}; color:{std_col}; "
+            "border-top-left-radius:6px; border-bottom-left-radius:6px; "
+            "border-right:none; }}")
+        self._adv_btn.setStyleSheet(
+            f"QPushButton {{ {_base} background:{adv_bg}; color:{adv_col}; "
+            "border-top-right-radius:6px; border-bottom-right-radius:6px; }}")
 
 
 class StatusHeader(QWidget):
