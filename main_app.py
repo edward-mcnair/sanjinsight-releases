@@ -1422,9 +1422,13 @@ if __name__ == "__main__":
         lambda key, ok: signals.log_message.emit(
             f"{{'✓' if ok else '✗'}} {key}: {{'connected' if ok else 'connection failed'}}"))
 
-    if not _FORCE_DEMO:
-        # Normal startup — attempt real hardware on background threads
-        hw_service.start()
+    # ── High-DPI support ──────────────────────────────────────────────
+    # MUST be set before QApplication() is created.
+    # Without these, Windows DPI scaling (e.g. 150 % / 200 % on high-DPI
+    # displays such as Parallels on a Retina Mac) is applied on top of Qt's
+    # own rendering, making fonts and UI elements appear 1.5–2× too large.
+    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
+    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps,    True)
 
     app = QApplication(_sys.argv)
     app.setStyle("Fusion")
@@ -1514,7 +1518,24 @@ if __name__ == "__main__":
 
             _startup_dlg.demo_requested.connect(_on_demo_requested)
             _startup_dlg.show()
+
+            # Start hardware AFTER the dialog is fully connected.
+            # If start() were called earlier (before the signal connection above),
+            # fast-connecting devices — especially the simulated camera — emit
+            # startup_status before the slot exists and the dialog never receives
+            # the notification, leaving it open indefinitely.
+            hw_service.start()
+
+            # Safety net: close after 30 s even if a device never reports back
+            # (e.g. auto-reconnect loop keeps a device perpetually "connecting").
+            QTimer.singleShot(
+                30_000,
+                lambda: _startup_dlg.accept() if _startup_dlg.isVisible() else None)
+
         else:
+            # No devices configured — start camera thread anyway (simulated
+            # fallback) and show the "no hardware" advisory toast.
+            hw_service.start()
             def _offer_demo():
                 window._toasts._show(
                     title="No Hardware Configured",
