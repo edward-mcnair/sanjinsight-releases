@@ -1466,11 +1466,25 @@ if __name__ == "__main__":
     app.setStyleSheet(STYLE)
 
     _assets = os.path.join(os.path.dirname(__file__), "assets")
-    # Prefer .icns on macOS (multi-resolution bundle icon); fall back to PNG
-    _icon_path = os.path.join(_assets, "app-icon.icns")
-    if not os.path.exists(_icon_path):
-        _icon_path = os.path.join(_assets, "app-icon.png")
-    if os.path.exists(_icon_path):
+    # Pick the best icon format for each platform.
+    # PyQt5 on Windows cannot render .icns (macOS-only format) — it silently
+    # returns an empty icon, which Qt then fills with the Fusion style's
+    # highlight colour (a solid green square).  Prefer .ico on Windows and
+    # .icns on macOS; fall back to .png on any platform if the preferred file
+    # is missing.
+    if _sys.platform == "win32":
+        _candidates = ["app-icon.ico", "app-icon.png"]
+    elif _sys.platform == "darwin":
+        _candidates = ["app-icon.icns", "app-icon.png"]
+    else:
+        _candidates = ["app-icon.png"]
+    _icon_path = None
+    for _c in _candidates:
+        _p = os.path.join(_assets, _c)
+        if os.path.exists(_p):
+            _icon_path = _p
+            break
+    if _icon_path:
         app.setWindowIcon(QIcon(_icon_path))
 
     # Register QTextCursor with Qt's meta-type system so it can be safely
@@ -1497,7 +1511,7 @@ if __name__ == "__main__":
             log.warning(f"First-run wizard error (non-fatal): {_fre}")
 
     window = MainWindow()
-    if os.path.exists(_icon_path):
+    if _icon_path:
         window.setWindowIcon(QIcon(_icon_path))   # title-bar / taskbar icon
 
     # ── Demo mode: activate immediately, skip the startup dialog ──────
