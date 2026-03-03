@@ -476,14 +476,14 @@ class _DeviceProfilePanel(QWidget):
         # ---- Connection parameters (editable) ----
         self._build_params(entry)
 
-        # ---- Action buttons ----
-        self._build_actions(entry)
-
         # ---- Datasheet link ----
+        # Placed before action buttons so the 📄 emoji (which renders
+        # as a white document icon) is clearly grouped with the info
+        # section, not floating below Connect/Disconnect.
         if desc.datasheet_url:
             ds = QLabel(
-                f'<a href="{desc.datasheet_url}" style="color:#00d4aa44;">'
-                f'📄  Datasheet / Documentation</a>')
+                f'<a href="{desc.datasheet_url}" style="color:#00d4aa66;">'
+                f'Datasheet / Documentation</a>')
             ds.setOpenExternalLinks(True)
             ds.setStyleSheet("font-size:8pt;")
             self._body_layout.addWidget(ds)
@@ -493,6 +493,9 @@ class _DeviceProfilePanel(QWidget):
             notes.setWordWrap(True)
             notes.setStyleSheet("font-size:8pt; color:#444; font-style:italic;")
             self._body_layout.addWidget(notes)
+
+        # ---- Action buttons ----
+        self._build_actions(entry)
 
         self._body_layout.addStretch()
 

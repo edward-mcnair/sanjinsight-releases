@@ -46,7 +46,12 @@ class TempPlot(QWidget):
     def paintEvent(self, e):
         p = QPainter(self)
         W, H = self.width(), self.height()
-        pad  = 36
+        # Keep pad proportional so the inner chart area never collapses.
+        # At the minimum height (80 px) a fixed pad=36 leaves only 8 px of
+        # drawable space — enough to compress both limit lines and labels
+        # into the same pixel row.  Capping at H//3 ensures there is always
+        # at least H//3 pixels of inner area on each side.
+        pad  = min(36, H // 3)
         p.fillRect(0, 0, W, H, QColor(13, 13, 13))
 
         vals = [v for v in list(self._actual)+list(self._target) if v is not None]
@@ -95,8 +100,14 @@ class TempPlot(QWidget):
                     p.drawLine(pad, y, W-pad, y)
                     p.setFont(QFont("Menlo", 10))
                     p.setPen(QPen(QColor(255, 100, 100), 1))
-                    label = f"{'min' if warn_offset > 0 else 'max'} {limit:.0f}°"
-                    p.drawText(pad+2, y-2, label)
+                    is_min = warn_offset > 0
+                    label  = f"{'min' if is_min else 'max'} {limit:.0f}°"
+                    # Draw min label BELOW its line, max label ABOVE its line.
+                    # This keeps both labels away from the centre of the chart
+                    # and prevents them collapsing together when the widget is
+                    # near its minimum height.
+                    label_y = (y + 12) if is_min else (y - 2)
+                    p.drawText(pad + 2, label_y, label)
 
                 # Warning zone — dashed amber
                 warn_limit = limit + warn_offset
@@ -117,13 +128,14 @@ class TempPlot(QWidget):
                 if prev: p.drawLine(prev[0], prev[1], x, y)
                 prev = (x, y)
 
-        # Legend
+        # Legend — 16 px row height so the text (≈13 px tall) never
+        # overlaps the line below it (was 12 px, causing visual bleed).
         p.setPen(QPen(QColor(0,212,170), 1))
         p.drawLine(W-110, 10, W-95, 10)
         p.setPen(QPen(QColor(100,100,100), 1))
         p.drawText(W-90, 14, "actual")
         p.setPen(QPen(QColor(255,170,68), 1))
-        p.drawLine(W-110, 22, W-95, 22)
+        p.drawLine(W-110, 26, W-95, 26)
         p.setPen(QPen(QColor(100,100,100), 1))
-        p.drawText(W-90, 26, "target")
+        p.drawText(W-90, 30, "target")
         p.end()

@@ -43,7 +43,10 @@ class WizardStepBar(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.setFixedHeight(44)
+        # 44 px was too short: circles reach y=30 and labels run y=34–50,
+        # so the bottom 6 px of every step label was clipped.  60 px gives
+        # 4 px of breathing room below the label baseline.
+        self.setFixedHeight(60)
         self._current = 0
 
     def set_step(self, index: int):
