@@ -247,7 +247,7 @@ QMenu::separator { height: 1px; background: #333; margin: 4px 0; }
 # This leaves the app stylesheet matching macOS visual size on Windows.
 # NOTE: do NOT use QT_FONT_DPI — that env var overrides system/default fonts too
 # (e.g. dialogs, Device Manager) which are already correctly DPI-aware.
-if _sys.platform == 'win32':
+if sys.platform == 'win32':
     STYLE = (STYLE
              .replace('font-size:13pt', 'font-size:10pt')
              .replace('font-size:12pt', 'font-size:9pt')
@@ -263,7 +263,7 @@ def _style_pt(macos_pt: int) -> str:
     Example:
         f"QMenuBar {{ font-size: {_style_pt(12)}; }}"
     """
-    if _sys.platform == 'win32':
+    if sys.platform == 'win32':
         return f"{int(round(macos_pt * 0.75))}pt"
     return f"{macos_pt}pt"
 
