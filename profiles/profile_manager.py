@@ -19,7 +19,7 @@ import logging
 from pathlib import Path
 from typing import List, Optional
 
-from .profiles import MaterialProfile, CATEGORY_USER
+from .profiles import MaterialProfile, CATEGORY_USER, BUILTIN_PROFILES
 
 log = logging.getLogger(__name__)
 
@@ -44,18 +44,29 @@ class ProfileManager:
     # ---------------------------------------------------------------- #
 
     def scan(self) -> None:
-        """Re-read all profile JSON files from disk."""
+        """Re-read all profile JSON files from disk and merge with built-ins.
+
+        BUILTIN_PROFILES are always available.  User-created profiles on disk
+        override a built-in with the same uid, so users can customise the
+        default C_T values without losing the entry from the list.
+        """
         self._dir.mkdir(parents=True, exist_ok=True)
-        profiles = []
+        disk_profiles = []
         for path in sorted(self._dir.glob("*.json")):
             try:
-                profiles.append(MaterialProfile.load(path))
+                disk_profiles.append(MaterialProfile.load(path))
             except Exception as e:
                 log.warning("Skipping malformed profile %s: %s", path.name, e)
-        self._profiles = sorted(profiles, key=lambda p: p.name.lower())
+
+        # Merge: start with built-ins, then let disk profiles override by uid.
+        merged: dict = {p.uid: p for p in BUILTIN_PROFILES}
+        for p in disk_profiles:
+            merged[p.uid] = p
+
+        self._profiles = sorted(merged.values(), key=lambda p: p.name.lower())
         self._scanned  = True
-        log.debug("ProfileManager: loaded %d profiles from %s",
-                  len(self._profiles), self._dir)
+        log.debug("ProfileManager: %d built-in + %d disk → %d total profiles",
+                  len(BUILTIN_PROFILES), len(disk_profiles), len(self._profiles))
 
     def all(self) -> List[MaterialProfile]:
         if not self._scanned:

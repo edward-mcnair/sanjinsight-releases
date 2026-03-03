@@ -49,6 +49,18 @@ CATEGORY_ACCENTS: dict = {
     CATEGORY_USER:          "#ff6688",   # pink
 }
 
+# Subtle dark-tinted backgrounds for selected / hovered profile cards.
+# Used by _ProfileCard / _ProfileRow._refresh_style() in wizard.py.
+# Each value is a dark mix of the corresponding CATEGORY_ACCENTS colour
+# blended against the #111 app background (~15 % tint).
+CATEGORY_COLORS: dict = {
+    CATEGORY_SEMICONDUCTOR: "#0d2a22",   # dark teal tint
+    CATEGORY_PCB:           "#0d1a2a",   # dark blue tint
+    CATEGORY_AUTOMOTIVE:    "#2a1e0d",   # dark amber tint
+    CATEGORY_METAL:         "#1a0d2a",   # dark violet tint
+    CATEGORY_USER:          "#2a0d18",   # dark pink tint
+}
+
 
 # ------------------------------------------------------------------ #
 #  MaterialProfile                                                     #

@@ -433,12 +433,24 @@ class Step1Profile(QWidget):
         self._scroll.setWidget(container)
         self._apply_filter()
 
+    # Maps the user-facing chip label to the MaterialProfile.category string.
+    # Kept here so the chip labels in __init__ and this mapping stay in sync.
+    _CHIP_TO_CATEGORY = {
+        "Semiconductor / IC": "Semiconductor",
+        "Electronics / PCB":  "PCB",
+        "Automotive / EV":    "Automotive",
+    }
+
     def _apply_filter(self):
         f = self._active_filter
+        # Resolve friendly chip label → profile category name.
+        cat_filter = self._CHIP_TO_CATEGORY.get(f)  # None = "All"
         for uid, w in self._widgets.items():
             p = self._mgr.get(uid)
-            show = (p is not None) and (
-                f == "All" or f in (p.industry_tags or [p.category]))
+            if p is None:
+                w.setVisible(False)
+                continue
+            show = (cat_filter is None) or (p.category == cat_filter)
             w.setVisible(show)
 
     def _filter(self, f: str):

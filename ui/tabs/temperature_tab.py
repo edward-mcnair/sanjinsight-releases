@@ -169,7 +169,7 @@ class TemperatureTab(QWidget):
         min_spin.setValue(-20.0)
         min_spin.setSingleStep(1.0)
         min_spin.setDecimals(1)
-        min_spin.setFixedWidth(70)
+        min_spin.setFixedWidth(105)  # wide enough for "min -20.0 °C" on Windows
         min_spin.setPrefix("min ")
         min_spin.setSuffix(" °C")
 
@@ -178,7 +178,7 @@ class TemperatureTab(QWidget):
         max_spin.setValue(85.0)
         max_spin.setSingleStep(1.0)
         max_spin.setDecimals(1)
-        max_spin.setFixedWidth(70)
+        max_spin.setFixedWidth(105)  # wide enough for "max 150.0 °C" on Windows
         max_spin.setPrefix("max ")
         max_spin.setSuffix(" °C")
 
@@ -187,7 +187,7 @@ class TemperatureTab(QWidget):
         warn_spin.setValue(5.0)
         warn_spin.setSingleStep(0.5)
         warn_spin.setDecimals(1)
-        warn_spin.setFixedWidth(70)
+        warn_spin.setFixedWidth(105)  # wide enough for "warn ±20.0 °C" on Windows
         warn_spin.setPrefix("warn ±")
         warn_spin.setSuffix(" °C")
 

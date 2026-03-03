@@ -364,10 +364,22 @@ class _DeviceProfilePanel(QWidget):
         self._show_placeholder()
 
     def _clear(self):
-        while self._body_layout.count():
-            item = self._body_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+        # Recursive helper: takeAt() only removes a QLayoutItem from its parent
+        # layout, but widgets inside sub-layouts remain parented to self._body
+        # unless explicitly deleted.  _purge() walks the whole tree so that
+        # QHBoxLayout rows added via addLayout() (e.g. name+badge, action btns)
+        # are fully cleaned up between show_device() calls.
+        def _purge(layout):
+            while layout.count():
+                item = layout.takeAt(0)
+                if item.widget():
+                    item.widget().deleteLater()
+                elif item.layout():
+                    _purge(item.layout())
+                # spacer items have neither widget nor layout; dropping them
+                # from takeAt() is sufficient.
+
+        _purge(self._body_layout)
 
     def _show_placeholder(self):
         self._clear()
