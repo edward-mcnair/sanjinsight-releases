@@ -41,7 +41,7 @@ class SnrBar(QWidget):
     def __init__(self):
         super().__init__()
         self.setFixedWidth(44)
-        self.setMinimumHeight(80)
+        self.setMinimumHeight(140)   # was 80 — 75% taller
         self._value = 0.0
         self._min   = -20.0
         self._max   =  40.0
@@ -95,10 +95,10 @@ class SnrBar(QWidget):
             p.drawText(bar_x + bar_w + 5, ty + 4, str(db))
             p.setPen(QColor(60, 60, 60))
 
-        # Value label
+        # Value label — rect form keeps text inside the widget at all heights
         p.setFont(QFont("Menlo", 11))
         p.setPen(QColor(0, 200, 130) if frac > 0.4 else QColor(200, 80, 40))
-        p.drawText(0, H - 10, W, 12, Qt.AlignCenter,
+        p.drawText(0, H - pad_bot + 4, W, pad_bot - 6, Qt.AlignCenter,
                    f"{self._value:.1f}dB")
         p.end()
 

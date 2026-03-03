@@ -274,7 +274,12 @@ class ScriptingConsoleTab(QWidget):
 
     @staticmethod
     def _mono_font() -> QFont:
-        font = QFont("Menlo")
+        # Menlo is macOS-only; Qt falls back to Courier New on Windows, which
+        # lacks the double-line box-drawing glyphs (╔ ═ ╗ ╚ ╝) used in the
+        # banner.  Consolas is built into Windows since Vista and supports all
+        # of the Unicode box-drawing block.
+        name = "Consolas" if sys.platform == "win32" else "Menlo"
+        font = QFont(name)
         font.setStyleHint(QFont.Monospace)
         font.setPointSize(14)
         return font

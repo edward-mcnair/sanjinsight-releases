@@ -90,8 +90,9 @@ datas = [
     (os.path.join(PROJECT_DIR, 'assets', 'microsanj-logo.svg'),        'assets'),
     (os.path.join(PROJECT_DIR, 'assets', 'microsanj-logo-print.svg'),  'assets'),
     (os.path.join(PROJECT_DIR, 'assets', 'microsanj-bug.svg'),         'assets'),
-    # PNG icon — used as in-app window / taskbar icon (app-icon.icns is macOS-only)
+    # App icons — main_app.py picks the right one per platform at runtime
     (os.path.join(PROJECT_DIR, 'assets', 'app-icon.png'),              'assets'),
+    (os.path.join(PROJECT_DIR, 'assets', 'app-icon.ico'),              'assets'),
 
     # ── Documentation (read at module-import time by ai/prompt_templates.py) ─
     # ai/prompt_templates.py resolves: Path(__file__).parent.parent / "docs"
@@ -180,7 +181,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=os.path.join(SPEC_DIR, 'assets', 'sanjinsight.ico'),  # app icon
+    icon=os.path.join(PROJECT_DIR, 'assets', 'app-icon.ico'),  # app icon (single source of truth)
     version=os.path.join(SPEC_DIR, 'version_info.txt'),         # Windows version metadata
 )
 

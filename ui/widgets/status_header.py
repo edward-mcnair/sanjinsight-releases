@@ -181,26 +181,19 @@ class StatusHeader(QWidget):
 
         lay.addStretch()
 
-        # ---- Active profile indicator ----
+        # ---- Active profile indicator — styled to match the hardware dots ----
         self._profile_pill = QWidget()
         self._profile_pill.setMaximumHeight(36)
         self._profile_pill.setMinimumWidth(60)
         self._profile_pill.setObjectName("profilePill")
-        # Use a scoped selector so the border/background only apply to this
-        # widget and do not propagate into child QLabels.  An unscoped rule
-        # (no type prefix) would give every child label its own rounded box,
-        # creating the "ghost button behind it" double-border effect.
-        self._profile_pill.setStyleSheet(
-            "QWidget#profilePill { background:#1a1a1a; border:1px solid #2a2a2a;"
-            " border-radius:4px; }")
         pp_lay = QHBoxLayout(self._profile_pill)
-        pp_lay.setContentsMargins(10, 0, 10, 0)
-        pp_lay.setSpacing(6)
-        pp_icon = QLabel("◈")
-        pp_icon.setStyleSheet(f"color:#333; font-size:{FONT['label']}pt;")
+        pp_lay.setContentsMargins(8, 0, 8, 0)
+        pp_lay.setSpacing(5)
+        pp_icon = QLabel("●")
+        pp_icon.setStyleSheet(f"color:#555; font-size:{FONT['label']}pt;")
         self._profile_name_lbl = QLabel("No profile")
         self._profile_name_lbl.setStyleSheet(
-            f"font-size:{FONT['label']}pt; color:#666; font-family:Menlo,monospace;")
+            f"font-size:{FONT['label']}pt; color:#888; letter-spacing:1px;")
         pp_lay.addWidget(pp_icon)
         pp_lay.addWidget(self._profile_name_lbl)
         self._profile_pill_icon = pp_icon
@@ -308,21 +301,19 @@ class StatusHeader(QWidget):
         if profile is None:
             self._profile_name_lbl.setText("No profile")
             self._profile_name_lbl.setStyleSheet(
-                f"font-size:{FONT['label']}pt; color:#666; font-family:Menlo,monospace;")
-            self._profile_pill_icon.setStyleSheet(f"color:#333; font-size:{FONT['label']}pt;")
-            self._profile_pill.setStyleSheet(
-                "background:#1a1a1a; border:1px solid #2a2a2a; border-radius:4px;")
+                f"font-size:{FONT['label']}pt; color:#888; letter-spacing:1px;")
+            self._profile_pill_icon.setStyleSheet(
+                f"color:#555; font-size:{FONT['label']}pt;")
+            self._profile_pill.setToolTip("")
         else:
             accent = CATEGORY_ACCENTS.get(profile.category, "#00d4aa")
             # Truncate long names
             name = profile.name if len(profile.name) <= 28 else profile.name[:26] + "…"
             self._profile_name_lbl.setText(name)
             self._profile_name_lbl.setStyleSheet(
-                f"font-size:{FONT['label']}pt; color:{accent}; font-family:Menlo,monospace;")
+                f"font-size:{FONT['label']}pt; color:{accent}; letter-spacing:1px;")
             self._profile_pill_icon.setStyleSheet(
                 f"color:{accent}; font-size:{FONT['label']}pt;")
-            self._profile_pill.setStyleSheet(
-                f"background:#111; border:1px solid {accent}44; border-radius:4px;")
             self._profile_pill.setToolTip(
                 f"{profile.name}\n"
                 f"C_T = {profile.ct_value:.3e} K⁻¹\n"
@@ -369,20 +360,21 @@ class StatusHeader(QWidget):
         self._estop_btn.style().polish(self._estop_btn)
 
     def add_device_manager_button(self, callback):
-        """Add a HW button that opens the Device Manager."""
-        # Use text "HW" (hardware) instead of the ⚙ glyph — the gear
-        # character falls back to a meaningless replacement glyph on some
-        # Windows fonts, and 19 pt in a 30 px button also causes clipping.
-        gear = QPushButton("HW")
+        """Add a gear button that opens the Device Manager."""
+        # Use ⚙️ (U+2699 + U+FE0F variation selector-16) — the emoji form
+        # forces Segoe UI Emoji on Windows, which renders the gear correctly.
+        # Plain ⚙ (U+2699 alone) fell back to a symbol-font glyph that looked
+        # garbled; the full emoji sequence avoids that fallback entirely.
+        gear = QPushButton("⚙️")
         gear.setFixedSize(36, 30)
         gear.setToolTip("Device Manager — manage hardware connections and drivers")
         gear.setStyleSheet("""
             QPushButton {
-                background:#1a1a1a; color:#444;
+                background:#1a1a1a; color:#888;
                 border:1px solid #2a2a2a; border-radius:4px;
-                font-size:10pt; font-weight:600; letter-spacing:1px;
+                font-size:16pt;
             }
-            QPushButton:hover { color:#888; background:#222; }
+            QPushButton:hover { color:#bbb; background:#222; }
         """)
         gear.clicked.connect(callback)
         self.layout().addWidget(gear)

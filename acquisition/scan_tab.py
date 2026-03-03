@@ -355,7 +355,8 @@ class ScanTab(QWidget):
                 border: 1px solid #2a2a2a;
                 border-bottom: none;
                 border-radius: 3px 3px 0 0;
-                padding: 4px 14px;
+                padding: 4px 20px;
+                min-width: 110px;
                 font-size: 12pt;
             }
             QTabBar::tab:selected {
