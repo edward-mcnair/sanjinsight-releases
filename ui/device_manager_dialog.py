@@ -107,6 +107,9 @@ class _DeviceRow(QWidget):
         self._selected = False
         self.setFixedHeight(44)
         self.setCursor(Qt.PointingHandCursor)
+        # Named so _refresh_bg() can scope the CSS selector to this widget only,
+        # preventing border-radius from bleeding into child QLabel widgets.
+        self.setObjectName("devicerow")
 
         lay = QHBoxLayout(self)
         lay.setContentsMargins(10, 0, 10, 0)
@@ -161,12 +164,13 @@ class _DeviceRow(QWidget):
         self._refresh_bg()
 
     def _refresh_bg(self):
-        if self._selected:
-            self.setStyleSheet(
-                "background:#0d2a1a; border-radius:3px;")
-        else:
-            self.setStyleSheet(
-                "background:transparent; border-radius:3px;")
+        # Use the objectName selector so border-radius stays on THIS widget
+        # and does not propagate into child QLabel elements (which would
+        # cause each label to render its own rounded background box).
+        bg = "#0d2a1a" if self._selected else "transparent"
+        self.setStyleSheet(
+            f"QWidget#devicerow {{ background:{bg}; border-radius:3px; }}"
+        )
 
     def mousePressEvent(self, e):
         if e.button() == Qt.LeftButton:
@@ -185,7 +189,7 @@ class _DeviceListPanel(QWidget):
         self._mgr   = device_manager
         self._rows:  Dict[str, _DeviceRow] = {}
         self._selected_uid: Optional[str] = None
-        self.setFixedWidth(230)
+        self.setMinimumWidth(180)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -914,7 +918,7 @@ class DeviceManagerDialog(QDialog):
             QPushButton {
                 background:#1e1e1e; color:#888;
                 border:1px solid #2a2a2a; border-radius:4px;
-                padding:4px 14px; font-size:8.5pt;
+                padding:2px 8px; font-size:8.5pt;
             }
             QPushButton:hover { background:#242424; color:#aaa; }
             QPushButton[objectName="primary"] {
@@ -948,10 +952,16 @@ class DeviceManagerDialog(QDialog):
             "font-size:11pt; font-weight:bold; color:#888;")
         tl.addWidget(title_lbl, 1)
 
-        # Log toggle button
+        # Log toggle button — explicit stylesheet so the dialog-level rule
+        # (which sets font-size:8.5pt and padding) doesn't cause overflow
+        # on the fixed 72×28 footprint of this button.
         self._log_btn = QPushButton("📋  Log")
         self._log_btn.setFixedSize(72, 28)
         self._log_btn.setCheckable(True)
+        self._log_btn.setStyleSheet(
+            "QPushButton { font-size:8pt; padding:0 6px; }"
+            "QPushButton:checked { background:#0d2a1a; color:#00d4aa; "
+            "border-color:#00d4aa44; }")
         self._log_btn.clicked.connect(self._toggle_log)
         tl.addWidget(self._log_btn)
 
