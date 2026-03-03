@@ -237,6 +237,37 @@ QMenu::item:selected { background: #252525; color: #fff; }
 QMenu::separator { height: 1px; background: #333; margin: 4px 0; }
 """
 
+# ── Windows stylesheet font-size fix ─────────────────────────────────────────
+# Qt converts stylesheet `pt` values to pixels using the screen's logical DPI.
+# macOS uses 72 DPI as its pt baseline, so a "13pt" font renders as 13 logical
+# pixels.  Windows uses 96 DPI, making the same rule render as ~17 px — 33%
+# larger.  On Parallels at 200% scaling the compound effect can look ~2× bigger.
+#
+# The fix: scale every explicit pt value in the STYLE string down by 72/96 = ¾.
+# This leaves the app stylesheet matching macOS visual size on Windows.
+# NOTE: do NOT use QT_FONT_DPI — that env var overrides system/default fonts too
+# (e.g. dialogs, Device Manager) which are already correctly DPI-aware.
+if _sys.platform == 'win32':
+    STYLE = (STYLE
+             .replace('font-size:13pt', 'font-size:10pt')
+             .replace('font-size:12pt', 'font-size:9pt')
+             .replace('font-size:26pt', 'font-size:20pt'))
+
+
+def _style_pt(macos_pt: int) -> str:
+    """Return a CSS font-size declaration scaled for the current platform.
+
+    Use this for any stylesheet string that is built dynamically (not part
+    of the top-level STYLE constant which is already scaled at module load).
+
+    Example:
+        f"QMenuBar {{ font-size: {_style_pt(12)}; }}"
+    """
+    if _sys.platform == 'win32':
+        return f"{int(round(macos_pt * 0.75))}pt"
+    return f"{macos_pt}pt"
+
+
 # ------------------------------------------------------------------ #
 #  Signals                                                           #
 # ------------------------------------------------------------------ #
@@ -723,7 +754,7 @@ class MainWindow(QMainWindow):
 
         mb = self.menuBar()
         mb.setStyleSheet(
-            "QMenuBar { background:#111; color:#888; font-size:12pt; }"
+            f"QMenuBar {{ background:#111; color:#888; font-size:{_style_pt(12)}; }}"
             "QMenuBar::item:selected { background:#222; color:#fff; }"
             "QMenu { background:#1a1a1a; color:#ccc; border:1px solid #333; }"
             "QMenu::item:selected { background:#222; }")
@@ -1429,20 +1460,6 @@ if __name__ == "__main__":
     # own rendering, making fonts and UI elements appear 1.5–2× too large.
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
     QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps,    True)
-
-    # ── Windows font DPI fix ───────────────────────────────────────────
-    # Qt converts stylesheet `pt` values to pixels using the screen DPI.
-    # macOS uses 72 DPI as its pt baseline (1 pt = 1 px at 1× scaling),
-    # so a "13pt" font renders as 13 logical pixels on macOS.
-    # Windows reports 96 DPI even at 100% scaling, making the same font
-    # render as 13 × 96/72 ≈ 17 px — ~33% larger than on macOS.
-    # On Parallels at 200% (192 DPI), the combination of Qt's 96-DPI
-    # conversion and Windows' 2× screen scaling effectively doubles the
-    # apparent font size.
-    # Forcing QT_FONT_DPI=72 makes Qt use 72 DPI for all pt → px
-    # calculations on Windows, producing font sizes that match macOS.
-    if _sys.platform == 'win32':
-        os.environ.setdefault('QT_FONT_DPI', '72')
 
     app = QApplication(_sys.argv)
     app.setStyle("Fusion")
