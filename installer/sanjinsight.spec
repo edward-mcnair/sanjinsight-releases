@@ -85,12 +85,24 @@ hidden_imports = [
 
 # ── Data files (non-Python assets bundled alongside the exe) ─────────────────
 datas = [
-    # SVG logos
+    # ── App assets ────────────────────────────────────────────────────────────
+    # SVG logos (used by status_header, report generator, settings tab)
     (os.path.join(PROJECT_DIR, 'assets', 'microsanj-logo.svg'),        'assets'),
     (os.path.join(PROJECT_DIR, 'assets', 'microsanj-logo-print.svg'),  'assets'),
     (os.path.join(PROJECT_DIR, 'assets', 'microsanj-bug.svg'),         'assets'),
+    # PNG icon — used as in-app window / taskbar icon (app-icon.icns is macOS-only)
+    (os.path.join(PROJECT_DIR, 'assets', 'app-icon.png'),              'assets'),
 
-    # Default config — user can edit this after installation
+    # ── Documentation (read at module-import time by ai/prompt_templates.py) ─
+    # ai/prompt_templates.py resolves: Path(__file__).parent.parent / "docs"
+    # which points to  <bundle_root>/docs/  in a frozen onedir build.
+    *( [(os.path.join(PROJECT_DIR, 'docs', 'QuickstartGuide.md'),
+          'docs'),
+        (os.path.join(PROJECT_DIR, 'docs', 'UserManual.md'),
+          'docs')]
+       if os.path.isdir(os.path.join(PROJECT_DIR, 'docs')) else [] ),
+
+    # ── Default config — user can edit this after installation ────────────────
     (os.path.join(PROJECT_DIR, 'config.yaml'), '.'),
 
     # Bundled material profiles (only if folder exists and has content)
