@@ -1430,6 +1430,20 @@ if __name__ == "__main__":
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
     QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps,    True)
 
+    # ── Windows font DPI fix ───────────────────────────────────────────
+    # Qt converts stylesheet `pt` values to pixels using the screen DPI.
+    # macOS uses 72 DPI as its pt baseline (1 pt = 1 px at 1× scaling),
+    # so a "13pt" font renders as 13 logical pixels on macOS.
+    # Windows reports 96 DPI even at 100% scaling, making the same font
+    # render as 13 × 96/72 ≈ 17 px — ~33% larger than on macOS.
+    # On Parallels at 200% (192 DPI), the combination of Qt's 96-DPI
+    # conversion and Windows' 2× screen scaling effectively doubles the
+    # apparent font size.
+    # Forcing QT_FONT_DPI=72 makes Qt use 72 DPI for all pt → px
+    # calculations on Windows, producing font sizes that match macOS.
+    if _sys.platform == 'win32':
+        os.environ.setdefault('QT_FONT_DPI', '72')
+
     app = QApplication(_sys.argv)
     app.setStyle("Fusion")
     app.setStyleSheet(STYLE)
@@ -1504,6 +1518,24 @@ if __name__ == "__main__":
                 expected_devices=_configured_devices,
                 parent=window)
             hw_service.startup_status.connect(_startup_dlg.on_device_status)
+
+            # Track whether any device connects as simulated so we can
+            # show an advisory in the status bar when no real hardware
+            # is present (but the user didn't explicitly request demo mode).
+            _simulated_keys: list = []
+            def _on_startup_status_sim(key: str, ok: bool, detail: str):
+                if ok and 'simulated' in detail.lower():
+                    _simulated_keys.append(key)
+            hw_service.startup_status.connect(_on_startup_status_sim)
+
+            def _on_startup_finished():
+                if _simulated_keys and not app_state.demo_mode:
+                    keys_str = ', '.join(_simulated_keys)
+                    window._status.showMessage(
+                        f"SanjINSIGHT {version_string()}  \u2014  "
+                        f"Simulated hardware  ({keys_str} — no real hardware connected)",
+                        0)
+            _startup_dlg.finished.connect(_on_startup_finished)
 
             def _on_demo_requested():
                 hw_service.shutdown()
