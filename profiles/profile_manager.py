@@ -76,6 +76,13 @@ class ProfileManager:
     def by_category(self, category: str) -> List[MaterialProfile]:
         return [p for p in self.all() if p.category == category]
 
+    def get(self, uid: str) -> Optional[MaterialProfile]:
+        """Return the profile with the given uid, or None."""
+        for p in self.all():
+            if p.uid == uid:
+                return p
+        return None
+
     def find(self, name: str) -> Optional[MaterialProfile]:
         for p in self.all():
             if p.name == name:
