@@ -340,7 +340,31 @@ class ScanTab(QWidget):
 
         # ---- Map tabs ----
         result_tabs = QTabWidget()
-        result_tabs.setDocumentMode(True)
+        # documentMode(True) strips the frame that visually connects the tab
+        # bar to the content area; without it, the inactive tab looks like it
+        # is floating in the wrong position.  Use explicit styling instead.
+        result_tabs.setStyleSheet("""
+            QTabWidget::pane {
+                border: 1px solid #2a2a2a;
+                border-top: none;
+                background: #111;
+            }
+            QTabBar::tab {
+                background: #1a1a1a;
+                color: #555;
+                border: 1px solid #2a2a2a;
+                border-bottom: none;
+                border-radius: 3px 3px 0 0;
+                padding: 4px 14px;
+                font-size: 12pt;
+            }
+            QTabBar::tab:selected {
+                background: #111;
+                color: #00d4aa;
+                border-bottom-color: #111;
+            }
+            QTabBar::tab:hover:!selected { color: #888; background: #222; }
+        """)
 
         # Live / final ΔR/R
         drr_wrapper = QWidget()

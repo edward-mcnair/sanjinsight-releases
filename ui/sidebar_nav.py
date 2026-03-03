@@ -209,8 +209,8 @@ class _CollapseHeader(QWidget):
         p.setPen(col)
         p.drawText(48, 0, w - 70, h, Qt.AlignVCenter | Qt.AlignLeft, self._title)
 
-        p.setFont(QFont("Segoe UI Symbol", 10))
-        p.setPen(QColor(_TEXT_DIM))
+        p.setFont(QFont("Segoe UI Symbol", 14))
+        p.setPen(QColor(_TEXT_NORM))
         p.drawText(w - 26, 0, 20, h, Qt.AlignVCenter | Qt.AlignLeft,
                    "▾" if not self._collapsed else "▸")
         p.end()

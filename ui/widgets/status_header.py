@@ -185,8 +185,14 @@ class StatusHeader(QWidget):
         self._profile_pill = QWidget()
         self._profile_pill.setMaximumHeight(36)
         self._profile_pill.setMinimumWidth(60)
+        self._profile_pill.setObjectName("profilePill")
+        # Use a scoped selector so the border/background only apply to this
+        # widget and do not propagate into child QLabels.  An unscoped rule
+        # (no type prefix) would give every child label its own rounded box,
+        # creating the "ghost button behind it" double-border effect.
         self._profile_pill.setStyleSheet(
-            "background:#1a1a1a; border:1px solid #2a2a2a; border-radius:4px;")
+            "QWidget#profilePill { background:#1a1a1a; border:1px solid #2a2a2a;"
+            " border-radius:4px; }")
         pp_lay = QHBoxLayout(self._profile_pill)
         pp_lay.setContentsMargins(10, 0, 10, 0)
         pp_lay.setSpacing(6)
@@ -363,15 +369,18 @@ class StatusHeader(QWidget):
         self._estop_btn.style().polish(self._estop_btn)
 
     def add_device_manager_button(self, callback):
-        """Add a ⚙ gear button that opens the Device Manager."""
-        gear = QPushButton("⚙")
-        gear.setFixedSize(30, 30)
+        """Add a HW button that opens the Device Manager."""
+        # Use text "HW" (hardware) instead of the ⚙ glyph — the gear
+        # character falls back to a meaningless replacement glyph on some
+        # Windows fonts, and 19 pt in a 30 px button also causes clipping.
+        gear = QPushButton("HW")
+        gear.setFixedSize(36, 30)
         gear.setToolTip("Device Manager — manage hardware connections and drivers")
         gear.setStyleSheet("""
             QPushButton {
                 background:#1a1a1a; color:#444;
                 border:1px solid #2a2a2a; border-radius:4px;
-                font-size:19pt;
+                font-size:10pt; font-weight:600; letter-spacing:1px;
             }
             QPushButton:hover { color:#888; background:#222; }
         """)
@@ -388,7 +397,7 @@ class StatusHeader(QWidget):
     def add_ai_button(self, callback) -> QPushButton:
         """Add the AI assistant toggle button and return it."""
         btn = QPushButton("AI")
-        btn.setFixedSize(36, 30)
+        btn.setFixedSize(44, 30)
         btn.setCheckable(True)
         btn.setToolTip(
             "AI Assistant — toggle the on-device AI assistant panel.\n"

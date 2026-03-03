@@ -18,7 +18,7 @@ from PyQt5.QtWidgets import (
     QDoubleSpinBox, QSpinBox, QGroupBox, QGridLayout, QProgressBar,
     QTextEdit, QFileDialog, QSplitter, QFrame, QTabWidget,
     QSizePolicy, QToolButton, QScrollArea, QMessageBox, QComboBox)
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, QRect, pyqtSignal
 from PyQt5.QtGui  import (QImage, QPixmap, QPainter, QPen, QColor,
                            QBrush, QFont, QLinearGradient)
 
@@ -50,7 +50,10 @@ class ColourBar(QWidget):
     def paintEvent(self, e):
         p = QPainter(self)
         W, H = self.width(), self.height()
-        pad  = 50
+        # pad=72 gives enough margin for "0.00e+00" (~64 px at Menlo 11pt)
+        # without overlapping the colour bar.  Previously pad=50 caused the
+        # label text to extend ~14 px into the bar on each side.
+        pad  = 72
 
         grad = QLinearGradient(pad, 0, W - pad, 0)
         grad.setColorAt(0.0, QColor(  0,   0, 255))
@@ -65,10 +68,12 @@ class ColourBar(QWidget):
         p.setFont(QFont("Menlo", 11))
         lo_s = format(self._lo, self._fmt)
         hi_s = format(self._hi, self._fmt)
-        p.drawText(0, H - 2, lo_s)
-        p.drawText(W - pad + 4, H - 2, hi_s)
+        # Pin each label to its margin using the rect form of drawText so
+        # the text stays clear of the bar regardless of the formatted width.
+        p.drawText(QRect(2, 0, pad - 4, H), Qt.AlignLeft | Qt.AlignVCenter, lo_s)
+        p.drawText(QRect(W - pad + 2, 0, pad - 4, H), Qt.AlignRight | Qt.AlignVCenter, hi_s)
         if self._lbl:
-            p.drawText(W // 2 - 30, H - 2, self._lbl)
+            p.drawText(QRect(pad, 0, W - 2*pad, H), Qt.AlignCenter, self._lbl)
 
         p.end()
 

@@ -522,6 +522,7 @@ class LiveTab(QWidget):
         lay.addWidget(self._sub("SNR"))
         self._snr_bar = SnrBar()
         lay.addWidget(self._snr_bar)
+        lay.addSpacing(10)
 
         # Numerical stats
         stats_box = QGroupBox("Frame Stats")
