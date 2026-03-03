@@ -129,14 +129,21 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
-        # Safe to exclude — not used at runtime by our app or its dependencies.
-        # Do NOT add stdlib modules that are imported transitively (e.g. fnmatch,
-        # difflib, xml): PyInstaller's own bootstrap and many libraries need them.
-        'tkinter',      # we use PyQt5, not tkinter
-        'unittest',     # testing framework — not needed at runtime
-        'pydoc',        # interactive help — not needed at runtime
-        'doctest',      # inline tests — not needed at runtime
-        'ftplib',       # FTP client — we use no FTP
+        # !! KEEP THIS LIST SHORT !!
+        # Only exclude a module if you are 100% certain that NOTHING in our
+        # dependency tree (including third-party packages like matplotlib,
+        # pyparsing, scipy …) imports it at module-load time — even indirectly.
+        #
+        # Lessons learned:
+        #   fnmatch  → shutil → zipfile → pyi_rth_inspect (PyInstaller bootstrap)
+        #   unittest → pyparsing.testing → pyparsing → matplotlib.__init__
+        #   pydoc    → potentially pulled by inspect-heavy libraries
+        #   doctest  → occasionally imported by third-party testing helpers
+        #   ftplib   → urllib.request may import it in some code paths
+        #
+        # tkinter is the only module we are confident is never touched by our
+        # deps (we use PyQt5 exclusively; matplotlib uses Qt5Agg, not TkAgg).
+        'tkinter',
     ],
     noarchive=False,
 )
