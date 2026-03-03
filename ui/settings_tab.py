@@ -475,7 +475,7 @@ class SettingsTab(QWidget):
 
         browse_btn = QPushButton("Browse…")
         browse_btn.setStyleSheet(_BTN_SECONDARY)
-        browse_btn.setFixedWidth(90)
+        browse_btn.setFixedWidth(120)  # was 90 — too narrow for "Browse…" at 12pt + 18px padding
         browse_btn.clicked.connect(self._browse_model)
         path_row.addWidget(browse_btn)
         lay.addLayout(path_row)
