@@ -167,9 +167,13 @@ _path   = str(CONFIG_PATH)   # exposed so first_run wizard knows where to write
 setup_logging(_config)
 
 
-def get(section: str) -> dict:
-    """Get a top-level config section. e.g. get('hardware')['tec_meerstetter']"""
-    return _config.get(section, {})
+def get(section: str, default=None) -> dict:
+    """Get a top-level config section. e.g. get('hardware')['tec_meerstetter']
+
+    Mirrors the dict.get(key, default) signature so callers can write:
+        config.get('hardware', {})
+    """
+    return _config.get(section, {} if default is None else default)
 
 
 def reload(path: str = None) -> None:
