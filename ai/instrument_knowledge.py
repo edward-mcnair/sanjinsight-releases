@@ -13,12 +13,19 @@ Sources
   • AN-005: Detecting Hot-Spots and Other Thermal Defects on a Sub-Micron Scale
   • AN-006: Analysis of Time-Dependent Thermal Events in High Speed Logic ICs
   • AN-007: Through-the-Substrate Imaging Enables Flip Chip Thermal Analysis
+  • TEC1089_Configuration file.ini (Meerstetter TEC controller — verified LabVIEW config)
+  • LDD1121_Configuration file.ini (Meerstetter LDD driver  — verified LabVIEW config)
+  • MAIN_AUTOMATION.py (SanjANALYZER LabVIEW automation script)
+  • LabVIEW project review (EZ500_SV7.lvproj, LINX Olympus Turret.lvproj,
+    IV_Curve_Tracer.lvproj, QUICKCAL.lvproj, EZIR_Imager.lvproj, et al.)
 
 All numeric limits referenced in ui/tabs, acquisition, ai/diagnostic_rules, and
 ai/prompt_templates are imported from here — never hardcoded elsewhere.
 """
 
 from __future__ import annotations
+from dataclasses import dataclass, field
+from typing import Optional, List
 
 # ── Thermoreflectance Coefficients (CTR / C_T / Cth) [K⁻¹] ─────────────────
 #
@@ -102,16 +109,86 @@ def led_wavelengths(material: str) -> list[int]:
 # Cth values outside this range likely indicate measurement error or
 # an inappropriate wavelength / surface condition.
 
-CTH_MIN: float = 1e-5   # K⁻¹ — below this SNR is impractically low
-CTH_MAX: float = 1e-2   # K⁻¹ — above this value is anomalously high
+CTH_MIN: float        = 1e-5   # K⁻¹ — below this SNR is impractically low
+CTH_MAX: float        = 1e-2   # K⁻¹ — above this value is anomalously high
+CTH_FILTER_MIN: float = 3e-6   # K⁻¹ — minimum Cth to include pixel in ΔR/R map
+                                #        (SanjANALYZER MAIN_AUTOMATION.py: Filter Magnitude Cth)
 
 
 # ── Stage / Temperature Limits ───────────────────────────────────────────────
 
-STAGE_TEMP_MIN_C    =  10.0   # minimum operating temperature (all stage types)
-STAGE_TEMP_MAX_TC   = 120.0   # TC-100 / EZ-CAL50 maximum setpoint
+STAGE_TEMP_MIN_C    =  15.0   # minimum operating temperature (TEC1089 PAR_TOBJECT1_UNDER)
+STAGE_TEMP_MAX_TC   = 130.0   # TC-100 / EZ-CAL50 maximum setpoint (TEC1089 PAR_TOBJECT1_OVER)
 STAGE_TEMP_MAX_AF   = 150.0   # AF-200 maximum setpoint
 STAGE_TEMP_MAX_C    = 150.0   # overall system maximum (used for validation)
+
+
+# ── TEC Controller Hardware Limits (TEC1089_Configuration file.ini) ──────────
+#
+# Physical limits programmed into the Meerstetter TEC1089 firmware.
+# Verified directly from the LabVIEW project configuration file.
+#
+# Note: STAGE_TEMP_MIN_C / STAGE_TEMP_MAX_TC above are kept as aliases so
+# existing code that imports those names continues to work unchanged.
+
+TEC_OBJECT_MIN_C       =  15.0   # PAR_TOBJECT1_UNDER  — object (DUT side) temp floor
+TEC_OBJECT_MAX_C       = 130.0   # PAR_TOBJECT1_OVER   — object (DUT side) temp ceiling
+TEC_SINK_MIN_C         =   5.0   # PAR_TSINK1_TEMP_UNDER — heatsink temp minimum
+TEC_SINK_MAX_C         =  70.0   # PAR_TSINK1_TEMP_OVER  — heatsink temp maximum
+TEC_STABILITY_WINDOW_C =   1.0   # PAR_STABILITY_IND_TEMP1 — stable band ±°C
+TEC_STABILITY_TIME_S   =  10     # PAR_STABILITY_IND_TIME1 — seconds in-band for stable flag
+TEC_MAX_CURRENT_A      =   9.25  # PAR_TEC1_LIMIT_I — TEC1 max continuous current (A)
+TEC_MAX_VOLTAGE_V      =  15.5   # PAR_TEC1_LIMIT_U — TEC1 max voltage (V)
+TEC_PUMP_ON_C          =  40.0   # PAR_PUMP_ON_THRESHOLD1  — coolant pump starts at this sink temp
+TEC_PUMP_OFF_C         =  35.0   # PAR_PUMP_OFF_THRESHOLD1 — coolant pump stops at this sink temp
+PELTIER_MAX_DT_C       =  68.0   # PAR_PELT1_MAXDT — maximum ΔT across Peltier element (K)
+
+
+# ── TEC Controller PID Defaults (TEC1089_Configuration file.ini) ─────────────
+#
+# Factory PID tuning values for Channel 1 (temperature control mode).
+# Channel 2 uses slower PID (Kp=10, Ti=300) for the auxiliary stage.
+# All values verified directly from the LabVIEW configuration file (S/N 9376).
+
+TEC_PID_KP:       float = 35.0   # PAR_TEMP1_REGUL_KP   — proportional gain
+TEC_PID_TI:       float =  5.0   # PAR_TEMP1_REGUL_TI   — integral time (s)
+TEC_PID_TD:       float =  0.5   # PAR_TEMP1_REGUL_TD   — derivative time (s)
+TEC_PID_D_PT1:    float =  0.3   # PAR_TEMP1_REGUL_D_PT1 — derivative filter (PT1)
+TEC_CONTROL_HZ:   int   =  10    # PAR_TCTRL_CYCLE1      — control loop rate (Hz)
+
+
+# ── NTC Thermistor Calibration Points (both TEC1089 and LDD1121) ──────────────
+#
+# Both Meerstetter devices (TEC-1089 and LDD-1121) use the same 3-point NTC
+# calibration.  Values verified from both configuration files.
+# NTC type: 10 kΩ @ 25 °C standard thermistor (R25 = 10 000 Ω)
+
+MEERSTETTER_NTC_T1_C:   float =  0.0    # PAR_TOBJ_NTC_T11  — calibration point 1 temp
+MEERSTETTER_NTC_R1_OHM: int   = 32650   # PAR_TOBJ_NTC_R11  — NTC resistance at T1
+MEERSTETTER_NTC_T2_C:   float = 25.0    # PAR_TOBJ_NTC_T21  — calibration point 2 temp
+MEERSTETTER_NTC_R2_OHM: int   = 10000   # PAR_TOBJ_NTC_R21  — NTC resistance at T2 (R25)
+MEERSTETTER_NTC_T3_C:   float = 60.0    # PAR_TOBJ_NTC_T31  — calibration point 3 temp
+MEERSTETTER_NTC_R3_OHM: int   =  2488   # PAR_TOBJ_NTC_R31  — NTC resistance at T3
+
+
+# ── Laser Diode Driver Limits (LDD1121_Configuration file.ini) ───────────────
+#
+# Physical limits from the Meerstetter LDD1121 firmware.
+# Verified directly from the LabVIEW project configuration file (S/N 4798).
+
+LDD_MAX_CURRENT_A    =  2.0    # CURRENT_LIMIT    — maximum LED / laser diode current (A)
+LDD_START_CURRENT_A  =  1.5    # LimitStartCurrent — ramp-up starting limit (A)
+LDD_DIODE_MIN_C      = -20.0   # PAR_TLD_TEMP_UNDER — diode temperature minimum (°C)
+LDD_DIODE_MAX_C      =  60.0   # PAR_TLD_TEMP_OVER  — diode temperature maximum (°C)
+
+# LDD signal-generator timing constants (internal mode; not used in HW-trigger mode)
+# In hardware-trigger mode (Pulse_Source = HW Pin), the FPGA drives pulse timing.
+LDD_TIMEBASE_NS:      int   = 100    # label_TimeBase=100  — internal timer resolution (ns)
+LDD_PULSE_HIGH_NS:    int   = 100    # PulseHigh=1 × 100 ns  — internal high duration
+LDD_PULSE_LOW_NS:     int   = 90000  # PulseLow=900 × 100 ns — internal low duration (90 µs)
+LDD_SLOPE_LIMIT_A_US: float = 0.2    # SlopeLimit — maximum current ramp rate (A/µs)
+LDD_RS485_BAUD:       int   = 57600  # RS485_CH1_BaudRate — serial baud rate
+LDD_RS485_ADDRESS:    int   = 1      # PAR_RS485_1_ADDR — default LDD device address
 
 
 # ── Bias / Electrical Output Limits ─────────────────────────────────────────
@@ -131,17 +208,85 @@ CAMERA_SAT_LIMIT    = 4095    # full saturation (12-bit maximum)
 CAMERA_SAT_WARN     = 3900    # warn when within ~5 % of saturation
 
 
-# ── Objective Field-of-View Reference (from AN-002) ──────────────────────────
+# ── Objective Specifications (Olympus IX — from LINX Olympus Turret.lvproj) ──
 #
-# Approximate camera FOV at each standard objective magnification.
-# Values assume a typical 2/3" sensor format; actual FOV depends on sensor size.
-# Use these to set scan step sizes and to estimate tile overlap.
+# Full optical specifications for each objective slot on the Olympus IX turret.
+# Pixel sizes assume:
+#   acA1920-155um: 5.86 µm pixel pitch, 1920 × 1200 sensor
+#   acA640-750um : 4.80 µm pixel pitch,  640 × 480  sensor
+# Formula: px_size_um = pixel_pitch_um / magnification
+# FOV width: fov_um = n_pixels × px_size_um
+
+@dataclass
+class ObjectiveSpec:
+    """Optical properties of one objective lens position on the turret."""
+    position:               int    # Turret slot (1-based)
+    magnification:          int    # Nominal magnification
+    numerical_aperture:     float  # NA
+    working_dist_mm:        float  # Working distance (mm)
+    label:                  str    # Display string
+    px_size_acA1920_um:     float  # µm/px for Basler acA1920-155um
+    px_size_acA640_um:      float  # µm/px for Basler acA640-750um
+    fov_w_acA1920_um:       float  # FOV width (µm) for acA1920-155um  (1920 px × px_size)
+    fov_w_acA640_um:        float  # FOV width (µm) for acA640-750um   ( 640 px × px_size)
+
+    def fov_um(self, camera_model: str = "acA1920") -> float:
+        """Return FOV width in µm for the named camera model."""
+        if "640" in camera_model:
+            return self.fov_w_acA640_um
+        return self.fov_w_acA1920_um
+
+    def px_size_um(self, camera_model: str = "acA1920") -> float:
+        """Return pixel size in µm/px for the named camera model."""
+        if "640" in camera_model:
+            return self.px_size_acA640_um
+        return self.px_size_acA1920_um
+
+
+OBJECTIVE_SPECS: list[ObjectiveSpec] = [
+    # Olympus IX — standard objective set
+    ObjectiveSpec(
+        position=1, magnification=4,   numerical_aperture=0.10,
+        working_dist_mm=18.5, label=" 4× / 0.10 NA",
+        px_size_acA1920_um =1.465,  px_size_acA640_um=1.200,
+        fov_w_acA1920_um   =2813.0, fov_w_acA640_um  =768.0),
+    ObjectiveSpec(
+        position=2, magnification=10,  numerical_aperture=0.25,
+        working_dist_mm=10.6, label="10× / 0.25 NA",
+        px_size_acA1920_um =0.586,  px_size_acA640_um=0.480,
+        fov_w_acA1920_um   =1125.1, fov_w_acA640_um  =307.2),
+    ObjectiveSpec(
+        position=3, magnification=20,  numerical_aperture=0.45,
+        working_dist_mm= 8.2, label="20× / 0.45 NA",
+        px_size_acA1920_um =0.293,  px_size_acA640_um=0.240,
+        fov_w_acA1920_um   = 562.6, fov_w_acA640_um  =153.6),
+    ObjectiveSpec(
+        position=4, magnification=50,  numerical_aperture=0.80,
+        working_dist_mm= 0.37,label="50× / 0.80 NA",
+        px_size_acA1920_um =0.117,  px_size_acA640_um=0.096,
+        fov_w_acA1920_um   = 225.0, fov_w_acA640_um  = 61.4),
+    ObjectiveSpec(
+        position=5, magnification=100, numerical_aperture=0.95,
+        working_dist_mm= 0.21,label="100× / 0.95 NA",
+        px_size_acA1920_um =0.059,  px_size_acA640_um=0.048,
+        fov_w_acA1920_um   = 112.3, fov_w_acA640_um  = 30.7),
+]
+
+# Quick lookup by magnification
+_OBJ_BY_MAG = {s.magnification: s for s in OBJECTIVE_SPECS}
+
+def objective_by_mag(magnification: int) -> Optional[ObjectiveSpec]:
+    """Return ObjectiveSpec for a given magnification, or None."""
+    return _OBJ_BY_MAG.get(magnification)
+
+
+# ── Objective Field-of-View Reference (legacy dict — kept for compatibility) ─
+#
+# FOV width in µm for acA1920-155um camera at each magnification.
 
 OBJECTIVE_FOV_UM: dict[int, int] = {
-    5:   2500,   # 5×   → ~2.5 mm FOV
-    20:   600,   # 20×  → ~0.6 mm FOV
-    50:   250,   # 50×  → ~250 µm FOV
-    100:  120,   # 100× → ~120 µm FOV
+    s.magnification: int(s.fov_w_acA1920_um)
+    for s in OBJECTIVE_SPECS
 }
 
 
@@ -177,8 +322,8 @@ TTI_TEMP_RES_2MIN_C:   float = 0.4    # Typical temperature resolution at 2 min 
 TTI_TEMP_RES_BEST_C:   float = 0.008  # Best achievable (6–10 mK, long averaging)
 TTI_SPATIAL_RES_NM:    int   = 250    # Best top-side visible spatial resolution
 TTI_SPATIAL_RES_NIR_UM: float = 1.5  # Thru-substrate NIR spatial resolution
-TTI_TIME_RES_NS:       int   = 50    # Typical (50 ns in a megapixel image)
-TTI_TIME_RES_BEST_PS:  int   = 800   # Best demonstrated (800 ps, NT410A system)
+TTI_TIME_RES_NS:       int   = 50    # EZ-Therm / NT220 temporal resolution (ns)
+TTI_TIME_RES_BEST_PS:  int   = 800   # PT410A PicoTherm best (800 ps)
 TTI_MIN_POWER_UW:      int   = 500   # Minimum detectable power (1 hr averaging)
 TTI_MIN_POWER_OPT_UW:  int   = 50    # Detectable under optimal conditions
 
@@ -201,6 +346,42 @@ DUTY_CYCLE_WARN_PCT = 50.0    # above this → risk of DUT overheating
 DUTY_CYCLE_FAIL_PCT = 80.0    # above this → high overheating risk
 
 
+# ── Thermal Chuck Controller Limits ──────────────────────────────────────────
+#
+# Thermal chucks (Temptronic, Cascade, Wentworth) have significantly wider
+# temperature ranges than Meerstetter TEC1089 controllers.
+# Used in thermal_chuck.py and for calibration_tab.py range validation.
+
+CHUCK_TEMP_MIN_C:   float = -65.0   # typical ATS-series minimum setpoint
+CHUCK_TEMP_MAX_C:   float = 250.0   # typical ATS-series maximum setpoint
+CHUCK_STAB_TOL_C:   float =   2.0   # stability tolerance (chucks are less precise than TEC)
+CHUCK_RAMP_RATE_MAX_C_MIN: float = 300.0  # typical maximum ramp rate
+
+
+# ── Movie Mode Defaults ───────────────────────────────────────────────────────
+#
+# Default operating parameters for the movie-mode burst acquisition pipeline.
+# Frame rates are per-camera-model maximums at reduced ROI.
+
+MOVIE_DEFAULT_N_FRAMES:    int   = 200     # default burst length (frames)
+MOVIE_DEFAULT_SETTLE_MS:   float =  50.0  # settle time after power-on before burst
+MOVIE_MIN_N_FRAMES:        int   =  10    # minimum useful burst
+MOVIE_MAX_N_FRAMES:        int   = 2000   # practical RAM limit for full-frame sequences
+
+# Per-camera achievable frame rates (approximate; depends on ROI and host PC speed)
+MOVIE_FPS_ACA1920:  float = 155.0   # Basler acA1920-155um at full frame
+MOVIE_FPS_ACA640:   float = 750.0   # Basler acA640-750um at full frame (movie camera)
+
+
+# ── Transient Acquisition Defaults ───────────────────────────────────────────
+
+TRANSIENT_DEFAULT_N_DELAYS:    int   =  50     # time-delay steps in the output cube
+TRANSIENT_DEFAULT_N_AVERAGES:  int   =  50     # trigger cycles averaged per delay
+TRANSIENT_DEFAULT_PULSE_US:    float = 500.0   # default power pulse width (µs)
+TRANSIENT_DEFAULT_DELAY_END_S: float =   0.005 # default transient window (5 ms)
+TRANSIENT_MIN_AVERAGES:        int   =  10     # below this, SNR is poor
+
+
 # ── Calibration Temperature Presets ──────────────────────────────────────────
 #
 # TR Standard: 6-point sweep from base=20°C to high=120°C (~12 min total)
@@ -208,6 +389,17 @@ DUTY_CYCLE_FAIL_PCT = 80.0    # above this → high overheating risk
 
 CAL_TR_TEMPS_C: list[float] = [20.0, 40.0, 60.0, 80.0, 100.0, 120.0]
 CAL_IR_TEMPS_C: list[float] = [85.0, 90.0, 95.0, 100.0, 105.0, 110.0, 115.0]
+
+
+# ── Calibration Workflow Parameters (from MAIN_AUTOMATION.py) ─────────────────
+#
+# Timing parameters verified from the SanjANALYZER LabVIEW automation script.
+# Used to compute accurate time estimates and to set sensible UI defaults.
+
+CAL_N_AVERAGES:       int   = 100    # standard frame averaging count per temperature step
+TEC_RAMP_TIME_S:      int   =  35    # typical heating ramp time to reach each setpoint (s)
+CAL_SETTLE_TIMEOUT_S: int   = 200    # maximum wait time per setpoint for stability (s)
+TEC_MAX_RAMP_RATE_C_MIN: float = 200.0  # maximum TEC ramp rate (5216E config, °C/min)
 
 
 # ── Compact AI Knowledge String ───────────────────────────────────────────────
@@ -243,9 +435,10 @@ UI_NAV_MAP: str = (
 # Injected verbatim into the LLM system prompt alongside UI_NAV_MAP.
 
 AI_DOMAIN_KNOWLEDGE: str = (
-    "Hardware limits: pixel sat=4095 (12-bit); stage temp 10–150 °C; "
+    "Hardware limits: pixel sat=4095 (12-bit); TEC object 15–130 °C, sink 5–70 °C; "
     "VO INT ±10 V pulsed, VO EXT ≤60 V, AUX INT ±10 V DC; "
-    "duty >50 % risks DUT overheating. "
+    "duty >50 % risks DUT overheating; TEC stable = ±1 °C for 10 s. "
+    "LED driver (LDD-1121): max 2 A, diode –20 to 60 °C, HW-trigger via FPGA pin. "
     "Optimal LED: Si/GaAs/InP→470 nm Blue; GaN→365/470/530 nm; "
     "Au→470/530 nm; Al→780 nm ONLY; Ni/Ti→585/660 nm; "
     "flip-chip/backside→1050–1500 nm NIR (Si transparent ≥1100 nm). "
@@ -255,5 +448,93 @@ AI_DOMAIN_KNOWLEDGE: str = (
     "Transient: duty 25–35 %; delayed heat = sub-surface source. "
     "TR cal: Base=20 °C High=120 °C ~12 min. "
     "IR cal: Base=85 °C High=115 °C. "
-    "Convergence: ROI mean variance <5 %."
+    "Convergence: ROI mean variance <5 %. "
+    "Systems: EZ500 (50 ns TR, acA1920 CMOS); NT220 (50 ns, acA640, MPI prober); "
+    "PT410A (800 ps, 1024×1024 EMCCD, 532/1060 nm pulsed laser)."
 )
+
+
+# ── System Model Specifications ───────────────────────────────────────────────
+#
+# Full product specifications for each Microsanj system family.
+# Sources:
+#   EZ500  : EZ-Therm User Manual / product datasheet
+#   NT220  : Microsanj website (sitemap NT220 product pages, IMS 2024 showcase)
+#   PT410A : Microsanj PicoTherm product page (picotherm-1.html, S/N PT410A)
+
+@dataclass
+class SystemModelSpec:
+    """Complete specification for one Microsanj system model."""
+    model:            str         # Model identifier: "EZ500", "NT220", "PT410A"
+    display_name:     str         # Human-readable full name
+    min_time_res_ns:  float       # Best temporal resolution (ns)
+    sensor:           str         # Sensor description
+    sensor_pixels:    tuple       # (width, height) in pixels
+    pixel_size_um:    float       # Sensor pixel pitch (µm)
+    illumination_nm:  List[int]   # Supported illumination wavelengths (nm)
+    objectives:       List[int]   # Supported objective magnifications
+    notes:            str = ""    # Additional notes
+
+
+SYSTEM_SPECS: dict[str, SystemModelSpec] = {
+
+    # EZ-Therm EZ500 — standard thermoreflectance, CW lock-in + transient
+    "EZ500": SystemModelSpec(
+        model        = "EZ500",
+        display_name = "Microsanj EZ-Therm EZ500",
+        min_time_res_ns = 50.0,
+        sensor          = "Basler acA1920-155um CMOS (monochrome, 12-bit)",
+        sensor_pixels   = (1920, 1200),
+        pixel_size_um   = 5.86,
+        illumination_nm = [365, 470, 532, 785, 1060],
+        objectives      = [4, 10, 20, 50, 100],
+        notes = (
+            "Lock-in thermoreflectance and transient thermal imaging. "
+            "Pulse timing via NI FPGA (50 ns resolution). "
+            "Optional Basler acA640-750um for high-speed movie mode."
+        ),
+    ),
+
+    # NanoTHERM NT220 — 50 ns transient, MPI probe station integration, AMCAD
+    "NT220": SystemModelSpec(
+        model        = "NT220",
+        display_name = "Microsanj NanoTHERM NT220",
+        min_time_res_ns = 50.0,
+        sensor          = "Basler acA640-750um CMOS (monochrome, 12-bit, 750 fps)",
+        sensor_pixels   = (640, 480),
+        pixel_size_um   = 4.80,
+        illumination_nm = [470, 532, 785],
+        objectives      = [10, 20, 50, 100],
+        notes = (
+            "50 ns submicron transient thermal imaging. "
+            "Integrated with MPI/FormFactor probe station and AMCAD Pulse IV. "
+            "High-speed CMOS for sub-100 ns delay steps. "
+            "Uses LDD-1121 laser diode driver with FPGA hardware trigger."
+        ),
+    ),
+
+    # PicoTherm PT410A — 800 ps transient, EMCCD, pulsed diode laser
+    "PT410A": SystemModelSpec(
+        model        = "PT410A",
+        display_name = "Microsanj PicoTherm PT410A",
+        min_time_res_ns = 0.8,      # 800 ps = 0.8 ns
+        sensor          = "1024×1024 EMCCD, 13 µm pixel pitch (480–1060 nm)",
+        sensor_pixels   = (1024, 1024),
+        pixel_size_um   = 13.0,
+        illumination_nm = [532, 1060],
+        objectives      = [5, 20, 100],
+        notes = (
+            "Picosecond transient thermal imager. "
+            "Pulse duration: 800 ps FWHM. "
+            "Spatial resolution: 380 nm @ 100×/0.7 NA/532 nm. "
+            "Temperature sensitivity: 1 000 mK (EMCCD). "
+            "Spectral range: 480–1060 nm (topside and backside capable). "
+            "Software: SanjCONTROLLER with SanjVIEW v6.0."
+        ),
+    ),
+}
+
+
+def system_spec(model: str) -> Optional[SystemModelSpec]:
+    """Return SystemModelSpec for *model* (case-insensitive key), or None."""
+    return SYSTEM_SPECS.get(model.upper()) or SYSTEM_SPECS.get(model)

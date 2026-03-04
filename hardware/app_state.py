@@ -50,22 +50,29 @@ class ApplicationState:
         self._lock = threading.RLock()
 
         # ── Hardware drivers ────────────────────────────────────────
-        self._cam      = None    # CameraDriver | None
-        self._fpga     = None    # FpgaDriver   | None
-        self._bias     = None    # BiasDriver    | None
-        self._stage    = None    # StageDriver   | None
-        self._af       = None    # AutofocusDriver | None
+        self._cam      = None    # CameraDriver         | None
+        self._fpga     = None    # FpgaDriver           | None
+        self._bias     = None    # BiasDriver           | None
+        self._stage    = None    # StageDriver          | None — microscope scan stage
+        self._prober   = None    # StageDriver (prober) | None — probe-station chuck
+        self._af       = None    # AutofocusDriver      | None
+        self._turret   = None    # ObjectiveTurretDriver| None — motorized objective
         self._tecs: List = []    # List[TecDriver]
         self._tec_guards: List = []   # List[ThermalGuard | None]
+        self._ldd      = None    # LddDriver            | None
 
         # ── Acquisition objects ─────────────────────────────────────
         self._pipeline = None    # AcquisitionPipeline | None
 
         # ── Active measurement context ──────────────────────────────
-        self._active_calibration = None   # CalibrationResult | None
-        self._active_profile     = None   # MaterialProfile   | None
-        self._active_analysis    = None   # AnalysisResult    | None
-        self._active_modality    = "thermoreflectance"  # str
+        self._active_calibration  = None   # CalibrationResult | None
+        self._active_profile      = None   # MaterialProfile   | None
+        self._active_analysis     = None   # AnalysisResult    | None
+        self._active_modality     = "thermoreflectance"  # str
+        self._active_objective    = None   # ObjectiveSpec | None — from turret
+
+        # ── System identification ────────────────────────────────────
+        self._system_model: Optional[str] = None  # e.g. "EZ500" / "NT220" / "PT410A"
 
         # ── Demo mode ───────────────────────────────────────────────
         self._demo_mode: bool = False     # True when running on simulated hardware
@@ -130,6 +137,26 @@ class ApplicationState:
             self._stage = value
 
     @property
+    def prober(self):
+        """Probe-station chuck stage (distinct from microscope scan stage)."""
+        return self._prober
+
+    @prober.setter
+    def prober(self, value):
+        with self._lock:
+            self._prober = value
+
+    @property
+    def turret(self):
+        """Motorized objective turret driver."""
+        return self._turret
+
+    @turret.setter
+    def turret(self, value):
+        with self._lock:
+            self._turret = value
+
+    @property
     def af(self):
         return self._af
 
@@ -153,6 +180,16 @@ class ApplicationState:
             self._tecs.append(tec)
             self._tec_guards.append(None)   # guard registered separately
             return len(self._tecs) - 1
+
+    @property
+    def ldd(self):
+        """Laser Diode Driver (LDD-1121 or simulated)."""
+        return self._ldd
+
+    @ldd.setter
+    def ldd(self, value):
+        with self._lock:
+            self._ldd = value
 
     def set_tec_guard(self, index: int, guard) -> None:
         """Register a ThermalGuard for the given TEC index."""
@@ -217,6 +254,28 @@ class ApplicationState:
         with self._lock:
             self._active_modality = value
 
+    @property
+    def active_objective(self):
+        """Currently selected ObjectiveSpec (from turret), or None."""
+        return self._active_objective
+
+    @active_objective.setter
+    def active_objective(self, value):
+        with self._lock:
+            self._active_objective = value
+
+    # ── System identification ────────────────────────────────────────
+
+    @property
+    def system_model(self) -> Optional[str]:
+        """Instrument model key (e.g. 'EZ500', 'NT220', 'PT410A'), or None."""
+        return self._system_model
+
+    @system_model.setter
+    def system_model(self, value: Optional[str]) -> None:
+        with self._lock:
+            self._system_model = value if value is None else str(value)
+
     # ── Convenience helpers ──────────────────────────────────────────
 
     def require_cam(self):
@@ -240,14 +299,25 @@ class ApplicationState:
             raise RuntimeError("Stage not connected.")
         return s
 
+    def require_ldd(self):
+        """Return LDD driver or raise RuntimeError if not connected."""
+        d = self._ldd
+        if d is None:
+            raise RuntimeError("Laser diode driver not connected.")
+        return d
+
     def snapshot(self) -> dict:
         """Return a dict snapshot of all driver references (for logging/debugging)."""
         with self._lock:
+            obj = self._active_objective
             return {
                 "cam":      type(self._cam).__name__      if self._cam      else None,
                 "fpga":     type(self._fpga).__name__     if self._fpga     else None,
                 "bias":     type(self._bias).__name__     if self._bias     else None,
+                "ldd":      type(self._ldd).__name__      if self._ldd      else None,
                 "stage":    type(self._stage).__name__    if self._stage    else None,
+                "prober":   type(self._prober).__name__   if self._prober   else None,
+                "turret":   type(self._turret).__name__   if self._turret   else None,
                 "af":       type(self._af).__name__       if self._af       else None,
                 "tecs":     [type(t).__name__ for t in self._tecs],
                 "pipeline": type(self._pipeline).__name__ if self._pipeline else None,
@@ -257,7 +327,13 @@ class ApplicationState:
                 "profile":  (
                     self._active_profile.name
                     if self._active_profile else None),
-                "modality": self._active_modality,
+                "modality":      self._active_modality,
+                "system_model":  self._system_model,
+                "objective": (
+                    {"magnification": obj.magnification,
+                     "na":            obj.numerical_aperture,
+                     "label":         obj.label}
+                    if obj else None),
             }
 
     def is_hardware_ready(self) -> bool:

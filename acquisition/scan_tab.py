@@ -39,11 +39,14 @@ class ScanMapView(QWidget):
     Supports zoom-to-fit and optional physical scale annotation.
     """
 
+    context_save_image = pyqtSignal()   # user requested "Save Map Image…"
+
     def __init__(self):
         super().__init__()
         self.setMinimumSize(400, 300)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setStyleSheet("background:#0d0d0d;")
+        self.setMouseTracking(True)
 
         self._data      = None   # float32 map
         self._n_cols    = 1
@@ -54,6 +57,13 @@ class ScanMapView(QWidget):
         self._cmap      = "signed"
         self._pixmap    = None
         self._title     = ""
+
+        # ── Zoom & pan ────────────────────────────────────────────────
+        self._zoom           = 1.0
+        self._pan_x          = 0.0
+        self._pan_y          = 0.0
+        self._drag_start     = None
+        self._drag_pan_start = (0.0, 0.0)
 
     def update_map(self, data: np.ndarray,
                    n_cols: int, n_rows: int,
@@ -118,36 +128,34 @@ class ScanMapView(QWidget):
             p.end()
             return
 
-        # Scale pixmap to fit widget
-        W, H   = self.width(), self.height()
-        PAD    = 8
-        scaled = self._pixmap.scaled(
-            W - 2*PAD, H - 2*PAD,
-            Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        ox = (W - scaled.width())  // 2
-        oy = (H - scaled.height()) // 2
+        # Scale pixmap to fit widget (honouring zoom/pan)
+        W, H = self.width(), self.height()
+        PAD  = 8
+        ox, oy, dw, dh = self._draw_rect()
+        scaled = self._pixmap.scaled(dw, dh, Qt.IgnoreAspectRatio,
+                                     Qt.SmoothTransformation)
         p.drawPixmap(ox, oy, scaled)
 
         # Tile grid overlay
         if self._show_grid and self._n_cols > 0 and self._n_rows > 0:
             p.setPen(QPen(QColor(0, 180, 130, 80), 1, Qt.DotLine))
-            tw = scaled.width()  / self._n_cols
-            th = scaled.height() / self._n_rows
+            tw = dw / self._n_cols
+            th = dh / self._n_rows
             for c in range(1, self._n_cols):
                 x = ox + int(c * tw)
-                p.drawLine(x, oy, x, oy + scaled.height())
+                p.drawLine(x, oy, x, oy + dh)
             for r in range(1, self._n_rows):
                 y = oy + int(r * th)
-                p.drawLine(ox, y, ox + scaled.width(), y)
+                p.drawLine(ox, y, ox + dw, y)
 
         # Scale bar (100 μm)
-        px_per_um = (scaled.width() / self._n_cols) / self._step_x_um \
+        px_per_um = (dw / self._n_cols) / self._step_x_um \
                     if self._step_x_um > 0 else 0
         if px_per_um > 0:
             bar_um  = 100.0
             bar_px  = int(bar_um * px_per_um)
             bar_x   = ox + 12
-            bar_y   = oy + scaled.height() - 14
+            bar_y   = oy + dh - 14
             p.setPen(QPen(QColor(255, 255, 255, 180), 2))
             p.drawLine(bar_x, bar_y, bar_x + bar_px, bar_y)
             p.setFont(QFont("Helvetica", 11))
@@ -161,11 +169,97 @@ class ScanMapView(QWidget):
             p.drawText(self.rect().adjusted(8, 4, -8, -4),
                        Qt.AlignTop | Qt.AlignRight, self._title)
 
+        # Zoom indicator
+        if abs(self._zoom - 1.0) > 0.05:
+            p.setPen(QColor(180, 180, 180, 200))
+            p.setFont(QFont("Helvetica", 11))
+            p.drawText(8, self.height() - 8, f"×{self._zoom:.2f}")
+
         p.end()
+
+    # ── Zoom & pan helpers ────────────────────────────────────────────
+
+    def _draw_rect(self):
+        """(ox, oy, dw, dh) for the pixmap given current zoom/pan."""
+        if self._pixmap is None:
+            return 0, 0, self.width(), self.height()
+        W, H = self.width(), self.height()
+        PAD  = 8
+        pw, ph = self._pixmap.width(), max(self._pixmap.height(), 1)
+        fit_scale = min((W - 2*PAD) / max(pw, 1), (H - 2*PAD) / max(ph, 1))
+        dw = max(1, int(pw * fit_scale * self._zoom))
+        dh = max(1, int(ph * fit_scale * self._zoom))
+        ox = (W - dw) // 2 + int(self._pan_x)
+        oy = (H - dh) // 2 + int(self._pan_y)
+        return ox, oy, dw, dh
+
+    def wheelEvent(self, e):
+        if self._pixmap is None:
+            return
+        delta   = e.angleDelta().y()
+        factor  = 1.15 if delta > 0 else 1.0 / 1.15
+        new_zoom = max(0.25, min(16.0, self._zoom * factor))
+        r = self._draw_rect()
+        if r and new_zoom != self._zoom:
+            ox, oy, dw, dh = r
+            cx, cy = e.x(), e.y()
+            new_ox = cx - int((cx - ox) * new_zoom / max(self._zoom, 1e-9))
+            new_oy = cy - int((cy - oy) * new_zoom / max(self._zoom, 1e-9))
+            new_dw = max(1, int(dw * new_zoom / max(self._zoom, 1e-9)))
+            new_dh = max(1, int(dh * new_zoom / max(self._zoom, 1e-9)))
+            W, H = self.width(), self.height()
+            self._pan_x = new_ox - (W - new_dw) // 2
+            self._pan_y = new_oy - (H - new_dh) // 2
+        self._zoom = new_zoom
+        self.update()
+        e.accept()
+
+    def mousePressEvent(self, e):
+        if e.button() == Qt.MiddleButton:
+            self._drag_start     = e.pos()
+            self._drag_pan_start = (self._pan_x, self._pan_y)
+            self.setCursor(Qt.ClosedHandCursor)
+        else:
+            super().mousePressEvent(e)
+
+    def mouseMoveEvent(self, e):
+        if e.buttons() & Qt.MiddleButton and self._drag_start is not None:
+            dx = e.x() - self._drag_start.x()
+            dy = e.y() - self._drag_start.y()
+            self._pan_x = self._drag_pan_start[0] + dx
+            self._pan_y = self._drag_pan_start[1] + dy
+            self.update()
+
+    def mouseReleaseEvent(self, e):
+        if e.button() == Qt.MiddleButton:
+            self._drag_start = None
+            self.setCursor(Qt.ArrowCursor)
+        else:
+            super().mouseReleaseEvent(e)
+
+    def reset_zoom(self):
+        self._zoom  = 1.0
+        self._pan_x = 0.0
+        self._pan_y = 0.0
+        self.update()
 
     def save_image(self, path: str):
         if self._pixmap:
             self._pixmap.save(path)
+
+    def contextMenuEvent(self, e):
+        from PyQt5.QtWidgets import QMenu
+        menu = QMenu(self)
+        menu.setStyleSheet(
+            "QMenu { background:#1a1a1a; color:#ccc; border:1px solid #333; }"
+            "QMenu::item:selected { background:#2a2a2a; }"
+            "QMenu::separator { height:1px; background:#333; margin:3px 8px; }")
+        menu.addAction("🔍  Reset Zoom (fit)", self.reset_zoom)
+        menu.addSeparator()
+        act_save = menu.addAction("💾  Save Map Image…")
+        act_save.setEnabled(self._pixmap is not None)
+        act_save.triggered.connect(self.context_save_image)
+        menu.exec_(e.globalPos())
 
 
 # ------------------------------------------------------------------ #
@@ -182,12 +276,12 @@ class ScanTab(QWidget):
         root = QHBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
 
-        splitter = QSplitter(Qt.Horizontal)
-        root.addWidget(splitter)
+        self._body_splitter = QSplitter(Qt.Horizontal)
+        root.addWidget(self._body_splitter)
 
-        splitter.addWidget(self._build_left())
-        splitter.addWidget(self._build_right())
-        splitter.setSizes([320, 900])
+        self._body_splitter.addWidget(self._build_left())
+        self._body_splitter.addWidget(self._build_right())
+        self._body_splitter.setSizes([320, 900])
 
     # ---------------------------------------------------------------- #
     #  Left panel — config + controls                                  #
@@ -393,10 +487,14 @@ class ScanTab(QWidget):
         dw.addLayout(cmap_row)
 
         self._map_drr = ScanMapView()
+        self._map_drr.context_save_image.connect(
+            lambda: self._save_map_ctx(self._map_drr))
         dw.addWidget(self._map_drr)
 
         self._map_dt  = ScanMapView()
         self._map_dt.set_title("ΔT (°C)  — requires calibration")
+        self._map_dt.context_save_image.connect(
+            lambda: self._save_map_ctx(self._map_dt))
 
         result_tabs.addTab(drr_wrapper,  " ΔR/R Map ")
         result_tabs.addTab(self._map_dt, " ΔT Map ")
@@ -581,6 +679,14 @@ class ScanTab(QWidget):
         if path:
             self._map_drr.save_image(path)
             QMessageBox.information(self, "Saved", f"Image saved to:\n{path}")
+
+    def _save_map_ctx(self, view: ScanMapView):
+        """Context-menu 'Save Map Image…' — save whichever map view was right-clicked."""
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save Map Image", "scan_map.png",
+            "PNG images (*.png);;All files (*)")
+        if path:
+            view.save_image(path)
 
     def _gen_report(self):
         if not (self._result and self._result.valid):

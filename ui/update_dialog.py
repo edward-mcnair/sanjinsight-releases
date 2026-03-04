@@ -21,7 +21,8 @@ from PyQt5.QtGui     import QDesktopServices, QFont, QColor
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QWidget, QFrame, QTextEdit, QSizePolicy, QApplication,
-    QScrollArea,
+    QScrollArea, QTabWidget, QTableWidget, QTableWidgetItem,
+    QHeaderView, QAbstractItemView,
 )
 
 from version import (
@@ -252,7 +253,7 @@ class AboutDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle(f"About {APP_NAME}")
         self.setModal(True)
-        self.setFixedSize(500, 420)
+        self.setFixedSize(560, 520)
         self.setStyleSheet(f"QDialog {{ background:{_BG}; }} QLabel {{ background:transparent; }}")
 
         root = QVBoxLayout(self)
@@ -278,11 +279,25 @@ class AboutDialog(QDialog):
 
         root.addWidget(hdr)
 
-        # ── System info block ─────────────────────────────────────────
-        info_widget = QWidget()
-        info_lay = QVBoxLayout(info_widget)
-        info_lay.setContentsMargins(30, 20, 30, 10)
-        info_lay.setSpacing(6)
+        # ── Tabbed body ───────────────────────────────────────────────
+        tabs = QTabWidget()
+        tabs.setStyleSheet(f"""
+            QTabWidget::pane {{
+                border: 1px solid {_BORDER}; background: {_BG};
+            }}
+            QTabBar::tab {{
+                background: {_BG2}; color: {_MUTED};
+                padding: 6px 18px; border: 1px solid {_BORDER};
+                border-bottom: none; margin-right: 2px;
+            }}
+            QTabBar::tab:selected {{ background: {_BG}; color: #fff; }}
+        """)
+
+        # ── "About" tab ───────────────────────────────────────────────
+        about_widget = QWidget()
+        about_lay = QVBoxLayout(about_widget)
+        about_lay.setContentsMargins(20, 16, 20, 10)
+        about_lay.setSpacing(6)
 
         self._sys_info = self._build_sys_info()
 
@@ -298,7 +313,7 @@ class AboutDialog(QDialog):
             }}
         """)
         info_box.setFixedHeight(170)
-        info_lay.addWidget(info_box)
+        about_lay.addWidget(info_box)
 
         copy_btn = QPushButton("📋  Copy Info to Clipboard  (for support tickets)")
         copy_btn.setStyleSheet(_BTN_SECONDARY.replace("padding:8px 22px", "padding:6px 14px"))
@@ -306,9 +321,15 @@ class AboutDialog(QDialog):
             "Copies version + system info to clipboard so you can paste it\n"
             "into a support ticket or email to " + SUPPORT_EMAIL)
         copy_btn.clicked.connect(self._copy_to_clipboard)
-        info_lay.addWidget(copy_btn)
+        about_lay.addWidget(copy_btn)
+        about_lay.addStretch(1)
 
-        root.addWidget(info_widget, 1)
+        tabs.addTab(about_widget, "About")
+
+        # ── "Shortcuts" tab ───────────────────────────────────────────
+        tabs.addTab(self._build_shortcuts_tab(), "Keyboard Shortcuts")
+
+        root.addWidget(tabs, 1)
 
         # ── Separator ─────────────────────────────────────────────────
         sep = QFrame()
@@ -391,3 +412,68 @@ class AboutDialog(QDialog):
             sender.setText("✓ Copied!")
             from PyQt5.QtCore import QTimer
             QTimer.singleShot(1500, lambda: sender.setText(original))
+
+    def _build_shortcuts_tab(self) -> QWidget:
+        """Build the Keyboard Shortcuts tab with a categorised table."""
+        SHORTCUTS = [
+            # (Category, Key, Action)
+            ("Acquisition", "Ctrl+R",       "Run Sequence (Acquire tab)"),
+            ("Acquisition", "Escape",        "Abort current operation"),
+            ("Acquisition", "F5",            "Start Live Stream"),
+            ("Acquisition", "F6",            "Stop Live Stream"),
+            ("Acquisition", "F7",            "Freeze / Resume live display"),
+            ("Acquisition", "F8",            "Run Analysis"),
+            ("Acquisition", "F9",            "Start / Stop Scan"),
+            ("Navigation",  "Ctrl+L",        "Switch to Live tab"),
+            ("Navigation",  "Ctrl+Shift+S",  "Switch to Scan tab"),
+            ("Navigation",  "Ctrl+1",        "Switch to Acquire tab"),
+            ("Navigation",  "Ctrl+2",        "Switch to Camera tab"),
+            ("Navigation",  "Ctrl+3",        "Switch to Temperature tab"),
+            ("Navigation",  "Ctrl+4",        "Switch to Stage tab"),
+            ("Navigation",  "Ctrl+5",        "Switch to Analysis tab"),
+            ("Hardware",    "Ctrl+D",        "Open Device Manager"),
+            ("Hardware",    "Ctrl+Shift+H",  "Hardware Setup Wizard"),
+            ("Safety",      "Ctrl+.",        "Emergency Stop"),
+            ("App",         "Ctrl+,",        "Open Settings"),
+        ]
+
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.setContentsMargins(12, 10, 12, 8)
+        lay.setSpacing(4)
+
+        table = QTableWidget(len(SHORTCUTS), 3)
+        table.setHorizontalHeaderLabels(["Category", "Shortcut", "Action"])
+        table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        table.setAlternatingRowColors(True)
+        table.verticalHeader().setVisible(False)
+        table.setShowGrid(False)
+        table.setFocusPolicy(Qt.NoFocus)
+        table.setStyleSheet(f"""
+            QTableWidget {{
+                background:{_BG}; alternate-background-color:{_BG2};
+                border:none; font-size:11pt; color:{_MUTED};
+                selection-background-color:#252525; outline:none;
+            }}
+            QHeaderView::section {{
+                background:{_BG2}; color:#555;
+                padding:4px 8px; border:none;
+                border-bottom:1px solid {_BORDER};
+            }}
+        """)
+        mono = QFont("Menlo, Consolas, monospace")
+        mono.setPointSize(11)
+        for row, (section, key, action) in enumerate(SHORTCUTS):
+            for col, val in enumerate([section, key, action]):
+                item = QTableWidgetItem(val)
+                if col == 1:
+                    item.setFont(mono)
+                table.setItem(row, col, item)
+
+        table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        table.resizeRowsToContents()
+        lay.addWidget(table)
+        return w

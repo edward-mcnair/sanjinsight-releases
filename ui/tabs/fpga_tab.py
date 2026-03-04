@@ -24,7 +24,8 @@ log = logging.getLogger(__name__)
 
 from PyQt5.QtWidgets import (
     QWidget, QLabel, QPushButton, QDoubleSpinBox, QVBoxLayout,
-    QHBoxLayout, QGridLayout, QGroupBox, QFrame)
+    QHBoxLayout, QGridLayout, QGroupBox, QFrame, QComboBox,
+    QInputDialog, QMessageBox)
 from PyQt5.QtCore    import Qt
 
 from hardware.app_state import app_state
@@ -43,6 +44,9 @@ class FpgaTab(QWidget):
     def __init__(self, hw_service=None):
         super().__init__()
         self._hw = hw_service
+        from hardware.hardware_preset_manager import (
+            HardwarePresetManager, FPGA_FACTORY_PRESETS)
+        self._preset_mgr = HardwarePresetManager("fpga", FPGA_FACTORY_PRESETS)
         root = QVBoxLayout(self)
         root.setContentsMargins(10, 10, 10, 10)
         root.setSpacing(10)
@@ -59,6 +63,38 @@ class FpgaTab(QWidget):
                   self._sync_w, self._stim_w]:
             sl.addWidget(w)
         root.addWidget(status_box)
+
+        # ── Configuration presets ──────────────────────────────────────
+        preset_box = QGroupBox("Configuration Presets")
+        pl = QHBoxLayout(preset_box)
+        pl.setContentsMargins(8, 6, 8, 6)
+        pl.setSpacing(6)
+
+        self._preset_combo = QComboBox()
+        self._preset_combo.setMinimumWidth(240)
+        self._preset_combo.setToolTip("Load a named FPGA configuration preset")
+        self._refresh_preset_combo()
+        pl.addWidget(self._preset_combo)
+
+        load_btn = QPushButton("Load")
+        load_btn.setFixedWidth(60)
+        load_btn.setToolTip("Apply the selected preset")
+        load_btn.clicked.connect(self._load_preset)
+        pl.addWidget(load_btn)
+
+        save_btn = QPushButton("Save…")
+        save_btn.setFixedWidth(60)
+        save_btn.setToolTip("Save current settings as a new preset")
+        save_btn.clicked.connect(self._save_preset)
+        pl.addWidget(save_btn)
+
+        del_btn = QPushButton("Delete")
+        del_btn.setFixedWidth(60)
+        del_btn.setToolTip("Delete the selected user preset")
+        del_btn.clicked.connect(self._delete_preset)
+        pl.addWidget(del_btn)
+        pl.addStretch()
+        root.addWidget(preset_box)
 
         # ── Quick controls (basic) ─────────────────────────────────────
         ctrl_box = QGroupBox("Quick Controls")
@@ -210,6 +246,60 @@ class FpgaTab(QWidget):
         v.addWidget(val)
         w._val = val
         return w
+
+    # ── Preset helpers ────────────────────────────────────────────────
+
+    def _refresh_preset_combo(self):
+        self._preset_combo.blockSignals(True)
+        self._preset_combo.clear()
+        for name in self._preset_mgr.names():
+            self._preset_combo.addItem(name)
+        self._preset_combo.blockSignals(False)
+
+    def _load_preset(self):
+        name = self._preset_combo.currentText()
+        cfg  = self._preset_mgr.get(name)
+        if not cfg:
+            return
+        freq = cfg.get("freq_hz")
+        duty = cfg.get("duty_pct")
+        if freq is not None:
+            self._freq_spin.setValue(float(freq))
+            self._set_freq(float(freq))
+        if duty is not None:
+            self._duty_spin.setValue(float(duty))
+            self._set_duty(float(duty) / 100.0)
+
+    def _save_preset(self):
+        name, ok = QInputDialog.getText(
+            self, "Save Preset", "Preset name:")
+        if not (ok and name.strip()):
+            return
+        cfg = {
+            "freq_hz":  self._freq_spin.value(),
+            "duty_pct": self._duty_spin.value(),
+        }
+        self._preset_mgr.save(name.strip(), cfg)
+        self._refresh_preset_combo()
+        # Select the newly saved preset
+        idx = self._preset_combo.findText(name.strip())
+        if idx >= 0:
+            self._preset_combo.setCurrentIndex(idx)
+
+    def _delete_preset(self):
+        name = self._preset_combo.currentText()
+        if not self._preset_mgr.is_user_preset(name):
+            QMessageBox.information(
+                self, "Cannot Delete",
+                f"'{name}' is a factory preset and cannot be deleted.")
+            return
+        r = QMessageBox.question(
+            self, "Delete Preset",
+            f"Delete preset '{name}'?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if r == QMessageBox.Yes:
+            self._preset_mgr.delete(name)
+            self._refresh_preset_combo()
 
     def _sub(self, text):
         l = QLabel(text)

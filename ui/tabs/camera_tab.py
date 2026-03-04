@@ -27,7 +27,7 @@ log = logging.getLogger(__name__)
 
 from PyQt5.QtWidgets import (
     QWidget, QLabel, QPushButton, QSlider, QVBoxLayout, QHBoxLayout,
-    QGridLayout, QGroupBox, QButtonGroup, QRadioButton, QFrame)
+    QGridLayout, QGroupBox, QButtonGroup, QRadioButton, QFrame, QComboBox)
 from PyQt5.QtCore    import Qt
 
 from hardware.app_state    import app_state
@@ -120,6 +120,29 @@ class CameraTab(QWidget):
             f"font-size:{FONT['caption']}pt; color:{PALETTE['textDim']}; padding-left:2px;")
         cl.addWidget(sub_gain, 4, 1, 1, 2)
 
+        # ── Objective Turret selector (row 5 — only shown when turret connected) ──
+        self._obj_label = help_label("Objective", "objective_turret")
+        self._obj_combo = QComboBox()
+        self._obj_combo.setFixedWidth(180)
+        self._obj_combo.setToolTip(
+            "Select the active objective lens on the motorized turret.\n"
+            "Changing the objective updates the field of view and pixel size.")
+        self._obj_combo.currentIndexChanged.connect(self._on_objective_changed)
+
+        self._obj_fov_lbl = QLabel("")
+        self._obj_fov_lbl.setStyleSheet(
+            f"font-size:{FONT['caption']}pt; color:{PALETTE['textDim']}; "
+            f"padding-left:2px;")
+
+        # These widgets are hidden when no turret is connected
+        self._obj_label.setVisible(False)
+        self._obj_combo.setVisible(False)
+        self._obj_fov_lbl.setVisible(False)
+
+        cl.addWidget(self._obj_label,   5, 0)
+        cl.addWidget(self._obj_combo,   5, 1)
+        cl.addWidget(self._obj_fov_lbl, 6, 1, 1, 2)
+
         # ── Advanced section (collapsible) ────────────────────────────
         adv_panel = CollapsiblePanel("Display & save", start_collapsed=True)
 
@@ -144,7 +167,7 @@ class CameraTab(QWidget):
         adv_grid.addWidget(save_btn, 1, 1)
 
         adv_panel.addWidget(adv_inner)
-        cl.addWidget(adv_panel, 5, 0, 1, 3)
+        cl.addWidget(adv_panel, 7, 0, 1, 3)
 
         top.addWidget(ctrl_box, 1)
 
@@ -244,6 +267,79 @@ class CameraTab(QWidget):
             cv2.imwrite(name, frame.data)
             from ui.app_signals import signals
             signals.log_message.emit(f"Saved: {name}")
+
+    # ── Objective turret ───────────────────────────────────────────────
+
+    def showEvent(self, e):
+        self._refresh_turret()
+        super().showEvent(e)
+
+    def _refresh_turret(self):
+        """Populate the objective combo box from the connected turret."""
+        turret = app_state.turret
+        has_turret = turret is not None
+        self._obj_label.setVisible(has_turret)
+        self._obj_combo.setVisible(has_turret)
+        self._obj_fov_lbl.setVisible(has_turret)
+
+        if not has_turret:
+            return
+
+        # Populate combo without triggering _on_objective_changed
+        self._obj_combo.blockSignals(True)
+        self._obj_combo.clear()
+        try:
+            objectives = turret.list_objectives()
+            for obj in objectives:
+                self._obj_combo.addItem(obj.label, userData=obj)
+
+            # Select current objective
+            cur_pos = turret.get_position()
+            for i in range(self._obj_combo.count()):
+                obj = self._obj_combo.itemData(i)
+                if obj is not None and obj.position == cur_pos:
+                    self._obj_combo.setCurrentIndex(i)
+                    self._update_fov_label(obj)
+                    break
+        except Exception:
+            pass
+        self._obj_combo.blockSignals(False)
+
+    def _on_objective_changed(self, index: int):
+        """Called when user selects a different objective in the combo."""
+        if index < 0:
+            return
+        obj = self._obj_combo.itemData(index)
+        if obj is None:
+            return
+
+        self._update_fov_label(obj)
+
+        # Move turret in background thread
+        turret = app_state.turret
+        if turret is None:
+            return
+
+        import threading
+
+        def _move():
+            try:
+                turret.move_to(obj.position)
+                app_state.active_objective = obj
+            except Exception as exc:
+                log.warning("Turret move error: %s", exc)
+
+        threading.Thread(target=_move, daemon=True).start()
+
+    def _update_fov_label(self, obj):
+        """Update the FOV / pixel-size caption below the combo box."""
+        try:
+            fov  = obj.fov_um()
+            px   = obj.px_size_um()
+            self._obj_fov_lbl.setText(
+                f"FOV ≈ {fov:.0f} µm wide   ·   pixel ≈ {px:.3f} µm")
+        except Exception:
+            self._obj_fov_lbl.setText("")
 
     def set_exposure(self, us: float):
         """Push a new exposure value from an external source (e.g. profile)."""

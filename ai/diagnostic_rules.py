@@ -25,6 +25,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, Optional
 
+from ai.instrument_knowledge import (
+    DUTY_CYCLE_WARN_PCT as _DC_WARN_PCT,   # T1 duty cycle overheating warning
+    DUTY_CYCLE_FAIL_PCT as _DC_FAIL_PCT,   # T1 duty cycle overheating fail
+    CAMERA_SAT_WARN     as _PIX_WARN,      # C3 pixel headroom warning
+    CAMERA_SAT_LIMIT    as _PIX_FAIL,      # C3 pixel at 12-bit saturation
+    TEC_OBJECT_MIN_C    as _TEMP_MIN_C,    # R5 min safe TEC setpoint  (15 °C, TEC1089)
+    TEC_OBJECT_MAX_C    as _TEMP_MAX_C,    # R5 max safe TEC setpoint (130 °C, TEC1089)
+    TEC_STABILITY_WINDOW_C,                # R4 stability band ±°C     (1 °C,  TEC1089)
+    TEC_STABILITY_TIME_S,                  # R4 seconds in-band needed  (10 s,  TEC1089)
+)
+
 
 # ── Result type ────────────────────────────────────────────────────────────
 
@@ -53,13 +64,10 @@ _FOCUS_FAIL      = 40.0   # Laplacian variance → fail below this
 _TEC_WARN_C      = 0.10   # TEC Δ°C           → warn
 _TEC_FAIL_C      = 0.20   # TEC Δ°C           → fail
 
-# ── Thresholds sourced from ai/instrument_knowledge.py ─────────────────────
-_DC_WARN_PCT  = 50.0     # duty cycle % → overheating warning (T1)
-_DC_FAIL_PCT  = 80.0     # duty cycle % → overheating fail    (T1)
-_PIX_WARN     = 3900     # pixel value within ~5% of 4095     (C3)
-_PIX_FAIL     = 4095     # pixel value at 12-bit saturation   (C3)
-_TEMP_MIN_C   = 10.0     # min safe TEC setpoint              (R5)
-_TEMP_MAX_C   = 150.0    # max safe TEC setpoint              (R5)
+# ── Thresholds imported from ai/instrument_knowledge.py ────────────────────
+# _DC_WARN_PCT, _DC_FAIL_PCT, _PIX_WARN, _PIX_FAIL,
+# _TEMP_MIN_C, _TEMP_MAX_C, TEC_STABILITY_WINDOW_C, TEC_STABILITY_TIME_S
+# are all imported at the top of this file — do not duplicate here.
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -125,8 +133,10 @@ def rule_tec_stable(snap: dict) -> list[RuleResult]:
             ),
             hint = (
                 f"Wait for TEC {idx + 1} to stabilise at {target:.1f}°C "
-                f"(Temperature panel), or reduce the duty cycle in the FPGA panel "
-                "to lower sample heating."
+                f"(controller requires ±{TEC_STABILITY_WINDOW_C:.0f} °C for "
+                f"{TEC_STABILITY_TIME_S} s). "
+                "Open the Temperature panel to monitor progress; "
+                "reduce FPGA duty cycle to lower sample heating."
             ),
         ))
     return results

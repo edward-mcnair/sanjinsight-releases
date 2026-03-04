@@ -48,6 +48,10 @@ class AppSignals(QObject):
     cal_complete    = pyqtSignal(object)           # CalibrationResult
     scan_progress   = pyqtSignal(object)           # ScanProgress
     scan_complete   = pyqtSignal(object)           # ScanResult
+    movie_progress  = pyqtSignal(object)           # MovieProgress
+    movie_complete  = pyqtSignal(object)           # MovieResult
+    transient_progress = pyqtSignal(object)        # TransientProgress
+    transient_complete = pyqtSignal(object)        # TransientResult
     profile_applied = pyqtSignal(object)           # MaterialProfile
     acq_progress    = pyqtSignal(object)           # AcquisitionProgress
     acq_complete    = pyqtSignal(object)           # AcquisitionResult

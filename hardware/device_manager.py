@@ -35,7 +35,8 @@ _CONNECT_TIMEOUT_S: float = 12.0
 
 from .device_registry import (DeviceDescriptor, DEVICE_REGISTRY,
                                 DTYPE_CAMERA, DTYPE_TEC, DTYPE_FPGA,
-                                DTYPE_STAGE, DTYPE_BIAS)
+                                DTYPE_STAGE, DTYPE_PROBER, DTYPE_TURRET,
+                                DTYPE_BIAS)
 from .device_scanner  import DiscoveredDevice, ScanReport
 
 
@@ -414,6 +415,14 @@ class DeviceManager:
             elif dtype == DTYPE_STAGE:
                 from hardware.stage import create_stage
                 return create_stage(cfg)
+            elif dtype == DTYPE_PROBER:
+                # Prober uses the stage factory with the mpi_prober driver key
+                from hardware.stage import create_stage
+                cfg_prober = dict(cfg, driver="mpi_prober")
+                return create_stage(cfg_prober)
+            elif dtype == DTYPE_TURRET:
+                from hardware.turret.factory import create_turret
+                return create_turret(cfg)
             elif dtype == DTYPE_BIAS:
                 from hardware.bias import create_bias
                 return create_bias(cfg)
@@ -426,20 +435,25 @@ class DeviceManager:
     def _driver_key(self, desc: DeviceDescriptor) -> str:
         """Map descriptor uid to the short driver key used by factories."""
         KEY_MAP = {
-            "basler_aca1920_155um": "pypylon",
-            "basler_aca640_750um":  "pypylon",
-            "basler_gigE_generic":  "pypylon",
-            "meerstetter_tec_1089": "meerstetter",
-            "meerstetter_tec_1123": "meerstetter",
-            "atec_302":             "atec",
-            "ni_9637":              "ni9637",
-            "ni_usb_6001":          "ni9637",
-            "thorlabs_bsc203":      "thorlabs",
-            "thorlabs_mpc320":      "thorlabs",
-            "prior_proscan":        "prior",
-            "keithley_2400":        "keithley",
-            "keithley_2450":        "keithley",
-            "rigol_dp832":          "visa",
+            "basler_aca1920_155um":     "pypylon",
+            "basler_aca640_750um":      "pypylon",
+            "basler_gigE_generic":      "pypylon",
+            "meerstetter_tec_1089":     "meerstetter",
+            "meerstetter_tec_1123":     "meerstetter",
+            "atec_302":                 "atec",
+            "temptronic_ats_series":    "thermal_chuck",
+            "cascade_thermal_chuck":    "thermal_chuck",
+            "wentworth_thermal_chuck":  "thermal_chuck",
+            "ni_9637":                  "ni9637",
+            "ni_usb_6001":              "ni9637",
+            "thorlabs_bsc203":          "thorlabs",
+            "thorlabs_mpc320":          "thorlabs",
+            "prior_proscan":            "prior",
+            "mpi_prober_generic":       "mpi_prober",
+            "olympus_ix_turret":        "olympus_linx",
+            "keithley_2400":            "keithley",
+            "keithley_2450":            "keithley",
+            "rigol_dp832":              "visa",
         }
         return KEY_MAP.get(desc.uid, desc.uid)
 
@@ -472,10 +486,20 @@ class DeviceManager:
             from hardware.app_state import app_state
             desc  = self._entries[uid].descriptor
             dtype = desc.device_type
-            if   dtype == DTYPE_CAMERA: app_state.cam   = driver_obj
-            elif dtype == DTYPE_FPGA:   app_state.fpga  = driver_obj
-            elif dtype == DTYPE_STAGE:  app_state.stage = driver_obj
-            elif dtype == DTYPE_BIAS:   app_state.bias  = driver_obj
+            if   dtype == DTYPE_CAMERA:  app_state.cam    = driver_obj
+            elif dtype == DTYPE_FPGA:    app_state.fpga   = driver_obj
+            elif dtype == DTYPE_STAGE:   app_state.stage  = driver_obj
+            elif dtype == DTYPE_PROBER:  app_state.prober = driver_obj
+            elif dtype == DTYPE_BIAS:    app_state.bias   = driver_obj
+            elif dtype == DTYPE_TURRET:
+                app_state.turret = driver_obj
+                # Prime active_objective from current turret position
+                try:
+                    spec = driver_obj.get_objective()
+                    if spec is not None:
+                        app_state.active_objective = spec
+                except Exception:
+                    pass
             elif dtype == DTYPE_TEC:
                 app_state.add_tec(driver_obj)
         except Exception:
@@ -488,10 +512,14 @@ class DeviceManager:
             desc  = self._entries[uid].descriptor
             dtype = desc.device_type
             driver_obj = self._entries[uid].driver_obj
-            if   dtype == DTYPE_CAMERA: app_state.cam   = None
-            elif dtype == DTYPE_FPGA:   app_state.fpga  = None
-            elif dtype == DTYPE_STAGE:  app_state.stage = None
-            elif dtype == DTYPE_BIAS:   app_state.bias  = None
+            if   dtype == DTYPE_CAMERA:  app_state.cam    = None
+            elif dtype == DTYPE_FPGA:    app_state.fpga   = None
+            elif dtype == DTYPE_STAGE:   app_state.stage  = None
+            elif dtype == DTYPE_PROBER:  app_state.prober = None
+            elif dtype == DTYPE_BIAS:    app_state.bias   = None
+            elif dtype == DTYPE_TURRET:
+                app_state.turret           = None
+                app_state.active_objective = None
             elif dtype == DTYPE_TEC:
                 # Remove this TEC from the list; preserve order of others
                 with app_state:

@@ -153,6 +153,55 @@ class StageDriver(ABC):
         """Default speed per axis in μm/s."""
         return {"x": 1000.0, "y": 1000.0, "z": 100.0}
 
+    # ---------------------------------------------------------------- #
+    #  Optional prober extensions (not abstract — do not break         #
+    #  existing drivers; override in probe-station stage drivers)      #
+    # ---------------------------------------------------------------- #
+
+    def is_prober(self) -> bool:
+        """Return True if this driver supports probe-station die-stepping."""
+        return False
+
+    def step_to_die(self, col: int, row: int) -> None:
+        """
+        Move to a wafer-map die position (column, row).
+
+        Probe stations maintain an internal wafer map.  This method
+        commands the chuck to move to the die at (col, row) in the map.
+
+        Not supported on standard microscope stages — raises NotImplementedError.
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not support die stepping.")
+
+    def probe_contact(self) -> None:
+        """
+        Lower probe needles to make electrical contact with the DUT.
+
+        Only valid on probe station stages that control needle Z-axis.
+        Raises NotImplementedError on standard stages.
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not support probe_contact().")
+
+    def probe_lift(self) -> None:
+        """
+        Raise probe needles to safe travel height.
+
+        Must be called before any XY die-step move to avoid dragging
+        needles across the wafer surface.
+        Raises NotImplementedError on standard stages.
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not support probe_lift().")
+
+    def get_wafer_map_size(self) -> tuple:
+        """
+        Return (n_cols, n_rows) of the configured wafer die map.
+        Returns (0, 0) if not a prober or wafer map not configured.
+        """
+        return (0, 0)
+
     def __repr__(self):
         return (f"<{self.__class__.__name__} "
                 f"connected={self._connected} pos={self._pos}>")

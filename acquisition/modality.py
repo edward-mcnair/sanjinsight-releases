@@ -34,6 +34,8 @@ class ImagingModality(str, Enum):
     IR_LOCKIN         = "ir_lockin"
     HYBRID            = "hybrid"
     OPP               = "opp"
+    MOVIE             = "movie"       # High-speed burst capture (thermal transient video)
+    TRANSIENT         = "transient"   # FPGA-triggered time-resolved ΔR/R cube
     UNKNOWN           = "unknown"
 
     @classmethod
@@ -104,6 +106,28 @@ MODALITY_INFO: dict[ImagingModality, ModalityInfo] = {
         instrument_examples = "OPP system, PS700",
         accent_color        = "#4488ff",
     ),
+    ImagingModality.MOVIE: ModalityInfo(
+        display_name        = "Movie Mode (Burst Capture)",
+        short_name          = "MOVIE",
+        calibration_model   = "Raw intensity vs. time; ΔR/R = (frame - reference) / reference",
+        requires_ct_map     = False,  # optional: apply C_T post-hoc for temperature
+        requires_emissivity = False,
+        output_dimensions   = 3,
+        output_description  = "3D frame cube  (N_frames × H × W, float32)",
+        instrument_examples = "EZ-THERM, SanjSCOPE (high-speed camera config)",
+        accent_color        = "#ffcc22",
+    ),
+    ImagingModality.TRANSIENT: ModalityInfo(
+        display_name        = "Time-Resolved Transient (TR)",
+        short_name          = "TRANS",
+        calibration_model   = "ΔR/R = C_T × ΔT  at each trigger delay; boxcar averaged",
+        requires_ct_map     = True,
+        requires_emissivity = False,
+        output_dimensions   = 3,
+        output_description  = "3D ΔT cube  (N_delays × H × W, float32, °C)",
+        instrument_examples = "EZ-THERM (FPGA-triggered), SanjSCOPE",
+        accent_color        = "#22aaff",
+    ),
     ImagingModality.UNKNOWN: ModalityInfo(
         display_name        = "Unknown",
         short_name          = "?",
@@ -132,4 +156,6 @@ def all_modalities() -> list[ImagingModality]:
         ImagingModality.IR_LOCKIN,
         ImagingModality.HYBRID,
         ImagingModality.OPP,
+        ImagingModality.MOVIE,
+        ImagingModality.TRANSIENT,
     ]

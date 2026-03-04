@@ -13,6 +13,7 @@ Right panel : Numerical readouts — SNR meter, pixel probe, histogram,
 """
 
 from __future__ import annotations
+import collections
 import time
 import numpy as np
 
@@ -22,8 +23,8 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QDoubleSpinBox, QSpinBox, QGroupBox, QGridLayout,
     QComboBox, QCheckBox, QSplitter, QSizePolicy, QFrame,
-    QFileDialog, QMessageBox, QSlider)
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal
+    QFileDialog, QMessageBox, QSlider, QRubberBand)
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QRect, QSize, QPoint
 from PyQt5.QtGui  import (QImage, QPixmap, QPainter, QPen, QColor,
                            QBrush, QFont, QLinearGradient, QFontMetrics)
 
@@ -171,13 +172,103 @@ class Histogram(QWidget):
 
 
 # ------------------------------------------------------------------ #
+#  Probe sparkline widget                                             #
+# ------------------------------------------------------------------ #
+
+class TempPlot(QWidget):
+    """
+    Compact sparkline showing the last N pixel-probe ΔR/R readings.
+
+    Push a new value with push(); clear the history with clear().
+    The zero line is drawn as a faint dotted reference when data
+    spans both positive and negative values.
+    """
+
+    def __init__(self, capacity: int = 64):
+        super().__init__()
+        self.setFixedHeight(80)
+        self.setMinimumWidth(60)
+        self._buf: collections.deque = collections.deque(maxlen=capacity)
+
+    def push(self, value: float) -> None:
+        self._buf.append(value)
+        self.update()
+
+    def clear(self) -> None:
+        self._buf.clear()
+        self.update()
+
+    def paintEvent(self, e):
+        p = QPainter(self)
+        W, H = self.width(), self.height()
+        PAD = 4
+        p.fillRect(0, 0, W, H, QColor(18, 18, 18))
+
+        if len(self._buf) < 2:
+            p.setPen(QColor(50, 50, 50))
+            p.setFont(QFont("Menlo", 9))
+            p.drawText(self.rect(), Qt.AlignCenter,
+                       "Move cursor\nover image")
+            p.end()
+            return
+
+        data = list(self._buf)
+        lo   = min(data)
+        hi   = max(data)
+        span = hi - lo
+        if span < 1e-15:
+            lo -= 1e-9
+            hi += 1e-9
+            span = hi - lo
+
+        plot_h = H - 2 * PAD
+        plot_w = W - 2 * PAD
+
+        def _y(v):
+            return int(H - PAD - (v - lo) / span * plot_h)
+
+        # Zero reference line
+        if lo < 0.0 < hi:
+            zy = _y(0.0)
+            p.setPen(QPen(QColor(55, 55, 55), 1, Qt.DotLine))
+            p.drawLine(PAD, zy, W - PAD, zy)
+
+        # Sparkline
+        n   = len(data)
+        pts = [
+            (int(PAD + i / (n - 1) * plot_w), _y(v))
+            for i, v in enumerate(data)
+        ]
+        pen = QPen(QColor(0, 212, 170), 1, Qt.SolidLine)
+        pen.setCapStyle(Qt.RoundCap)
+        p.setPen(pen)
+        for i in range(1, len(pts)):
+            p.drawLine(pts[i-1][0], pts[i-1][1], pts[i][0], pts[i][1])
+
+        # Current-value dot
+        cx, cy = pts[-1]
+        p.setBrush(QColor(0, 212, 170))
+        p.setPen(Qt.NoPen)
+        p.drawEllipse(cx - 3, cy - 3, 6, 6)
+
+        # Current value label (top-left)
+        p.setPen(QColor(0, 180, 140))
+        p.setFont(QFont("Menlo", 8))
+        p.drawText(PAD + 2, PAD + 10, f"{data[-1]:.4e}")
+
+        p.end()
+
+
+# ------------------------------------------------------------------ #
 #  Live map canvas                                                    #
 # ------------------------------------------------------------------ #
 
 class LiveCanvas(QWidget):
     """Displays the live ΔR/R map. Optionally shows a crosshair probe."""
 
-    probe_moved = pyqtSignal(int, int)   # pixel x, y under cursor
+    probe_moved    = pyqtSignal(int, int)   # pixel x, y under cursor
+    context_action = pyqtSignal(str)        # "start" | "stop" | "freeze" | "capture"
+    roi_changed    = pyqtSignal(object)     # None, or (x0, y0, x1, y1) in data coords
 
     def __init__(self):
         super().__init__()
@@ -191,6 +282,18 @@ class LiveCanvas(QWidget):
         self._cmap      = "signed"
         self._data      = None
         self._probe_pos = None   # (px, py) in widget coords
+
+        # ── Zoom & pan state ──────────────────────────────────────────
+        self._zoom      = 1.0    # 1.0 = fit-to-window
+        self._pan_x     = 0.0   # horizontal offset from centred position (px)
+        self._pan_y     = 0.0   # vertical offset
+        self._drag_start     = None   # QPoint when middle-button drag starts
+        self._drag_pan_start = (0.0, 0.0)
+
+        # ── ROI selection (Ctrl+drag) ─────────────────────────────────
+        self._roi_data       = None   # (x0,y0,x1,y1) in data coords, or None
+        self._roi_start_w    = None   # QPoint in widget coords (drag origin)
+        self._rb             = QRubberBand(QRubberBand.Rectangle, self)
 
     def set_cmap(self, cmap: str):
         self._cmap = cmap
@@ -230,6 +333,20 @@ class LiveCanvas(QWidget):
         qi = QImage(rgb.tobytes(), w, h, w * 3, QImage.Format_RGB888)
         self._pixmap = QPixmap.fromImage(qi)
 
+    def _draw_rect(self):
+        """Return (ox, oy, dw, dh) — the destination rect for the current pixmap."""
+        if self._pixmap is None:
+            return None
+        W, H = self.width(), self.height()
+        PAD = 6
+        pw, ph = self._pixmap.width(), max(self._pixmap.height(), 1)
+        fit_scale = min((W - 2*PAD) / max(pw, 1), (H - 2*PAD) / max(ph, 1))
+        dw = max(1, int(pw * fit_scale * self._zoom))
+        dh = max(1, int(ph * fit_scale * self._zoom))
+        ox = (W - dw) // 2 + int(self._pan_x)
+        oy = (H - dh) // 2 + int(self._pan_y)
+        return ox, oy, dw, dh
+
     def paintEvent(self, e):
         p = QPainter(self)
         p.fillRect(self.rect(), QColor(13, 13, 13))
@@ -244,13 +361,10 @@ class LiveCanvas(QWidget):
             p.end()
             return
 
-        W, H   = self.width(), self.height()
-        PAD    = 6
-        scaled = self._pixmap.scaled(
-            W - 2*PAD, H - 2*PAD,
-            Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        ox = (W - scaled.width())  // 2
-        oy = (H - scaled.height()) // 2
+        r = self._draw_rect()
+        ox, oy, dw, dh = r
+        scaled = self._pixmap.scaled(dw, dh, Qt.IgnoreAspectRatio,
+                                     Qt.SmoothTransformation)
         p.drawPixmap(ox, oy, scaled)
 
         # Crosshair probe
@@ -258,8 +372,34 @@ class LiveCanvas(QWidget):
             px, py = self._probe_pos
             pen = QPen(QColor(0, 220, 150, 160), 1, Qt.DashLine)
             p.setPen(pen)
-            p.drawLine(px, oy, px, oy + scaled.height())
-            p.drawLine(ox, py, ox + scaled.width(), py)
+            p.drawLine(px, oy, px, oy + dh)
+            p.drawLine(ox, py, ox + dw, py)
+
+        # ROI rectangle overlay (when ROI is set and rubber band not visible)
+        if self._roi_data and not self._rb.isVisible():
+            r = self._draw_rect()
+            if r:
+                ox, oy, dw, dh = r
+                x0d, y0d, x1d, y1d = self._roi_data
+                pw = self._data.shape[1] if self._data is not None else max(dw, 1)
+                ph = self._data.shape[0] if self._data is not None else max(dh, 1)
+                rx0 = ox + int(x0d / pw * dw)
+                ry0 = oy + int(y0d / ph * dh)
+                rx1 = ox + int(x1d / pw * dw)
+                ry1 = oy + int(y1d / ph * dh)
+                p.setPen(QPen(QColor(255, 200, 0, 180), 2, Qt.DashLine))
+                p.setBrush(QColor(255, 200, 0, 18))
+                p.drawRect(QRect(QPoint(rx0, ry0), QPoint(rx1, ry1)))
+                p.setBrush(Qt.NoBrush)
+                p.setPen(QColor(255, 200, 0, 220))
+                p.setFont(QFont("Helvetica", 10))
+                p.drawText(rx0 + 4, ry0 + 14, "ROI")
+
+        # Zoom level indicator (when zoomed in)
+        if abs(self._zoom - 1.0) > 0.05:
+            p.setPen(QColor(180, 180, 180, 200))
+            p.setFont(QFont("Helvetica", 11))
+            p.drawText(8, self.height() - 8, f"×{self._zoom:.2f}")
 
         if self._frozen:
             self._draw_frozen_badge(p)
@@ -273,23 +413,110 @@ class LiveCanvas(QWidget):
         p.setFont(QFont("Helvetica-Bold", 14))
         p.drawText(8, 8, 70, 22, Qt.AlignCenter, "FROZEN")
 
+    def wheelEvent(self, e):
+        """Scroll wheel → zoom in/out, centred on cursor."""
+        if self._pixmap is None:
+            return
+        delta   = e.angleDelta().y()
+        factor  = 1.15 if delta > 0 else 1.0 / 1.15
+        new_zoom = max(0.25, min(16.0, self._zoom * factor))
+
+        # Zoom toward the cursor position
+        r = self._draw_rect()
+        if r and new_zoom != self._zoom:
+            ox, oy, dw, dh = r
+            cx, cy = e.x(), e.y()
+            new_dw = max(1, int(dw * new_zoom / max(self._zoom, 1e-9)))
+            new_dh = max(1, int(dh * new_zoom / max(self._zoom, 1e-9)))
+            # img_frac = (cx - ox) / dw; keep img_frac * new_dw + new_ox == cx
+            new_ox = cx - int((cx - ox) * new_zoom / max(self._zoom, 1e-9))
+            new_oy = cy - int((cy - oy) * new_zoom / max(self._zoom, 1e-9))
+            W, H = self.width(), self.height()
+            self._pan_x = new_ox - (W - new_dw) // 2
+            self._pan_y = new_oy - (H - new_dh) // 2
+
+        self._zoom = new_zoom
+        self.update()
+        e.accept()
+
+    def mousePressEvent(self, e):
+        """Middle-click → pan drag; Ctrl+left-click → ROI selection."""
+        if e.button() == Qt.MiddleButton:
+            self._drag_start     = e.pos()
+            self._drag_pan_start = (self._pan_x, self._pan_y)
+            self.setCursor(Qt.ClosedHandCursor)
+        elif e.button() == Qt.LeftButton and (e.modifiers() & Qt.ControlModifier):
+            self._roi_start_w = e.pos()
+            self._rb.setGeometry(QRect(e.pos(), QSize()))
+            self._rb.show()
+        else:
+            super().mousePressEvent(e)
+
+    def mouseReleaseEvent(self, e):
+        if e.button() == Qt.MiddleButton:
+            self._drag_start = None
+            self.setCursor(Qt.ArrowCursor)
+        elif e.button() == Qt.LeftButton and self._roi_start_w is not None:
+            self._rb.hide()
+            # Convert rubber-band rect to data coordinates
+            rb_rect = QRect(self._roi_start_w, e.pos()).normalized()
+            r = self._draw_rect()
+            if r and self._data is not None and rb_rect.width() > 4:
+                ox, oy, dw, dh = r
+                ph, pw = self._data.shape[:2]
+                def clamp(v, lo, hi): return max(lo, min(hi, v))
+                x0 = clamp(int((rb_rect.left()   - ox) / dw * pw), 0, pw - 1)
+                y0 = clamp(int((rb_rect.top()    - oy) / dh * ph), 0, ph - 1)
+                x1 = clamp(int((rb_rect.right()  - ox) / dw * pw), 0, pw - 1)
+                y1 = clamp(int((rb_rect.bottom() - oy) / dh * ph), 0, ph - 1)
+                if x1 > x0 and y1 > y0:
+                    self._roi_data = (x0, y0, x1, y1)
+                    self.roi_changed.emit(self._roi_data)
+                    self.update()
+            self._roi_start_w = None
+        else:
+            super().mouseReleaseEvent(e)
+
+    def reset_zoom(self):
+        """Reset zoom and pan to fit-to-window (zoom=1.0)."""
+        self._zoom  = 1.0
+        self._pan_x = 0.0
+        self._pan_y = 0.0
+        self.update()
+
+    def clear_roi(self):
+        """Clear the current ROI selection."""
+        self._roi_data = None
+        self.roi_changed.emit(None)
+        self.update()
+
     def mouseMoveEvent(self, e):
+        # Middle-button drag → pan
+        if e.buttons() & Qt.MiddleButton and self._drag_start is not None:
+            dx = e.x() - self._drag_start.x()
+            dy = e.y() - self._drag_start.y()
+            self._pan_x = self._drag_pan_start[0] + dx
+            self._pan_y = self._drag_pan_start[1] + dy
+            self.update()
+            return
+
+        # Ctrl+left-drag → ROI rubber band
+        if e.buttons() & Qt.LeftButton and self._roi_start_w is not None:
+            self._rb.setGeometry(
+                QRect(self._roi_start_w, e.pos()).normalized())
+            return
+
         self._probe_pos = (e.x(), e.y())
         if self._pixmap and self._data is not None:
-            # Map widget coords back to data coords
-            W, H   = self.width(), self.height()
-            PAD    = 6
-            sw     = min(W - 2*PAD, int((H - 2*PAD) *
-                         self._pixmap.width() / max(self._pixmap.height(), 1)))
-            sh     = min(H - 2*PAD, int((W - 2*PAD) *
-                         self._pixmap.height() / max(self._pixmap.width(), 1)))
-            ox     = (W - sw) // 2
-            oy     = (H - sh) // 2
-            dx     = int((e.x() - ox) / sw * self._data.shape[1])
-            dy     = int((e.y() - oy) / sh * self._data.shape[0])
-            dx     = max(0, min(dx, self._data.shape[1] - 1))
-            dy     = max(0, min(dy, self._data.shape[0] - 1))
-            self.probe_moved.emit(dx, dy)
+            # Map widget coords → data coords (honouring zoom/pan)
+            r = self._draw_rect()
+            if r:
+                ox, oy, dw, dh = r
+                dx = int((e.x() - ox) / dw * self._data.shape[1])
+                dy = int((e.y() - oy) / dh * self._data.shape[0])
+                dx = max(0, min(dx, self._data.shape[1] - 1))
+                dy = max(0, min(dy, self._data.shape[0] - 1))
+                self.probe_moved.emit(dx, dy)
         self.update()
 
     def leaveEvent(self, e):
@@ -299,6 +526,27 @@ class LiveCanvas(QWidget):
     def save_snapshot(self, path: str):
         if self._pixmap:
             self._pixmap.save(path)
+
+    def contextMenuEvent(self, e):
+        from PyQt5.QtWidgets import QMenu
+        menu = QMenu(self)
+        menu.setStyleSheet(
+            "QMenu { background:#1a1a1a; color:#ccc; border:1px solid #333; }"
+            "QMenu::item:selected { background:#2a2a2a; }"
+            "QMenu::separator { height:1px; background:#333; margin:3px 8px; }")
+        menu.addAction("▶  Start Live",       lambda: self.context_action.emit("start"))
+        menu.addAction("■  Stop Live",         lambda: self.context_action.emit("stop"))
+        menu.addAction("❄  Freeze / Resume",   lambda: self.context_action.emit("freeze"))
+        menu.addSeparator()
+        menu.addAction("🔍  Reset Zoom (fit)", self.reset_zoom)
+        act_clear_roi = menu.addAction("⬜  Clear ROI")
+        act_clear_roi.setEnabled(self._roi_data is not None)
+        act_clear_roi.triggered.connect(self.clear_roi)
+        menu.addSeparator()
+        act_save = menu.addAction("📷  Save Snapshot…")
+        act_save.setEnabled(self._pixmap is not None)
+        act_save.triggered.connect(lambda: self.context_action.emit("capture"))
+        menu.exec_(e.globalPos())
 
 
 # ------------------------------------------------------------------ #
@@ -312,6 +560,7 @@ class LiveTab(QWidget):
         self._proc    = None
         self._frozen  = False
         self._last_frame: LiveFrame = None
+        self._roi: tuple = None    # (x0,y0,x1,y1) in data coords, or None
 
         # Poll timer — reads queue and updates UI
         self._timer = QTimer()
@@ -324,12 +573,12 @@ class LiveTab(QWidget):
 
         root.addWidget(self._build_toolbar())
 
-        body = QSplitter(Qt.Horizontal)
-        body.addWidget(self._build_settings())
-        body.addWidget(self._build_canvas())
-        body.addWidget(self._build_readouts())
-        body.setSizes([220, 900, 200])
-        root.addWidget(body, 1)
+        self._body_splitter = QSplitter(Qt.Horizontal)
+        self._body_splitter.addWidget(self._build_settings())
+        self._body_splitter.addWidget(self._build_canvas())
+        self._body_splitter.addWidget(self._build_readouts())
+        self._body_splitter.setSizes([220, 900, 200])
+        root.addWidget(self._body_splitter, 1)
 
     # ---------------------------------------------------------------- #
     #  Toolbar                                                          #
@@ -504,8 +753,27 @@ class LiveTab(QWidget):
 
         self._canvas = LiveCanvas()
         self._canvas.probe_moved.connect(self._on_probe)
+        self._canvas.context_action.connect(self._on_canvas_context)
+        self._canvas.roi_changed.connect(self._on_roi_changed)
         lay.addWidget(self._canvas)
         return w
+
+    def _on_canvas_context(self, action: str):
+        """Dispatch context menu actions from LiveCanvas."""
+        if action == "start":
+            if self._start_btn.isEnabled():
+                self._start()
+        elif action == "stop":
+            if self._stop_btn.isEnabled():
+                self._stop()
+        elif action == "freeze":
+            self._toggle_freeze()
+        elif action == "capture":
+            self._capture()
+
+    def _on_roi_changed(self, roi):
+        """Update stored ROI whenever the canvas rubber-band selection changes."""
+        self._roi = roi
 
     # ---------------------------------------------------------------- #
     #  Readouts panel (right)                                           #
@@ -564,6 +832,15 @@ class LiveTab(QWidget):
         pl.addWidget(self._sub("ΔT (°C)"),  2, 0)
         pl.addWidget(self._probe_dt,         2, 1)
         lay.addWidget(probe_box)
+
+        # Probe sparkline — history of ΔR/R at cursor position
+        lay.addWidget(self._sub("Probe History  (ΔR/R)"))
+        self._probe_plot = TempPlot(capacity=64)
+        self._probe_plot.setToolTip(
+            "Rolling sparkline of the last 64 ΔR/R readings at the\n"
+            "pixel under the cursor. Move the cursor over the live map\n"
+            "to start recording. The faint dotted line marks zero.")
+        lay.addWidget(self._probe_plot)
 
         # Histogram
         lay.addWidget(self._sub("ΔR/R Histogram"))
@@ -678,10 +955,15 @@ class LiveTab(QWidget):
         self._histogram.update_data(frame.drr)
         self._snr_bar.set_value(frame.snr_db)
 
-        # Stats
+        # Stats — restrict to ROI sub-array if one is set
         drr = frame.drr
         if drr is not None:
-            flat = drr.ravel()
+            if self._roi is not None:
+                x0, y0, x1, y1 = self._roi
+                sub = drr[y0:y1, x0:x1]
+                flat = sub.ravel() if sub.size > 0 else drr.ravel()
+            else:
+                flat = drr.ravel()
             self._stat_vals["min"].setText(f"{float(flat.min()):.4e}")
             self._stat_vals["max"].setText(f"{float(flat.max()):.4e}")
             self._stat_vals["mean"].setText(f"{float(flat.mean()):.4e}")
@@ -701,7 +983,7 @@ class LiveTab(QWidget):
             "border-radius:3px; font-family:Menlo,monospace; font-size:12pt;")
 
     def _on_probe(self, dx: int, dy: int):
-        """Update pixel probe readout from mouse position."""
+        """Update pixel probe readout and sparkline from mouse position."""
         if self._last_frame is None:
             return
         drr = self._last_frame.drr
@@ -710,7 +992,9 @@ class LiveTab(QWidget):
         dy = max(0, min(dy, drr.shape[0] - 1))
         dx = max(0, min(dx, drr.shape[1] - 1))
         self._probe_xy.setText(f"({dx}, {dy})")
-        self._probe_drr.setText(f"{drr[dy, dx]:.5e}")
+        val = float(drr[dy, dx])
+        self._probe_drr.setText(f"{val:.5e}")
+        self._probe_plot.push(val)
 
         dt = self._last_frame.dt_map
         if dt is not None and 0 <= dy < dt.shape[0] and 0 <= dx < dt.shape[1]:

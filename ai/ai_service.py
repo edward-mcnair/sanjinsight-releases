@@ -60,7 +60,7 @@ class AIService(QObject):
     history_cleared   = pyqtSignal()
 
     # Rolling window: keep the last N user+assistant exchange pairs
-    _MAX_HISTORY_TURNS = 3
+    _MAX_HISTORY_TURNS = 6
 
     def __init__(self, parent: Optional[QObject] = None):
         super().__init__(parent)

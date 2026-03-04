@@ -118,6 +118,25 @@ class AcquireTab(QWidget):
         self._progress.setRange(0, 100)
         cl.addWidget(self._progress, 4, 0, 1, 2)
 
+        # Recipe quick-access row
+        from PyQt5.QtWidgets import QFrame as _QFrame
+        recipe_row = QHBoxLayout()
+        recipe_lbl = QLabel("Recipe:")
+        recipe_lbl.setStyleSheet("color:#555; font-size:12pt;")
+        recipe_row.addWidget(recipe_lbl)
+        self._active_recipe_lbl = QLabel("(none)")
+        self._active_recipe_lbl.setStyleSheet(
+            "color:#00d4aa; font-size:12pt; font-style:italic;")
+        recipe_row.addWidget(self._active_recipe_lbl, 1)
+        self._load_recipe_btn = QPushButton("📋  Load Recipe…")
+        self._load_recipe_btn.setFixedHeight(26)
+        self._load_recipe_btn.setToolTip(
+            "Open the Recipe Manager to select and apply a hardware + "
+            "acquisition configuration preset")
+        self._load_recipe_btn.clicked.connect(self._open_recipe_manager)
+        recipe_row.addWidget(self._load_recipe_btn)
+        cl.addLayout(recipe_row, 5, 0, 1, 2)
+
         left.addWidget(ctrl_box)
 
         # Log
@@ -207,6 +226,19 @@ class AcquireTab(QWidget):
         self._run_btn.clicked.connect(self._run)
         self._abort_btn.clicked.connect(self._abort)
         self._export_btn.clicked.connect(self._export)
+
+    def set_active_recipe_name(self, name: str | None) -> None:
+        """Called by MainWindow when a recipe is applied to reflect its name."""
+        self._active_recipe_lbl.setText(name or "(none)")
+
+    def _open_recipe_manager(self):
+        """Navigate to the Recipe tab (makes it visible to the user)."""
+        # Walk up to MainWindow and switch to the Recipe tab
+        w = self.window()
+        recipe_tab = getattr(w, '_recipe_tab', None)
+        nav = getattr(w, '_nav', None)
+        if recipe_tab is not None and nav is not None:
+            nav.navigate_to(recipe_tab)
 
     def insert_readiness_widget(self, widget) -> None:
         """

@@ -470,6 +470,138 @@ HELP_CONTENT: dict[str, dict] = {
         "docs":    "Scan Mode › Path",
     },
 
+    # ---- Objective turret --------------------------------------------
+
+    "objective_turret": {
+        "title":   "Motorized Objective Turret",
+        "what":    "A motorized nose-piece that rotates to select one of "
+                   "the installed objective lenses (e.g. 4×, 10×, 20×, "
+                   "50×, 100×). Changing the objective updates the camera "
+                   "field of view (FOV) and pixel size automatically.",
+        "do":      ("Select the objective in the Camera panel. "
+                    "Use a low-magnification objective (4× or 10×) to locate "
+                    "the device, then switch to higher magnification for "
+                    "sub-micron hot-spot analysis.  "
+                    "After changing objectives, click 'Use Objective Z-Range' "
+                    "in the Autofocus panel to preset the Z-sweep range for "
+                    "the new working distance."),
+        "range":   ("4×: FOV ≈ 2.8 mm,  px ≈ 1.5 µm  |  "
+                    "10×: FOV ≈ 1.1 mm,  px ≈ 0.59 µm  |  "
+                    "20×: FOV ≈ 0.6 mm,  px ≈ 0.29 µm  |  "
+                    "50×: FOV ≈ 225 µm,  px ≈ 0.12 µm  |  "
+                    "100×: FOV ≈ 112 µm, px ≈ 0.06 µm"),
+        "warning": ("At NA > 0.5 (50× and above), the thermoreflectance "
+                    "coefficient Cth becomes NA-dependent — high-NA objectives "
+                    "may require a dedicated calibration for accurate absolute "
+                    "temperature values.  "
+                    "Always lift the objective clear of the sample before "
+                    "rotating the turret."),
+        "docs":    "AN-002 §Objective Selection; LINX Olympus Turret.lvproj",
+    },
+
+    # ---- Movie mode --------------------------------------------------
+
+    "movie_mode": {
+        "title":   "Movie Mode (Burst Acquisition)",
+        "what":    "Captures N frames as fast as the camera allows after "
+                   "bias power turns ON, building a time-lapse 'movie' of "
+                   "the thermal transient response.  Unlike lock-in live "
+                   "mode, no FPGA synchronisation is required.",
+        "do":      ("Set N frames to cover the full thermal event "
+                    "(200–500 for most devices at 150 fps).  "
+                    "Enable 'Capture cold reference' to compute ΔR/R from "
+                    "each frame.  "
+                    "Increase 'Settle' time if the device needs time to "
+                    "reach operating conditions after power-on.  "
+                    "Save the result cube (.npz) for post-processing in "
+                    "SanjANALYZER or Python / MATLAB."),
+        "range":   ("10–2000 frames;  "
+                    "Frame rate: acA1920 ≈ 155 fps (full frame), "
+                    "acA640 ≈ 750 fps"),
+        "warning": ("Movie mode does NOT use FPGA lock-in — SNR is lower "
+                    "than accumulated live mode.  "
+                    "Long bursts (>500 frames) may require large RAM. "
+                    "Verify system RAM before capturing high-frame-count "
+                    "sequences at full resolution."),
+        "docs":    "AN-006 §Thermal Movie Mode; EZ500_SV7.lvproj",
+    },
+
+    # ---- Transient tab -----------------------------------------------
+
+    "transient_mode": {
+        "title":   "Transient Acquisition (FPGA-Triggered)",
+        "what":    "Time-resolved mode fires a precise power pulse and "
+                   "captures one camera frame per delay step, building a "
+                   "3D ΔR/R cube (N_delays × H × W).  "
+                   "Multiple trigger cycles are averaged per delay step to "
+                   "improve SNR.  Requires FPGA single-shot trigger support.",
+        "do":      ("Set Delay end to cover the full cool-down period — "
+                    "start with 5 ms and increase if the signal has not "
+                    "returned to baseline.  "
+                    "Use at least 50 averages per delay step for acceptable "
+                    "SNR.  Pulse width should match the electrical test "
+                    "condition.  "
+                    "If 'HW Trigger' shows SW fallback, timing jitter will "
+                    "be ~1 ms instead of ~50 ns — reduce number of delays "
+                    "or increase averages to compensate."),
+        "range":   ("N delays: 10–200;  N averages: 10–500;  "
+                    "Delay range: 0–5,000 ms;  Pulse width: 1–100,000 µs"),
+        "warning": ("SW fallback mode has ~1 ms timing jitter — not "
+                    "suitable for sub-millisecond transient analysis.  "
+                    "Keep pulse duty cycle ≤ 35 % to allow complete "
+                    "cool-down between trigger cycles."),
+        "docs":    "AN-006 §Time-Resolved Thermoreflectance; EZ500_SV7.lvproj",
+    },
+
+    # ---- Probe station -----------------------------------------------
+
+    "prober": {
+        "title":   "MPI Probe Station",
+        "what":    "A motorised chuck that positions the wafer under the "
+                   "optical microscope.  In probe-station mode the chuck "
+                   "moves the die array to the measurement position while "
+                   "probe needles make electrical contact for biasing.",
+        "do":      ("1. Lift probe needles before any chuck movement.  "
+                    "2. Step to the target die using the die map grid or "
+                    "col/row spinboxes.  "
+                    "3. Lower needles (Contact) and verify electrical "
+                    "connection before enabling bias output.  "
+                    "4. Lift needles again before stepping to the next die."),
+        "warning": ("Always lift needles before moving the chuck — "
+                    "contacting the wafer while moving will bend or break "
+                    "the probe tips.  "
+                    "Home the chuck on first use after power-up to "
+                    "initialise position reference."),
+        "docs":    "EZ500_SV7.lvproj §MPI Stage Driver",
+    },
+
+    # ---- Thermal chuck -----------------------------------------------
+
+    "thermal_chuck": {
+        "title":   "Thermal Chuck (Temperature-Controlled Stage)",
+        "what":    "A wafer-holding platform with built-in heating and "
+                   "cooling.  The chuck is controlled as a TEC channel "
+                   "and appears in the Temperature tab alongside "
+                   "Meerstetter TEC controllers.",
+        "do":      ("Set the target temperature in the Temperature panel "
+                    "and enable the chuck output.  "
+                    "Allow 2–5 minutes for large temperature changes — the "
+                    "chuck ramps slowly compared to a Meerstetter TEC.  "
+                    "The stability tolerance is ±2 °C (wider than the TEC "
+                    "± 1 °C) — wait for the 'Stable' indicator before "
+                    "capturing calibration frames."),
+        "range":   ("Temperature: −65 °C to +250 °C  |  "
+                    "Stability tolerance: ±2 °C  |  "
+                    "Max ramp rate: ~300 °C/min"),
+        "warning": ("Condensation forms when chilling below the dew point "
+                    "— purge the chuck with dry N₂ when operating below "
+                    "ambient.  "
+                    "The thermal chuck stability window (±2 °C) is wider "
+                    "than the Meerstetter TEC — factor this into calibration "
+                    "uncertainty estimates."),
+        "docs":    "EZ-Therm Manual §Thermal Chuck; Temptronic ATS Manual",
+    },
+
 }
 
 

@@ -224,7 +224,10 @@ class CalibrationTab(QWidget):
         sl = QVBoxLayout(seq_box)
 
         # Preset buttons — row 1: quick density presets
-        from ai.instrument_knowledge import CAL_TR_TEMPS_C, CAL_IR_TEMPS_C
+        from ai.instrument_knowledge import (
+            CAL_TR_TEMPS_C, CAL_IR_TEMPS_C,
+            CAL_N_AVERAGES, TEC_RAMP_TIME_S, CAL_SETTLE_TIMEOUT_S,
+        )
 
         pre_row1 = QHBoxLayout()
         for label, temps in [
@@ -298,12 +301,20 @@ class CalibrationTab(QWidget):
             cl.addWidget(self._sub(lbl), r, 0)
             cl.addWidget(widget, r, 1)
 
-        self._n_avg     = QSpinBox();   self._n_avg.setRange(5, 200)
-        self._n_avg.setValue(20);       self._n_avg.setFixedWidth(80)
+        self._n_avg     = QSpinBox();   self._n_avg.setRange(5, 500)
+        self._n_avg.setValue(CAL_N_AVERAGES)   # 100 frames — standard (SanjANALYZER)
+        self._n_avg.setFixedWidth(80)
+        self._n_avg.setToolTip(
+            f"Frames averaged per temperature step.\n"
+            f"Standard calibration uses {CAL_N_AVERAGES} frames (SanjANALYZER default).")
 
-        self._settle    = QDoubleSpinBox(); self._settle.setRange(1, 300)
-        self._settle.setValue(30.0);        self._settle.setSuffix(" s")
+        self._settle    = QDoubleSpinBox(); self._settle.setRange(1, CAL_SETTLE_TIMEOUT_S)
+        self._settle.setValue(60.0);        self._settle.setSuffix(" s")
         self._settle.setFixedWidth(90)
+        self._settle.setToolTip(
+            f"Maximum time to wait for each setpoint to stabilise before capturing.\n"
+            f"Hardware timeout limit: {CAL_SETTLE_TIMEOUT_S} s (SanjANALYZER).\n"
+            f"Ramp time to reach setpoint is ~{TEC_RAMP_TIME_S} s (not included here).")
 
         self._stable_tol = QDoubleSpinBox(); self._stable_tol.setRange(0.01, 2.0)
         self._stable_tol.setValue(0.2);      self._stable_tol.setSuffix(" °C")
@@ -715,15 +726,24 @@ class CalibrationTab(QWidget):
         return l
 
     def _update_time_est(self):
-        """Recompute and display estimated calibration time."""
+        """Recompute and display estimated calibration time.
+
+        Per-step budget (from SanjANALYZER / TEC1089 config):
+          • Ramp    — ~TEC_RAMP_TIME_S s to reach setpoint
+          • Settle  — user-configured max settle time
+          • Capture — n_avg frames at ~5 fps
+        """
+        from ai.instrument_knowledge import TEC_RAMP_TIME_S
         n      = len(self._temp_rows)
-        settle = self._settle.value()      # seconds per step (max settle)
-        n_avg  = self._n_avg.value()       # frames per step
-        secs   = n * (settle + n_avg / 5.0)   # assume ~5 fps capture rate
-        m, s   = divmod(int(secs), 60)
+        ramp   = TEC_RAMP_TIME_S          # s — to reach setpoint
+        settle = self._settle.value()     # s — max wait for stability
+        n_avg  = self._n_avg.value()      # frames per step
+        capture = n_avg / 5.0             # s — at ~5 fps
+        secs    = n * (ramp + settle + capture)
+        m, s    = divmod(int(secs), 60)
         if n == 0:
             self._time_est_lbl.setText("Estimated time: — (add temperature steps)")
         else:
             self._time_est_lbl.setText(
                 f"Estimated time: ~{m} min {s} s  "
-                f"({n} steps × {settle:.0f} s settle + {n_avg} frames)")
+                f"({n} steps × [{ramp} s ramp + {settle:.0f} s settle + {n_avg} frames])")

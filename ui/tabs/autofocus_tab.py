@@ -96,6 +96,20 @@ class AutofocusTab(QWidget):
         self._settle.setFixedWidth(80)
         row("Settle delay", self._settle, 7)
 
+        # ── Objective Z-range preset button (row 8) ───────────────────
+        self._obj_preset_btn = QPushButton("⌖  Use Objective Z-Range")
+        self._obj_preset_btn.setToolTip(
+            "Auto-fill Z start / end / step from the active objective's\n"
+            "working distance.  Requires a motorized turret to be connected.")
+        self._obj_preset_btn.clicked.connect(self._apply_objective_preset)
+        cl.addWidget(self._obj_preset_btn, 8, 0, 1, 2)
+
+        self._obj_preset_lbl = QLabel("")
+        self._obj_preset_lbl.setStyleSheet(
+            f"font-size:{FONT['caption']}pt; color:{PALETTE['textDim']}; "
+            f"padding-left:2px;")
+        cl.addWidget(self._obj_preset_lbl, 9, 0, 1, 2)
+
         mid.addWidget(cfg_box, 1)
 
         # Focus curve plot
@@ -169,6 +183,52 @@ class AutofocusTab(QWidget):
         if suffix:
             s.setSuffix(f" {suffix}")
         return s
+
+    # ── Objective Z-range preset ──────────────────────────────────────
+
+    def showEvent(self, e):
+        self._refresh_obj_label()
+        super().showEvent(e)
+
+    def _refresh_obj_label(self):
+        """Update the objective preset label to show the active objective."""
+        obj = app_state.active_objective
+        if obj is not None:
+            self._obj_preset_lbl.setText(
+                f"Active: {obj.label}  (WD {obj.working_dist_mm:.1f} mm)")
+        else:
+            self._obj_preset_lbl.setText("No objective active (turret not connected)")
+
+    def _apply_objective_preset(self):
+        """
+        Set Z-start, Z-end, coarse step, and fine step based on the
+        active objective's working distance.
+        """
+        obj = app_state.active_objective
+        if obj is None:
+            self.log("No active objective — connect a motorized turret first.")
+            return
+
+        wd_um   = obj.working_dist_mm * 1000.0      # working distance in µm
+        # Sweep ±(WD / 3), capped at ±2000 µm (spinbox maximum)
+        z_half  = min(wd_um / 3.0, 2000.0)
+        # Coarse step ≈ z_half / 10 (10 steps covers the range), clamped
+        coarse  = max(5.0,   min(z_half / 10.0, 200.0))
+        # Fine step ≈ coarse / 10, clamped
+        fine    = max(0.5,   min(coarse  / 10.0, 20.0))
+
+        self._z_start.setValue(-z_half)
+        self._z_end.setValue(  z_half)
+        self._coarse.setValue(coarse)
+        self._fine.setValue(  fine)
+
+        self._obj_preset_lbl.setText(
+            f"Applied {obj.label}  (WD {obj.working_dist_mm:.1f} mm)  →  "
+            f"Z ±{z_half:.0f} µm  coarse {coarse:.0f} µm  fine {fine:.1f} µm")
+        self.log(
+            f"Objective preset applied: {obj.label}  "
+            f"Z start={-z_half:.0f} µm  end=+{z_half:.0f} µm  "
+            f"coarse={coarse:.0f} µm  fine={fine:.1f} µm")
 
     def _build_cfg(self) -> dict:
         """Read current UI settings into a config dict."""

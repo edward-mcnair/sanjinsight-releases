@@ -82,32 +82,38 @@ class MeerstetterDriver(TecDriver):
     def get_status(self) -> TecStatus:
         try:
             with self._api_lock:
-                # Parameter 1000: Object Temperature
+                # Parameter 1000: Object Temperature (°C)
                 actual = self._tec.get_parameter(
                     parameter_id=1000, address=self._address, instance=1)
-                # Parameter 1001: Output Current
-                current = self._tec.get_parameter(
+                # Parameter 1001: Sink Temperature (°C)
+                sink = self._tec.get_parameter(
                     parameter_id=1001, address=self._address, instance=1)
-                # Parameter 1002: Output Voltage
+                # Parameter 1020: Actual Output Current (A)
+                current = self._tec.get_parameter(
+                    parameter_id=1020, address=self._address, instance=1)
+                # Parameter 1021: Actual Output Voltage (V)
                 voltage = self._tec.get_parameter(
-                    parameter_id=1002, address=self._address, instance=1)
-                # Parameter 2010: Output Enable status
+                    parameter_id=1021, address=self._address, instance=1)
+                # Parameter 1200: Temperature Is Stable flag (0/1)
+                hw_stable = bool(self._tec.get_parameter(
+                    parameter_id=1200, address=self._address, instance=1))
+                # Parameter 2010: Output Enable status (0/1)
                 enabled = bool(self._tec.get_parameter(
                     parameter_id=2010, address=self._address, instance=1))
-
-            stable = abs(actual - self._target) <= self.stability_tolerance()
 
             return TecStatus(
                 actual_temp    = float(actual),
                 target_temp    = self._target,
+                sink_temp      = float(sink),
                 output_current = float(current),
                 output_voltage = float(voltage),
                 output_power   = abs(float(current) * float(voltage)),
                 enabled        = enabled,
-                stable         = stable,
+                stable         = hw_stable,
             )
         except Exception as e:
             return TecStatus(error=str(e))
 
-    def temp_range(self) -> tuple:
-        return (-40.0, 150.0)
+    # temp_range() and stability_tolerance() are inherited from TecDriver base class,
+    # which now correctly sources TEC_OBJECT_MIN_C (15 °C), TEC_OBJECT_MAX_C (130 °C),
+    # and TEC_STABILITY_WINDOW_C (±1 °C) from ai.instrument_knowledge.

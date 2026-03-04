@@ -106,6 +106,42 @@ class ContextBuilder:
         except Exception:
             data["bias"] = {"connected": False}
 
+        # LDD (Laser Diode Driver — illumination source)
+        try:
+            ldd = app_state.ldd
+            if ldd is not None:
+                st = ldd.get_status()
+                data["ldd"] = {
+                    "connected":   True,
+                    "enabled":     st.enabled,
+                    "current_a":   round(st.actual_current_a, 3),
+                    "voltage_v":   round(st.actual_voltage_v, 3),
+                    "diode_temp_c": round(st.diode_temp_c, 1),
+                    "mode":        st.mode,
+                }
+                if st.error:
+                    data["ldd"]["error"] = st.error
+            else:
+                data["ldd"] = {"connected": False}
+        except Exception:
+            data["ldd"] = {"connected": False}
+
+        # System model (EZ500 / NT220 / PT410A) — from config or auto-detected
+        try:
+            from ai.instrument_knowledge import SYSTEM_SPECS, system_spec
+            model_key = getattr(app_state, "system_model", None)
+            spec = system_spec(model_key) if model_key else None
+            if spec is not None:
+                data["system_model"] = {
+                    "model":           spec.model,
+                    "min_time_res_ns": spec.min_time_res_ns,
+                    "sensor":          spec.sensor,
+                    "illumination_nm": spec.illumination_nm,
+                    "objectives":      spec.objectives,
+                }
+        except Exception:
+            pass
+
         # Active measurement profile (material + wavelength + C_T)
         try:
             prof = app_state.active_profile
@@ -133,6 +169,59 @@ class ContextBuilder:
                     })
             if tec_data:
                 data["tecs"] = tec_data
+        except Exception:
+            pass
+
+        # Active acquisition modality (omit default 'thermoreflectance' to save tokens)
+        try:
+            modality = app_state.active_modality
+            if modality and modality != "thermoreflectance":
+                data["modality"] = modality
+        except Exception:
+            pass
+
+        # Prober (probe-station chuck — distinct from microscope scan stage)
+        try:
+            prober = app_state.prober
+            if prober is not None:
+                _pos = getattr(prober, '_pos', None)
+                pos_dict = None
+                if _pos is not None:
+                    pos_dict = {
+                        "x": round(getattr(_pos, 'x', 0.0), 1),
+                        "y": round(getattr(_pos, 'y', 0.0), 1),
+                        "z": round(getattr(_pos, 'z', 0.0), 1),
+                    }
+                _map = getattr(prober, '_map_size', (0, 0))
+                data["prober"] = {
+                    "connected": True,
+                    "homed":    getattr(prober, '_homed', None),
+                    "pos_um":   pos_dict,
+                    "map_size": (f"{_map[0]}×{_map[1]}"
+                                 if _map and _map[0] and _map[1] else None),
+                }
+            else:
+                data["prober"] = {"connected": False}
+        except Exception:
+            data["prober"] = {"connected": False}
+
+        # Active objective (from motorized turret — drives FOV, pixel size, autofocus range)
+        try:
+            obj = app_state.active_objective
+            if obj is not None:
+                obj_data: dict = {
+                    "mag":   obj.magnification,
+                    "na":    obj.numerical_aperture,
+                    "label": obj.label,
+                }
+                try:
+                    obj_data["fov_um"] = round(obj.fov_um(), 1)
+                    obj_data["px_um"]  = round(obj.px_size_um(), 4)
+                except Exception:
+                    pass
+                data["objective"] = obj_data
+            elif app_state.turret is not None:
+                data["objective"] = {"connected": True}
         except Exception:
             pass
 

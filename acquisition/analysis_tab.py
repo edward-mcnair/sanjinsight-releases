@@ -105,7 +105,8 @@ class VerdictBanner(QWidget):
 # ------------------------------------------------------------------ #
 
 class OverlayCanvas(QWidget):
-    hotspot_hovered = pyqtSignal(int)   # hotspot index (1-based), -1 = none
+    hotspot_hovered    = pyqtSignal(int)   # hotspot index (1-based), -1 = none
+    context_save_png   = pyqtSignal()      # user requested "Save Image…"
 
     def __init__(self):
         super().__init__()
@@ -157,6 +158,18 @@ class OverlayCanvas(QWidget):
             self._pixmap.save(path)
             return True
         return False
+
+    def contextMenuEvent(self, e):
+        from PyQt5.QtWidgets import QMenu
+        menu = QMenu(self)
+        menu.setStyleSheet(
+            "QMenu { background:#1a1a1a; color:#ccc; border:1px solid #333; }"
+            "QMenu::item:selected { background:#2a2a2a; }"
+            "QMenu::separator { height:1px; background:#333; margin:3px 8px; }")
+        act_save = menu.addAction("💾  Save Overlay Image…")
+        act_save.setEnabled(self._pixmap is not None)
+        act_save.triggered.connect(self.context_save_png)
+        menu.exec_(e.globalPos())
 
 
 # ------------------------------------------------------------------ #
@@ -254,12 +267,12 @@ class AnalysisTab(QWidget):
 
         root.addWidget(self._build_toolbar())
 
-        body = QSplitter(Qt.Horizontal)
-        body.addWidget(self._build_controls())
-        body.addWidget(self._build_canvas())
-        body.addWidget(self._build_results())
-        body.setSizes([230, 780, 290])
-        root.addWidget(body, 1)
+        self._body_splitter = QSplitter(Qt.Horizontal)
+        self._body_splitter.addWidget(self._build_controls())
+        self._body_splitter.addWidget(self._build_canvas())
+        self._body_splitter.addWidget(self._build_results())
+        self._body_splitter.setSizes([230, 780, 290])
+        root.addWidget(self._body_splitter, 1)
 
     # ---------------------------------------------------------------- #
     #  Toolbar                                                          #
@@ -426,8 +439,18 @@ class AnalysisTab(QWidget):
         lay = QVBoxLayout(w)
         lay.setContentsMargins(4, 4, 4, 4)
         self._canvas = OverlayCanvas()
+        self._canvas.context_save_png.connect(self._save_overlay_png)
         lay.addWidget(self._canvas)
         return w
+
+    def _save_overlay_png(self):
+        """Save the overlay image via a file dialog (right-click → Save Overlay Image…)."""
+        from PyQt5.QtWidgets import QFileDialog
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save Overlay Image", "overlay.png",
+            "PNG images (*.png);;All files (*)")
+        if path:
+            self._canvas.save_png(path)
 
     # ---------------------------------------------------------------- #
     #  Right: results                                                   #

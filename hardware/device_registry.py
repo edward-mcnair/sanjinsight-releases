@@ -36,7 +36,10 @@ DTYPE_CAMERA  = "camera"
 DTYPE_TEC     = "tec"
 DTYPE_FPGA    = "fpga"
 DTYPE_STAGE   = "stage"
+DTYPE_PROBER  = "prober"   # probe-station chuck stage
+DTYPE_TURRET  = "turret"   # motorized objective turret
 DTYPE_BIAS    = "bias"
+DTYPE_LDD     = "ldd"      # laser diode driver / LED illumination controller
 DTYPE_UNKNOWN = "unknown"
 
 CONN_SERIAL   = "serial"
@@ -334,6 +337,131 @@ DEVICE_REGISTRY: dict[str, DeviceDescriptor] = {
         serial_patterns= ["Rigol", "DP832"],
         description    = "Triple-output programmable DC power supply. "
                          "Used as lower-cost bias source for less demanding applications.",
+    ),
+
+    # ---------------------------------------------------------------- #
+    #  Laser Diode Drivers                                             #
+    # ---------------------------------------------------------------- #
+
+    "meerstetter_ldd1121": DeviceDescriptor(
+        uid            = "meerstetter_ldd1121",
+        display_name   = "Meerstetter LDD-1121",
+        manufacturer   = "Meerstetter Engineering",
+        device_type    = DTYPE_LDD,
+        connection_type= CONN_USB,
+        driver_module  = "hardware.ldd.meerstetter_ldd1121",
+        driver_version = "builtin",
+        hot_loadable   = True,
+        usb_vid        = 0x0403,   # FTDI — same adapter as TEC-1089
+        usb_pid        = 0x6001,
+        serial_patterns= ["Meerstetter", "LDD-1121", "LDD1121"],
+        default_baud   = 57600,
+        description    = (
+            "Meerstetter LDD-1121 laser diode / LED driver. "
+            "Shares RS-485 bus with TEC-1089 (address 1 vs TEC address 2). "
+            "Controls illumination amplitude; pulse timing driven by FPGA HW Pin. "
+            "Max current: 2 A.  Factory serial: 4798."),
+        datasheet_url  = "https://www.meerstetter.ch/products/laser-diode-drivers",
+        notes          = (
+            "Uses MeCom protocol (pyMeCom). "
+            "Parameter IDs: 1000=temp, 1020=actual_I, 1021=actual_V, "
+            "2010=enable, 3000=target_I."),
+    ),
+
+    # ---------------------------------------------------------------- #
+    #  Probe Station (MPI / FormFactor)                                #
+    # ---------------------------------------------------------------- #
+
+    "mpi_prober_generic": DeviceDescriptor(
+        uid            = "mpi_prober_generic",
+        display_name   = "MPI Probe Station (Generic ASCII)",
+        manufacturer   = "FormFactor / MPI",
+        device_type    = DTYPE_PROBER,
+        connection_type= CONN_SERIAL,
+        driver_module  = "hardware.stage.mpi_prober",
+        driver_version = "builtin",
+        hot_loadable   = True,
+        serial_patterns= ["MPI", "FormFactor", "ProbeStation"],
+        default_baud   = 115200,
+        description    = "MPI/FormFactor wafer probe station chuck stage. "
+                         "Controls XYZ chuck positioning and probe needle contact/lift. "
+                         "Stored separately from the optical microscope scan stage.",
+        notes          = "Command set may vary by firmware version. "
+                         "See config key 'protocol' overrides if default commands fail.",
+    ),
+
+    # ---------------------------------------------------------------- #
+    #  Thermal Chuck Controllers                                        #
+    # ---------------------------------------------------------------- #
+
+    "temptronic_ats_series": DeviceDescriptor(
+        uid            = "temptronic_ats_series",
+        display_name   = "Temptronic ATS Thermal Chuck",
+        manufacturer   = "Temptronic (Spirent)",
+        device_type    = DTYPE_TEC,       # integrates as TEC in temperature_tab
+        connection_type= CONN_SERIAL,
+        driver_module  = "hardware.tec.thermal_chuck",
+        driver_version = "builtin",
+        hot_loadable   = True,
+        serial_patterns= ["Temptronic", "ATS", "Thermostream"],
+        default_baud   = 9600,
+        description    = "Temptronic ATS-series thermal chuck controller. "
+                         "Temperature range: –65°C to 250°C. "
+                         "Appears as an additional TEC in the Temperature tab.",
+        notes          = "Set protocol: 'temptronic' in config.",
+    ),
+
+    "cascade_thermal_chuck": DeviceDescriptor(
+        uid            = "cascade_thermal_chuck",
+        display_name   = "Cascade / FormFactor Thermal Chuck",
+        manufacturer   = "FormFactor (Cascade Microtech)",
+        device_type    = DTYPE_TEC,
+        connection_type= CONN_SERIAL,
+        driver_module  = "hardware.tec.thermal_chuck",
+        driver_version = "builtin",
+        hot_loadable   = True,
+        serial_patterns= ["Cascade", "FormFactor", "Chuck"],
+        default_baud   = 9600,
+        description    = "Cascade/FormFactor thermal chuck controller. "
+                         "Set protocol: 'cascade' in config.",
+    ),
+
+    "wentworth_thermal_chuck": DeviceDescriptor(
+        uid            = "wentworth_thermal_chuck",
+        display_name   = "Wentworth Labs Thermal Chuck",
+        manufacturer   = "Wentworth Laboratories",
+        device_type    = DTYPE_TEC,
+        connection_type= CONN_SERIAL,
+        driver_module  = "hardware.tec.thermal_chuck",
+        driver_version = "builtin",
+        hot_loadable   = True,
+        serial_patterns= ["Wentworth"],
+        default_baud   = 9600,
+        description    = "Wentworth Labs thermal chuck controller. "
+                         "Set protocol: 'wentworth' in config.",
+    ),
+
+    # ---------------------------------------------------------------- #
+    #  Objective Turrets                                               #
+    # ---------------------------------------------------------------- #
+
+    "olympus_ix_turret": DeviceDescriptor(
+        uid            = "olympus_ix_turret",
+        display_name   = "Olympus IX Objective Turret (Arduino/LINX)",
+        manufacturer   = "Olympus / custom Arduino interface",
+        device_type    = DTYPE_TURRET,
+        connection_type= CONN_SERIAL,
+        driver_module  = "hardware.turret.olympus_linx",
+        driver_version = "builtin",
+        hot_loadable   = True,
+        serial_patterns= ["Arduino", "CH340", "CP210", "Turret"],
+        default_baud   = 115200,
+        description    = "Olympus IX motorized objective turret controlled via "
+                         "Arduino/LINX serial interface. "
+                         "Rotating to a new objective updates FOV, pixel size, "
+                         "and autofocus search range automatically.",
+        notes          = "Arduino must have the LINX turret sketch loaded. "
+                         "Changing objectives requires autofocus re-run.",
     ),
 }
 

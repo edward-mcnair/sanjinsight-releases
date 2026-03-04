@@ -47,6 +47,8 @@ import numpy as np
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
+from ai.instrument_knowledge import CTH_FILTER_MIN
+
 
 @dataclass
 class CalibrationPoint:
@@ -85,8 +87,9 @@ class CalibrationResult:
     # Mask: pixels where C_T is reliable
     mask:         Optional[np.ndarray] = None   # bool, shape (H, W)
 
-    # Per-pixel min C_T threshold (pixels below are masked)
-    MIN_CT = 1e-7
+    # Per-pixel min C_T threshold (pixels below are masked).
+    # Sourced from SanjANALYZER baseline script (Filter Magnitude Cth = 3e-6 K⁻¹).
+    MIN_CT = CTH_FILTER_MIN   # 3e-6 K⁻¹
 
     # ---------------------------------------------------------------- #
     #  Apply calibration                                                #

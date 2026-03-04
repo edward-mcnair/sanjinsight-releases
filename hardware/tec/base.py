@@ -14,14 +14,21 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Optional
 
+from ai.instrument_knowledge import (
+    TEC_OBJECT_MIN_C,
+    TEC_OBJECT_MAX_C,
+    TEC_STABILITY_WINDOW_C,
+)
+
 
 @dataclass
 class TecStatus:
     """Current status snapshot from the TEC controller."""
-    actual_temp:    float = 0.0     # °C  — measured object temperature
+    actual_temp:    float = 0.0     # °C  — measured object temperature (MeComAPI ID 1000)
     target_temp:    float = 0.0     # °C  — setpoint
-    output_current: float = 0.0     # A
-    output_voltage: float = 0.0     # V
+    sink_temp:      float = 0.0     # °C  — heat-sink temperature     (MeComAPI ID 1001)
+    output_current: float = 0.0     # A                               (MeComAPI ID 1020)
+    output_voltage: float = 0.0     # V                               (MeComAPI ID 1021)
     output_power:   float = 0.0     # W  (current × voltage)
     enabled:        bool  = False   # is the controller actively driving?
     stable:         bool  = False   # is temp within tolerance of setpoint?
@@ -91,12 +98,12 @@ class TecDriver(ABC):
         return self._connected
 
     def temp_range(self) -> tuple:
-        """Return (min_c, max_c). Override for tighter limits."""
-        return (-40.0, 150.0)
+        """Return (min_c, max_c). TEC1089 hardware limits from instrument_knowledge."""
+        return (TEC_OBJECT_MIN_C, TEC_OBJECT_MAX_C)
 
     def stability_tolerance(self) -> float:
-        """°C within which temperature is considered stable."""
-        return 0.1
+        """°C within which temperature is considered stable (TEC1089: ±1 °C)."""
+        return TEC_STABILITY_WINDOW_C
 
     def __repr__(self):
         return (f"<{self.__class__.__name__} "

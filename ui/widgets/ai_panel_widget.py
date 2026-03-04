@@ -28,12 +28,13 @@ and an install hint are shown.
 from __future__ import annotations
 
 import logging
+import time
 
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTextEdit, QLineEdit, QSizePolicy, QFrame)
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QCursor
+from PyQt5.QtGui import QCursor, QTextCharFormat, QColor, QFont
 
 log = logging.getLogger(__name__)
 
@@ -222,9 +223,9 @@ class AIPanelWidget(QWidget):
             f"font-size:12pt; font-family:Menlo,monospace; padding:6px; }}"
         )
         self._display.setPlaceholderText(
-            "AI responses will appear here.\n\n"
+            "Conversation will appear here.\n\n"
             "Load a model in Settings → AI Assistant, then click\n"
-            "\"Explain this tab\" or \"Diagnose\" to get started."
+            "\"Explain this tab\", \"Diagnose\", or type a question below."
         )
         self._display.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         lay.addWidget(self._display, 1)
@@ -272,6 +273,49 @@ class AIPanelWidget(QWidget):
     #  Public API (called by MainWindow via AIService signals)             #
     # ------------------------------------------------------------------ #
 
+    def start_user_turn(self, label: str) -> None:
+        """
+        Insert a user message bubble and an AI response header into the
+        chat log, ready for streaming tokens.
+
+        Call this BEFORE emitting ask_requested (or before calling the AI
+        service for explain/diagnose) so the user can see their prompt
+        immediately.
+        """
+        if not hasattr(self, "_display"):
+            return
+        ts = time.strftime("%H:%M")
+        cursor = self._display.textCursor()
+        cursor.movePosition(cursor.End)
+
+        # ── User header ──────────────────────────────────────────────────
+        fmt_you = QTextCharFormat()
+        fmt_you.setForeground(QColor(_GREEN))
+        fmt_you.setFont(QFont("Menlo", 11, QFont.Bold))
+        cursor.insertText(f"\n▷ You  {ts}\n", fmt_you)
+
+        # ── User question body ───────────────────────────────────────────
+        fmt_body = QTextCharFormat()
+        fmt_body.setForeground(QColor("#aaaaaa"))
+        fmt_body.setFont(QFont("Menlo", 11))
+        cursor.insertText(f"  {label}\n\n", fmt_body)
+
+        # ── AI response header ───────────────────────────────────────────
+        fmt_ai_hdr = QTextCharFormat()
+        fmt_ai_hdr.setForeground(QColor(_PURPLE))
+        fmt_ai_hdr.setFont(QFont("Menlo", 11, QFont.Bold))
+        cursor.insertText("◉ AI\n", fmt_ai_hdr)
+
+        # Reset char format so streaming tokens arrive in normal colour
+        fmt_reset = QTextCharFormat()
+        fmt_reset.setForeground(QColor(_TEXT))
+        fmt_reset.setFont(QFont("Menlo", 11))
+        cursor.setCharFormat(fmt_reset)
+        self._display.setTextCursor(cursor)
+
+        sb = self._display.verticalScrollBar()
+        sb.setValue(sb.maximum())
+
     def on_status_changed(self, status: str) -> None:
         """Update status indicator and enable/disable buttons."""
         color = _STATUS_COLORS.get(status, _MUTED)
@@ -299,15 +343,42 @@ class AIPanelWidget(QWidget):
         sb.setValue(sb.maximum())
 
     def on_response_complete(self, text: str, elapsed: float) -> None:
-        """Show token rate after a response completes."""
+        """Append a turn separator and show token rate after a response completes."""
         tok_count = len(text.split())
         rate = tok_count / elapsed if elapsed > 0 else 0
         self._rate_lbl.setText(f"{rate:.0f} tok/s  ·  {elapsed:.1f}s")
 
-    def on_error(self, msg: str) -> None:
-        """Display an error message in the response area."""
         if hasattr(self, "_display"):
-            self._display.append(f"\n⚠  {msg}")
+            cursor = self._display.textCursor()
+            cursor.movePosition(cursor.End)
+            fmt_sep = QTextCharFormat()
+            fmt_sep.setForeground(QColor(_MUTED))
+            fmt_sep.setFont(QFont("Menlo", 9))
+            cursor.insertText(
+                "\n─────────────────────────────────────────────\n\n",
+                fmt_sep)
+            self._display.setTextCursor(cursor)
+            sb = self._display.verticalScrollBar()
+            sb.setValue(sb.maximum())
+
+    def on_error(self, msg: str) -> None:
+        """Display an error message in the chat log."""
+        if hasattr(self, "_display"):
+            cursor = self._display.textCursor()
+            cursor.movePosition(cursor.End)
+            fmt_err = QTextCharFormat()
+            fmt_err.setForeground(QColor(_RED))
+            fmt_err.setFont(QFont("Menlo", 11))
+            cursor.insertText(f"\n⚠  {msg}\n", fmt_err)
+            fmt_sep = QTextCharFormat()
+            fmt_sep.setForeground(QColor(_MUTED))
+            fmt_sep.setFont(QFont("Menlo", 9))
+            cursor.insertText(
+                "\n─────────────────────────────────────────────\n\n",
+                fmt_sep)
+            self._display.setTextCursor(cursor)
+            sb = self._display.verticalScrollBar()
+            sb.setValue(sb.maximum())
         if hasattr(self, "_rate_lbl"):
             self._rate_lbl.setText("")
 
@@ -413,8 +484,8 @@ class AIPanelWidget(QWidget):
             f"{r.observed}. "
             f"Please give me step-by-step guidance to resolve this."
         )
-        if hasattr(self, "_display"):
-            self._display.append(f"\n▷  {question}\n")
+        self.start_user_turn(
+            f"Fix: {r.display_name}  ({r.severity.upper()}: {r.observed})")
         self.ask_requested.emit(question)
 
     def _on_clear(self) -> None:
@@ -428,7 +499,7 @@ class AIPanelWidget(QWidget):
         if not q:
             return
         self._input.clear()
-        self._display.append(f"\n▷  {q}\n")
+        self.start_user_turn(q)
         self.ask_requested.emit(q)
 
     def _build_not_installed_view(self, lay: QVBoxLayout) -> None:

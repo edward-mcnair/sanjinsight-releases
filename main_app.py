@@ -627,7 +627,13 @@ class MainWindow(QMainWindow):
         self._ai_service.ai_error.connect(self._ai_panel.on_error)
 
         # AI panel → service
+        # start_user_turn must be connected FIRST so the user bubble appears
+        # in the chat log before the AI service starts streaming tokens.
+        self._ai_panel.explain_requested.connect(
+            lambda: self._ai_panel.start_user_turn("Explain this tab"))
         self._ai_panel.explain_requested.connect(self._ai_service.explain_tab)
+        self._ai_panel.diagnose_requested.connect(
+            lambda: self._ai_panel.start_user_turn("Diagnose instrument state"))
         self._ai_panel.diagnose_requested.connect(self._ai_service.diagnose)
         self._ai_panel.ask_requested.connect(self._ai_service.ask)
         self._ai_panel.close_requested.connect(self._toggle_ai_panel)
@@ -728,14 +734,41 @@ class MainWindow(QMainWindow):
         self._scan_tab.update_complete(result)
         if result.valid:
             H, W = result.drr_map.shape[:2]
-            self._log_tab.append(
+            summary = (
                 f"Scan complete — {result.n_cols}×{result.n_rows} tiles  "
                 f"{W}×{H} px  FOV "
                 f"{result.n_cols*result.step_x_um:.0f}×"
                 f"{result.n_rows*result.step_y_um:.0f} μm  "
                 f"{result.duration_s:.0f}s")
+            self._log_tab.append(summary)
+            # ── Completion notification ──────────────────────────
+            self._toasts.show_success(
+                f"Scan complete  ({result.n_cols}×{result.n_rows} tiles, "
+                f"{result.duration_s:.0f}s)",
+                auto_dismiss_ms=6000)
+            try:                          # Windows system beep (silent on other OS)
+                import winsound
+                winsound.MessageBeep(winsound.MB_ICONASTERISK)
+            except Exception:
+                pass
         else:
             self._log_tab.append("Scan failed or aborted")
+            self._toasts.show_warning("Scan failed or was aborted",
+                                      auto_dismiss_ms=5000)
+            return
+        # ── Autosave checkpoint (scan) ────────────────────────────────
+        try:
+            from acquisition.autosave import scan_autosave
+            _sarr = {"drr_map": result.drr_map}
+            if hasattr(result, "dt_map") and result.dt_map is not None:
+                _sarr["dt_map"] = result.dt_map
+            scan_autosave.save(
+                _sarr,
+                {"n_cols": result.n_cols, "n_rows": result.n_rows,
+                 "step_x_um": result.step_x_um, "step_y_um": result.step_y_um,
+                 "label": time.strftime("scan_%Y%m%d_%H%M%S")})
+        except Exception as _se:
+            log.debug("Autosave (scan) failed: %s", _se)
 
     def _open_device_manager(self):
         if self._device_mgr_dlg is None:
@@ -783,6 +816,41 @@ class MainWindow(QMainWindow):
         act_scan.setShortcut(QKeySequence("Ctrl+Shift+S"))
         act_scan.triggered.connect(
             lambda: self._nav.navigate_to(self._scan_tab))
+
+        acq_menu.addSeparator()
+
+        act_start_live = acq_menu.addAction("▶  Start Live Stream")
+        act_start_live.setShortcut(QKeySequence("F5"))
+        act_start_live.setToolTip("Start the live ΔR/R preview (F5)")
+        act_start_live.triggered.connect(
+            lambda: self._live_tab._start_btn.click()
+            if self._live_tab._start_btn.isEnabled() else None)
+
+        act_stop_live = acq_menu.addAction("■  Stop Live Stream")
+        act_stop_live.setShortcut(QKeySequence("F6"))
+        act_stop_live.setToolTip("Stop the live preview (F6)")
+        act_stop_live.triggered.connect(
+            lambda: self._live_tab._stop_btn.click()
+            if self._live_tab._stop_btn.isEnabled() else None)
+
+        act_freeze = acq_menu.addAction("❄  Freeze / Resume")
+        act_freeze.setShortcut(QKeySequence("F7"))
+        act_freeze.setToolTip("Freeze or resume the live display (F7)")
+        act_freeze.triggered.connect(self._live_tab._toggle_freeze)
+
+        acq_menu.addSeparator()
+
+        act_run_analysis = acq_menu.addAction("◈  Run Analysis")
+        act_run_analysis.setShortcut(QKeySequence("F8"))
+        act_run_analysis.setToolTip("Run hotspot analysis on the current result (F8)")
+        act_run_analysis.triggered.connect(
+            lambda: self._analysis_tab._run_btn.click()
+            if self._analysis_tab._run_btn.isEnabled() else None)
+
+        act_start_scan = acq_menu.addAction("⊞  Start / Stop Scan")
+        act_start_scan.setShortcut(QKeySequence("F9"))
+        act_start_scan.setToolTip("Start or abort the large-area scan (F9)")
+        act_start_scan.triggered.connect(self._toggle_scan)
 
         # ── View menu ────────────────────────────────────────────
         view_menu = mb.addMenu("View")
@@ -843,6 +911,18 @@ class MainWindow(QMainWindow):
         # ── Emergency stop shortcut (keyboard) ───────────────────
         estop_sc = QShortcut(QKeySequence("Ctrl+."), self)
         estop_sc.activated.connect(self._trigger_estop)
+
+    # ── Keyboard shortcut helpers ──────────────────────────────────
+
+    def _toggle_scan(self):
+        """F9 — start scan if idle, abort if running."""
+        try:
+            if self._scan_tab._btn_runner.is_running:
+                self._scan_tab._abort_btn.click()
+            else:
+                self._scan_tab._run_btn.click()
+        except Exception:
+            pass
 
     # ── About ──────────────────────────────────────────────────────
 
@@ -934,6 +1014,12 @@ class MainWindow(QMainWindow):
 
         log = logging.getLogger(__name__)
         log.info("Applying recipe: %s", recipe.label)
+
+        # Reflect active recipe name in the Acquire tab
+        try:
+            self._acquire_tab.set_active_recipe_name(recipe.label)
+        except Exception:
+            pass
 
         # ── Camera settings ───────────────────────────────────────
         try:
@@ -1121,6 +1207,21 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 signals.log_message.emit(f"Session save failed: {e}")
         threading.Thread(target=_save, daemon=True).start()
+
+        # ── Autosave checkpoint (acquire) ─────────────────────────
+        try:
+            from acquisition.autosave import acquire_autosave
+            _arrays = {}
+            if drr_map is not None:
+                _arrays["drr"] = drr_map
+            if dt_map is not None:
+                _arrays["dt"] = dt_map
+            acquire_autosave.save(
+                _arrays,
+                {"label": time.strftime("acq_%Y%m%d_%H%M%S"),
+                 "snr_db": float(getattr(r, "snr_db", 0))})
+        except Exception as _ae:
+            log.debug("Autosave (acquire) failed: %s", _ae)
 
         # AI session quality report — silently skips if model not loaded
         if self._ai_service.status == "ready":
@@ -1372,6 +1473,53 @@ class MainWindow(QMainWindow):
             n_gpu = cfg_mod.get_pref("ai.n_gpu_layers", 0)
             self._on_ai_enable(path, n_gpu)
 
+    def showEvent(self, event):
+        """Restore window geometry and splitter positions once on first show."""
+        super().showEvent(event)
+        if not getattr(self, '_layout_restored', False):
+            self._layout_restored = True
+            self._restore_layout()
+
+    def _restore_layout(self):
+        """Restore persisted window geometry and tab splitter sizes."""
+        import config as _cfg
+        from PyQt5.QtCore import QByteArray
+        geo = _cfg.get_pref("ui.geometry", "")
+        if geo:
+            try:
+                self.restoreGeometry(QByteArray.fromHex(geo.encode()))
+            except Exception:
+                pass
+        for attr, key, n in [
+            ("_live_tab",     "ui.splitter.live",     3),
+            ("_scan_tab",     "ui.splitter.scan",     2),
+            ("_analysis_tab", "ui.splitter.analysis", 3),
+        ]:
+            sizes = _cfg.get_pref(key, [])
+            if sizes and len(sizes) == n:
+                try:
+                    getattr(self, attr)._body_splitter.setSizes(sizes)
+                except Exception:
+                    pass
+
+    def _save_layout(self):
+        """Persist window geometry and tab splitter sizes."""
+        import config as _cfg
+        try:
+            _cfg.set_pref("ui.geometry",
+                          self.saveGeometry().toHex().data().decode())
+        except Exception:
+            pass
+        for attr, key in [
+            ("_live_tab",     "ui.splitter.live"),
+            ("_scan_tab",     "ui.splitter.scan"),
+            ("_analysis_tab", "ui.splitter.analysis"),
+        ]:
+            try:
+                _cfg.set_pref(key, list(getattr(self, attr)._body_splitter.sizes()))
+            except Exception:
+                pass
+
     def closeEvent(self, event):
         """
         Deterministic shutdown sequence:
@@ -1382,6 +1530,14 @@ class MainWindow(QMainWindow):
           5. Shutdown the thread pool (wait=True up to 3 s, then cancel)
           6. Accept the event — window closes cleanly
         """
+        self._save_layout()
+        # Clear autosave checkpoints on clean exit (not a crash)
+        try:
+            from acquisition.autosave import acquire_autosave, scan_autosave
+            acquire_autosave.clear()
+            scan_autosave.clear()
+        except Exception:
+            pass
         import sys
         global running
 
@@ -1627,4 +1783,57 @@ if __name__ == "__main__":
 
     window.show()
     window._start_update_checker()   # background check, non-blocking
+
+    # ── Autosave recovery check ──────────────────────────────────────
+    try:
+        from acquisition.autosave import acquire_autosave, scan_autosave
+        from PyQt5.QtWidgets import QMessageBox as _QMB
+        for _as, _label, _tab in [
+            (acquire_autosave, "acquisition", window._analysis_tab),
+            (scan_autosave,    "scan",        window._scan_tab),
+        ]:
+            if _as.has_checkpoint():
+                cp = _as.load()
+                if cp:
+                    saved_at = cp.get("saved_at", "?")
+                    r = _QMB.question(
+                        window,
+                        "Restore Unsaved Result",
+                        f"An unsaved {_label} result from {saved_at} was found.\n\n"
+                        "Restore it now?",
+                        _QMB.Yes | _QMB.No, _QMB.Yes)
+                    if r == _QMB.Yes:
+                        try:
+                            _arrays = cp.get("arrays", {})
+                            if _label == "acquisition":
+                                drr = _arrays.get("drr")
+                                dtt = _arrays.get("dt")
+                                if drr is not None:
+                                    window._analysis_tab.push_result(
+                                        dt_map=dtt, drr_map=drr,
+                                        base_image=None,
+                                        source_label="Restored")
+                                    window._nav.navigate_to(window._analysis_tab)
+                            else:
+                                import numpy as _np
+                                drr = _arrays.get("drr_map")
+                                dtt = _arrays.get("dt_map")
+                                if drr is not None:
+                                    meta = cp.get("metadata", {})
+                                    from acquisition.scan import ScanResult
+                                    sr = ScanResult(
+                                        drr_map=drr, dt_map=dtt,
+                                        n_cols=int(meta.get("n_cols", 1)),
+                                        n_rows=int(meta.get("n_rows", 1)),
+                                        step_x_um=float(meta.get("step_x_um", 100)),
+                                        step_y_um=float(meta.get("step_y_um", 100)),
+                                        duration_s=0.0, valid=True)
+                                    window._scan_tab.update_complete(sr)
+                                    window._nav.navigate_to(window._scan_tab)
+                        except Exception as _re:
+                            pass
+                    _as.clear()
+    except Exception as _ce:
+        pass   # autosave recovery is best-effort; never block startup
+
     _sys.exit(app.exec_())
