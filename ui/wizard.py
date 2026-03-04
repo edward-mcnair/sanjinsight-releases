@@ -1105,6 +1105,7 @@ class StandardWizard(QWidget):
         sep.setFrameShape(QFrame.HLine)
         sep.setStyleSheet("color:#1e1e1e;")
         root.addWidget(sep)
+        root.addSpacing(10)   # breathing room between step bar and page content
 
         # Body: sidebar panel + main content side by side
         body = QHBoxLayout()
