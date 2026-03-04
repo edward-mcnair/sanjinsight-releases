@@ -372,25 +372,20 @@ class StatusHeader(QWidget):
             QPushButton:hover { background:#222; }
         """)
 
-        # Render the SVG into a QPixmap and use it as the button icon.
-        # Falls back to "HW" text if QtSvg is unavailable or the file is missing.
-        _svg = os.path.normpath(os.path.join(
-            os.path.dirname(__file__), "..", "..", "assets",
-            "icon-device-manager.svg"))
-        if os.path.exists(_svg):
-            try:
-                from PyQt5.QtSvg import QSvgRenderer
-                from PyQt5.QtGui import QIcon, QPixmap, QPainter as _Pnt
-                ren = QSvgRenderer(_svg)
-                pm  = QPixmap(20, 20)
-                pm.fill(Qt.transparent)
-                _p  = _Pnt(pm)
-                ren.render(_p)
-                _p.end()
-                btn.setIcon(QIcon(pm))
-                btn.setIconSize(pm.size())
-            except Exception:
-                btn.setText("HW")
+        # Load the SVG as a QIcon — Qt resolves the correct SVG plugin on every
+        # platform without needing a manual QSvgRenderer/QPixmap/QPainter chain
+        # (which was silently failing on Windows and falling back to "HW" text).
+        # _MEIPASS handles PyInstaller frozen builds; falls back to source tree.
+        import sys as _sys
+        from PyQt5.QtGui import QIcon as _QIcon
+        from PyQt5.QtCore import QSize as _QSize
+        _base = getattr(_sys, "_MEIPASS", None) or os.path.normpath(
+            os.path.join(os.path.dirname(__file__), "..", ".."))
+        _svg = os.path.join(_base, "assets", "icon-device-manager.svg")
+        _icon = _QIcon(_svg)
+        if not _icon.isNull():
+            btn.setIcon(_icon)
+            btn.setIconSize(_QSize(22, 22))
         else:
             btn.setText("HW")
 
