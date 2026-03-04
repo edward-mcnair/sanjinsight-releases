@@ -184,7 +184,8 @@ class _StatsTable(QTableWidget):
         self.setStyleSheet("""
             QTableWidget { background:#141414; color:#ccc; font-size:12pt;
                            font-family:Menlo,monospace; gridline-color:#222; }
-            QHeaderView::section { background:#1e1e1e; color:#aaa; font-size:12pt; }
+            QHeaderView::section { background:#1e1e1e; color:#aaa; font-size:12pt;
+                                   padding: 4px 16px 4px 8px; }
             QTableWidget::item:alternate { background:#191919; }
         """)
         for r, (name, _) in enumerate(self._METRICS):

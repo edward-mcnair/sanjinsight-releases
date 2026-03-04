@@ -43,8 +43,9 @@ AppUpdatesURL       =https://github.com/edward-mcnair/sanjinsight/releases
 DefaultDirName      ={autopf}\Microsanj\{#AppName}
 DefaultGroupName    =Microsanj\{#AppName}
 
-; Branding
-SetupIconFile       =assets\sanjinsight.ico
+; Branding — reference the project-level ICO directly so there is a single
+; source of truth and no risk of installer/assets/sanjinsight.ico going stale.
+SetupIconFile       =..\assets\app-icon.ico
 LicenseFile         =..\LICENSE
 UninstallDisplayIcon={app}\{#AppExeName}
 UninstallDisplayName={#AppName} {#AppVersion}

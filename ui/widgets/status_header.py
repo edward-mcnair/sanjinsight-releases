@@ -360,24 +360,42 @@ class StatusHeader(QWidget):
         self._estop_btn.style().polish(self._estop_btn)
 
     def add_device_manager_button(self, callback):
-        """Add a gear button that opens the Device Manager."""
-        # Use ⚙️ (U+2699 + U+FE0F variation selector-16) — the emoji form
-        # forces Segoe UI Emoji on Windows, which renders the gear correctly.
-        # Plain ⚙ (U+2699 alone) fell back to a symbol-font glyph that looked
-        # garbled; the full emoji sequence avoids that fallback entirely.
-        gear = QPushButton("⚙️")
-        gear.setFixedSize(36, 30)
-        gear.setToolTip("Device Manager — manage hardware connections and drivers")
-        gear.setStyleSheet("""
+        """Add a Device Manager button with the hardware SVG icon."""
+        btn = QPushButton()
+        btn.setFixedSize(44, 30)   # wider than the old 36px — icon needs breathing room
+        btn.setToolTip("Device Manager — manage hardware connections and drivers")
+        btn.setStyleSheet("""
             QPushButton {
-                background:#1a1a1a; color:#888;
+                background:#1a1a1a;
                 border:1px solid #2a2a2a; border-radius:4px;
-                font-size:16pt;
             }
-            QPushButton:hover { color:#bbb; background:#222; }
+            QPushButton:hover { background:#222; }
         """)
-        gear.clicked.connect(callback)
-        self.layout().addWidget(gear)
+
+        # Render the SVG into a QPixmap and use it as the button icon.
+        # Falls back to "HW" text if QtSvg is unavailable or the file is missing.
+        _svg = os.path.normpath(os.path.join(
+            os.path.dirname(__file__), "..", "..", "assets",
+            "icon-device-manager.svg"))
+        if os.path.exists(_svg):
+            try:
+                from PyQt5.QtSvg import QSvgRenderer
+                from PyQt5.QtGui import QIcon, QPixmap, QPainter as _Pnt
+                ren = QSvgRenderer(_svg)
+                pm  = QPixmap(20, 20)
+                pm.fill(Qt.transparent)
+                _p  = _Pnt(pm)
+                ren.render(_p)
+                _p.end()
+                btn.setIcon(QIcon(pm))
+                btn.setIconSize(pm.size())
+            except Exception:
+                btn.setText("HW")
+        else:
+            btn.setText("HW")
+
+        btn.clicked.connect(callback)
+        self.layout().addWidget(btn)
 
     def add_update_badge(self) -> "UpdateBadge":
         """Add the update-available badge to the header and return it."""

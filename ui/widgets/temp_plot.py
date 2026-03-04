@@ -56,15 +56,21 @@ class TempPlot(QWidget):
 
         vals = [v for v in list(self._actual)+list(self._target) if v is not None]
 
-        # Include limits in the Y-range calculation so lines are always visible
-        if self._temp_min is not None: vals.append(self._temp_min)
-        if self._temp_max is not None: vals.append(self._temp_max)
-
         if not vals:
             return
-        lo   = min(vals) - 2
-        hi   = max(vals) + 2
-        span = max(hi - lo, 0.5)
+
+        # Y-range: based on actual/target data only with a generous margin.
+        # Previously the hard limits (-20° / 85°) were included in the range
+        # calculation, which compressed the data traces into a tiny band when
+        # the actual temperature was close to a limit line (e.g. actual=84°C
+        # with max limit=85°C produced <1 px between every line).  The limit
+        # lines are still drawn wherever they fall; the ±10°C margin ensures
+        # nearby limits remain visible without squashing the data traces.
+        data_span = max(max(vals) - min(vals), 1.0)
+        margin    = max(data_span, 10.0)   # at least 10°C breathing room each side
+        lo   = min(vals) - margin
+        hi   = max(vals) + margin
+        span = max(hi - lo, 1.0)
 
         def tx(i): return int(pad + i/(self.HISTORY-1)*(W-2*pad))
         def ty(v): return int(H-pad-(v-lo)/span*(H-2*pad))
