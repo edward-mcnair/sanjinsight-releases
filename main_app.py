@@ -1649,7 +1649,26 @@ if __name__ == "__main__":
     app.setStyle("Fusion")
     app.setStyleSheet(STYLE)
 
-    _assets = os.path.join(os.path.dirname(__file__), "assets")
+    # ── Windows: set stable AppUserModelID before any window is created ──
+    # Without this, Windows assigns a generic AUMID based on the exe path,
+    # which means the taskbar icon can be blank (especially when pinned) and
+    # jump-lists / grouped taskbar buttons may not behave correctly.
+    if _sys.platform == "win32":
+        try:
+            import ctypes
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+                "Microsanj.SanjINSIGHT")
+        except Exception as _auid_err:
+            log.debug("AppUserModelID not set: %s", _auid_err)
+
+    # ── Application icon ──────────────────────────────────────────────
+    # _resource_base resolves correctly both when running from source and
+    # inside a PyInstaller-bundled executable (where __file__ points into the
+    # frozen archive but sys._MEIPASS is the temp extraction directory).
+    _resource_base = getattr(_sys, "_MEIPASS", os.path.dirname(
+        os.path.abspath(__file__)))
+    _assets = os.path.join(_resource_base, "assets")
+
     # Pick the best icon format for each platform.
     # PyQt5 on Windows cannot render .icns (macOS-only format) — it silently
     # returns an empty icon, which Qt then fills with the Fusion style's
@@ -1673,7 +1692,14 @@ if __name__ == "__main__":
             _icon_path = _p
             break
     if _icon_path:
-        app.setWindowIcon(QIcon(_icon_path))
+        _app_icon = QIcon(_icon_path)
+        if not _app_icon.isNull():
+            app.setWindowIcon(_app_icon)
+        else:
+            log.warning("Icon file found but QIcon returned null: %s", _icon_path)
+            _icon_path = None
+    else:
+        log.debug("No application icon found in: %s", _assets)
 
     # Register QTextCursor with Qt's meta-type system so it can be safely
     # queued across threads (suppresses the "Cannot queue arguments of type
@@ -1700,7 +1726,7 @@ if __name__ == "__main__":
 
     window = MainWindow()
     if _icon_path:
-        window.setWindowIcon(QIcon(_icon_path))   # title-bar / taskbar icon
+        window.setWindowIcon(_app_icon)   # title-bar / taskbar icon
 
     # ── Demo mode: activate immediately, skip the startup dialog ──────
     if _FORCE_DEMO:
