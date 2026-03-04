@@ -1566,11 +1566,8 @@ class MainWindow(QMainWindow):
             scan_autosave.clear()
         except Exception:
             pass
-        import sys
         global running
-
         log.info("Shutdown requested")
-        global running
         running = False   # legacy flag for any code that still checks it
 
         # ── Stop live preview processor ───────────────────────────
