@@ -59,8 +59,10 @@ DEFAULT_N_CTX: int = 8_192
 
 # ── Response instructions ──────────────────────────────────────────────────────
 
-# Guides the model to return a canned response for out-of-scope questions.
-_OUT_OF_SCOPE_INSTRUCTION: str = (
+# Two variants: one for models with the full Quickstart Guide embedded,
+# one for small models that have only domain knowledge + UI nav.
+
+_OUT_OF_SCOPE_WITH_GUIDE: str = (
     "Your documentation knowledge comes from: the Quickstart Guide above, "
     "any relevant User Manual sections provided with a question, "
     "and the live instrument state. "
@@ -68,6 +70,21 @@ _OUT_OF_SCOPE_INSTRUCTION: str = (
     "nor the provided manual sections "
     "(such as detailed calibration math, configuration file syntax, advanced "
     "scan settings, or hardware specifications not listed above), "
+    "respond with exactly: "
+    "\"Due to my current token limit, I can only access selected sections of "
+    "the documentation. "
+    "You can find the complete User Manual here: "
+    f"{USER_MANUAL_URL}\" "
+    "Do not attempt to guess or infer information not present in the "
+    "documentation provided."
+)
+
+_OUT_OF_SCOPE_NO_GUIDE: str = (
+    "Your documentation knowledge comes from: the domain knowledge and UI "
+    "navigation map above, any relevant User Manual sections provided with "
+    "a question, and the live instrument state. "
+    "If a user asks about detailed workflows, step-by-step procedures, "
+    "calibration math, or topics not covered by the information above, "
     "respond with exactly: "
     "\"Due to my current token limit, I can only access selected sections of "
     "the documentation. "
@@ -91,17 +108,28 @@ _DEFAULT_BASE: str = (
     "Say so honestly if you cannot help. Never invent hardware readings. "
 )
 
-def build_system_prompt(base: str) -> str:
+# Minimum n_ctx required to embed the full Quickstart Guide.
+# Below this the guide is skipped — AI still has domain knowledge + UI map.
+_GUIDE_MIN_CTX: int = 8_192
+
+
+def build_system_prompt(base: str, n_ctx: int = DEFAULT_N_CTX) -> str:
     """
     Assemble a complete system prompt from a persona base string.
 
-    Always appends AI_DOMAIN_KNOWLEDGE, UI_NAV_MAP, the Quickstart Guide,
-    and the out-of-scope canned-response instruction.
+    Appends AI_DOMAIN_KNOWLEDGE and UI_NAV_MAP unconditionally.
+    The Quickstart Guide (~2 600 tokens) is only embedded when the
+    model's context window is large enough to accommodate it alongside
+    the instrument state, conversation history, and question.
 
     Parameters
     ----------
     base : str
         The persona-specific tone / style instructions (e.g. from PERSONAS).
+    n_ctx : int
+        The context window size the model was loaded with.  When n_ctx is
+        below _GUIDE_MIN_CTX (8 192), the Quickstart Guide is omitted so
+        that small/lightweight models still have headroom for responses.
 
     Returns
     -------
@@ -110,14 +138,18 @@ def build_system_prompt(base: str) -> str:
     """
     prompt = base + " " + AI_DOMAIN_KNOWLEDGE + " " + UI_NAV_MAP
 
-    if QUICKSTART_GUIDE:
+    guide_included = bool(QUICKSTART_GUIDE) and n_ctx >= _GUIDE_MIN_CTX
+
+    if guide_included:
         prompt += (
             "\n\n=== SanjINSIGHT Quickstart Guide ===\n"
             + QUICKSTART_GUIDE
             + "=== End of Quickstart Guide ===\n\n"
         )
 
-    prompt += _OUT_OF_SCOPE_INSTRUCTION
+    prompt += (
+        _OUT_OF_SCOPE_WITH_GUIDE if guide_included else _OUT_OF_SCOPE_NO_GUIDE
+    )
     return prompt
 
 

@@ -30,6 +30,7 @@ MODEL_CATALOG: dict[str, dict] = {
         "size_gb":     1.0,
         "min_ram_gb":  4,
         "n_layers":    28,
+        "n_ctx":       4_096,   # small model — skip Quickstart Guide (~2600 tok)
         "description": (
             "Fastest and smallest model. Good for older PCs or systems "
             "with limited available memory (4–6 GB)."
@@ -45,6 +46,7 @@ MODEL_CATALOG: dict[str, dict] = {
         "size_gb":     2.4,
         "min_ram_gb":  6,
         "n_layers":    32,
+        "n_ctx":       4_096,   # balanced model — skip Quickstart Guide
         "description": (
             "Best balance of speed and quality. Runs well on most modern "
             "PCs (6–16 GB RAM or 4+ GB VRAM)."
@@ -60,6 +62,7 @@ MODEL_CATALOG: dict[str, dict] = {
         "size_gb":     4.5,
         "min_ram_gb":  10,
         "n_layers":    28,
+        "n_ctx":       8_192,   # full Quickstart Guide fits comfortably
         "description": (
             "High quality responses. Good for PCs with 16 GB RAM or 8+ GB VRAM."
         ),
@@ -74,6 +77,7 @@ MODEL_CATALOG: dict[str, dict] = {
         "size_gb":     8.8,
         "min_ram_gb":  16,
         "n_layers":    48,
+        "n_ctx":       8_192,   # full Quickstart Guide fits comfortably
         "description": (
             "Best quality responses. Recommended for Apple Silicon (16+ GB), "
             "high-end PCs with 24 GB+ RAM, or GPUs with 12+ GB VRAM."

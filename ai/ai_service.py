@@ -36,8 +36,23 @@ from ai.context_builder import ContextBuilder
 from ai import prompt_templates as tmpl
 from ai import manual_rag
 from ai.personas import PERSONAS, DEFAULT_PERSONA_ID
+from ai.model_catalog import MODEL_CATALOG
 
 log = logging.getLogger(__name__)
+
+
+def _n_ctx_for_model(model_path: str) -> int:
+    """
+    Look up the recommended n_ctx for a model by matching its filename
+    against MODEL_CATALOG entries.  Falls back to DEFAULT_N_CTX for
+    custom / unknown model files.
+    """
+    from pathlib import Path
+    filename = Path(model_path).name
+    for entry in MODEL_CATALOG.values():
+        if entry["filename"] == filename:
+            return entry.get("n_ctx", tmpl.DEFAULT_N_CTX)
+    return tmpl.DEFAULT_N_CTX
 
 
 class AIService(QObject):
@@ -68,6 +83,7 @@ class AIService(QObject):
         self._ctx     = ContextBuilder()
         self._status  = "off"
         self._history: list[dict] = []   # alternating user / assistant messages
+        self._n_ctx:  int = tmpl.DEFAULT_N_CTX  # updated in enable() from catalog
 
         # Wire runner signals
         self._runner.load_complete.connect(self._on_load_complete)
@@ -104,9 +120,10 @@ class AIService(QObject):
         """Load the model. Transitions to 'loading' then 'ready' or 'error'."""
         if self._status in ("loading", "thinking"):
             return
+        self._n_ctx = _n_ctx_for_model(model_path)
         self._set_status("loading")
         self._runner.load(model_path, n_gpu_layers=n_gpu_layers,
-                          n_ctx=tmpl.DEFAULT_N_CTX)
+                          n_ctx=self._n_ctx)
 
     def disable(self) -> None:
         """Unload the model and transition to 'off'."""
@@ -162,14 +179,15 @@ class AIService(QObject):
 
     def _active_system_prompt(self) -> str:
         """
-        Build the system prompt for the current persona.
+        Build the system prompt for the current persona and loaded model.
 
-        Always includes: persona tone/style + AI_DOMAIN_KNOWLEDGE + UI_NAV_MAP
-                         + Quickstart Guide + out-of-scope canned instruction.
+        The Quickstart Guide is only embedded when the model's n_ctx is
+        large enough (>= 8 192); smaller models receive domain knowledge
+        and UI nav only, preserving headroom for context and responses.
         """
         pid     = cfg_mod.get_pref("ai.persona", DEFAULT_PERSONA_ID)
         persona = PERSONAS.get(pid, PERSONAS[DEFAULT_PERSONA_ID])
-        return tmpl.build_system_prompt(persona.system_prompt)
+        return tmpl.build_system_prompt(persona.system_prompt, self._n_ctx)
 
     # ------------------------------------------------------------------ #
     #  Internal                                                            #
