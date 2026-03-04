@@ -57,17 +57,23 @@ class TempPlot(QWidget):
         vals = [v for v in list(self._actual)+list(self._target) if v is not None]
 
         if not vals:
+            # No data yet — draw a subtle placeholder so the widget doesn't
+            # appear broken (plain black rectangle) on Windows or when hardware
+            # is disconnected.
+            p.setPen(QColor(40, 40, 40))
+            p.setFont(QFont("Menlo", 11))
+            p.drawText(self.rect(), Qt.AlignCenter, "No data")
+            p.end()
             return
 
-        # Y-range: based on actual/target data only with a generous margin.
-        # Previously the hard limits (-20° / 85°) were included in the range
-        # calculation, which compressed the data traces into a tiny band when
-        # the actual temperature was close to a limit line (e.g. actual=84°C
-        # with max limit=85°C produced <1 px between every line).  The limit
-        # lines are still drawn wherever they fall; the ±10°C margin ensures
-        # nearby limits remain visible without squashing the data traces.
-        data_span = max(max(vals) - min(vals), 1.0)
-        margin    = max(data_span, 10.0)   # at least 10°C breathing room each side
+        # Y-range: based on actual/target data only with a tight margin.
+        # Previously the hard limits (-20° / 85°) were included in the range,
+        # compressing the data traces into a tiny band.  A ±5°C minimum margin
+        # (half the previous ±10°C) keeps the chart zoomed in on the actual
+        # operating region, doubling pixel density so small fluctuations (e.g.
+        # ±0.05°C when a TEC is locked) are clearly visible.
+        data_span = max(vals) - min(vals)
+        margin    = max(data_span * 2, 5.0)   # at least ±5°C breathing room
         lo   = min(vals) - margin
         hi   = max(vals) + margin
         span = max(hi - lo, 1.0)
