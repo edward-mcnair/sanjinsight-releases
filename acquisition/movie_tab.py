@@ -262,8 +262,10 @@ class MovieTab(QWidget):
         self._img_lbl.setStyleSheet(
             f"background:#0d0d0d; border:1px solid {PALETTE['border']};")
         self._img_lbl.setAlignment(Qt.AlignCenter)
+        _dim  = PALETTE['textDim']
+        _body = FONT['body']
         self._img_lbl.setText(
-            f"<span style='color:{PALETTE[\"textDim\"]};font-size:{FONT[\"body\"]}pt'>"
+            f"<span style='color:{_dim};font-size:{_body}pt'>"
             f"Run Movie to capture</span>")
         il.addWidget(self._img_lbl)
         lay.addWidget(img_box, 1)

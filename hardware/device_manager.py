@@ -36,7 +36,7 @@ _CONNECT_TIMEOUT_S: float = 12.0
 from .device_registry import (DeviceDescriptor, DEVICE_REGISTRY,
                                 DTYPE_CAMERA, DTYPE_TEC, DTYPE_FPGA,
                                 DTYPE_STAGE, DTYPE_PROBER, DTYPE_TURRET,
-                                DTYPE_BIAS)
+                                DTYPE_BIAS, DTYPE_LDD)
 from .device_scanner  import DiscoveredDevice, ScanReport
 
 
@@ -426,6 +426,9 @@ class DeviceManager:
             elif dtype == DTYPE_BIAS:
                 from hardware.bias import create_bias
                 return create_bias(cfg)
+            elif dtype == DTYPE_LDD:
+                from hardware.ldd.factory import create_ldd
+                return create_ldd(cfg)
             else:
                 raise ValueError(f"No factory for device type: {dtype}")
         except Exception:
@@ -502,6 +505,8 @@ class DeviceManager:
                     pass
             elif dtype == DTYPE_TEC:
                 app_state.add_tec(driver_obj)
+            elif dtype == DTYPE_LDD:
+                app_state.ldd = driver_obj
         except Exception:
             pass
 
@@ -525,6 +530,8 @@ class DeviceManager:
                 with app_state:
                     app_state.tecs = [t for t in app_state.tecs
                                       if t is not driver_obj]
+            elif dtype == DTYPE_LDD:
+                app_state.ldd = None
         except Exception:
             pass
 

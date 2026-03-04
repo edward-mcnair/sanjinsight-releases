@@ -9,6 +9,7 @@ _DRIVERS = {
     "thorlabs":     ("hardware.stage.thorlabs",     "ThorlabsDriver"),
     "serial_stage": ("hardware.stage.serial_stage", "SerialStageDriver"),
     "simulated":    ("hardware.stage.simulated",    "SimulatedStage"),
+    "mpi_prober":   ("hardware.stage.mpi_prober",  "MpiProberDriver"),
 }
 
 _INSTALL_HINTS: dict = {

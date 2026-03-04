@@ -55,6 +55,9 @@ from acquisition.modality        import ImagingModality     # ← modality enum
 from acquisition.comparison_tab  import ComparisonTab       # ← session comparison
 from acquisition.surface_plot_tab import SurfacePlotTab     # ← 3D surface plot
 from acquisition.recipe_tab      import RecipeTab           # ← measurement recipes
+from acquisition.movie_tab       import MovieTab            # ← movie-mode burst
+from acquisition.transient_tab   import TransientTab        # ← time-resolved transient
+from ui.tabs.prober_tab          import ProberTab           # ← probe-station chuck
 from ui.wizard                   import StandardWizard
 from ui.scripting_console        import ScriptingConsoleTab # ← Python console
 from ui.sidebar_nav              import SidebarNav          # ← grouped sidebar nav
@@ -482,6 +485,9 @@ class MainWindow(QMainWindow):
         self._surface_tab  = SurfacePlotTab()
         self._recipe_tab   = RecipeTab(app_state=app_state)
         self._console_tab  = ScriptingConsoleTab(app_state=app_state)
+        self._movie_tab    = MovieTab()                          # ← burst capture
+        self._transient_tab = TransientTab()                    # ← time-resolved
+        self._prober_tab   = ProberTab()                        # ← probe chuck
 
         # Wire recipe RUN signal → apply recipe to hardware
         self._recipe_tab.recipe_run.connect(self._apply_recipe)
@@ -509,9 +515,11 @@ class MainWindow(QMainWindow):
         from ui.sidebar_nav import NavItem as NI
 
         self._nav.add_section("MEASURE", [
-            NI("Live",        "●",  self._live_tab,    badge="★"),
-            NI("Acquire",     "⊙",  self._acquire_tab, badge="★"),
+            NI("Live",        "●",  self._live_tab,     badge="★"),
+            NI("Acquire",     "⊙",  self._acquire_tab,  badge="★"),
             NI("Scan",        "⊞",  self._scan_tab),
+            NI("Movie",       "▶",  self._movie_tab),
+            NI("Transient",   "⌇",  self._transient_tab),
         ])
         self._nav.add_section("ANALYSIS", [
             NI("Calibration", "⚖",  self._cal_tab),
@@ -525,6 +533,7 @@ class MainWindow(QMainWindow):
             NI("FPGA",        "⬡",  self._fpga_tab),
             NI("Bias Source", "⚡",  self._bias_tab),
             NI("Stage",       "✛",  self._stage_tab),
+            NI("Prober",      "⊕",  self._prober_tab),
             NI("ROI",         "⬚",  self._roi_tab),
             NI("Autofocus",   "◉",  self._af_tab),
         ], collapsed=False)
