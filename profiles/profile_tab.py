@@ -40,6 +40,7 @@ from profiles.profiles import (
     ALL_CATEGORIES, CATEGORY_USER, CATEGORY_ACCENTS,
 )
 from profiles.profile_manager import ProfileManager
+from ui.theme import PALETTE, FONT
 
 log = logging.getLogger(__name__)
 
@@ -151,17 +152,80 @@ class ProfileTab(QWidget):
         self._table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self._table.verticalHeader().setVisible(False)
         self._table.setAlternatingRowColors(True)
+        self._table.setStyleSheet(f"""
+            QTableWidget {{
+                background: {PALETTE['surface2']};
+                alternate-background-color: {PALETTE['surface']};
+                color: {PALETTE['text']};
+                gridline-color: {PALETTE['border']};
+                border: 1px solid {PALETTE['border']};
+                border-radius: 3px;
+            }}
+            QTableWidget::item {{
+                padding: 3px 6px;
+                border: none;
+            }}
+            QTableWidget::item:selected {{
+                background: {PALETTE['info']};
+                color: {PALETTE['bg']};
+            }}
+            QHeaderView::section {{
+                background: {PALETTE['surface3']};
+                color: {PALETTE['textDim']};
+                font-size: {FONT['caption']}pt;
+                border: none;
+                border-bottom: 1px solid {PALETTE['border']};
+                border-right: 1px solid {PALETTE['border']};
+                padding: 4px 8px;
+            }}
+            QHeaderView::section:last {{
+                border-right: none;
+            }}
+            QScrollBar:vertical {{
+                background: {PALETTE['surface3']};
+                width: 8px; border: none;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {PALETTE['border']};
+                border-radius: 4px; min-height: 20px;
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                height: 0px;
+            }}
+        """)
         self._table.selectionModel().selectionChanged.connect(self._on_selection)
         root.addWidget(self._table, 3)
 
         # ── Detail pane ────────────────────────────────────────────
         detail_box = QGroupBox("Profile Details")
+        detail_box.setStyleSheet(f"""
+            QGroupBox {{
+                background: {PALETTE['surface']};
+                color: {PALETTE['textDim']};
+                font-size: {FONT['label']}pt;
+                border: 1px solid {PALETTE['border']};
+                border-radius: 4px;
+                margin-top: 6px;
+            }}
+            QGroupBox::title {{
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                padding: 0 4px;
+                left: 8px;
+            }}
+            QLabel {{
+                background: transparent;
+                color: {PALETTE['textDim']};
+                font-size: {FONT['label']}pt;
+            }}
+        """)
         fl = QFormLayout(detail_box)
         fl.setContentsMargins(8, 8, 8, 8)
 
         def _ro_label() -> QLabel:
             lbl = QLabel("-")
-            lbl.setStyleSheet("color: #aaa;")
+            lbl.setStyleSheet(
+                f"color: {PALETTE['text']}; font-size: {FONT['label']}pt;")
             return lbl
 
         self._d_name     = _ro_label()
@@ -292,6 +356,44 @@ class ProfileTab(QWidget):
         """Show a dialog to create a new user profile from scratch."""
         dlg = QDialog(self)
         dlg.setWindowTitle("New Material Profile")
+        dlg.setStyleSheet(f"""
+            QDialog {{
+                background: {PALETTE['surface']};
+            }}
+            QLabel {{
+                background: transparent;
+                color: {PALETTE['textDim']};
+                font-size: {FONT['label']}pt;
+            }}
+            QLineEdit, QDoubleSpinBox, QSpinBox, QComboBox {{
+                background: {PALETTE['surface3']};
+                color: {PALETTE['text']};
+                border: 1px solid {PALETTE['border']};
+                border-radius: 3px;
+                padding: 3px 6px;
+                font-size: {FONT['label']}pt;
+            }}
+            QLineEdit:focus, QDoubleSpinBox:focus,
+            QSpinBox:focus, QComboBox:focus {{
+                border-color: {PALETTE['accent']};
+            }}
+            QComboBox::drop-down {{ border: none; }}
+            QComboBox QAbstractItemView {{
+                background: {PALETTE['surface3']};
+                color: {PALETTE['text']};
+                border: 1px solid {PALETTE['border']};
+            }}
+            QPushButton {{
+                background: {PALETTE['surface']};
+                color: {PALETTE['textDim']};
+                border: 1px solid {PALETTE['border']};
+                border-radius: 3px;
+                padding: 5px 14px;
+                font-size: {FONT['label']}pt;
+            }}
+            QPushButton:hover  {{ background: #252525; color: {PALETTE['text']}; }}
+            QPushButton:pressed {{ background: #111; }}
+        """)
         fl = QFormLayout(dlg)
         fl.setContentsMargins(12, 12, 12, 12)
         fl.setSpacing(8)
