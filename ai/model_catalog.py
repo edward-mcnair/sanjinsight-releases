@@ -16,6 +16,7 @@ MODEL_ORDER: list[str] = [
     "qwen25_1b5_q4",
     "phi35_mini_q4",
     "qwen25_7b_q4",
+    "qwen25_14b_q4",
 ]
 
 MODEL_CATALOG: dict[str, dict] = {
@@ -60,8 +61,22 @@ MODEL_CATALOG: dict[str, dict] = {
         "min_ram_gb":  10,
         "n_layers":    28,
         "description": (
-            "Highest quality responses. Recommended for high-end PCs with "
-            "16 GB+ RAM or 8+ GB VRAM."
+            "High quality responses. Good for PCs with 16 GB RAM or 8+ GB VRAM."
+        ),
+    },
+    "qwen25_14b_q4": {
+        "name":        "Qwen 2.5 — 14B  (Best Quality)",
+        "filename":    "Qwen2.5-14B-Instruct-Q4_K_M.gguf",
+        "url": (
+            "https://huggingface.co/bartowski/Qwen2.5-14B-Instruct-GGUF"
+            "/resolve/main/Qwen2.5-14B-Instruct-Q4_K_M.gguf"
+        ),
+        "size_gb":     8.8,
+        "min_ram_gb":  16,
+        "n_layers":    48,
+        "description": (
+            "Best quality responses. Recommended for Apple Silicon (16+ GB), "
+            "high-end PCs with 24 GB+ RAM, or GPUs with 12+ GB VRAM."
         ),
     },
 }
