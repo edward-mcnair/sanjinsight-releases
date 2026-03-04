@@ -589,3 +589,171 @@ class TestVsweepVoltageList:
         v = self._compute(0.1, 0.3, 2.0)
         for a, b in zip(v, v[1:]):
             assert b > a, f"Not monotonically increasing: {v}"
+
+    def test_float_overshoot_does_not_add_extra_step(self):
+        """
+        When (end - start) / step is almost an integer but slightly less due
+        to floating-point, round() must avoid including a spurious extra step.
+        0.0 → 1.3 in steps of 0.1: exact division = 13, so 14 steps.
+        """
+        v = self._compute(0.0, 0.1, 1.3)
+        assert len(v) == 14, f"Expected 14 steps, got {len(v)}: {v}"
+        assert v[-1] == pytest.approx(1.3, abs=1e-5)
+
+    def test_fp_step_not_exactly_divisible(self):
+        """
+        0.0 → 1.0 in steps of 0.3 gives 4 steps: 0.0, 0.3, 0.6, 0.9.
+        The end (1.0) is NOT reachable — 3 full steps cover 0.9.
+        round((1.0-0.0)/0.3) = round(3.333) = 3 → n = 4.
+        """
+        v = self._compute(0.0, 0.3, 1.0)
+        assert len(v) == 4, f"Expected 4 steps, got {len(v)}: {v}"
+        assert v[-1] == pytest.approx(0.9, abs=1e-5)
+
+
+# ================================================================== #
+#  8. Drift correction — edge cases                                   #
+# ================================================================== #
+
+class TestDriftCorrectionEdgeCases:
+    """Edge-case handling in estimate_shift / apply_shift."""
+
+    def test_estimate_shift_mismatched_shapes_raises(self):
+        """Frames with different shapes must raise a ValueError (or similar).
+
+        FFT cross-correlation requires the two operands to be the same size;
+        the multiplication F * np.conj(R) will fail when shapes differ.
+        """
+        from acquisition.drift_correction import estimate_shift
+        frame = np.ones((64, 64), dtype=np.float32)
+        ref   = np.ones((32, 32), dtype=np.float32)
+        with pytest.raises((ValueError, RuntimeError, Exception)):
+            estimate_shift(frame, ref)
+
+    def test_estimate_shift_all_zeros_returns_finite(self):
+        """
+        Featureless (all-zero) frames: phase correlation has no clear peak but
+        must still return finite floats rather than NaN / Inf.
+        """
+        from acquisition.drift_correction import estimate_shift
+        z = np.zeros((32, 32), dtype=np.float32)
+        dy, dx = estimate_shift(z, z)
+        assert np.isfinite(dy), f"dy is not finite: {dy}"
+        assert np.isfinite(dx), f"dx is not finite: {dx}"
+
+    def test_apply_shift_preserves_dtype_float32(self):
+        """apply_shift must return an array with the same dtype as the input."""
+        from acquisition.drift_correction import apply_shift
+        frame = np.random.rand(32, 32).astype(np.float32)
+        result = apply_shift(frame, 1.5, -2.0)
+        assert result.dtype == np.float32, \
+            f"Expected float32, got {result.dtype}"
+
+    def test_apply_shift_preserves_dtype_float64(self):
+        from acquisition.drift_correction import apply_shift
+        frame  = np.random.rand(32, 32).astype(np.float64)
+        result = apply_shift(frame, 0.5, 0.5)
+        assert result.dtype == np.float64, \
+            f"Expected float64, got {result.dtype}"
+
+    def test_apply_shift_preserves_shape(self):
+        """Output shape must match input shape."""
+        from acquisition.drift_correction import apply_shift
+        frame  = np.random.rand(48, 64).astype(np.float32)
+        result = apply_shift(frame, 3.0, -2.5)
+        assert result.shape == frame.shape, \
+            f"Shape changed: {frame.shape} → {result.shape}"
+
+    def test_apply_shift_zero_is_identity(self):
+        """apply_shift(frame, 0, 0) must return the exact same values."""
+        from acquisition.drift_correction import apply_shift
+        rng   = np.random.default_rng(99)
+        frame = rng.random((32, 32)).astype(np.float32)
+        result = apply_shift(frame, 0.0, 0.0)
+        np.testing.assert_array_equal(result, frame)
+
+
+# ================================================================== #
+#  9. ContextBuilder — system_model field                             #
+# ================================================================== #
+
+class TestContextBuilderSystemModel:
+    """
+    Verify ContextBuilder.build() includes hardware system_model info
+    when app_state.system_model is set to a known model key.
+    """
+
+    def _build_context(self, model_key):
+        """Helper: set app_state.system_model, build context, restore."""
+        from hardware.app_state import app_state
+        original = app_state.system_model
+        try:
+            app_state.system_model = model_key
+            from ai.context_builder import ContextBuilder
+            import json
+            ctx = ContextBuilder()
+            return json.loads(ctx.build())
+        finally:
+            app_state.system_model = original
+
+    def test_system_model_present_for_ez500(self):
+        """EZ500 is a known model — context must include 'system_model' key."""
+        data = self._build_context("EZ500")
+        assert "system_model" in data, \
+            f"'system_model' missing from context JSON: {list(data.keys())}"
+
+    def test_system_model_has_model_field(self):
+        """The system_model block must include a 'model' string."""
+        data = self._build_context("EZ500")
+        if "system_model" in data:
+            assert "model" in data["system_model"]
+            assert isinstance(data["system_model"]["model"], str)
+
+    def test_unknown_model_absent_from_context(self):
+        """An unrecognised model key must NOT produce a system_model block."""
+        data = self._build_context("TOTALLY_UNKNOWN_XYZ_9999")
+        # system_model block should be absent (system_spec returns None)
+        assert "system_model" not in data, \
+            "system_model block should not appear for unknown model key"
+
+    def test_none_model_absent_from_context(self):
+        """When system_model is None, no system_model block in context."""
+        data = self._build_context(None)
+        assert "system_model" not in data, \
+            "system_model block should not appear when model is None"
+
+
+# ================================================================== #
+#  10. AppState — ldd property                                        #
+# ================================================================== #
+
+class TestAppStateLddProperty:
+    """Verify the ldd property on ApplicationState."""
+
+    def test_ldd_default_is_none(self):
+        from hardware.app_state import ApplicationState
+        state = ApplicationState()
+        assert state.ldd is None
+
+    def test_ldd_set_and_get(self):
+        from hardware.app_state import ApplicationState
+        state = ApplicationState()
+        sentinel = object()
+        state.ldd = sentinel
+        assert state.ldd is sentinel
+
+    def test_ldd_set_none_clears(self):
+        from hardware.app_state import ApplicationState
+        state = ApplicationState()
+        state.ldd = object()
+        state.ldd = None
+        assert state.ldd is None
+
+    def test_ldd_in_snapshot(self):
+        """snapshot() must include a 'ldd' key (None when no driver attached)."""
+        from hardware.app_state import ApplicationState
+        state = ApplicationState()
+        snap  = state.snapshot()
+        assert "ldd" in snap, \
+            f"'ldd' missing from snapshot keys: {list(snap.keys())}"
+        assert snap["ldd"] is None

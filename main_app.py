@@ -629,6 +629,9 @@ class MainWindow(QMainWindow):
         hw_service.tec_warning.connect(self._on_tec_warning)
         hw_service.tec_alarm_clear.connect(self._on_tec_alarm_clear)
 
+        # Device hotplug → refresh HW indicators in acquisition tabs
+        hw_service.device_connected.connect(self._on_device_hotplug)
+
         # ── AI service signals ────────────────────────────────────
         self._ai_service.status_changed.connect(self._on_ai_status)
         self._ai_service.response_token.connect(self._ai_panel.on_token)
@@ -778,6 +781,22 @@ class MainWindow(QMainWindow):
                  "label": time.strftime("scan_%Y%m%d_%H%M%S")})
         except Exception as _se:
             log.debug("Autosave (scan) failed: %s", _se)
+
+    def _on_device_hotplug(self, key: str, ok: bool):
+        """
+        Called on the GUI thread whenever hw_service detects a device
+        connect or disconnect event.
+
+        Refreshes hardware-readiness labels in the acquisition tabs that
+        display a static HW status panel (populated at showEvent but not
+        otherwise updated while the tab is already visible).
+        """
+        try:
+            self._movie_tab._refresh_hw()
+            self._transient_tab._refresh_hw()
+            self._prober_tab._refresh_hw()
+        except Exception:
+            pass
 
     def _open_device_manager(self):
         if self._device_mgr_dlg is None:
