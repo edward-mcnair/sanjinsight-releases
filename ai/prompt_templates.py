@@ -16,12 +16,15 @@ Design goals
 
 Token budget (approximate)
 --------------------------
-  System prompt  ≈ 2 600 tokens  (persona base + domain knowledge +
+  System prompt  ≈ 3 300 tokens  (persona base + domain knowledge +
                                    UI nav map + Quickstart Guide)
   Context JSON   ≈   250 tokens
   Question       ≈    30 tokens
+  History (6T)   ≈   600 tokens
+  Manual RAG     ≈   200 tokens
   ─────────────────────────────
-  Total          ≈ 2 880 tokens  → fits in any 4 096-token context window
+  Total          ≈ 4 380 tokens  → requires n_ctx ≥ 8 192
+                                   (DEFAULT_N_CTX = 8_192)
 """
 
 from __future__ import annotations
@@ -47,8 +50,12 @@ QUICKSTART_GUIDE: str = (
 # URL shown in out-of-scope responses  (canonical source: version.py)
 USER_MANUAL_URL: str = DOCS_URL
 
-# Default llama-cpp n_ctx — fits the Quickstart prompt comfortably.
-DEFAULT_N_CTX: int = 4_096
+# Default llama-cpp n_ctx.
+# The embedded Quickstart Guide alone is ~2,600 tokens; combined with
+# domain knowledge, UI nav map, instrument state, conversation history,
+# and manual RAG context, 4096 is too tight.  8192 fits comfortably and
+# is natively supported by Qwen2.5-7B, Llama-3.x, Mistral-7B, and Phi-3.
+DEFAULT_N_CTX: int = 8_192
 
 # ── Response instructions ──────────────────────────────────────────────────────
 
