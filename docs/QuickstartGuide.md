@@ -7,12 +7,51 @@
 
 ## 1. Install
 
-1. Download `SanjINSIGHT-Setup-{version}.exe` from the [Releases page](https://github.com/edward-mcnair/sanjinsight/releases).
-2. Run the installer and follow the on-screen prompts.
-3. Install the required hardware SDK drivers **before** launching the app:
-   - **Basler camera:** [Pylon SDK](https://www.baslerweb.com/en/downloads/software-downloads/) (USB3 or GigE)
-   - **NI FPGA / DAQ:** [NI-RIO drivers](https://www.ni.com/downloads/) (NI 9637 / USB-6001)
-   - **NI IMAQdx camera:** Included with NI Vision Acquisition Software
+### Step 1 — Run the SanjINSIGHT installer
+
+Download `SanjINSIGHT-Setup-{version}.exe` from the [Releases page](https://github.com/edward-mcnair/sanjinsight/releases) and run it.
+
+The installer bundles everything SanjINSIGHT needs to run — Python, all Python packages, and the application itself. No separate Python installation is required.
+
+### Step 2 — Install NI hardware drivers
+
+The installer cannot bundle kernel-level hardware drivers. Install these **before** launching SanjINSIGHT for the first time:
+
+| Driver | Required for | Where to get it |
+|---|---|---|
+| **NI-RIO** | FPGA (NI 9637) | [ni.com → Drivers → NI-RIO](https://www.ni.com/en/support/downloads/drivers/download.ni-rio.html) |
+| **NI Vision Acquisition Software** | Camera (NI IMAQdx) | [ni.com → Drivers → NI-VAS](https://www.ni.com/en/support/downloads/drivers/download.ni-vision-acquisition-software.html) |
+| **NI-VISA** | Keithley bias source | [ni.com → Drivers → NI-VISA](https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html) |
+
+> Each NI installer requires a restart. Install them in any order, then restart once after all three are done.
+
+> **USB-to-serial adapters (TEC, stage, turret):** Windows 11 usually installs FTDI and Prolific drivers automatically. If a COM port does not appear in Device Manager after plugging in the cable, download the driver manually from [ftdichip.com](https://ftdichip.com/drivers/vcp-drivers/).
+
+### Step 3 — Copy the FPGA bitfile
+
+Copy the FPGA firmware file (supplied on the Microsanj USB key) to a permanent location:
+
+```
+C:\Microsanj\firmware\ez500firmware.lvbitx
+```
+
+Create the folder if it does not exist. The Hardware Setup Wizard will ask for this path on first launch.
+
+### Step 4 — Download the AI model (optional)
+
+The AI Assistant requires a language model file (~2–5 GB). Go to **Settings → AI Assistant** and click **Download Model**. The download runs in the background and a progress bar is shown. The assistant is disabled until this is complete, but all other functions work without it.
+
+### Installation checklist
+
+```
+□ Run SanjINSIGHT-Setup.exe
+□ Install NI-RIO drivers + restart
+□ Install NI Vision Acquisition Software + restart
+□ Install NI-VISA
+□ Copy FPGA bitfile → C:\Microsanj\firmware\ez500firmware.lvbitx
+□ Launch SanjINSIGHT → complete Hardware Setup Wizard
+□ Settings → AI Assistant → Download Model  (optional)
+```
 
 ---
 

@@ -8,13 +8,58 @@
 
 ## Quick Start (recommended)
 
-If you received a `SanjINSIGHT-Setup-1.0.0.exe` installer:
+The SanjINSIGHT installer bundles Python and all required Python packages — no separate Python installation is needed. A small number of items cannot be bundled and must be set up manually as described below.
 
-1. Double-click the installer and follow the prompts.
-2. Launch **SanjINSIGHT** from the Start menu or desktop shortcut.
-3. The **Hardware Setup Wizard** will appear on first launch — follow it to configure your instrument connections.
+### 1 — Run the installer
 
-> **To update:** when a new version is released, a notification will appear in the application header. Click it to download and run the new installer. Your settings and measurement data are preserved.
+Double-click `SanjINSIGHT-Setup-{version}.exe` and follow the prompts (administrator rights required).
+
+### 2 — Install NI hardware drivers
+
+These are Windows kernel-level drivers that cannot be embedded in the application installer. Install them **before** launching SanjINSIGHT:
+
+| Driver | Required for | Download |
+|---|---|---|
+| **NI-RIO** | FPGA — NI 9637 | [ni.com → NI-RIO](https://www.ni.com/en/support/downloads/drivers/download.ni-rio.html) |
+| **NI Vision Acquisition Software** | Camera — NI IMAQdx | [ni.com → NI-VAS](https://www.ni.com/en/support/downloads/drivers/download.ni-vision-acquisition-software.html) |
+| **NI-VISA** | Bias source — Keithley via GPIB | [ni.com → NI-VISA](https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html) |
+
+Each installer requires a restart. After all three are installed, open **NI MAX** (Measurement & Automation Explorer) and confirm that your camera and FPGA chassis appear under **Devices and Interfaces** / **Remote Systems**.
+
+> **USB-to-serial adapters** (Meerstetter TEC, ATEC, stage, turret): Windows 11 usually detects FTDI and Prolific adapters automatically. If a COM port does not appear in Device Manager after plugging in the cable, download and install the FTDI VCP driver from [ftdichip.com/drivers/vcp-drivers](https://ftdichip.com/drivers/vcp-drivers/).
+
+### 3 — Copy the FPGA bitfile
+
+Copy the FPGA firmware file from the Microsanj USB key to a permanent location on this PC:
+
+```
+C:\Microsanj\firmware\ez500firmware.lvbitx
+```
+
+Create the folder if it does not exist. The Hardware Setup Wizard will ask for this path on first launch.
+
+### 4 — Launch and complete the Hardware Setup Wizard
+
+Launch **SanjINSIGHT** from the Start menu or desktop shortcut. The **Hardware Setup Wizard** opens automatically on the first run and guides you through selecting COM ports, the camera driver, the FPGA resource string, and the bitfile path.
+
+### 5 — Download the AI model (optional)
+
+The AI Assistant requires a local language model (~2–5 GB). Go to **Settings → AI Assistant** and click **Download Model**. The application runs normally without it — only the AI panel is unavailable until the model is downloaded.
+
+### Quick checklist
+
+```
+□ Run SanjINSIGHT-Setup.exe
+□ Install NI-RIO + restart
+□ Install NI Vision Acquisition Software + restart
+□ Install NI-VISA
+□ Copy FPGA bitfile → C:\Microsanj\firmware\ez500firmware.lvbitx
+□ Open NI MAX — confirm camera and FPGA appear
+□ Launch SanjINSIGHT → complete Hardware Setup Wizard
+□ Settings → AI Assistant → Download Model  (optional)
+```
+
+> **To update:** when a new version is released, a notification badge appears in the application header. Click it to download and run the new installer. Your settings, profiles, and measurement data are preserved.
 
 ---
 

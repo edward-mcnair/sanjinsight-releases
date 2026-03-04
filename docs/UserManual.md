@@ -96,23 +96,76 @@ The application measures ΔR/R by alternating the device under test (DUT) betwee
 | USB | USB 3.0 | USB 3.1 Gen 1 |
 | Display | 1920×1080 | 2560×1440 |
 
-### 2.2 Software Prerequisites
+### 2.2 What the Installer Includes
 
-Install these before running SanjINSIGHT:
+The SanjINSIGHT `.exe` installer is a self-contained bundle built with PyInstaller. It includes:
 
-| Driver | Required for | Download |
-|---|---|---|
-| **Basler Pylon SDK** | Basler USB3 or GigE cameras | [baslerweb.com/downloads](https://www.baslerweb.com/en/downloads/software-downloads/) |
-| **NI-RIO Drivers** | NI 9637 FPGA / USB-6001 DAQ | [ni.com/downloads](https://www.ni.com/downloads/) |
-| **NI Vision Acquisition Software** | NI IMAQdx cameras | Included with NI Vision |
-| **FTDI CDM Drivers** | Meerstetter TEC via USB | Usually auto-installed by Windows |
+- Python runtime
+- All required Python packages (PyQt5, NumPy, OpenCV, Matplotlib, SciPy, HDF5, and all hardware driver libraries)
+- The complete SanjINSIGHT application and assets
+
+**No separate Python installation is required.**
 
 ### 2.3 Installing SanjINSIGHT
 
+#### Step 1 — Run the installer
+
 1. Download `SanjINSIGHT-Setup-{version}.exe` from the [Releases page](https://github.com/edward-mcnair/sanjinsight/releases).
 2. Double-click the installer and follow the prompts (administrator rights required).
-3. The installer places a shortcut on the Desktop and in the Start Menu.
-4. Launch **SanjINSIGHT** — the Hardware Setup Wizard opens automatically on the first run.
+3. The installer places shortcuts on the Desktop and in the Start Menu.
+
+#### Step 2 — Install NI hardware drivers
+
+The installer cannot bundle Windows kernel-level hardware drivers. Install these **before** launching SanjINSIGHT for the first time. Each installer requires a restart.
+
+| Driver | Required for | Download |
+|---|---|---|
+| **NI-RIO** | FPGA — NI 9637 | [ni.com → NI-RIO](https://www.ni.com/en/support/downloads/drivers/download.ni-rio.html) |
+| **NI Vision Acquisition Software** | Camera — NI IMAQdx | [ni.com → NI-VAS](https://www.ni.com/en/support/downloads/drivers/download.ni-vision-acquisition-software.html) |
+| **NI-VISA** | Bias source — Keithley (GPIB / USB / LAN) | [ni.com → NI-VISA](https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html) |
+| **Basler Pylon SDK** | Camera — Basler pypylon *(if applicable)* | [baslerweb.com/downloads](https://www.baslerweb.com/en/downloads/software-downloads/) |
+
+After installing the NI drivers, open **NI MAX** (Measurement & Automation Explorer) and verify:
+- The camera appears under **Devices and Interfaces** with the correct name (e.g. `cam4`).
+- The FPGA chassis appears under **Remote Systems** with its resource string (e.g. `rio://169.254.x.x/RIO0`).
+
+> **USB-to-serial adapters** (Meerstetter TEC, ATEC, stage, turret): Windows 11 typically installs FTDI and Prolific chip drivers automatically via Windows Update. If a COM port does not appear in Device Manager after plugging in the cable, install the FTDI VCP driver manually from [ftdichip.com/drivers/vcp-drivers](https://ftdichip.com/drivers/vcp-drivers/).
+
+#### Step 3 — Copy the FPGA bitfile
+
+The compiled FPGA firmware (`.lvbitx`) is supplied on the Microsanj USB key. Copy it to a permanent location:
+
+```
+C:\Microsanj\firmware\ez500firmware.lvbitx
+```
+
+Create the folder if it does not exist. The Hardware Setup Wizard will prompt for this path.
+
+#### Step 4 — Launch and complete the Hardware Setup Wizard
+
+Launch **SanjINSIGHT** from the Start Menu or Desktop shortcut. The Hardware Setup Wizard opens automatically on the first run (see Section 3 for full details). The wizard guides you through:
+- TEC controller COM ports
+- Camera driver and name
+- FPGA resource string and bitfile path
+- Bias source VISA address
+
+#### Step 5 — Download the AI model (optional)
+
+The AI Assistant requires a local language model file (~2–5 GB, downloaded once). Go to **Settings → AI Assistant** and click **Download Model**. A progress bar is shown in Settings. All non-AI features work immediately without the model.
+
+#### Complete installation checklist
+
+```
+□ Run SanjINSIGHT-Setup.exe
+□ Install NI-RIO drivers + restart
+□ Install NI Vision Acquisition Software + restart
+□ Install NI-VISA
+□ Install Basler Pylon SDK  (Basler camera systems only)
+□ Confirm camera + FPGA visible in NI MAX
+□ Copy FPGA bitfile → C:\Microsanj\firmware\ez500firmware.lvbitx
+□ Launch SanjINSIGHT → complete Hardware Setup Wizard
+□ Settings → AI Assistant → Download Model  (optional)
+```
 
 ### 2.4 Updates
 
