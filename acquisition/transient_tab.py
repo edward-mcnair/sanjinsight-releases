@@ -514,6 +514,13 @@ class TransientTab(QWidget):
             self._pipeline.on_progress = lambda p: signals.transient_progress.emit(p)
             self._pipeline.on_complete = lambda r: signals.transient_complete.emit(r)
             self._pipeline.on_error    = lambda e: signals.error.emit(e)
+            # Disconnect stale connections before reconnecting to avoid the
+            # slot firing N times on the Nth successive run.
+            try:
+                signals.transient_progress.disconnect(self._on_progress)
+                signals.transient_complete.disconnect(self._on_complete)
+            except Exception:
+                pass
             signals.transient_progress.connect(self._on_progress)
             signals.transient_complete.connect(self._on_complete)
         except Exception:
@@ -766,34 +773,42 @@ class TransientTab(QWidget):
         n_v = len(voltages)
 
         def worker():
-            for i, v in enumerate(voltages):
-                if self._sweep_abort_flag:
-                    self._sweep_status = "Sweep aborted."
-                    break
-
-                self._sweep_status = (
-                    f"Step {i + 1}/{n_v} — setting {v:.3f} V…")
-
-                try:
-                    bias.set_level(v)
-                    bias.enable()
-                    time.sleep(0.10)   # 100 ms settle
-                except Exception as exc:
-                    log.warning("Bias set_level(%.3f V) failed: %s", v, exc)
-
-                self._pipeline = TransientAcquisitionPipeline(cam,
-                                                              fpga=fpga,
-                                                              bias=bias)
-                self._sweep_status = (
-                    f"Step {i + 1}/{n_v} — acquiring at {v:.3f} V…")
-                result = self._pipeline.run(**params)
-                self._vsweep_results.append((v, result))
-
-            # Disable bias after last step (or after abort)
             try:
-                bias.disable()
-            except Exception:
-                pass
+                for i, v in enumerate(voltages):
+                    if self._sweep_abort_flag:
+                        self._sweep_status = "Sweep aborted."
+                        break
+
+                    self._sweep_status = (
+                        f"Step {i + 1}/{n_v} — setting {v:.3f} V…")
+
+                    try:
+                        bias.set_level(v)
+                        bias.enable()
+                        time.sleep(0.10)   # 100 ms settle
+                    except Exception as exc:
+                        log.warning("Bias set_level(%.3f V) failed: %s", v, exc)
+
+                    self._sweep_status = (
+                        f"Step {i + 1}/{n_v} — acquiring at {v:.3f} V…")
+                    try:
+                        self._pipeline = TransientAcquisitionPipeline(cam,
+                                                                      fpga=fpga,
+                                                                      bias=bias)
+                        result = self._pipeline.run(**params)
+                        self._vsweep_results.append((v, result))
+                    except Exception as exc:
+                        # Log and continue to next voltage step; bias will still
+                        # be disabled in the finally block.
+                        log.warning("Step %.3f V pipeline failed: %s", v, exc)
+
+            finally:
+                # Guarantee bias is disabled after last step, on abort,
+                # or on any unhandled exception — whichever comes first.
+                try:
+                    bias.disable()
+                except Exception:
+                    pass
 
             if not self._sweep_abort_flag and self._vsweep_results:
                 _, last_result = self._vsweep_results[-1]

@@ -294,6 +294,13 @@ class MovieTab(QWidget):
             self._pipeline.on_progress = lambda p: signals.movie_progress.emit(p)
             self._pipeline.on_complete = lambda r: signals.movie_complete.emit(r)
             self._pipeline.on_error    = lambda e: signals.error.emit(e)
+            # Disconnect any stale connections from a previous run to prevent
+            # the slot firing N times on the Nth successive run call.
+            try:
+                signals.movie_progress.disconnect(self._on_progress)
+                signals.movie_complete.disconnect(self._on_complete)
+            except Exception:
+                pass
             signals.movie_progress.connect(self._on_progress)
             signals.movie_complete.connect(self._on_complete)
         except Exception:
