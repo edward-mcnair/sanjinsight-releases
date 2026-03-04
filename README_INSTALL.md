@@ -1,8 +1,45 @@
 # SanjINSIGHT — Installation Guide (Windows)
 
-**Version:** 1.0.0  
-**Applies to:** Windows 10 / Windows 11 (64-bit)  
+**Version:** 1.0.0
+**Applies to:** Windows 10 / Windows 11 (64-bit)
 **Support:** support@microsanj.com
+
+---
+
+## System Requirements
+
+### Operating System
+
+| Version | Support |
+|---|---|
+| **Windows 11 64-bit** | Fully supported — recommended |
+| **Windows 10 64-bit, build 17763+** (October 2018 Update, version 1809) | Supported |
+| Windows 10 builds below 17763 | Not supported |
+| Windows 32-bit | Not supported |
+| macOS / Linux | Simulation / development mode only |
+
+To check your Windows build: press **Win+R**, type `winver`, press Enter.
+
+### Hardware
+
+| Component | Minimum | Recommended |
+|---|---|---|
+| CPU | 4-core, 2.5 GHz | 8-core, 3.5 GHz or better |
+| RAM | 8 GB | 32 GB (16 GB minimum if using AI Assistant) |
+| Disk | 4 GB free | NVMe SSD with 50 GB free |
+| USB | USB 3.0 × 2 | USB 3.0 × 4 or more |
+| Network | 100 Mbps Ethernet | Gigabit Ethernet |
+| GPU | Not required | NVIDIA RTX series, 8 GB VRAM+ (for fast AI inference) |
+| Display | 1920×1080 | 2560×1440, dual monitors |
+
+### NUC / Mini-PC
+
+An Intel NUC or equivalent mini-PC can run SanjINSIGHT for bench evaluation and network-attached setups. Limitations:
+- PCIe-connected NI hardware (NI 9637 via PCIe) is **not** supported — NUCs have no full-height PCIe slots
+- NI 9637 connected via Ethernet/network and Basler USB3 cameras work normally
+- AI Assistant runs on CPU only at reduced speed (~10–30 tokens/second)
+
+For production instrument use with a locally connected NI chassis, a standard desktop tower or workstation is required.
 
 ---
 

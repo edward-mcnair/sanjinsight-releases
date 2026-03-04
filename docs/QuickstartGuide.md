@@ -5,6 +5,23 @@
 
 ---
 
+## Before You Begin — Requirements
+
+| | Minimum | Recommended |
+|---|---|---|
+| **OS** | Windows 10 64-bit (build 17763+) | Windows 11 64-bit |
+| **CPU** | 4-core, 2.5 GHz | 8-core, 3.5 GHz |
+| **RAM** | 8 GB (16 GB with AI) | 32 GB |
+| **Disk** | 4 GB free | SSD, 50 GB free |
+| **USB** | USB 3.0 × 2 | USB 3.0 × 4 |
+| **GPU** | Not required | NVIDIA RTX (faster AI) |
+
+> **Windows version:** Press **Win+R** → type `winver` → press Enter. Build number must be **17763 or higher**.
+
+> **NUC / mini-PC:** Supported for USB cameras and network-attached FPGA. Not suitable for PCIe-connected NI hardware. See the User Manual Section 2.1 for details.
+
+---
+
 ## 1. Install
 
 ### Step 1 — Run the SanjINSIGHT installer

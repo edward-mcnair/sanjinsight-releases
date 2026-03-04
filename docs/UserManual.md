@@ -87,14 +87,48 @@ The application measures ΔR/R by alternating the device under test (DUT) betwee
 
 ### 2.1 System Requirements
 
-| Component | Minimum | Recommended |
-|---|---|---|
-| OS | Windows 10 (64-bit) | Windows 11 (64-bit) |
-| CPU | 4-core, 2.5 GHz | 8-core, 3.5 GHz |
-| RAM | 8 GB | 32 GB |
-| Disk | 2 GB free (+ ~5 GB for AI model) | SSD with 50 GB free |
-| USB | USB 3.0 | USB 3.1 Gen 1 |
-| Display | 1920×1080 | 2560×1440 |
+#### Operating System
+
+| Version | Support |
+|---|---|
+| **Windows 11 64-bit** | Fully supported — recommended |
+| **Windows 10 64-bit, build 17763+** (October 2018 Update, version 1809) | Supported |
+| Windows 10 64-bit, builds before 17763 | Not supported |
+| Windows 32-bit (any version) | Not supported |
+| macOS / Linux | Development and simulation mode only — NI drivers not available |
+
+> **Minimum Windows 10 build:** 17763. To check your build, press **Win+R**, type `winver`, press Enter. If the build number shown is below 17763, update Windows before installing SanjINSIGHT.
+
+#### Hardware
+
+| Component | Minimum | Recommended | Notes |
+|---|---|---|---|
+| CPU | 4-core, 2.5 GHz | 8-core, 3.5 GHz or better | More cores improve AI inference speed on CPU |
+| RAM | 8 GB | 32 GB | 16 GB minimum if using the AI Assistant; 32 GB for smooth simultaneous acquisition + AI |
+| Disk | 4 GB free | NVMe SSD with 50 GB free | SSD strongly recommended; AI model alone is 2–5 GB; large scan sessions can exceed 10 GB |
+| USB | USB 3.0 × 2 | USB 3.0 × 4 or more | One port per USB camera + additional ports for serial adapters (TEC, stage, turret) |
+| Network | 100 Mbps Ethernet | Gigabit Ethernet | Required if the FPGA chassis or camera connects over a network rather than USB |
+| GPU | Not required | NVIDIA RTX series, 8 GB VRAM+ | A dedicated NVIDIA GPU dramatically accelerates the AI Assistant (see note below) |
+| Display | 1920×1080 | 2560×1440, dual monitors | Dual monitors allow the live thermal map and analysis panels to be visible simultaneously |
+
+> **GPU and AI inference:** Without a dedicated GPU, the AI Assistant runs on the CPU at approximately 15–50 tokens/second (model dependent). An NVIDIA GPU with CUDA support raises this to 200–500+ tokens/second and enables larger, more capable models. The application runs fully without a GPU — only AI response speed is affected.
+
+#### Will it run on an Intel NUC or mini-PC?
+
+Yes, with limitations:
+
+| Capability | NUC / Mini-PC |
+|---|---|
+| SanjINSIGHT application | ✓ Fully supported |
+| Basler USB3 camera | ✓ Works via USB 3.0 |
+| NI 9637 FPGA via Ethernet/network | ✓ Works |
+| NI 9637 FPGA via PCIe | ✗ NUCs have no full-height PCIe slots |
+| Meerstetter / ATEC TEC (via USB-serial adapter) | ✓ Works |
+| Stage and turret (USB-serial) | ✓ Works |
+| AI Assistant (CPU inference, small model) | ✓ Works; expect 10–30 tok/s |
+| AI Assistant (GPU-accelerated, large model) | ✗ No dedicated GPU slot |
+
+A NUC is suitable for bench evaluation, software demonstrations, and systems where the FPGA connects over the network. For production instrument control with a locally connected NI chassis, a standard desktop tower or workstation is required.
 
 ### 2.2 What the Installer Includes
 
@@ -972,47 +1006,124 @@ Open with **Help → Settings** or **Ctrl+,**.
 
 ## 15. Supported Hardware
 
-### Cameras
+### 15.1 Cameras
 
-| Model | Connection | Driver | Notes |
+| Model | Sensor | Connection | Driver | Required SDK |
+|---|---|---|---|---|
+| Basler acA1920-155um | 1920×1200, mono | USB 3.0 | `pypylon` | Basler Pylon SDK 6.x / 7.x |
+| Basler acA640-750um | 640×480, mono | USB 3.0 | `pypylon` | Basler Pylon SDK 6.x / 7.x |
+| Basler acA2040-90um | 2040×1088, mono | USB 3.0 | `pypylon` | Basler Pylon SDK 6.x / 7.x |
+| Basler acA1300-200um | 1280×1024, mono | USB 3.0 | `pypylon` | Basler Pylon SDK 6.x / 7.x |
+| Any Basler USB3 Vision | varies | USB 3.0 | `pypylon` | Basler Pylon SDK 6.x / 7.x |
+| Any Basler GigE Vision | varies | Gigabit Ethernet | `pypylon` | Basler Pylon SDK 6.x / 7.x |
+| NI IMAQdx cameras | varies | USB / GigE / Camera Link | `ni_imaqdx` | NI Vision Acquisition Software 2019+ |
+| DirectShow-compatible | varies | USB | `directshow` | None (Windows API) |
+| Simulated | 512×512, synthetic | — | `simulated` | None |
+
+> **Pylon SDK download:** [baslerweb.com/downloads](https://www.baslerweb.com/en/downloads/software-downloads/)
+> **NI Vision Acquisition download:** [ni.com/downloads](https://www.ni.com/en/support/downloads/drivers/download.ni-vision-acquisition-software.html)
+
+### 15.2 TEC Controllers
+
+| Model | Manufacturer | Connection | Driver | Baud | Required Package |
+|---|---|---|---|---|---|
+| TEC-1089 | Meerstetter Engineering | USB (FTDI VCP) / RS-232 | `meerstetter` | 57 600 | `pyMeCom` |
+| TEC-1123 | Meerstetter Engineering | USB (FTDI VCP) / RS-232 | `meerstetter` | 57 600 | `pyMeCom` |
+| ATEC-302 | ATEC | RS-232 | `atec` | 9 600 | `pyserial` |
+| Simulated | — | — | `simulated` | — | None |
+
+> The Meerstetter protocol requires the FTDI VCP driver for USB connections. Windows 11 usually installs this automatically. Manual download: [ftdichip.com/drivers/vcp-drivers](https://ftdichip.com/drivers/vcp-drivers/).
+
+### 15.3 FPGA / Signal Generation
+
+| Model | Manufacturer | Connection | Driver | Required Software |
+|---|---|---|---|---|
+| NI 9637 | National Instruments | PCIe / cRIO / Ethernet | `ni9637` | NI-RIO 19.0+; compiled `.lvbitx` bitfile |
+| NI USB-6001 | National Instruments | USB | `ni9637` | NI-RIO 19.0+; compiled `.lvbitx` bitfile |
+| Simulated | — | — | `simulated` | None |
+
+> **NI-RIO download:** [ni.com → NI-RIO](https://www.ni.com/en/support/downloads/drivers/download.ni-rio.html)
+> The compiled bitfile (`.lvbitx`) is provided by Microsanj on the instrument USB key. The bitfile must match the NI-RIO version installed on the PC — if you upgrade NI-RIO, request a recompiled bitfile from Microsanj support.
+
+### 15.4 Bias Sources
+
+#### Keithley SourceMeters (SCPI command set)
+
+| Model | Connection | Driver |
+|---|---|---|
+| Keithley 2400 | GPIB / RS-232 | `keithley` |
+| Keithley 2410 | GPIB | `keithley` |
+| Keithley 2420 | GPIB | `keithley` |
+| Keithley 2425 | GPIB | `keithley` |
+| Keithley 2430 | GPIB | `keithley` |
+| Keithley 2450 | USB / Ethernet / GPIB | `keithley` |
+
+#### Keithley SourceMeters (TSP / Lua command set)
+
+| Model | Connection | Driver |
+|---|---|---|
+| Keithley 2601 / 2602 | GPIB / Ethernet | `keithley` |
+| Keithley 2611 / 2612 | GPIB / Ethernet | `keithley` |
+| Keithley 2635 / 2636 | GPIB / Ethernet | `keithley` |
+
+#### Generic VISA instruments
+
+| Instrument | Connection | Driver | Notes |
 |---|---|---|---|
-| Basler acA1920-155um | USB 3.0 | `pypylon` | 1920×1200 @ 155 fps; primary imaging sensor |
-| Basler acA640-750um | USB 3.0 | `pypylon` | 640×480 @ 750 fps; high-speed transient capture |
-| Basler GigE (any) | Ethernet | `pypylon` | GigE Vision; requires compatible NIC |
-| NI IMAQdx cameras | Various | `ni_imaqdx` | Requires NI Vision Acquisition Software |
-| Simulated | — | `simulated` | Generates synthetic test frames |
+| Rigol DP832 / DP831 | Ethernet / USB | `visa_generic` | Programmable DC supply |
+| Agilent / Keysight B2900 series | GPIB / USB / Ethernet | `visa_generic` | SMU series |
+| Rohde & Schwarz NGM / HMP series | Ethernet | `visa_generic` | Programmable supplies |
+| Any IEEE 488.2 / SCPI instrument | GPIB / USB / Ethernet | `visa_generic` | Command overrides configurable in `config.yaml` |
 
-### TEC Controllers
+> **VISA GPIB connections** require either NI-VISA + NI-GPIB-USB-HS adapter, or Keysight IO Libraries Suite + Keysight GPIB adapter. USB and Ethernet VISA instruments work with `pyvisa-py` only (no NI-VISA required).
 
-| Model | Manufacturer | Connection | Driver | Baud |
+### 15.5 Motorised Stages
+
+#### Thorlabs (USB, via thorlabs-apt-device)
+
+| Model | Axes | Driver | Notes |
+|---|---|---|---|
+| BBD302 | 3-axis (XYZ) | `thorlabs` | Brushless DC benchtop controller |
+| KST101 | 1-axis | `thorlabs` | Stepper motor controller |
+| KDC101 | 1-axis | `thorlabs` | DC servo motor controller |
+| TDC001 | 1-axis | `thorlabs` | DC servo motor controller |
+| MPC320 | 1-axis | `thorlabs` | Motorised polariser controller |
+
+#### Serial stages (RS-232 / USB-CDC, multi-dialect)
+
+| Model | Manufacturer | Dialect | Baud | Driver |
 |---|---|---|---|---|
-| TEC-1089 | Meerstetter | USB (FTDI) / RS-232 | `meerstetter` | 57 600 |
-| TEC-1123 | Meerstetter | USB (FTDI) / RS-232 | `meerstetter` | 57 600 |
-| ATEC-302 | Arroyo Instruments | RS-232 | `atec` | 9 600 |
+| ProScan III | Prior Scientific | `prior` | 9 600 | `serial_stage` |
+| ES111 / H128 | Prior Scientific | `prior` | 9 600 | `serial_stage` |
+| MAC5000 | Ludl Electronic Products | `ludl` | 9 600 | `serial_stage` |
+| BioPrecision2 | Ludl Electronic Products | `ludl` | 9 600 | `serial_stage` |
+| MS-2000 | Applied Scientific Instrumentation (ASI) | `asi` | 9 600 | `serial_stage` |
+| Tiger controller | Applied Scientific Instrumentation (ASI) | `asi` | 115 200 | `serial_stage` |
+| TANGO | Marzhauser Wetzlar | `marzhauser` | 57 600 | `serial_stage` |
 
-### FPGA / DAQ
-
-| Model | Manufacturer | Connection | Driver | Notes |
-|---|---|---|---|---|
-| NI 9637 | National Instruments | PCIe / cRIO | `ni9637` | Requires NI-RIO drivers and compiled `.lvbitx` bitfile |
-| NI USB-6001 | National Instruments | USB | `ni9637` | Lower bandwidth; bench/fallback configuration |
-
-### Stage Controllers
+#### Prober stations
 
 | Model | Manufacturer | Connection | Driver |
 |---|---|---|---|
-| BSC203 | Thorlabs | USB | `thorlabs` |
-| MPC320 | Thorlabs | USB | `thorlabs` |
-| ProScan III | Prior Scientific | RS-232 | `prior` |
+| Semi-automatic prober | MPI Corporation | RS-232 (115 200 baud) | `mpi_prober` |
 
-### Bias Sources
+### 15.6 Objective Turret
 
-| Model | Manufacturer | Connection | Driver |
+| Controller | Manufacturer | Connection | Driver | Baud |
+|---|---|---|---|---|
+| LINX (Arduino-based) | Olympus / custom | USB-CDC | `olympus_linx` | 115 200 |
+
+### 15.7 SDK and Driver Version Reference
+
+| Software | Minimum Version | Recommended | Notes |
 |---|---|---|---|
-| Keithley 2400 | Keithley | GPIB / RS-232 | `keithley` |
-| Keithley 2450 | Keithley | USB | `keithley` |
-| Rigol DP832 | Rigol | Ethernet | `visa_generic` |
-| Any VISA instrument | — | GPIB / USB / Ethernet | `visa_generic` |
+| Windows | 10 build 17763 (Oct 2018) | Windows 11 | — |
+| NI-RIO | 19.0 (2019) | Latest | Bitfile must match installed version |
+| NI Vision Acquisition Software | 2019 | Latest | Includes NI-IMAQdx |
+| NI-VISA | 19.0 | Latest | Required for GPIB instruments |
+| Basler Pylon SDK | 6.0 | 7.x | pypylon 1.x requires Pylon 6+; pypylon 2.x requires Pylon 7+ |
+| Thorlabs Kinesis | 1.14 | Latest | Required for Thorlabs USB stages |
+| FTDI VCP Driver | 2.12 | Latest | Auto-installed by Windows Update on most systems |
 
 ---
 
