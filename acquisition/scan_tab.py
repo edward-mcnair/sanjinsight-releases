@@ -261,7 +261,9 @@ class ScanTab(QWidget):
 
         self._run_btn   = QPushButton("▶  Start Scan")
         self._run_btn.setObjectName("primary")
-        self._run_btn.setFixedHeight(34)
+        self._run_btn.setFixedHeight(42)   # was 34 — taller so spinner text is
+        self._run_btn.setStyleSheet(       # clearly readable while scanning
+            "font-size:15pt; font-weight:600;")
 
         self._abort_btn = QPushButton("■  Abort")
         self._abort_btn.setObjectName("danger")
@@ -273,6 +275,7 @@ class ScanTab(QWidget):
 
         self._progress = QProgressBar()
         self._progress.setRange(0, 100)
+        self._progress.setFixedHeight(20)  # doubled from default ~10 px
 
         self._tile_lbl = QLabel("Ready")
         self._tile_lbl.setStyleSheet(

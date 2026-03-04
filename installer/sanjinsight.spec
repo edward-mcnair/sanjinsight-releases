@@ -93,6 +93,7 @@ datas = [
     # App icons — main_app.py picks the right one per platform at runtime
     (os.path.join(PROJECT_DIR, 'assets', 'app-icon.png'),              'assets'),
     (os.path.join(PROJECT_DIR, 'assets', 'app-icon.ico'),              'assets'),
+    (os.path.join(PROJECT_DIR, 'assets', 'app-icon.icns'),             'assets'),
 
     # ── Documentation (read at module-import time by ai/prompt_templates.py) ─
     # ai/prompt_templates.py resolves: Path(__file__).parent.parent / "docs"

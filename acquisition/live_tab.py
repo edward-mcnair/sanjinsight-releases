@@ -40,7 +40,7 @@ class SnrBar(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.setFixedWidth(44)
+        self.setFixedWidth(64)       # was 44 — wider to prevent label clipping
         self.setMinimumHeight(140)   # was 80 — 75% taller
         self._value = 0.0
         self._min   = -20.0
@@ -541,7 +541,7 @@ class LiveTab(QWidget):
             sl.addWidget(self._sub(lbl), r, 0)
             v = QLabel("—")
             v.setStyleSheet(
-                "font-family:Menlo,monospace; font-size:14pt; color:#aaa;")
+                "font-family:Menlo,monospace; font-size:11pt; color:#aaa;")
             v.setAlignment(Qt.AlignRight)
             sl.addWidget(v, r, 1)
             self._stat_vals[key] = v
@@ -556,7 +556,7 @@ class LiveTab(QWidget):
         self._probe_dt  = QLabel("—")
         for l in [self._probe_xy, self._probe_drr, self._probe_dt]:
             l.setStyleSheet(
-                "font-family:Menlo,monospace; font-size:14pt; color:#aaa;")
+                "font-family:Menlo,monospace; font-size:11pt; color:#aaa;")
         pl.addWidget(self._sub("Position"), 0, 0)
         pl.addWidget(self._probe_xy,         0, 1)
         pl.addWidget(self._sub("ΔR/R"),     1, 0)

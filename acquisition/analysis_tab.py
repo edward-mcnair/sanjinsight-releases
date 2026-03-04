@@ -48,26 +48,27 @@ class VerdictBanner(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.setFixedHeight(72)
+        self.setFixedHeight(90)      # was 72 — extra room for stacked layout
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
 
         self._outer = QWidget()
-        ol = QHBoxLayout(self._outer)
-        ol.setContentsMargins(20, 0, 20, 0)
+        ol = QVBoxLayout(self._outer)   # was QHBoxLayout — stacked so PASS
+        ol.setContentsMargins(12, 4, 12, 4)  # never clips against the sub-text
+        ol.setSpacing(2)
 
         self._icon  = QLabel("—")
         self._icon.setStyleSheet(
-            "font-size:44pt; font-weight:bold; font-family:Menlo,monospace;")
-        self._icon.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+            "font-size:36pt; font-weight:bold; font-family:Menlo,monospace;")
+        self._icon.setAlignment(Qt.AlignCenter)
 
         self._sub = QLabel("Run analysis to see verdict")
-        self._sub.setStyleSheet("font-size:14pt; color:#555;")
-        self._sub.setAlignment(Qt.AlignVCenter | Qt.AlignRight)
-        self._sub.setWordWrap(False)
+        self._sub.setStyleSheet("font-size:11pt; color:#555;")
+        self._sub.setAlignment(Qt.AlignCenter)
+        self._sub.setWordWrap(True)
 
-        ol.addWidget(self._icon, 1)
+        ol.addWidget(self._icon)
         ol.addWidget(self._sub)
         lay.addWidget(self._outer)
         self._set("NONE", "")
@@ -78,10 +79,10 @@ class VerdictBanner(QWidget):
             f"background:{bg}; border:1px solid {border}; border-radius:4px;")
         self._icon.setText(verdict if verdict != "NONE" else "—")
         self._icon.setStyleSheet(
-            f"font-size:44pt; font-weight:bold; "
+            f"font-size:36pt; font-weight:bold; "
             f"font-family:Menlo,monospace; color:{fg};")
         self._sub.setText(subtitle)
-        self._sub.setStyleSheet(f"font-size:14pt; color:{fg}88;")
+        self._sub.setStyleSheet(f"font-size:11pt; color:{fg}88;")
 
     def update_verdict(self, result: AnalysisResult):
         n  = result.n_hotspots
@@ -434,7 +435,7 @@ class AnalysisTab(QWidget):
 
     def _build_results(self) -> QWidget:
         w   = QWidget()
-        w.setMinimumWidth(250); w.setMaximumWidth(340)
+        w.setMinimumWidth(270)   # was 250; removed setMaximumWidth cap
         lay = QVBoxLayout(w)
         lay.setContentsMargins(4, 8, 8, 8)
         lay.setSpacing(8)
@@ -475,14 +476,24 @@ class AnalysisTab(QWidget):
         sep.setStyleSheet("color:#222;")
         lay.addWidget(sep)
 
-        btn_row = QHBoxLayout()
+        # Two-row export button layout so no label gets clipped.
+        # Row 1: Save PNG | Save CSV
+        # Row 2: Add to Report (full width)
+        btn_row1 = QHBoxLayout()
         self._save_png_btn = QPushButton("🖼  Save PNG")
         self._save_csv_btn = QPushButton("📊  Save CSV")
-        self._add_rpt_btn  = QPushButton("📄  Add to Report")
-        for b in [self._save_png_btn, self._save_csv_btn, self._add_rpt_btn]:
+        for b in [self._save_png_btn, self._save_csv_btn]:
             b.setFixedHeight(28); b.setEnabled(False)
-            btn_row.addWidget(b)
-        lay.addLayout(btn_row)
+            btn_row1.addWidget(b)
+
+        btn_row2 = QHBoxLayout()
+        self._add_rpt_btn  = QPushButton("📄  Add to Report")
+        self._add_rpt_btn.setFixedHeight(28)
+        self._add_rpt_btn.setEnabled(False)
+        btn_row2.addWidget(self._add_rpt_btn)
+
+        lay.addLayout(btn_row1)
+        lay.addLayout(btn_row2)
 
         self._save_png_btn.clicked.connect(self._export_png)
         self._save_csv_btn.clicked.connect(self._export_csv)

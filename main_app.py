@@ -1475,7 +1475,11 @@ if __name__ == "__main__":
     if _sys.platform == "win32":
         _candidates = ["app-icon.ico", "app-icon.png"]
     elif _sys.platform == "darwin":
-        _candidates = ["app-icon.icns", "app-icon.png"]
+        # .png is preferred: Qt reliably loads it via the native macOS image
+        # loader and correctly propagates the icon to the Dock.  .icns is kept
+        # as a fallback because PyQt5 cannot always parse the multi-resolution
+        # ICNS container, which silently produces a null icon (green square).
+        _candidates = ["app-icon.png", "app-icon.icns"]
     else:
         _candidates = ["app-icon.png"]
     _icon_path = None
