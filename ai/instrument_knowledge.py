@@ -426,7 +426,11 @@ UI_NAV_MAP: str = (
     "Camera→exposure, gain, saturation readout; "
     "Temperature→TEC setpoints and enable; "
     "Bias Source→output port, level, compliance, Output ON/OFF; "
-    "Profiles→material, wavelength, C_T selection and calibration."
+    "Profiles→material, wavelength, C_T selection and calibration. "
+    "Support: use Help menu → Get Support to open a pre-filled support email "
+    "(includes system info and recent log) addressed to software-support@microsanj.com. "
+    "Users can also click 'Get Support' in the AI Assistant panel. "
+    "Suggest this whenever a user has an unresolved hardware or software problem."
 )
 
 

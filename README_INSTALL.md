@@ -2,7 +2,7 @@
 
 **Version:** 1.0.0
 **Applies to:** Windows 10 / Windows 11 (64-bit)
-**Support:** support@microsanj.com
+**Support:** software-support@microsanj.com
 
 ---
 
@@ -227,7 +227,7 @@ Check:
 3. No other application (e.g. NI MAX, Pylon Viewer) has the camera open.
 
 ### Contacting support
-Go to **Help → About** in the application and click **"Copy Info to Clipboard"**, then paste into your support email to support@microsanj.com. This gives us your exact version, OS, and driver configuration.
+Use **Help → Get Support…** in the application to open a pre-filled support email with your system info and recent log included automatically. Alternatively, go to **Help → About** and click **"Copy Info to Clipboard"**, then paste into an email to software-support@microsanj.com.
 
 ---
 

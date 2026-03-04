@@ -1405,4 +1405,4 @@ All cross-thread communication uses Qt signals (queued connections) or `app_stat
 ---
 
 *Copyright © 2026 Microsanj, LLC. All Rights Reserved.*
-*For support, contact [support@microsanj.com](mailto:support@microsanj.com)*
+*For support, use **Help → Get Support…** in the application, or contact [software-support@microsanj.com](mailto:software-support@microsanj.com)*

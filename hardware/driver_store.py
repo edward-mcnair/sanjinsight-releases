@@ -117,7 +117,7 @@ class DriverStore:
             raise RuntimeError(
                 f"Cannot reach driver server:\n{e}\n\n"
                 f"Check your internet connection or contact "
-                f"support@microsanj.com") from e
+                f"software-support@microsanj.com") from e
 
         data = json.loads(raw)
         entries = []

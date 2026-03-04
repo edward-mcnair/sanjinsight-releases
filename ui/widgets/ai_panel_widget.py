@@ -98,6 +98,7 @@ class AIPanelWidget(QWidget):
     diagnose_requested        user clicked "Diagnose"
     ask_requested(str)        user submitted a free-form question
     close_requested           user clicked ✕
+    support_requested         user clicked "Get Support" (opens SupportDialog)
     """
 
     explain_requested  = pyqtSignal()
@@ -105,6 +106,7 @@ class AIPanelWidget(QWidget):
     ask_requested      = pyqtSignal(str)
     close_requested    = pyqtSignal()
     clear_requested    = pyqtSignal()   # user clicked "Clear" — reset conversation
+    support_requested  = pyqtSignal()   # user clicked "Get Support"
 
     def __init__(self, llama_installed: bool = True, parent=None):
         super().__init__(parent)
@@ -213,6 +215,25 @@ class AIPanelWidget(QWidget):
         action_row.addWidget(self._explain_btn)
         action_row.addWidget(self._diagnose_btn)
         lay.addLayout(action_row)
+
+        # ── Get Support button (always enabled — no AI model required) ──
+        support_row = QHBoxLayout()
+        self._support_btn = QPushButton("📧  Get Support")
+        self._support_btn.setStyleSheet(
+            f"QPushButton {{ background:#1a1a1a; color:#88aacc; "
+            f"border:1px solid #252525; border-radius:4px; "
+            f"font-size:11pt; padding:4px 10px; }}"
+            f"QPushButton:hover   {{ background:#222; color:#aaccee; border-color:#333; }}"
+            f"QPushButton:pressed {{ background:#181818; }}"
+        )
+        self._support_btn.setToolTip(
+            "Open a support email pre-filled with your system information\n"
+            "and recent log — ready to send to software-support@microsanj.com."
+        )
+        self._support_btn.clicked.connect(self.support_requested)
+        support_row.addWidget(self._support_btn)
+        support_row.addStretch()
+        lay.addLayout(support_row)
 
         # ── Response display ──
         self._display = QTextEdit()

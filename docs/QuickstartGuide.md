@@ -237,7 +237,7 @@ The **AI Assistant** is a dockable panel accessible from the sidebar. It shows:
 ## 8. Getting Help
 
 - **Documentation:** [docs.microsanj.com/sanjinsight](https://docs.microsanj.com/sanjinsight)
-- **Support:** [support@microsanj.com](mailto:support@microsanj.com)
+- **Support:** [software-support@microsanj.com](mailto:software-support@microsanj.com) — or use **Help → Get Support…** in the application for a pre-filled email with diagnostic data attached
 - **Releases:** [github.com/edward-mcnair/sanjinsight/releases](https://github.com/edward-mcnair/sanjinsight/releases)
 
 ---

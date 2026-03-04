@@ -650,6 +650,7 @@ class MainWindow(QMainWindow):
         self._ai_panel.ask_requested.connect(self._ai_service.ask)
         self._ai_panel.close_requested.connect(self._toggle_ai_panel)
         self._ai_panel.clear_requested.connect(self._ai_service.clear_history)
+        self._ai_panel.support_requested.connect(self._open_support_dialog)
 
         # Settings tab → AI service (enable / disable)
         self._settings_tab.ai_enable_requested.connect(self._on_ai_enable)
@@ -936,6 +937,13 @@ class MainWindow(QMainWindow):
         act_settings.triggered.connect(
             lambda: self._nav.select_by_label("Settings"))
 
+        help_menu.addSeparator()
+
+        act_support = help_menu.addAction("Get Support…")
+        act_support.setToolTip(
+            "Open a pre-filled support email with system info and recent log")
+        act_support.triggered.connect(self._open_support_dialog)
+
         # ── Emergency stop shortcut (keyboard) ───────────────────
         estop_sc = QShortcut(QKeySequence("Ctrl+."), self)
         estop_sc.activated.connect(self._trigger_estop)
@@ -979,6 +987,17 @@ class MainWindow(QMainWindow):
                 "Configuration saved.\n\n"
                 "Restart the application (or reconnect hardware from the "
                 "Device Manager) to apply the new driver settings.")
+
+    def _open_support_dialog(self):
+        """Open the Get Support dialog with current instrument state included."""
+        from ui.dialogs.support_dialog import SupportDialog
+        context_json = ""
+        try:
+            context_json = self._ai_service._ctx.build()
+        except Exception:
+            pass
+        dlg = SupportDialog(context_json=context_json, parent=self)
+        dlg.exec_()
 
     # ── Update checker ─────────────────────────────────────────────
 
