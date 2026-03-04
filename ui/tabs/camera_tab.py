@@ -27,7 +27,8 @@ log = logging.getLogger(__name__)
 
 from PyQt5.QtWidgets import (
     QWidget, QLabel, QPushButton, QSlider, QVBoxLayout, QHBoxLayout,
-    QGridLayout, QGroupBox, QButtonGroup, QRadioButton, QFrame, QComboBox)
+    QGridLayout, QGroupBox, QButtonGroup, QRadioButton, QFrame, QComboBox,
+    QFileDialog)
 from PyQt5.QtCore    import Qt
 
 from hardware.app_state    import app_state
@@ -41,6 +42,13 @@ def hline():
     f.setFrameShape(QFrame.HLine)
     f.setStyleSheet(f"color: {PALETTE['border']};")
     return f
+
+
+def _fmt_exp(us: int) -> str:
+    """Format exposure value showing both ms and μs for clarity."""
+    if us >= 1000:
+        return f"{us / 1000:.1f} ms  ({us} μs)"
+    return f"{us} μs"
 
 
 class CameraTab(QWidget):
@@ -74,11 +82,11 @@ class CameraTab(QWidget):
         self._exp_slider = QSlider(Qt.Horizontal)
         self._exp_slider.setRange(50, 200000)
         self._exp_slider.setValue(5000)
-        self._exp_lbl = QLabel("5000")
+        self._exp_lbl = QLabel(_fmt_exp(5000))
         self._exp_lbl.setStyleSheet(
             f"font-family:Menlo,monospace; font-size:{FONT['readoutSm']}pt; color:{PALETTE['accent']};")
         self._exp_slider.valueChanged.connect(
-            lambda v: self._exp_lbl.setText(str(v)))
+            lambda v: self._exp_lbl.setText(_fmt_exp(v)))
         self._exp_slider.sliderReleased.connect(self._on_exp)
         cl.addWidget(self._exp_slider, 0, 1)
         cl.addWidget(self._exp_lbl, 0, 2)
@@ -171,6 +179,25 @@ class CameraTab(QWidget):
 
         top.addWidget(ctrl_box, 1)
 
+        # ── Signal Quality strip (always visible) ─────────────────────
+        qual_box = QGroupBox("Signal Quality")
+        ql = QHBoxLayout(qual_box)
+        ql.setContentsMargins(10, 6, 10, 6)
+        ql.setSpacing(24)
+
+        self._qual_exp_lbl = QLabel("EXPOSURE  —")
+        self._qual_exp_lbl.setStyleSheet(
+            f"font-family:Menlo,monospace; font-size:{FONT['label']}pt; "
+            f"color:{PALETTE['textDim']};")
+        self._qual_sat_lbl = QLabel("SATURATION  —")
+        self._qual_sat_lbl.setStyleSheet(
+            f"font-family:Menlo,monospace; font-size:{FONT['label']}pt; "
+            f"color:{PALETTE['textDim']};")
+        ql.addWidget(self._qual_exp_lbl)
+        ql.addWidget(self._qual_sat_lbl)
+        ql.addStretch()
+        root.addWidget(qual_box)
+
         # ── Frame Statistics (collapsible) ────────────────────────────
         stats_panel = CollapsiblePanel("Frame statistics", start_collapsed=True)
 
@@ -235,6 +262,37 @@ class CameraTab(QWidget):
             f"font-family:Menlo,monospace; font-size:{FONT['readoutSm']}pt;"
             f" color:{color};")
 
+        # Update always-visible quality strip
+        mean_val = float(d.mean())
+        if mx >= CAMERA_SAT_LIMIT:
+            exp_color = PALETTE["danger"]
+            exp_text  = "EXPOSURE  SATURATED ✗"
+        elif mx >= CAMERA_SAT_WARN:
+            exp_color = PALETTE["warning"]
+            exp_text  = "EXPOSURE  NEAR SAT ⚠"
+        elif mean_val < 200:
+            exp_color = PALETTE["warning"]
+            exp_text  = "EXPOSURE  DARK ⚠"
+        else:
+            exp_color = PALETTE["success"]
+            exp_text  = "EXPOSURE  OK ✓"
+        self._qual_exp_lbl.setText(exp_text)
+        self._qual_exp_lbl.setStyleSheet(
+            f"font-family:Menlo,monospace; font-size:{FONT['label']}pt; color:{exp_color};")
+
+        if mx >= CAMERA_SAT_LIMIT:
+            sat_color = PALETTE["danger"]
+            sat_text  = "SATURATION  CLIPPED ✗"
+        elif mx >= CAMERA_SAT_WARN:
+            sat_color = PALETTE["warning"]
+            sat_text  = f"SATURATION  {sat_pct:.2f}% ⚠"
+        else:
+            sat_color = PALETTE["success"]
+            sat_text  = "SATURATION  OK ✓"
+        self._qual_sat_lbl.setText(sat_text)
+        self._qual_sat_lbl.setStyleSheet(
+            f"font-family:Menlo,monospace; font-size:{FONT['label']}pt; color:{sat_color};")
+
     def _set_exp(self, val):
         self._exp_slider.setValue(val)
         self._do_exp(val)
@@ -262,11 +320,17 @@ class CameraTab(QWidget):
     def _save(self):
         import cv2
         frame = self._last_frame
-        if frame is not None:
-            name = f"frame_{int(time.time())}.png"
-            cv2.imwrite(name, frame.data)
-            from ui.app_signals import signals
-            signals.log_message.emit(f"Saved: {name}")
+        if frame is None:
+            return
+        default = f"frame_{int(time.time())}.png"
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save Frame", default,
+            "PNG image (*.png);;16-bit TIFF (*.tiff *.tif);;All files (*)")
+        if not path:
+            return
+        cv2.imwrite(path, frame.data)
+        from ui.app_signals import signals
+        signals.log_message.emit(f"Saved: {path}")
 
     # ── Objective turret ───────────────────────────────────────────────
 

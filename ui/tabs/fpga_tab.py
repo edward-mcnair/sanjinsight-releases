@@ -64,6 +64,17 @@ class FpgaTab(QWidget):
             sl.addWidget(w)
         root.addWidget(status_box)
 
+        # Sync-lock hint (shown only when FPGA sync is UNLOCKED)
+        self._sync_hint_lbl = QLabel(
+            "ℹ  Sync UNLOCKED — modulation is running but the clock is not "
+            "phase-locked to the camera. Check the FPGA–camera trigger cable and "
+            "restart modulation. Acquisition will not be synchronised until locked.")
+        self._sync_hint_lbl.setStyleSheet(
+            f"color:{PALETTE['info']}; font-size:{FONT['caption']}pt;")
+        self._sync_hint_lbl.setWordWrap(True)
+        self._sync_hint_lbl.setVisible(False)
+        root.addWidget(self._sync_hint_lbl)
+
         # ── Configuration presets ──────────────────────────────────────
         preset_box = QGroupBox("Configuration Presets")
         pl = QHBoxLayout(preset_box)
@@ -148,20 +159,22 @@ class FpgaTab(QWidget):
 
         cl.addWidget(hline())
 
-        # Start / Stop / Stimulus row
+        # Start / Stop / Output row
         btn_row = QHBoxLayout()
-        start_btn = QPushButton("▶  Start")
+        start_btn = QPushButton("▶  Start Modulation")
         start_btn.setObjectName("primary")
         stop_btn  = QPushButton("■  Stop")
         stop_btn.setObjectName("danger")
-        stim_on   = QPushButton("Stimulus ON")
-        stim_off  = QPushButton("Stimulus OFF")
+        stim_on   = QPushButton("Output ON")
+        stim_off  = QPushButton("Output OFF")
         stim_on.setStyleSheet(
             f"background:#331a00; color:{PALETTE['warning']}; border-color:#cc6600;")
         stim_off.setStyleSheet(
             f"background:#1a1a2e; color:{PALETTE['info']}; border-color:#3355aa;")
-        for b in [start_btn, stop_btn, stim_on, stim_off]:
+        start_btn.setFixedWidth(150)
+        for b in [stop_btn, stim_on, stim_off]:
             b.setFixedWidth(110)
+        for b in [start_btn, stop_btn, stim_on, stim_off]:
             btn_row.addWidget(b)
         btn_row.addStretch()
         cl.addLayout(btn_row)
@@ -204,7 +217,10 @@ class FpgaTab(QWidget):
             "50 % = equal hot and cold dwell time.")
         adv_grid.addWidget(self._duty_spin, 1, 1)
 
-        apply_btn = QPushButton("Apply Settings")
+        apply_btn = QPushButton("Apply Only (no start)")
+        apply_btn.setToolTip(
+            "Push frequency and duty cycle to the FPGA without starting modulation.\n"
+            "Use '▶  Start Modulation' in Quick Controls to apply AND start.")
         apply_btn.clicked.connect(self._apply)
         adv_grid.addWidget(apply_btn, 2, 1)
 
@@ -314,6 +330,7 @@ class FpgaTab(QWidget):
             self._sync_w._val.setStyleSheet(
                 f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; "
                 f"color:{PALETTE['danger']};")
+            self._sync_hint_lbl.setVisible(False)
             return
 
         self._freq_w._val.setText(f"{status.freq_hz:,.0f} Hz")
@@ -325,11 +342,13 @@ class FpgaTab(QWidget):
             self._sync_w._val.setStyleSheet(
                 f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; "
                 f"color:{PALETTE['accent']};")
+            self._sync_hint_lbl.setVisible(False)
         else:
             self._sync_w._val.setText("UNLOCKED")
             self._sync_w._val.setStyleSheet(
                 f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; "
-                f"color:{PALETTE['textDim']};")
+                f"color:{PALETTE['warning']};")
+            self._sync_hint_lbl.setVisible(True)
 
         if status.stimulus_on:
             self._stim_w._val.setText("ON ●")

@@ -107,13 +107,15 @@ class TemperatureTab(QWidget):
         target_w = self._readout_widget("SETPOINT", "--", "#ffaa44")
         power_w  = self._readout_widget("OUTPUT", "--", "#6699ff")
         state_w  = self._readout_widget("STATUS", "UNKNOWN", "#555")
+        ready_w  = self._readout_widget("ACQUISITION", "CHECKING", PALETTE["textDim"])
 
         box._actual_lbl = actual_w._val
         box._target_lbl = target_w._val
         box._power_lbl  = power_w._val
         box._state_lbl  = state_w._val
+        box._ready_lbl  = ready_w._val
 
-        for w in [actual_w, target_w, power_w, state_w]:
+        for w in [actual_w, target_w, power_w, state_w, ready_w]:
             top.addWidget(w)
         main.addLayout(top)
 
@@ -248,6 +250,9 @@ class TemperatureTab(QWidget):
             p._state_lbl.setText(status.error[:20])
             p._state_lbl.setStyleSheet(
                 f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:{PALETTE['danger']};")
+            p._ready_lbl.setText("ERROR ✗")
+            p._ready_lbl.setStyleSheet(
+                f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:{PALETTE['danger']};")
             return
         p._actual_lbl.setText(f"{status.actual_temp:.2f} °C")
         p._target_lbl.setText(f"{status.target_temp:.1f} °C")
@@ -256,15 +261,24 @@ class TemperatureTab(QWidget):
             p._state_lbl.setText("DISABLED")
             p._state_lbl.setStyleSheet(
                 f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:#444;")
+            p._ready_lbl.setText("○  Disabled")
+            p._ready_lbl.setStyleSheet(
+                f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:#555;")
         elif status.stable:
             p._state_lbl.setText("STABLE ✓")
             p._state_lbl.setStyleSheet(
+                f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:{PALETTE['accent']};")
+            p._ready_lbl.setText("READY ✓")
+            p._ready_lbl.setStyleSheet(
                 f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:{PALETTE['accent']};")
         else:
             diff  = status.actual_temp - status.target_temp
             arrow = "▼" if diff > 0 else "▲"
             p._state_lbl.setText(f"SETTLING {arrow}")
             p._state_lbl.setStyleSheet(
+                f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:{PALETTE['warning']};")
+            p._ready_lbl.setText("SETTLING…")
+            p._ready_lbl.setStyleSheet(
                 f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:{PALETTE['warning']};")
         p._plot.push(status.actual_temp, status.target_temp)
 
