@@ -121,18 +121,18 @@ class _DeviceRow(QWidget):
         self._dot.setFixedWidth(18 if sys.platform == 'win32' else 12)
 
         self._name = QLabel(entry.display_name)
-        self._name.setStyleSheet(_pt("font-size:8.5pt;"))
+        self._name.setStyleSheet(_pt("font-size:7.5pt;"))
 
         self._addr = QLabel("")
         self._addr.setStyleSheet(
-            _pt("font-family:Menlo,monospace; font-size:8.5pt; color:#888;"))
+            _pt("font-family:Menlo,monospace; font-size:7.5pt; color:#888;"))
         self._addr.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
         conn_icon = CONN_ICONS.get(
             entry.descriptor.connection_type, "?")
         icon_lbl = QLabel(conn_icon)
         # color:#777 — visible against the dark background (#333 was near-invisible)
-        icon_lbl.setStyleSheet(_pt("font-size:8.5pt; color:#777;"))
+        icon_lbl.setStyleSheet(_pt("font-size:7.5pt; color:#777;"))
         icon_lbl.setFixedWidth(18 if sys.platform == 'win32' else 14)
 
         lay.addWidget(self._dot)
@@ -145,9 +145,9 @@ class _DeviceRow(QWidget):
 
     def update_entry(self, entry: DeviceEntry):
         self._dot.setStyleSheet(
-            _pt(f"color:{entry.status_color}; font-size:8.5pt;"))
+            _pt(f"color:{entry.status_color}; font-size:7.5pt;"))
         self._name.setStyleSheet(
-            _pt(f"font-size:8.5pt; "
+            _pt(f"font-size:7.5pt; "
                 f"color:{'#ccc' if entry.state != DeviceState.ABSENT else '#888'};"
                 ))
         addr = entry.address
@@ -204,14 +204,14 @@ class _DeviceListPanel(QWidget):
         hl.setContentsMargins(12, 0, 8, 0)
         title = QLabel("DEVICES")
         title.setStyleSheet(
-            "font-size:9.5pt; letter-spacing:2px; color:#888;")
+            "font-size:8.5pt; letter-spacing:2px; color:#888;")
         self._scan_btn = QPushButton("🔍  Scan")
         self._scan_btn.setFixedHeight(24)
         self._scan_btn.setStyleSheet("""
             QPushButton {
                 background:#1a1a1a; color:#00d4aa;
                 border:1px solid #00d4aa33; border-radius:3px;
-                font-size:8.5pt; padding:0 8px;
+                font-size:7.5pt; padding:0 8px;
             }
             QPushButton:hover { background:#0d2a1a; }
             QPushButton:disabled { color:#333; border-color:#222; }
@@ -222,7 +222,7 @@ class _DeviceListPanel(QWidget):
             "Also scan the local subnet for Ethernet instruments.\n"
             "Slower (~3 s) — disable on corporate networks with IDS.")
         self._net_chk.setStyleSheet(
-            "QCheckBox { color:#888; font-size:8.5pt; } "
+            "QCheckBox { color:#888; font-size:7.5pt; } "
             "QCheckBox::indicator { width:12px; height:12px; }")
         hl.addWidget(title, 1)
         hl.addWidget(self._net_chk)
@@ -245,7 +245,7 @@ class _DeviceListPanel(QWidget):
         # Scan status
         self._status = QLabel("")
         self._status.setStyleSheet(
-            "font-size:8.5pt; color:#888; padding:4px 12px;")
+            "font-size:7.5pt; color:#888; padding:4px 12px;")
         self._status.setWordWrap(True)
         root.addWidget(self._status)
 
@@ -276,7 +276,7 @@ class _DeviceListPanel(QWidget):
             # Section header
             sec = QLabel(TYPE_LABELS.get(dtype, dtype).upper())
             sec.setStyleSheet(
-                "font-size:9.5pt; letter-spacing:1.5px; color:#777;"
+                "font-size:8.5pt; letter-spacing:1.5px; color:#777;"
                 " padding:6px 10px 2px 10px;")
             idx = self._layout.count() - 1
             self._layout.insertWidget(idx, sec)
@@ -517,24 +517,38 @@ class _DeviceProfilePanel(QWidget):
 
         r = 0
         if ct in (CONN_SERIAL, CONN_USB):
-            # Port selector
+            # Port selector — populate asynchronously so comports() never
+            # blocks the GUI thread (on Windows with no connected devices
+            # it can stall for several seconds, freezing the window).
             pg.addWidget(self._sublabel("Port"), r, 0)
             port_combo = QComboBox()
-            try:
-                import serial.tools.list_ports as lp
-                ports = [p.device for p in lp.comports()]
-            except Exception:
-                ports = []
-            for p in ports:
-                port_combo.addItem(p)
-            if entry.address and entry.address not in ports:
-                port_combo.insertItem(0, entry.address)
-            idx = port_combo.findText(entry.address)
-            if idx >= 0:
-                port_combo.setCurrentIndex(idx)
+            port_combo.addItem("Scanning…")
+            port_combo.setEnabled(False)
             pg.addWidget(port_combo, r, 1)
             self._param_widgets["port"] = port_combo
             r += 1
+
+            def _scan_ports(combo=port_combo, addr=entry.address):
+                try:
+                    import serial.tools.list_ports as lp
+                    ports = [p.device for p in lp.comports()]
+                except Exception:
+                    ports = []
+
+                def _apply():
+                    combo.clear()
+                    for p in ports:
+                        combo.addItem(p)
+                    if addr and addr not in ports:
+                        combo.insertItem(0, addr)
+                    idx = combo.findText(addr or "")
+                    if idx >= 0:
+                        combo.setCurrentIndex(idx)
+                    combo.setEnabled(True)
+
+                QTimer.singleShot(0, _apply)
+
+            threading.Thread(target=_scan_ports, daemon=True).start()
 
             # Baud rate
             if ct == CONN_SERIAL:
