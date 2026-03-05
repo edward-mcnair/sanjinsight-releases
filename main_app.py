@@ -73,6 +73,7 @@ from ui.widgets.safe_mode_banner import SafeModeBanner
 from hardware.requirements_resolver import (
     check_readiness, OP_ACQUIRE, OP_SCAN,
 )
+from utils import safe_call
 
 # ------------------------------------------------------------------ #
 #  App-wide style                                                     #
@@ -781,7 +782,8 @@ class MainWindow(QMainWindow):
                 import winsound
                 winsound.MessageBeep(winsound.MB_ICONASTERISK)
             except Exception:
-                pass
+                log.debug("_on_scan_complete: winsound.MessageBeep failed",
+                          exc_info=True)
         else:
             self._log_tab.append("Scan failed or aborted")
             self._toasts.show_warning("Scan failed or was aborted",
@@ -1048,13 +1050,18 @@ class MainWindow(QMainWindow):
             self._scan_start_ts = time.time()
             try:
                 from events import emit_info, EVT_SCAN_START
-                emit_info("acquisition.scan", EVT_SCAN_START,
-                          "Scan start requested")
-            except Exception:
-                pass
-            self._scan_tab._run_btn.click()
+                safe_call(emit_info,
+                          "acquisition.scan", EVT_SCAN_START,
+                          "Scan start requested",
+                          label="EVT_SCAN_START", level=logging.DEBUG)
+            except ImportError:
+                log.debug("_toggle_scan: events module not available — "
+                          "EVT_SCAN_START not emitted")
+            safe_call(self._scan_tab._run_btn.click,
+                      label="_toggle_scan._run_btn.click")
         except Exception:
-            pass
+            log.warning("_toggle_scan: unexpected exception in scan gate",
+                        exc_info=True)
 
     # ── About ──────────────────────────────────────────────────────
 
@@ -1091,7 +1098,8 @@ class MainWindow(QMainWindow):
         try:
             context_json = self._ai_service._ctx.build()
         except Exception:
-            pass
+            log.debug("_show_support_dialog: context build failed — "
+                      "sending empty context", exc_info=True)
         dlg = SupportDialog(context_json=context_json, parent=self)
         dlg.exec_()
 
@@ -1165,10 +1173,8 @@ class MainWindow(QMainWindow):
         log.info("Applying recipe: %s", recipe.label)
 
         # Reflect active recipe name in the Acquire tab
-        try:
-            self._acquire_tab.set_active_recipe_name(recipe.label)
-        except Exception:
-            pass
+        safe_call(self._acquire_tab.set_active_recipe_name, recipe.label,
+                  label="acquire_tab.set_active_recipe_name", level=logging.DEBUG)
 
         # ── Camera settings ───────────────────────────────────────
         try:
@@ -1401,14 +1407,17 @@ class MainWindow(QMainWindow):
                     # Emit ACQ_COMPLETE with key outcome fields
                     try:
                         from events import emit_info, EVT_ACQ_COMPLETE
-                        emit_info("acquisition", EVT_ACQ_COMPLETE,
+                        safe_call(emit_info,
+                                  "acquisition", EVT_ACQ_COMPLETE,
                                   f"Acquisition complete — snr={record.snr_db} dB  "
                                   f"outcome={record.outcome}",
                                   session_uid=session.meta.uid,
                                   outcome=record.outcome,
-                                  snr_db=record.snr_db)
-                    except Exception:
-                        pass
+                                  snr_db=record.snr_db,
+                                  label="EVT_ACQ_COMPLETE", level=logging.DEBUG)
+                    except ImportError:
+                        log.debug("_save: events module not available — "
+                                  "EVT_ACQ_COMPLETE not emitted")
                 except Exception as _me:
                     log.debug("Manifest write (acquire) failed: %s", _me)
 
@@ -1433,11 +1442,7 @@ class MainWindow(QMainWindow):
 
         # AI session quality report — silently skips if model not loaded
         if self._ai_service.status == "ready":
-            snr = None
-            try:
-                snr = r.snr_db
-            except Exception:
-                pass
+            snr = getattr(r, "snr_db", None)
             result_data = {
                 "grade":         self._acq_start_grade,
                 "issues":        [
@@ -1574,7 +1579,8 @@ class MainWindow(QMainWindow):
                     self._status.showMessage(
                         "✓  Instrument grade restored to A — ready for acquisition", 5000)
         except Exception:
-            pass
+            log.debug("_refresh_evidence_panel: diagnostic evaluation failed",
+                      exc_info=True)
 
     def _on_acquire_requested(self, n_frames: int, delay: float) -> None:
         """
@@ -1620,11 +1626,14 @@ class MainWindow(QMainWindow):
         # Emit ACQ_START to the event bus timeline
         try:
             from events import emit_info, EVT_ACQ_START
-            emit_info("acquisition", EVT_ACQ_START,
+            safe_call(emit_info,
+                      "acquisition", EVT_ACQ_START,
                       f"Acquisition start — {n_frames} frames/phase",
-                      n_frames=n_frames, grade=grade)
-        except Exception:
-            pass
+                      n_frames=n_frames, grade=grade,
+                      label="EVT_ACQ_START", level=logging.DEBUG)
+        except ImportError:
+            log.debug("_on_acquire_requested: events module not available — "
+                      "EVT_ACQ_START not emitted")
 
         if grade in ("A", "B"):
             self._acquire_tab.start_acquisition(n_frames, delay)
@@ -1728,7 +1737,7 @@ class MainWindow(QMainWindow):
             try:
                 self.restoreGeometry(QByteArray.fromHex(geo.encode()))
             except Exception:
-                pass
+                log.debug("_restore_layout: restoreGeometry failed", exc_info=True)
         for attr, key, n in [
             ("_live_tab",     "ui.splitter.live",     3),
             ("_scan_tab",     "ui.splitter.scan",     2),
@@ -1739,7 +1748,8 @@ class MainWindow(QMainWindow):
                 try:
                     getattr(self, attr)._body_splitter.setSizes(sizes)
                 except Exception:
-                    pass
+                    log.debug("_restore_layout: setSizes failed for %s", key,
+                              exc_info=True)
 
     def _save_layout(self):
         """Persist window geometry and tab splitter sizes."""
@@ -1748,7 +1758,7 @@ class MainWindow(QMainWindow):
             _cfg.set_pref("ui.geometry",
                           self.saveGeometry().toHex().data().decode())
         except Exception:
-            pass
+            log.debug("_save_layout: saveGeometry failed", exc_info=True)
         for attr, key in [
             ("_live_tab",     "ui.splitter.live"),
             ("_scan_tab",     "ui.splitter.scan"),
@@ -1757,7 +1767,8 @@ class MainWindow(QMainWindow):
             try:
                 _cfg.set_pref(key, list(getattr(self, attr)._body_splitter.sizes()))
             except Exception:
-                pass
+                log.debug("_save_layout: set_pref failed for %s", key,
+                          exc_info=True)
 
     def closeEvent(self, event):
         """
@@ -1776,7 +1787,7 @@ class MainWindow(QMainWindow):
             acquire_autosave.clear()
             scan_autosave.clear()
         except Exception:
-            pass
+            log.debug("closeEvent: autosave clear failed (non-fatal)", exc_info=True)
         global running
         log.info("Shutdown requested")
         running = False   # legacy flag for any code that still checks it
@@ -2093,9 +2104,11 @@ if __name__ == "__main__":
                                     window._scan_tab.update_complete(sr)
                                     window._nav.navigate_to(window._scan_tab)
                         except Exception as _re:
-                            pass
+                            log.debug("Autosave restore: failed to push result to UI — %s",
+                                      _re, exc_info=True)
                     _as.clear()
     except Exception as _ce:
-        pass   # autosave recovery is best-effort; never block startup
+        log.debug("Autosave recovery: unexpected error (startup continues) — %s",
+                  _ce, exc_info=True)
 
     _sys.exit(app.exec_())

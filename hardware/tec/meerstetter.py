@@ -57,7 +57,8 @@ class MeerstetterDriver(TecDriver):
             try:
                 self._tec.session.close()
             except Exception:
-                pass
+                log.debug("MeerstetterDriver.disconnect: session.close() failed — "
+                          "port will still be released", exc_info=True)
         self._connected = False
         self._port_lock.release()
 

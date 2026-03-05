@@ -75,7 +75,8 @@ def exclusive_serial_kwargs() -> dict:
         if "exclusive" in inspect.signature(serial.Serial.__init__).parameters:
             return {"exclusive": True}
     except Exception:
-        pass
+        log.debug("_exclusive_kwargs: pyserial introspection failed — "
+                  "exclusive kwarg will not be used", exc_info=True)
     return {}
 
 
@@ -129,7 +130,8 @@ class PortLock:
                 try:
                     self._fd.close()
                 except Exception:
-                    pass
+                    log.debug("PortLock.acquire: fd.close() failed during "
+                              "contention retry for %s", self._port, exc_info=True)
                 self._fd = None
 
                 if time.monotonic() >= deadline:
@@ -169,7 +171,8 @@ class PortLock:
             try:
                 os.remove(self._lock_path)
             except OSError:
-                pass
+                log.debug("PortLock.release: could not remove lockfile %s",
+                          self._lock_path, exc_info=True)
         self._lock_path = None
 
     # ------------------------------------------------------------------
