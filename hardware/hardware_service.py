@@ -135,7 +135,8 @@ class HardwareService(QObject):
             self._BIAS_POLL_S  = float(poll.get("bias_interval_s",  self._BIAS_POLL_S))
             self._STAGE_POLL_S = float(poll.get("stage_interval_s", self._STAGE_POLL_S))
         except Exception:
-            pass  # keep class-level defaults on any config error
+            log.debug("HardwareService: polling config parse failed — using defaults",
+                      exc_info=True)
 
     # ================================================================ #
     #  Public API                                                       #
@@ -753,7 +754,8 @@ class HardwareService(QObject):
                                 cam.stop()
                                 cam.close()
                             except Exception:
-                                pass
+                                log.debug("Camera: cleanup failed before reconnect",
+                                          exc_info=True)
                             cam.open()
                             cam.start()
                         if not self._reconnect_loop(
@@ -822,7 +824,8 @@ class HardwareService(QObject):
                             try:
                                 tec.disconnect()
                             except Exception:
-                                pass
+                                log.debug("TEC: cleanup failed before reconnect",
+                                          exc_info=True)
                             tec.connect()
                         if not self._reconnect_loop(tec_key, _do_reconnect, key):
                             return
@@ -875,7 +878,8 @@ class HardwareService(QObject):
                                 fpga.stop()
                                 fpga.close()
                             except Exception:
-                                pass
+                                log.debug("FPGA: cleanup failed before reconnect",
+                                          exc_info=True)
                             fpga.open()
                             fpga.start()
                         if not self._reconnect_loop("fpga", _do_reconnect, "fpga"):
@@ -927,7 +931,8 @@ class HardwareService(QObject):
                             try:
                                 bias.disconnect()
                             except Exception:
-                                pass
+                                log.debug("Bias: cleanup failed before reconnect",
+                                          exc_info=True)
                             bias.connect()
                         if not self._reconnect_loop("bias", _do_reconnect, "bias"):
                             return
@@ -977,7 +982,8 @@ class HardwareService(QObject):
                                 stage.stop()
                                 stage.disconnect()
                             except Exception:
-                                pass
+                                log.debug("Stage: cleanup failed before reconnect",
+                                          exc_info=True)
                             stage.connect()
                         if not self._reconnect_loop("stage", _do_reconnect, "stage"):
                             return

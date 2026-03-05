@@ -31,10 +31,13 @@ Usage
 """
 
 from __future__ import annotations
+import logging
 import time, threading
 import numpy as np
 from dataclasses import dataclass, field
 from typing      import List, Optional, Callable, Tuple
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -99,7 +102,7 @@ class ScanEngine:
             try:
                 self._pipe.abort()
             except Exception:
-                pass
+                log.debug("ScanEngine: pipeline abort raised", exc_info=True)
 
     def run(self) -> ScanResult:
         cfg        = self._cfg
@@ -119,7 +122,8 @@ class ScanEngine:
                 origin_x = st.position.x
                 origin_y = st.position.y
             except Exception:
-                pass
+                log.warning("ScanEngine: could not read stage origin — "
+                            "return-to-origin will use (0, 0)", exc_info=True)
 
         total  = n_cols * n_rows
         t0     = time.time()
@@ -147,7 +151,7 @@ class ScanEngine:
                         state=state, message=msg,
                         partial_map=partial))
                 except Exception:
-                    pass
+                    log.debug("ScanEngine: progress callback raised", exc_info=True)
 
         for i, (x, y, row, col) in enumerate(positions):
             if self._abort:
@@ -218,6 +222,8 @@ class ScanEngine:
                 else:
                     dt_map = self._cal.apply(drr_map)
             except Exception:
+                log.warning("ScanEngine: calibration apply failed — "
+                            "ΔT map will be None", exc_info=True)
                 dt_map = None
 
         duration = time.time() - t0
@@ -248,14 +254,15 @@ class ScanEngine:
             try:
                 self.on_complete(result)
             except Exception:
-                pass
+                log.warning("ScanEngine: on_complete callback raised", exc_info=True)
 
         # Return to origin
         if self._stage:
             try:
                 self._stage.move_to(x=origin_x, y=origin_y)
             except Exception:
-                pass
+                log.warning("ScanEngine: return-to-origin failed "
+                            "(%.1f, %.1f) μm", origin_x, origin_y, exc_info=True)
 
         return result
 
@@ -274,7 +281,8 @@ class ScanEngine:
                 result = self._pipe.run(n_frames=n_frames)
                 return result.delta_r_over_r if result else None
             except Exception:
-                pass
+                log.warning("ScanEngine: pipeline tile acquisition failed — "
+                            "falling back to direct capture", exc_info=True)
 
         # Direct capture fallback (simulated / no pipeline)
         if self._cam is None:
@@ -322,6 +330,7 @@ class ScanEngine:
         try:
             return self._stitch(tile_drr, n_rows, n_cols, tile_h, tile_w)
         except Exception:
+            log.debug("ScanEngine: partial stitch failed", exc_info=True)
             return None
 
     @staticmethod

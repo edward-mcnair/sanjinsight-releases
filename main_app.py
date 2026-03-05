@@ -802,7 +802,7 @@ class MainWindow(QMainWindow):
             self._transient_tab._refresh_hw()
             self._prober_tab._refresh_hw()
         except Exception:
-            pass
+            log.debug("hotplug refresh failed", exc_info=True)
 
     def _open_device_manager(self):
         self._device_mgr_dlg.show()

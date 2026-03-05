@@ -185,14 +185,15 @@ class DeviceManager:
             try:
                 self._status_cb(uid, state, msg)
             except Exception:
-                pass
+                log.warning("DeviceManager: status callback failed for %s",
+                            uid, exc_info=True)
 
     def _log(self, msg: str):
         if self._log_cb:
             try:
                 self._log_cb(msg)
             except Exception:
-                pass
+                log.debug("DeviceManager: log callback failed", exc_info=True)
 
     # ---------------------------------------------------------------- #
     #  Scan integration                                                 #
@@ -307,7 +308,8 @@ class DeviceManager:
                     entry.serial_number = getattr(st, "serial_number",
                                                   entry.serial_number) or ""
                 except Exception:
-                    pass
+                    log.debug("[%s] get_status() for metadata failed — "
+                              "firmware/serial will be blank", uid, exc_info=True)
 
             self._log(f"✓  Connected: {desc.display_name}  ({entry.address})")
             self._emit(uid, DeviceState.CONNECTED)
@@ -489,26 +491,57 @@ class DeviceManager:
             from hardware.app_state import app_state
             desc  = self._entries[uid].descriptor
             dtype = desc.device_type
-            if   dtype == DTYPE_CAMERA:  app_state.cam    = driver_obj
-            elif dtype == DTYPE_FPGA:    app_state.fpga   = driver_obj
-            elif dtype == DTYPE_STAGE:   app_state.stage  = driver_obj
-            elif dtype == DTYPE_PROBER:  app_state.prober = driver_obj
-            elif dtype == DTYPE_BIAS:    app_state.bias   = driver_obj
-            elif dtype == DTYPE_TURRET:
-                app_state.turret = driver_obj
-                # Prime active_objective from current turret position
-                try:
-                    spec = driver_obj.get_objective()
-                    if spec is not None:
-                        app_state.active_objective = spec
-                except Exception:
-                    pass
-            elif dtype == DTYPE_TEC:
-                app_state.add_tec(driver_obj)
-            elif dtype == DTYPE_LDD:
-                app_state.ldd = driver_obj
+
+            # Snapshot current state so we can roll back on failure
+            _snap = {
+                "cam":    app_state.cam,
+                "fpga":   app_state.fpga,
+                "stage":  app_state.stage,
+                "prober": app_state.prober,
+                "bias":   app_state.bias,
+                "turret": app_state.turret,
+                "active_objective": app_state.active_objective,
+                "ldd":    app_state.ldd,
+            }
+
+            try:
+                if   dtype == DTYPE_CAMERA:  app_state.cam    = driver_obj
+                elif dtype == DTYPE_FPGA:    app_state.fpga   = driver_obj
+                elif dtype == DTYPE_STAGE:   app_state.stage  = driver_obj
+                elif dtype == DTYPE_PROBER:  app_state.prober = driver_obj
+                elif dtype == DTYPE_BIAS:    app_state.bias   = driver_obj
+                elif dtype == DTYPE_TURRET:
+                    app_state.turret = driver_obj
+                    # Prime active_objective from current turret position
+                    try:
+                        spec = driver_obj.get_objective()
+                        if spec is not None:
+                            app_state.active_objective = spec
+                    except Exception:
+                        log.debug("[%s] get_objective() failed — "
+                                  "active_objective unchanged", uid, exc_info=True)
+                elif dtype == DTYPE_TEC:
+                    app_state.add_tec(driver_obj)
+                elif dtype == DTYPE_LDD:
+                    app_state.ldd = driver_obj
+            except Exception:
+                # Restore snapshot to avoid partial app_state mutation
+                log.warning("[%s] _inject_into_app failed — rolling back app_state",
+                            uid, exc_info=True)
+                for attr, val in _snap.items():
+                    try:
+                        setattr(app_state, attr, val)
+                    except Exception:
+                        pass
+                with self._lock:
+                    entry = self._entries.get(uid)
+                    if entry:
+                        entry.state = DeviceState.ERROR
+                        entry.error_msg = "app_state injection failed"
+                self._emit(uid, DeviceState.ERROR, "app_state injection failed")
+
         except Exception:
-            pass
+            log.warning("[%s] _inject_into_app: unexpected error", uid, exc_info=True)
 
     def _eject_from_app(self, uid: str):
         """Clear the app_state reference when a device disconnects."""
@@ -533,7 +566,8 @@ class DeviceManager:
             elif dtype == DTYPE_LDD:
                 app_state.ldd = None
         except Exception:
-            pass
+            log.warning("[%s] _eject_from_app failed — app_state may still "
+                        "hold a stale reference", uid, exc_info=True)
 
     # ---------------------------------------------------------------- #
     #  Query                                                            #
