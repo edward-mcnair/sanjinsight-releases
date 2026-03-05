@@ -1,0 +1,47 @@
+# SanjINSIGHT — Pinned dependency lock file
+#
+# Generated from: pip3 freeze | grep <project-packages>
+# Generated on:   2026-03-05
+# Python version: 3.x (system)
+#
+# To regenerate with full transitive pins use pip-tools:
+#   pip install pip-tools
+#   pip-compile requirements.txt -o requirements.lock
+#
+# Install exact versions with:
+#   pip install -r requirements.lock
+
+# ── GUI framework ─────────────────────────────────────────────────────────────
+PyQt5==5.15.11
+PyQt5-sip==12.17.1
+
+# ── Icons ─────────────────────────────────────────────────────────────────────
+QtAwesome==1.4.1
+
+# ── Scientific / imaging ──────────────────────────────────────────────────────
+numpy==2.0.2
+opencv-python>=4.7.0            # version varies by platform — no system pin available
+matplotlib==3.9.4
+
+# ── Data export ───────────────────────────────────────────────────────────────
+h5py==3.14.0
+scipy==1.13.1
+reportlab==4.4.10
+Pillow==11.3.0
+
+# ── Configuration ─────────────────────────────────────────────────────────────
+PyYAML==6.0.3
+
+# ── Serial / USB (hardware comms) ─────────────────────────────────────────────
+pyserial==3.5
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+pytest==8.4.2
+
+# ── Hardware-specific (install only what applies to your system) ───────────────
+# These are NOT installed in the base environment; install manually:
+#   pypylon      — Basler cameras via Pylon SDK
+#   nifpga       — NI FPGA (NI-RIO driver required)
+#   pyMeCom      — Meerstetter TEC controllers
+#   pyvisa       — VISA instruments (Keithley bias source etc.)
+#   llama-cpp-python — local AI assistant (see requirements.txt for variants)
