@@ -110,8 +110,9 @@ class _DeviceListPanel(QWidget):
       "No devices found  ·  check connections or run in demo mode"
     """
 
-    device_selected = pyqtSignal(str)
-    scan_completed  = pyqtSignal()      # emitted (GUI thread) when scan finishes or cancels
+    device_selected  = pyqtSignal(str)
+    scan_completed   = pyqtSignal()     # emitted (GUI thread) when scan finishes or cancels
+    no_devices_found = pyqtSignal()     # emitted when scan completes with zero results
 
     _C_DOT  = 0   # ● status dot  (fixed 20 px)
     _C_NAME = 1   # device name   (stretches)
@@ -429,6 +430,7 @@ class _DeviceListPanel(QWidget):
             if found == 0:
                 self._status.setText(
                     "No devices found  ·  check connections or run in demo mode")
+                self.no_devices_found.emit()
             elif connected == 0:
                 self._status.setText(
                     f"{found} device(s) found  ·  none connected")
@@ -1051,6 +1053,7 @@ class DeviceManagerDialog(QDialog):
     """
 
     hw_status_changed = pyqtSignal(bool)
+    demo_requested    = pyqtSignal()    # user chose "Run in Demo Mode" from the no-devices dialog
 
     def __init__(self, device_manager: DeviceManager, parent=None):
         super().__init__(parent,
@@ -1175,8 +1178,15 @@ class DeviceManagerDialog(QDialog):
         # Propagate scan-done + per-device state changes to hw_status_changed
         self._list_panel.scan_completed.connect(self._emit_hw_status)
 
-        # Initial scan on open (quick — no network)
-        QTimer.singleShot(200, self._initial_scan)
+        # When a scan finds nothing, offer a modal dialog with Scan Again /
+        # Demo Mode choices instead of leaving the user with a status-bar hint.
+        self._list_panel.no_devices_found.connect(self._offer_demo_dialog)
+
+        # Guard so the auto-scan fires once on first open, not at __init__ time.
+        # Deferring to showEvent prevents the NI/pyvisa sub-scanner from
+        # running during app startup while hardware drivers are still
+        # initialising — on Windows that causes 10–30 s GUI freezes.
+        self._opened_once = False
 
     # ---------------------------------------------------------------- #
     #  Callbacks from DeviceManager                                     #
@@ -1218,6 +1228,23 @@ class DeviceManagerDialog(QDialog):
     #  Initial quick scan (serial + USB only, no network)              #
     # ---------------------------------------------------------------- #
 
+    # ---------------------------------------------------------------- #
+    #  First-open auto-scan                                           #
+    # ---------------------------------------------------------------- #
+
+    def showEvent(self, event):
+        """Trigger a quick scan the first time the dialog is opened.
+
+        Deferring to showEvent (rather than firing from __init__) ensures the
+        scan never starts during app startup — at that point the NI/pyvisa
+        sub-scanner can hold Windows COM objects for 10–30 s, which competes
+        with the hardware-service init threads and causes "Not Responding".
+        """
+        super().showEvent(event)
+        if not self._opened_once:
+            self._opened_once = True
+            QTimer.singleShot(200, self._initial_scan)
+
     def _initial_scan(self):
         """Kick off the on-open quick scan via the list panel's unified path.
 
@@ -1227,3 +1254,39 @@ class DeviceManagerDialog(QDialog):
         serial/USB-only scan identical to what the old _initial_scan did.
         """
         self._list_panel.start_scan()
+
+    # ---------------------------------------------------------------- #
+    #  No-devices dialog                                               #
+    # ---------------------------------------------------------------- #
+
+    def _offer_demo_dialog(self):
+        """Modal dialog shown when a completed scan finds zero devices.
+
+        Replaces the silent status-bar text with an actionable choice:
+          • Scan Again  — reruns the scan immediately
+          • Demo Mode   — emits demo_requested so main_app.py can activate it
+          • Close       — dismisses with no action (status bar text remains)
+        """
+        box = QMessageBox(self)
+        box.setWindowTitle("No Devices Found")
+        box.setIcon(QMessageBox.Warning)
+        box.setText(
+            "<b>No compatible hardware was detected.</b>")
+        box.setInformativeText(
+            "Check that all devices are powered on and their cables are "
+            "connected, then scan again.\n\n"
+            "Select <i>Demo Mode</i> to explore the full interface with "
+            "simulated hardware — no physical devices required.")
+
+        scan_btn = box.addButton("Scan Again",   QMessageBox.AcceptRole)
+        demo_btn = box.addButton("Demo Mode",    QMessageBox.ActionRole)
+        box.addButton(           "Close",        QMessageBox.RejectRole)
+        box.setDefaultButton(scan_btn)
+        box.exec_()
+
+        clicked = box.clickedButton()
+        if clicked is scan_btn:
+            self._list_panel.start_scan()
+        elif clicked is demo_btn:
+            self.close()          # hide DM before switching mode
+            self.demo_requested.emit()

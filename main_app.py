@@ -585,13 +585,15 @@ class MainWindow(QMainWindow):
             self._mode_stack.setCurrentIndex(1)
 
         # Device manager — dialog created eagerly (hidden) so hw_status_changed
-        # is wired from app start.  The 200 ms initial scan fires automatically;
-        # the header button turns green once hardware is detected.
+        # is wired from app start.  The auto-scan now fires on first open (not
+        # at __init__ time) so it never competes with the startup hw-init threads.
         self._device_mgr     = DeviceManager()
         self._device_mgr_dlg = DeviceManagerDialog(self._device_mgr, parent=self)
         self._header.add_device_manager_button(self._open_device_manager)
         self._device_mgr_dlg.hw_status_changed.connect(
             self._header.set_hw_btn_status)
+        # Allow the Device Manager's "Demo Mode" button to activate demo mode.
+        self._device_mgr_dlg.demo_requested.connect(self._activate_demo_mode)
 
         # Emergency stop — wire header button to hw_service
         self._header.connect_estop(
@@ -1549,6 +1551,30 @@ class MainWindow(QMainWindow):
         self._status.showMessage("Emergency stop cleared — hardware ready", 4000)
         self._log_tab.append("✓ Emergency stop cleared — outputs can be re-enabled")
 
+    # ── Demo mode activation ───────────────────────────────────────────
+
+    def _activate_demo_mode(self):
+        """Switch to demo mode from any in-app trigger (Device Manager, etc.).
+
+        Safe to call at any point after MainWindow is constructed.  Shuts down
+        any partially-initialised real hardware, then starts all simulated
+        drivers via HardwareService.start_demo().
+        """
+        from hardware.app_state import app_state as _app_state
+        if _app_state.demo_mode:
+            return  # already in demo mode — nothing to do
+
+        hw_service.shutdown()
+        _app_state.demo_mode = True
+        _app_state.tecs      = []
+        self._header.set_demo_mode(True)
+        self._status.showMessage(
+            f"SanjINSIGHT {version_string()}  \u2014  DEMO MODE  "
+            f"(simulated hardware)", 0)
+        signals.log_message.emit(
+            "Demo mode activated \u2014 all hardware replaced with simulated drivers")
+        hw_service.start_demo()
+
     # ── AI assistant handlers ──────────────────────────────────────────
 
     @staticmethod
@@ -2030,18 +2056,27 @@ if __name__ == "__main__":
 
         else:
             # No devices configured — start camera thread anyway (simulated
-            # fallback) and show the "no hardware" advisory toast.
+            # fallback) and offer demo mode via a QMessageBox so the user has
+            # a real button to click (the old toast only mentioned --demo,
+            # which is not discoverable from a desktop shortcut).
             hw_service.start()
             def _offer_demo():
-                window._toasts._show(
-                    title="No Hardware Configured",
-                    message="All devices are disabled in config.yaml.",
-                    level="warning",
-                    guidance=[
-                        "Open config.yaml and set enabled: true for your devices",
-                        "Or run with --demo to explore with simulated hardware",
-                    ],
-                    auto_dismiss_ms=0)
+                from PyQt5.QtWidgets import QMessageBox as _QMB
+                box = _QMB(window)
+                box.setWindowTitle("No Hardware Configured")
+                box.setIcon(_QMB.Warning)
+                box.setText("<b>No devices are enabled in config.yaml.</b>")
+                box.setInformativeText(
+                    "Open config.yaml and set <i>enabled: true</i> for each "
+                    "connected device, then restart.\n\n"
+                    "Or click <i>Demo Mode</i> to explore the full interface "
+                    "with simulated hardware — no physical devices required.")
+                demo_btn = box.addButton("Demo Mode",    _QMB.ActionRole)
+                box.addButton(           "Configure Later", _QMB.RejectRole)
+                box.setDefaultButton(demo_btn)
+                box.exec_()
+                if box.clickedButton() is demo_btn:
+                    window._activate_demo_mode()
             QTimer.singleShot(800, _offer_demo)
 
     # Scan existing sessions on startup
