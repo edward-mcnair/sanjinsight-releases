@@ -536,7 +536,8 @@ class DeviceManager:
                     try:
                         setattr(app_state, attr, val)
                     except Exception:
-                        pass
+                        log.debug("[%s] rollback setattr(%r) failed",
+                                  uid, attr, exc_info=True)
                 with self._lock:
                     entry = self._entries.get(uid)
                     if entry:

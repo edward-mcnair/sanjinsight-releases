@@ -126,7 +126,8 @@ class AutosaveManager:
                     if os.path.isfile(path):
                         os.remove(path)
                 except Exception:
-                    pass
+                    log.debug("AutosaveManager[%s]: tmp cleanup failed for %s",
+                              self._kind, path, exc_info=True)
 
     def load(self) -> Optional[dict]:
         """

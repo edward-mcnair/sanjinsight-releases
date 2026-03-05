@@ -347,7 +347,15 @@ class ScriptingConsoleTab(QWidget):
     # ── Execution ────────────────────────────────────────────────────
 
     def _run_script(self):
-        if not self._console_enabled:
+        # ── Config gate — re-read at exec time, not just at widget init ────────
+        # This prevents exec() from running even if self._console_enabled was
+        # set programmatically after widget construction (e.g. via the REPL).
+        import config as _cfg
+        _runtime_enabled = bool(
+            _cfg.get("developer", {}).get("enable_script_console", False))
+        if not _runtime_enabled:
+            log.warning("Script console exec() blocked — "
+                        "developer.enable_script_console is false in config")
             self._print_to_output(
                 "Script console is disabled — enable via developer.enable_script_console "
                 "in config.yaml.", color="#f44747")
