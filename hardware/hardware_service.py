@@ -38,10 +38,12 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
-from PyQt5.QtCore import QObject, pyqtSignal
+from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot
 
 import config as config_module
 from hardware.app_state import app_state
+from events import (emit_info, emit_warning,
+                    EVT_DEVICE_CONNECT, EVT_DEVICE_DISCONNECT)
 from hardware.cameras.factory  import create_camera
 from hardware.tec.factory      import create_tec
 from hardware.fpga.factory     import create_fpga
@@ -127,6 +129,9 @@ class HardwareService(QObject):
         self._threads: list[threading.Thread] = []
         self._lock = threading.Lock()
 
+        # Mirror device_connected Qt signal → event bus timeline.
+        self.device_connected.connect(self._on_device_connected_evt)
+
         # Pull poll intervals from config (class-level values are defaults).
         try:
             poll = (config_module.get("hardware") or {}).get("polling", {})
@@ -137,6 +142,16 @@ class HardwareService(QObject):
         except Exception:
             log.debug("HardwareService: polling config parse failed — using defaults",
                       exc_info=True)
+
+    @pyqtSlot(str, bool)
+    def _on_device_connected_evt(self, key: str, ok: bool) -> None:
+        """Mirror device_connected signal into the event bus timeline."""
+        if ok:
+            emit_info("hardware.service", EVT_DEVICE_CONNECT,
+                      f"{key}: connected", device=key)
+        else:
+            emit_warning("hardware.service", EVT_DEVICE_DISCONNECT,
+                         f"{key}: disconnected or failed", device=key)
 
     # ================================================================ #
     #  Public API                                                       #

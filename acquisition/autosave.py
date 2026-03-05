@@ -31,6 +31,9 @@ from typing import Optional
 
 import numpy as np
 
+from events import (emit_info, emit_warning,
+                    EVT_AUTOSAVE_SAVE, EVT_AUTOSAVE_LOAD, EVT_AUTOSAVE_CLEAR)
+
 log = logging.getLogger(__name__)
 
 _AUTOSAVE_DIR = os.path.join(os.path.expanduser("~"), ".microsanj", "autosave")
@@ -113,6 +116,8 @@ class AutosaveManager:
             os.replace(meta_tmp, self._meta)
 
             log.debug("AutosaveManager[%s]: checkpoint saved", self._kind)
+            emit_info("acquisition.autosave", EVT_AUTOSAVE_SAVE,
+                      f"Autosave checkpoint saved [{self._kind}]", kind=self._kind)
         except Exception as exc:
             log.warning("AutosaveManager[%s]: save failed — %s", self._kind, exc)
             # Clean up any leftover temporaries
@@ -156,6 +161,8 @@ class AutosaveManager:
                 log.warning("AutosaveManager[%s]: clear failed — %s",
                             self._kind, exc)
         log.debug("AutosaveManager[%s]: checkpoint cleared", self._kind)
+        emit_info("acquisition.autosave", EVT_AUTOSAVE_CLEAR,
+                  f"Autosave checkpoint cleared [{self._kind}]", kind=self._kind)
 
 
 # ── Module-level singletons ───────────────────────────────────────────────────
