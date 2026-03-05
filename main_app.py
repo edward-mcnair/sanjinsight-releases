@@ -993,6 +993,12 @@ class MainWindow(QMainWindow):
             "Open a pre-filled support email with system info and recent log")
         act_support.triggered.connect(self._open_support_dialog)
 
+        act_bundle = help_menu.addAction("Create Support Bundle…")
+        act_bundle.setToolTip(
+            "Save a .zip file with logs, config, device inventory, and event "
+            "timeline — attach it to a support email for faster diagnosis")
+        act_bundle.triggered.connect(self._create_support_bundle)
+
         # ── Emergency stop shortcut (keyboard) ───────────────────
         estop_sc = QShortcut(QKeySequence("Ctrl+."), self)
         estop_sc.activated.connect(self._trigger_estop)
@@ -1060,6 +1066,12 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
         dlg = SupportDialog(context_json=context_json, parent=self)
+        dlg.exec_()
+
+    def _create_support_bundle(self):
+        """Open the Support Bundle dialog (Help → Create Support Bundle…)."""
+        from ui.dialogs.bundle_dialog import BundleDialog
+        dlg = BundleDialog(device_manager=self._device_mgr, parent=self)
         dlg.exec_()
 
     # ── Update checker ─────────────────────────────────────────────
