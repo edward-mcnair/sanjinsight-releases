@@ -229,7 +229,7 @@ class HardwareService(QObject):
             except Exception as e:
                 from hardware.fpga.base import FpgaStatus
                 self.fpga_status.emit(FpgaStatus(error=str(e)))
-            import time; time.sleep(self._FPGA_POLL_S)
+            self._stop_event.wait(timeout=self._FPGA_POLL_S)
 
     def _run_demo_tec(self, cfg: dict, tec_key: str):
         """TEC demo thread — uses simulated driver."""
@@ -257,7 +257,6 @@ class HardwareService(QObject):
         )
         app_state.set_tec_guard(idx, guard)
 
-        import time
         while not self._stop_event.is_set():
             try:
                 status = tec.get_status()
@@ -266,7 +265,7 @@ class HardwareService(QObject):
             except Exception as e:
                 from hardware.tec.base import TecStatus
                 self.tec_status.emit(idx, TecStatus(error=str(e)))
-            time.sleep(self._TEC_POLL_S)
+            self._stop_event.wait(timeout=self._TEC_POLL_S)
 
     def _run_demo_bias(self, cfg: dict):
         """Bias source demo thread — uses simulated driver."""
@@ -281,14 +280,13 @@ class HardwareService(QObject):
         except Exception as e:
             self.startup_status.emit("bias", False, str(e)[:60])
             return
-        import time
         while not self._stop_event.is_set():
             try:
                 self.bias_status.emit(bias.get_status())
             except Exception as e:
                 from hardware.bias.base import BiasStatus
                 self.bias_status.emit(BiasStatus(error=str(e)))
-            time.sleep(self._BIAS_POLL_S)
+            self._stop_event.wait(timeout=self._BIAS_POLL_S)
 
     def _run_demo_stage(self, cfg: dict):
         """Stage demo thread — uses simulated driver."""
@@ -303,14 +301,13 @@ class HardwareService(QObject):
         except Exception as e:
             self.startup_status.emit("stage", False, str(e)[:60])
             return
-        import time
         while not self._stop_event.is_set():
             try:
                 self.stage_status.emit(stage.get_status())
             except Exception as e:
                 from hardware.stage.base import StageStatus
                 self.stage_status.emit(StageStatus(error=str(e)))
-            time.sleep(self._STAGE_POLL_S)
+            self._stop_event.wait(timeout=self._STAGE_POLL_S)
 
     def shutdown(self) -> None:
         """
@@ -725,11 +722,11 @@ class HardwareService(QObject):
                 pipeline = app_state.pipeline
                 if pipeline and _HAS_PIPELINE and pipeline.state == AcqState.CAPTURING:
                     last_frame_t = time.monotonic()   # acquisition is producing frames
-                    time.sleep(0.05)
+                    self._stop_event.wait(0.05)
                     continue
                 cam = app_state.cam
                 if cam is None:
-                    time.sleep(0.1)
+                    self._stop_event.wait(0.1)
                     continue
                 try:
                     frame = cam.grab(timeout_ms=500)
@@ -764,7 +761,7 @@ class HardwareService(QObject):
                         last_frame_t = time.monotonic()
                     else:
                         log.debug("HardwareService camera grab: %s", e)
-                    time.sleep(0.1)
+                    self._stop_event.wait(0.1)
         except Exception as e:
             log.error("[camera] Poll thread died unexpectedly: %s",
                       e, exc_info=True)
