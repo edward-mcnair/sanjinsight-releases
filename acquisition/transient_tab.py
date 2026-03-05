@@ -524,10 +524,13 @@ class TransientTab(QWidget):
                 signals.transient_progress.disconnect(self._on_progress)
                 signals.transient_complete.disconnect(self._on_complete)
             except Exception:
-                pass
+                log.debug("TransientTab._run: signal disconnect (stale) — "
+                          "no previous connection to remove", exc_info=True)
             signals.transient_progress.connect(self._on_progress)
             signals.transient_complete.connect(self._on_complete)
         except Exception:
+            log.warning("TransientTab._run: app_signals unavailable — "
+                        "using direct pipeline callbacks", exc_info=True)
             self._pipeline.on_progress = lambda p: setattr(self, '_last_progress', p)
             self._pipeline.on_complete = self._on_complete
 
@@ -552,7 +555,7 @@ class TransientTab(QWidget):
         try:
             app_state.active_modality = "transient"
         except Exception:
-            pass
+            log.debug("TransientTab._run: could not set active_modality", exc_info=True)
 
     def _abort(self):
         self._sweep_abort_flag = True   # signals sweep worker to stop between steps
@@ -567,7 +570,8 @@ class TransientTab(QWidget):
             from hardware.app_state import app_state
             app_state.active_modality = "thermoreflectance"
         except Exception:
-            pass
+            log.debug("TransientTab._abort: could not reset active_modality",
+                      exc_info=True)
 
     # ---------------------------------------------------------------- #
     #  Poll + callbacks                                                 #
@@ -649,7 +653,8 @@ class TransientTab(QWidget):
             from hardware.app_state import app_state
             app_state.active_modality = "thermoreflectance"
         except Exception:
-            pass
+            log.debug("TransientTab._on_complete: could not reset active_modality",
+                      exc_info=True)
 
     # ---------------------------------------------------------------- #
     #  Frame / slice display                                           #
@@ -812,7 +817,9 @@ class TransientTab(QWidget):
                 try:
                     bias.disable()
                 except Exception:
-                    pass
+                    log.warning("TransientTab vsweep worker: bias.disable() failed "
+                                "in finally block — bias may still be active",
+                                exc_info=True)
 
             if not self._sweep_abort_flag and self._vsweep_results:
                 _, last_result = self._vsweep_results[-1]
@@ -840,7 +847,8 @@ class TransientTab(QWidget):
             from hardware.app_state import app_state
             app_state.active_modality = "transient"
         except Exception:
-            pass
+            log.debug("TransientTab._start_vsweep: could not set active_modality",
+                      exc_info=True)
 
     # ---------------------------------------------------------------- #
     #  Hardware readiness                                               #
@@ -871,7 +879,8 @@ class TransientTab(QWidget):
             self._hw_trig_lbl.setStyleSheet(
                 base + (ok if has_trig else wrn))
         except Exception:
-            pass
+            log.debug("TransientTab._refresh_hw: could not read hardware state",
+                      exc_info=True)
 
     def showEvent(self, e):
         self._refresh_hw()

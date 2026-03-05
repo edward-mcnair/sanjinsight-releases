@@ -256,7 +256,8 @@ class TransientAcquisitionPipeline:
             try:
                 self.on_progress(p)
             except Exception:
-                pass
+                log.warning("TransientAcquisitionPipeline: on_progress callback raised",
+                            exc_info=True)
 
     def _set_power(self, on: bool):
         if self._fpga is not None:
@@ -264,12 +265,15 @@ class TransientAcquisitionPipeline:
                 self._fpga.set_stimulus(on)
                 return
             except Exception:
-                pass
+                log.warning("TransientAcquisitionPipeline._set_power: "
+                            "FPGA set_stimulus(%s) failed", on, exc_info=True)
         if self._bias is not None:
             try:
                 (self._bias.enable if on else self._bias.disable)()
             except Exception:
-                pass
+                log.warning("TransientAcquisitionPipeline._set_power: "
+                            "bias %s failed", "enable" if on else "disable",
+                            exc_info=True)
 
     def _grab_one(self) -> Optional[np.ndarray]:
         frame = self._cam.grab(timeout_ms=2000)
@@ -385,7 +389,9 @@ class TransientAcquisitionPipeline:
                     from hardware.fpga.base import FpgaTriggerMode
                     self._fpga.set_trigger_mode(FpgaTriggerMode.CONTINUOUS)
                 except Exception:
-                    pass
+                    log.warning("TransientAcquisitionPipeline._run: "
+                                "failed to restore FPGA to CONTINUOUS trigger mode",
+                                exc_info=True)
 
             # ── Processing — compute ΔR/R cube ───────────────────────────
             self._state = TransientAcqState.PROCESSING
@@ -428,7 +434,8 @@ class TransientAcquisitionPipeline:
                     from hardware.fpga.base import FpgaTriggerMode
                     self._fpga.set_trigger_mode(FpgaTriggerMode.CONTINUOUS)
             except Exception:
-                pass
+                log.warning("TransientAcquisitionPipeline._run: "
+                            "cleanup after error also failed", exc_info=True)
             self._state = TransientAcqState.ERROR
             msg = f"Transient acquisition error: {e}"
             log.error(msg, exc_info=True)
