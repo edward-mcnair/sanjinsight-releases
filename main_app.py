@@ -471,6 +471,8 @@ class MainWindow(QMainWindow):
         self._last_grade: str = ""         # tracks grade for change notifications
         self._acq_start_grade: str = "A"  # grade snapshot at acquisition start
         self._acq_start_issues: list = [] # issue snapshot at acquisition start
+        self._acq_start_ts:  float = 0.0  # wall-clock time at acquisition start
+        self._scan_start_ts: float = 0.0  # wall-clock time at scan start
         self._diagnostic_engine = DiagnosticEngine(self._metrics)
         self._ai_service = AIService(parent=self)
         self._ai_service.set_metrics(self._metrics)
@@ -799,6 +801,24 @@ class MainWindow(QMainWindow):
         except Exception as _se:
             log.debug("Autosave (scan) failed: %s", _se)
 
+        # ── Run manifest (scan) ───────────────────────────────────────
+        # Scans are not yet saved through SessionManager, so there is no
+        # session directory to write the manifest into.  A scan-specific
+        # session save path is tracked for a future enhancement; for now
+        # we emit the run event to the timeline bus only.
+        try:
+            from events import emit_info, EVT_SCAN_COMPLETE
+            _rdns = check_readiness(OP_SCAN, app_state)
+            emit_info("acquisition.scan", EVT_SCAN_COMPLETE,
+                      f"Scan complete — {result.n_cols}×{result.n_rows} tiles  "
+                      f"{result.duration_s:.0f}s",
+                      n_cols=result.n_cols, n_rows=result.n_rows,
+                      duration_s=result.duration_s,
+                      degraded_mode=_rdns.degraded,
+                      optional_devices_missing=_rdns.optional_missing)
+        except Exception as _me:
+            log.debug("Manifest event (scan) failed: %s", _me)
+
     def _on_device_hotplug(self, key: str, ok: bool):
         """
         Called on the GUI thread whenever hw_service detects a device
@@ -1025,6 +1045,13 @@ class MainWindow(QMainWindow):
                 box.setStandardButtons(QMessageBox.Ok)
                 box.exec_()
                 return
+            self._scan_start_ts = time.time()
+            try:
+                from events import emit_info, EVT_SCAN_START
+                emit_info("acquisition.scan", EVT_SCAN_START,
+                          "Scan start requested")
+            except Exception:
+                pass
             self._scan_tab._run_btn.click()
         except Exception:
             pass
@@ -1308,6 +1335,11 @@ class MainWindow(QMainWindow):
         fpga    = app_state.fpga
         notes   = self._acquire_tab.get_notes()   # capture now, before UI changes
 
+        # Capture manifest context now (Qt main thread) before the background save
+        _acq_start_ts_snap   = self._acq_start_ts
+        _device_mgr_snap     = self._device_mgr
+        _rdns_snap           = check_readiness(OP_ACQUIRE, app_state)
+
         def _save():
             try:
                 label   = time.strftime("acq_%Y%m%d_%H%M%S")
@@ -1326,6 +1358,60 @@ class MainWindow(QMainWindow):
                 signals.log_message.emit(
                     f"Session saved: {session.meta.uid}  "
                     f"({session_mgr.root})")
+
+                # ── Run manifest ──────────────────────────────────────
+                try:
+                    from session.manifest import (RunRecord, ManifestWriter,
+                                                  build_device_inventory,
+                                                  build_settings_snapshot)
+                    from events import timeline as _tl
+
+                    _now = time.time()
+                    _cal = app_state.active_calibration
+                    _cal_status = ("ok" if (_cal and _cal.valid)
+                                   else "missing")
+                    _cal_uid    = (getattr(_cal, "uid", "")
+                                   if (_cal and _cal.valid) else "")
+                    record = RunRecord(
+                        operation    = "acquire",
+                        started_at   = time.strftime(
+                            "%Y-%m-%dT%H:%M:%S",
+                            time.localtime(_acq_start_ts_snap)),
+                        completed_at = time.strftime(
+                            "%Y-%m-%dT%H:%M:%S",
+                            time.localtime(_now)),
+                        duration_s   = getattr(r, "duration_s", 0.0),
+                        outcome      = ("complete" if r.is_complete
+                                        else "abort"),
+                        session_uid  = session.meta.uid,
+                        device_inventory = build_device_inventory(
+                            _device_mgr_snap),
+                        settings_snapshot = build_settings_snapshot(
+                            app_state),
+                        calibration_uid    = _cal_uid,
+                        calibration_status = _cal_status,
+                        degraded_mode      = _rdns_snap.degraded,
+                        optional_devices_missing = _rdns_snap.optional_missing,
+                        snr_db   = getattr(r, "snr_db", None),
+                        n_frames = getattr(r, "n_frames", 0),
+                        event_trace = _tl.export_for_run(
+                            _acq_start_ts_snap, _now),
+                    )
+                    ManifestWriter(session.meta.path).append_run(record)
+                    # Emit ACQ_COMPLETE with key outcome fields
+                    try:
+                        from events import emit_info, EVT_ACQ_COMPLETE
+                        emit_info("acquisition", EVT_ACQ_COMPLETE,
+                                  f"Acquisition complete — snr={record.snr_db} dB  "
+                                  f"outcome={record.outcome}",
+                                  session_uid=session.meta.uid,
+                                  outcome=record.outcome,
+                                  snr_db=record.snr_db)
+                    except Exception:
+                        pass
+                except Exception as _me:
+                    log.debug("Manifest write (acquire) failed: %s", _me)
+
             except Exception as e:
                 signals.log_message.emit(f"Session save failed: {e}")
         threading.Thread(target=_save, daemon=True).start()
@@ -1526,9 +1612,19 @@ class MainWindow(QMainWindow):
             results = []
             grade   = "A"   # if engine fails, don't block acquisition
 
-        # Snapshot for session report regardless of whether we proceed
+        # Snapshot for session report and run manifest regardless of whether we proceed
+        self._acq_start_ts     = time.time()
         self._acq_start_grade  = grade
         self._acq_start_issues = [r for r in results if r.severity in ("fail", "warn")]
+
+        # Emit ACQ_START to the event bus timeline
+        try:
+            from events import emit_info, EVT_ACQ_START
+            emit_info("acquisition", EVT_ACQ_START,
+                      f"Acquisition start — {n_frames} frames/phase",
+                      n_frames=n_frames, grade=grade)
+        except Exception:
+            pass
 
         if grade in ("A", "B"):
             self._acquire_tab.start_acquisition(n_frames, delay)
