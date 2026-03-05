@@ -12,6 +12,7 @@ import numpy as np
 from typing import Optional
 
 from ui.button_utils import RunningButton, apply_hand_cursor
+from ui.icons import set_btn_icon
 
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -277,7 +278,8 @@ class CalibrationTab(QWidget):
         self._add_temp_spin.setValue(25.0)
         self._add_temp_spin.setSuffix(" °C")
         self._add_temp_spin.setFixedWidth(100)
-        add_btn = QPushButton("+ Add")
+        add_btn = QPushButton("Add")
+        set_btn_icon(add_btn, "fa5s.plus")
         add_btn.setFixedWidth(60)
         add_btn.clicked.connect(self._add_temp)
         add_row.addWidget(self._add_temp_spin)
@@ -343,9 +345,11 @@ class CalibrationTab(QWidget):
         run_box = QGroupBox("Run")
         rl = QVBoxLayout(run_box)
 
-        self._run_btn   = QPushButton("▶  Run Calibration")
+        self._run_btn   = QPushButton("Run Calibration")
+        set_btn_icon(self._run_btn, "fa5s.play", "#00d4aa")
         self._run_btn.setObjectName("primary")
-        self._abort_btn = QPushButton("■  Abort")
+        self._abort_btn = QPushButton("Abort")
+        set_btn_icon(self._abort_btn, "fa5s.stop", "#ff6666")
         self._abort_btn.setObjectName("danger")
         self._abort_btn.setEnabled(False)
         self._run_btn.setFixedHeight(34)
@@ -445,9 +449,12 @@ class CalibrationTab(QWidget):
         # ---- Save / load ----
         file_box = QGroupBox("Calibration File")
         fl = QHBoxLayout(file_box)
-        self._save_btn = QPushButton("💾  Save .cal")
-        self._load_btn = QPushButton("📂  Load .cal")
-        self._apply_btn = QPushButton("✓  Apply to Acquisitions")
+        self._save_btn = QPushButton("Save .cal")
+        set_btn_icon(self._save_btn, "fa5s.save")
+        self._load_btn = QPushButton("Load .cal")
+        set_btn_icon(self._load_btn, "fa5s.folder-open")
+        self._apply_btn = QPushButton("Apply to Acquisitions")
+        set_btn_icon(self._apply_btn, "fa5s.check", "#00d4aa")
         self._apply_btn.setObjectName("primary")
         self._apply_btn.setEnabled(False)
         self._file_lbl = QLabel("None loaded")

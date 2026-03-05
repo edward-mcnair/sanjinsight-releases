@@ -513,39 +513,40 @@ class MainWindow(QMainWindow):
 
         # ── Register panels with the Bootstrap-style sidebar ─────
         from ui.sidebar_nav import NavItem as NI
+        from ui.icons import NAV_ICONS as _I, GROUP_ICONS as _G
 
         self._nav.add_section("MEASURE", [
-            NI("Live",        "●",  self._live_tab,     badge="★"),
-            NI("Acquire",     "⊙",  self._acquire_tab,  badge="★"),
-            NI("Scan",        "⊞",  self._scan_tab),
-            NI("Movie",       "▶",  self._movie_tab),
-            NI("Transient",   "⌇",  self._transient_tab),
+            NI("Live",        _I["Live"],        self._live_tab,     badge="★"),
+            NI("Acquire",     _I["Acquire"],     self._acquire_tab,  badge="★"),
+            NI("Scan",        _I["Scan"],        self._scan_tab),
+            NI("Movie",       _I["Movie"],       self._movie_tab),
+            NI("Transient",   _I["Transient"],   self._transient_tab),
         ])
         self._nav.add_section("ANALYSIS", [
-            NI("Calibration", "⚖",  self._cal_tab),
-            NI("Analysis",    "◈",  self._analysis_tab, badge="★"),
-            NI("Compare",     "⇌",  self._compare_tab),
-            NI("3D Surface",  "△",  self._surface_tab),
+            NI("Calibration", _I["Calibration"], self._cal_tab),
+            NI("Analysis",    _I["Analysis"],    self._analysis_tab, badge="★"),
+            NI("Compare",     _I["Compare"],     self._compare_tab),
+            NI("3D Surface",  _I["3D Surface"],  self._surface_tab),
         ])
-        self._nav.add_collapsible("Hardware", "⚙", [
-            NI("Camera",      "▣",  self._camera_tab),
-            NI("Temperature", "⊡",  self._temp_tab),
-            NI("FPGA",        "⬡",  self._fpga_tab),
-            NI("Bias Source", "⚡",  self._bias_tab),
-            NI("Stage",       "✛",  self._stage_tab),
-            NI("Prober",      "⊕",  self._prober_tab),
-            NI("ROI",         "⬚",  self._roi_tab),
-            NI("Autofocus",   "◉",  self._af_tab),
+        self._nav.add_collapsible("Hardware", _G["Hardware"], [
+            NI("Camera",      _I["Camera"],      self._camera_tab),
+            NI("Temperature", _I["Temperature"], self._temp_tab),
+            NI("FPGA",        _I["FPGA"],        self._fpga_tab),
+            NI("Bias Source", _I["Bias Source"], self._bias_tab),
+            NI("Stage",       _I["Stage"],       self._stage_tab),
+            NI("Prober",      _I["Prober"],      self._prober_tab),
+            NI("ROI",         _I["ROI"],         self._roi_tab),
+            NI("Autofocus",   _I["Autofocus"],   self._af_tab),
         ], collapsed=False)
         self._nav.add_section("SETUP", [
-            NI("Profiles",    "◧",  self._profile_tab),
-            NI("Recipes",     "≡",  self._recipe_tab),
+            NI("Profiles",    _I["Profiles"],    self._profile_tab),
+            NI("Recipes",     _I["Recipes"],     self._recipe_tab),
         ])
         self._nav.add_section("TOOLS", [
-            NI("Data",        "⊟",  self._data_tab),
-            NI("Console",     "›_", self._console_tab),
-            NI("Log",         "☰",  self._log_tab),
-            NI("Settings",    "⚙",  self._settings_tab),
+            NI("Data",        _I["Data"],        self._data_tab),
+            NI("Console",     _I["Console"],     self._console_tab),
+            NI("Log",         _I["Log"],         self._log_tab),
+            NI("Settings",    _I["Settings"],    self._settings_tab),
         ])
         self._nav.finish()
         self._nav.select_first()

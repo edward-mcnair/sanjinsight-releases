@@ -17,6 +17,7 @@ from PyQt5.QtCore    import Qt
 
 from hardware.app_state import app_state
 from ui.theme import FONT, PALETTE
+from ui.icons import set_btn_icon
 
 
 class StageTab(QWidget):
@@ -95,10 +96,14 @@ class StageTab(QWidget):
 
         # Home + Stop row
         ctrl_row = QHBoxLayout()
-        home_xyz = QPushButton("⌂  Home All")
-        home_xy  = QPushButton("⌂  Home XY")
-        home_z   = QPushButton("⌂  Home Z")
-        stop_btn = QPushButton("■  STOP")
+        home_xyz = QPushButton("Home All")
+        set_btn_icon(home_xyz, "fa5s.home")
+        home_xy  = QPushButton("Home XY")
+        set_btn_icon(home_xy, "fa5s.home")
+        home_z   = QPushButton("Home Z")
+        set_btn_icon(home_z, "fa5s.home")
+        stop_btn = QPushButton("STOP")
+        set_btn_icon(stop_btn, "fa5s.stop", "#ff6666")
         stop_btn.setObjectName("danger")
         for b in [home_xyz, home_xy, home_z]:
             b.setFixedWidth(110)

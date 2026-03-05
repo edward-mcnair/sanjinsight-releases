@@ -13,6 +13,7 @@ log = logging.getLogger(__name__)
 
 from PyQt5.QtWidgets import (
     QWidget, QPushButton, QVBoxLayout, QTextEdit)
+from ui.icons import set_btn_icon
 
 
 class LogTab(QWidget):

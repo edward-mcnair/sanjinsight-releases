@@ -35,6 +35,7 @@ from PyQt5.QtWidgets import (
     QFileDialog, QSizePolicy, QSplitter, QFrame,
 )
 from PyQt5.QtCore import Qt, QTimer
+from ui.icons import set_btn_icon
 
 import matplotlib
 if matplotlib.get_backend().lower() in ("", "agg"):
@@ -115,7 +116,8 @@ class SurfacePlotTab(QWidget):
 
         toolbar.addStretch(1)
 
-        self._rotate_btn = QPushButton("Auto-rotate  ▶")
+        self._rotate_btn = QPushButton("Auto-rotate")
+        set_btn_icon(self._rotate_btn, "fa5s.sync-alt")
         self._rotate_btn.setFixedHeight(28)
         self._rotate_btn.setCheckable(True)
         self._rotate_btn.toggled.connect(self._toggle_rotate)
@@ -262,10 +264,10 @@ class SurfacePlotTab(QWidget):
 
     def _toggle_rotate(self, checked: bool):
         if checked:
-            self._rotate_btn.setText("Auto-rotate  ■")
+            self._rotate_btn.setText("Auto-rotate")
             self._rotate_timer.start()
         else:
-            self._rotate_btn.setText("Auto-rotate  ▶")
+            self._rotate_btn.setText("Auto-rotate")
             self._rotate_timer.stop()
 
     def _auto_rotate_step(self):

@@ -30,6 +30,7 @@ from PyQt5.QtWidgets import (
 import version
 from logging_config import log_path
 from ui.theme import PALETTE, FONT
+from ui.icons import set_btn_icon
 
 log = logging.getLogger(__name__)
 
@@ -270,7 +271,8 @@ class SupportDialog(QDialog):
         # ── Action buttons ────────────────────────────────────────────────────
         btn_row = QHBoxLayout()
 
-        copy_btn = QPushButton("📋  Copy to Clipboard")
+        copy_btn = QPushButton("Copy to Clipboard")
+        set_btn_icon(copy_btn, "fa5s.clipboard")
         copy_btn.setStyleSheet(_btn_secondary_style())
         copy_btn.setToolTip(
             "Copy the full email (To + Subject + Body) to the clipboard.\n"
@@ -279,10 +281,12 @@ class SupportDialog(QDialog):
         copy_btn.clicked.connect(self._on_copy)
 
         close_btn = QPushButton("Close")
+        set_btn_icon(close_btn, "fa5s.times")
         close_btn.setStyleSheet(_btn_secondary_style())
         close_btn.clicked.connect(self.reject)
 
-        mail_btn = QPushButton("✉  Open in Mail Client")
+        mail_btn = QPushButton("Open in Mail Client")
+        set_btn_icon(mail_btn, "fa5s.envelope")
         mail_btn.setStyleSheet(_btn_primary_style())
         mail_btn.setToolTip(
             "Open your default mail client with this email pre-filled.\n\n"

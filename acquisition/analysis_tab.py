@@ -18,6 +18,7 @@ from typing import Optional
 
 import numpy as np
 
+from ui.icons import set_btn_icon
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QDoubleSpinBox, QSpinBox, QGroupBox, QGridLayout, QSplitter,
@@ -287,12 +288,14 @@ class AnalysisTab(QWidget):
         lay.setContentsMargins(12, 0, 12, 0)
         lay.setSpacing(8)
 
-        self._run_btn    = QPushButton("▶  Run Analysis")
+        self._run_btn    = QPushButton("Run Analysis")
+        set_btn_icon(self._run_btn, "fa5s.play", "#00d4aa")
         self._run_btn.setObjectName("primary")
         self._run_btn.setFixedHeight(30)
         self._run_btn.clicked.connect(self._run)
 
-        self._clear_btn  = QPushButton("✕  Clear")
+        self._clear_btn  = QPushButton("Clear")
+        set_btn_icon(self._clear_btn, "fa5s.times")
         self._clear_btn.setFixedHeight(30)
         self._clear_btn.clicked.connect(self._clear)
 
@@ -503,14 +506,17 @@ class AnalysisTab(QWidget):
         # Row 1: Save PNG | Save CSV
         # Row 2: Add to Report (full width)
         btn_row1 = QHBoxLayout()
-        self._save_png_btn = QPushButton("🖼  Save PNG")
-        self._save_csv_btn = QPushButton("📊  Save CSV")
+        self._save_png_btn = QPushButton("Save PNG")
+        set_btn_icon(self._save_png_btn, "fa5s.image")
+        self._save_csv_btn = QPushButton("Save CSV")
+        set_btn_icon(self._save_csv_btn, "fa5s.chart-bar")
         for b in [self._save_png_btn, self._save_csv_btn]:
             b.setFixedHeight(28); b.setEnabled(False)
             btn_row1.addWidget(b)
 
         btn_row2 = QHBoxLayout()
-        self._add_rpt_btn  = QPushButton("📄  Add to Report")
+        self._add_rpt_btn  = QPushButton("Add to Report")
+        set_btn_icon(self._add_rpt_btn, "fa5s.file-alt")
         self._add_rpt_btn.setFixedHeight(28)
         self._add_rpt_btn.setEnabled(False)
         btn_row2.addWidget(self._add_rpt_btn)

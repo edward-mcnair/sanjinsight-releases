@@ -23,6 +23,7 @@ from PyQt5.QtGui     import QPainter, QColor, QPen, QFont, QBrush
 from hardware.app_state  import app_state
 from hardware.autofocus  import create_autofocus, AfState
 from ui.theme import FONT, PALETTE
+from ui.icons import set_btn_icon
 
 # Module-level autofocus driver (set by AutofocusTab._run())
 af_driver = None
@@ -97,7 +98,8 @@ class AutofocusTab(QWidget):
         row("Settle delay", self._settle, 7)
 
         # ── Objective Z-range preset button (row 8) ───────────────────
-        self._obj_preset_btn = QPushButton("⌖  Use Objective Z-Range")
+        self._obj_preset_btn = QPushButton("Use Objective Z-Range")
+        set_btn_icon(self._obj_preset_btn, "fa5s.crosshairs")
         self._obj_preset_btn.setToolTip(
             "Auto-fill Z start / end / step from the active objective's\n"
             "working distance.  Requires a motorized turret to be connected.")
@@ -121,9 +123,11 @@ class AutofocusTab(QWidget):
 
         # ---- Run controls ----
         ctrl = QHBoxLayout()
-        self._run_btn   = QPushButton("▶  Run Autofocus")
+        self._run_btn   = QPushButton("Run Autofocus")
+        set_btn_icon(self._run_btn, "fa5s.play", "#00d4aa")
         self._run_btn.setObjectName("primary")
-        self._abort_btn = QPushButton("■  Abort")
+        self._abort_btn = QPushButton("Abort")
+        set_btn_icon(self._abort_btn, "fa5s.stop", "#ff6666")
         self._abort_btn.setObjectName("danger")
         self._abort_btn.setEnabled(False)
         self._run_btn.setFixedWidth(150)

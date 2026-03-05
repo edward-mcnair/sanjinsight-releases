@@ -35,6 +35,7 @@ from hardware.app_state    import app_state
 from ui.widgets.image_pane import ImagePane
 from ui.widgets.collapsible_panel import CollapsiblePanel
 from ui.theme import FONT, PALETTE
+from ui.icons import set_btn_icon
 
 
 def hline():
@@ -171,6 +172,7 @@ class CameraTab(QWidget):
         adv_grid.addLayout(dr, 0, 1)
 
         save_btn = QPushButton("Save Frame (16-bit PNG)")
+        set_btn_icon(save_btn, "fa5s.save")
         save_btn.clicked.connect(self._save)
         adv_grid.addWidget(save_btn, 1, 1)
 

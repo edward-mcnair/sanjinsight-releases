@@ -18,6 +18,7 @@ from PyQt5.QtCore    import Qt
 from hardware.app_state      import app_state
 from acquisition.roi         import Roi
 from acquisition.roi_widget  import RoiSelector
+from ui.icons import set_btn_icon
 
 
 class RoiTab(QWidget):
@@ -107,9 +108,11 @@ class RoiTab(QWidget):
         # Apply to acquisition / clear
         ctrl_box = QGroupBox("Acquisition")
         ctl = QVBoxLayout(ctrl_box)
-        self._apply_acq_btn = QPushButton("✓  Apply ROI to Acquisition")
+        self._apply_acq_btn = QPushButton("Apply ROI to Acquisition")
+        set_btn_icon(self._apply_acq_btn, "fa5s.check", "#00d4aa")
         self._apply_acq_btn.setObjectName("primary")
-        self._clear_acq_btn = QPushButton("✕  Clear  (use full frame)")
+        self._clear_acq_btn = QPushButton("Clear  (use full frame)")
+        set_btn_icon(self._clear_acq_btn, "fa5s.times")
         self._apply_acq_btn.clicked.connect(self._apply_to_acq)
         self._clear_acq_btn.clicked.connect(self._clear_acq)
         self._acq_status = QLabel("No ROI active")

@@ -235,6 +235,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QColor, QFont
+from ui.icons import set_btn_icon
 
 
 class RecipeTab(QWidget):
@@ -290,8 +291,11 @@ class RecipeTab(QWidget):
 
         btn_row = QHBoxLayout()
         self._new_btn    = QPushButton("New")
+        set_btn_icon(self._new_btn, "fa5s.plus")
         self._delete_btn = QPushButton("Delete")
-        self._run_btn    = QPushButton("▶  RUN")
+        set_btn_icon(self._delete_btn, "fa5s.trash", "#ff6666")
+        self._run_btn    = QPushButton("RUN")
+        set_btn_icon(self._run_btn, "fa5s.play", "#00d4aa")
         self._run_btn.setStyleSheet(
             "background:#006b40; color:#fff; font-weight:600; border-radius:3px;")
         for b in [self._new_btn, self._delete_btn, self._run_btn]:
@@ -303,6 +307,7 @@ class RecipeTab(QWidget):
         left_lay.addLayout(btn_row)
 
         self._preset_btn = QPushButton("Load Preset…")
+        set_btn_icon(self._preset_btn, "fa5s.folder-open")
         self._preset_btn.setFixedHeight(28)
         self._preset_btn.setToolTip(
             "Load a factory preset into the editor as a starting point.\n"
@@ -399,7 +404,9 @@ class RecipeTab(QWidget):
         right_lay.addLayout(footer)
 
         self._save_btn = QPushButton("Save Recipe")
+        set_btn_icon(self._save_btn, "fa5s.save")
         self._cap_btn  = QPushButton("Capture Current Settings")
+        set_btn_icon(self._cap_btn, "fa5s.camera")
         self._cap_btn.setToolTip(
             "Read current camera / analysis / profile settings from the app "
             "and populate this recipe automatically.")

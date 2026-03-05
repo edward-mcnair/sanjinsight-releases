@@ -20,6 +20,7 @@ from hardware.app_state import app_state
 from ui.theme import FONT, PALETTE
 from ai.instrument_knowledge import (
     BIAS_VO_INT_MAX_V, BIAS_AUX_INT_MAX_V, BIAS_VO_EXT_MAX_V)
+from ui.icons import set_btn_icon
 
 
 # (label, max_v, bipolar)
@@ -211,8 +212,10 @@ class BiasTab(QWidget):
         # Action buttons
         btn_row = QHBoxLayout()
         apply_btn  = QPushButton("Apply Settings")
-        self._on_btn  = QPushButton("⬤  Output ON")
-        self._off_btn = QPushButton("⬤  Output OFF")
+        self._on_btn  = QPushButton("Output ON")
+        set_btn_icon(self._on_btn, "fa5s.circle", "#00d4aa")
+        self._off_btn = QPushButton("Output OFF")
+        set_btn_icon(self._off_btn, "fa5s.circle", "#555555")
         self._on_btn.setStyleSheet(
             "background:#003322; color:#00d4aa; border-color:#00d4aa; font-weight:bold;")
         self._off_btn.setStyleSheet(

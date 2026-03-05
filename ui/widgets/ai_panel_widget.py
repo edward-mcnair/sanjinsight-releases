@@ -35,6 +35,7 @@ from PyQt5.QtWidgets import (
     QTextEdit, QLineEdit, QSizePolicy, QFrame)
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QCursor, QTextCharFormat, QColor, QFont
+from ui.icons import set_btn_icon
 
 log = logging.getLogger(__name__)
 
@@ -197,6 +198,7 @@ class AIPanelWidget(QWidget):
         # ── Quick action buttons ──
         action_row = QHBoxLayout()
         self._explain_btn = QPushButton("Explain this tab")
+        set_btn_icon(self._explain_btn, "fa5s.info-circle")
         self._explain_btn.setStyleSheet(_BTN)
         self._explain_btn.setEnabled(False)
         self._explain_btn.setToolTip(
@@ -205,6 +207,7 @@ class AIPanelWidget(QWidget):
         self._explain_btn.clicked.connect(self.explain_requested)
 
         self._diagnose_btn = QPushButton("Diagnose")
+        set_btn_icon(self._diagnose_btn, "fa5s.stethoscope")
         self._diagnose_btn.setStyleSheet(_BTN)
         self._diagnose_btn.setEnabled(False)
         self._diagnose_btn.setToolTip(
@@ -218,7 +221,8 @@ class AIPanelWidget(QWidget):
 
         # ── Get Support button (always enabled — no AI model required) ──
         support_row = QHBoxLayout()
-        self._support_btn = QPushButton("📧  Get Support")
+        self._support_btn = QPushButton("Get Support")
+        set_btn_icon(self._support_btn, "fa5s.envelope")
         self._support_btn.setStyleSheet(
             f"QPushButton {{ background:#1a1a1a; color:#88aacc; "
             f"border:1px solid #252525; border-radius:4px; "
@@ -263,6 +267,7 @@ class AIPanelWidget(QWidget):
         self._input.returnPressed.connect(self._on_ask)
 
         self._ask_btn = QPushButton("Ask")
+        set_btn_icon(self._ask_btn, "fa5s.paper-plane", "#00d4aa")
         self._ask_btn.setStyleSheet(_BTN_PRIMARY)
         self._ask_btn.setFixedWidth(60)
         self._ask_btn.setEnabled(False)
@@ -275,6 +280,7 @@ class AIPanelWidget(QWidget):
         # ── Token rate + Clear row ──
         rate_row = QHBoxLayout()
         self._clear_btn = QPushButton("Clear")
+        set_btn_icon(self._clear_btn, "fa5s.trash")
         self._clear_btn.setStyleSheet(
             f"QPushButton {{ background:transparent; color:{_MUTED}; "
             f"border:none; font-size:10pt; padding:0px 4px; }}"

@@ -17,6 +17,7 @@ from PyQt5.QtWidgets import (
     QProgressBar, QVBoxLayout, QHBoxLayout, QGridLayout,
     QGroupBox, QComboBox, QTextEdit, QFileDialog)
 from PyQt5.QtCore import pyqtSignal
+from ui.icons import set_btn_icon
 
 from hardware.app_state import app_state
 from acquisition        import AcquisitionProgress, AcqState
@@ -84,25 +85,29 @@ class AcquireTab(QWidget):
 
         # Buttons
         btn_row = QHBoxLayout()
-        self._cold_btn = QPushButton("① COLD")
+        self._cold_btn = QPushButton("COLD")
+        set_btn_icon(self._cold_btn, "fa5s.snowflake", "#66aaff")
         self._cold_btn.setObjectName("cold_btn")
         self._cold_btn.setToolTip(
             "Capture cold (baseline) frames only.\n"
             "Use this when you want to set up the cold reference manually "
             "before applying the stimulus.")
-        self._hot_btn  = QPushButton("② HOT")
+        self._hot_btn  = QPushButton("HOT")
+        set_btn_icon(self._hot_btn, "fa5s.fire", "#ff8866")
         self._hot_btn.setObjectName("hot_btn")
         self._hot_btn.setToolTip(
             "Capture hot (stimulus) frames and compute ΔR/R immediately.\n"
             "Requires a cold reference to already be captured.")
-        self._run_btn  = QPushButton("▶  RUN SEQUENCE")
+        self._run_btn  = QPushButton("RUN SEQUENCE")
+        set_btn_icon(self._run_btn, "fa5s.play", "#00d4aa")
         self._run_btn.setObjectName("primary")
         self._run_btn.setToolTip(
             "Run the full cold → hot acquisition sequence automatically.\n"
             "Captures cold baseline, applies stimulus, captures hot frames, "
             "then computes ΔR/R and ΔT.\n\n"
             "Keyboard shortcut: Ctrl+R")
-        self._abort_btn = QPushButton("■  ABORT")
+        self._abort_btn = QPushButton("ABORT")
+        set_btn_icon(self._abort_btn, "fa5s.stop", "#ff6666")
         self._abort_btn.setObjectName("danger")
         self._abort_btn.setToolTip(
             "Abort the current acquisition immediately.\n"
@@ -128,7 +133,8 @@ class AcquireTab(QWidget):
         self._active_recipe_lbl.setStyleSheet(
             "color:#00d4aa; font-size:12pt; font-style:italic;")
         recipe_row.addWidget(self._active_recipe_lbl, 1)
-        self._load_recipe_btn = QPushButton("📋  Load Recipe…")
+        self._load_recipe_btn = QPushButton("Load Recipe…")
+        set_btn_icon(self._load_recipe_btn, "fa5s.clipboard-list")
         self._load_recipe_btn.setFixedHeight(26)
         self._load_recipe_btn.setToolTip(
             "Open the Recipe Manager to select and apply a hardware + "
@@ -213,7 +219,8 @@ class AcquireTab(QWidget):
         self._snr_lbl = QLabel("SNR  —")
         self._snr_lbl.setStyleSheet(
             "font-family:Menlo,monospace; font-size:15pt; color:#555;")
-        self._export_btn = QPushButton("💾  Export")
+        self._export_btn = QPushButton("Export")
+        set_btn_icon(self._export_btn, "fa5s.file-export")
         self._export_btn.setEnabled(False)
         bot.addWidget(self._snr_lbl)
         bot.addStretch()

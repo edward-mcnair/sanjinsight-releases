@@ -37,6 +37,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QFont, QImage, QPixmap, QColor
+from ui.icons import set_btn_icon
 
 import matplotlib
 if matplotlib.get_backend().lower() in ("", "agg"):
@@ -264,12 +265,14 @@ class ComparisonTab(QWidget):
         self._cmap_combo.currentIndexChanged.connect(self._refresh_maps)
         self._cmap_combo.setFixedHeight(28)
 
-        self._blink_btn = QPushButton("Blink  ▶")
+        self._blink_btn = QPushButton("Blink")
+        set_btn_icon(self._blink_btn, "fa5s.eye")
         self._blink_btn.setFixedHeight(28)
         self._blink_btn.setCheckable(True)
         self._blink_btn.toggled.connect(self._toggle_blink)
 
         self._export_btn = QPushButton("Export Figure…")
+        set_btn_icon(self._export_btn, "fa5s.file-export")
         self._export_btn.setFixedHeight(28)
         self._export_btn.clicked.connect(self._export_figure)
 
@@ -433,10 +436,10 @@ class ComparisonTab(QWidget):
 
     def _toggle_blink(self, checked: bool):
         if checked:
-            self._blink_btn.setText("Blink  ■")
+            self._blink_btn.setText("Blink")
             self._blink_timer.start(500)   # 2 Hz blink
         else:
-            self._blink_btn.setText("Blink  ▶")
+            self._blink_btn.setText("Blink")
             self._blink_timer.stop()
             self._refresh_maps()           # restore normal view
 

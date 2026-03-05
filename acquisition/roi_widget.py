@@ -27,6 +27,7 @@ from PyQt5.QtGui     import (QImage, QPixmap, QPainter, QPen, QColor,
                               QBrush, QFont, QCursor)
 
 from .roi import Roi
+from ui.icons import set_btn_icon
 
 
 class RoiCanvas(QWidget):
@@ -274,7 +275,8 @@ class RoiSelector(QWidget):
         bar.addWidget(self._info)
         bar.addStretch()
 
-        self._clear_btn = QPushButton("✕  Clear ROI")
+        self._clear_btn = QPushButton("Clear ROI")
+        set_btn_icon(self._clear_btn, "fa5s.times")
         self._clear_btn.setFixedWidth(100)
         self._clear_btn.clicked.connect(self._canvas.clear_roi)
         bar.addWidget(self._clear_btn)

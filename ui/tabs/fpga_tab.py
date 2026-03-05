@@ -31,6 +31,7 @@ from PyQt5.QtCore    import Qt
 from hardware.app_state import app_state
 from ui.widgets.collapsible_panel import CollapsiblePanel
 from ui.theme import FONT, PALETTE
+from ui.icons import set_btn_icon
 
 
 def hline():
@@ -161,9 +162,11 @@ class FpgaTab(QWidget):
 
         # Start / Stop / Output row
         btn_row = QHBoxLayout()
-        start_btn = QPushButton("▶  Start Modulation")
+        start_btn = QPushButton("Start Modulation")
+        set_btn_icon(start_btn, "fa5s.play", "#00d4aa")
         start_btn.setObjectName("primary")
-        stop_btn  = QPushButton("■  Stop")
+        stop_btn  = QPushButton("Stop")
+        set_btn_icon(stop_btn, "fa5s.stop", "#ff6666")
         stop_btn.setObjectName("danger")
         stim_on   = QPushButton("Output ON")
         stim_off  = QPushButton("Output OFF")

@@ -22,6 +22,7 @@ from PyQt5.QtWidgets import (
     QTextEdit, QFileDialog, QSplitter, QFrame, QTabWidget,
     QSizePolicy, QCheckBox, QComboBox, QScrollArea, QMessageBox)
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
+from ui.icons import set_btn_icon
 from PyQt5.QtGui  import (QImage, QPixmap, QPainter, QPen, QColor,
                            QBrush, QFont)
 
@@ -353,13 +354,15 @@ class ScanTab(QWidget):
         rl = QVBoxLayout(run_box)
         rl.setSpacing(6)
 
-        self._run_btn   = QPushButton("▶  Start Scan")
+        self._run_btn   = QPushButton("Start Scan")
+        set_btn_icon(self._run_btn, "fa5s.play", "#00d4aa")
         self._run_btn.setObjectName("primary")
         self._run_btn.setFixedHeight(42)   # was 34 — taller so spinner text is
         self._run_btn.setStyleSheet(       # clearly readable while scanning
             "font-size:15pt; font-weight:600;")
 
-        self._abort_btn = QPushButton("■  Abort")
+        self._abort_btn = QPushButton("Abort")
+        set_btn_icon(self._abort_btn, "fa5s.stop", "#ff6666")
         self._abort_btn.setObjectName("danger")
         self._abort_btn.setFixedHeight(30)
         self._abort_btn.setEnabled(False)
@@ -502,10 +505,14 @@ class ScanTab(QWidget):
 
         # ---- Export buttons ----
         btn_row = QHBoxLayout()
-        self._save_map_btn  = QPushButton("💾  Save Map (.npy)")
-        self._save_img_btn  = QPushButton("🖼  Save Image (.png)")
-        self._report_btn    = QPushButton("📄  PDF Report")
-        self._save_prof_btn = QPushButton("◈  Save as Profile")
+        self._save_map_btn  = QPushButton("Save Map (.npy)")
+        set_btn_icon(self._save_map_btn, "fa5s.save")
+        self._save_img_btn  = QPushButton("Save Image (.png)")
+        set_btn_icon(self._save_img_btn, "fa5s.image")
+        self._report_btn    = QPushButton("PDF Report")
+        set_btn_icon(self._report_btn, "fa5s.file-pdf")
+        self._save_prof_btn = QPushButton("Save as Profile")
+        set_btn_icon(self._save_prof_btn, "fa5s.layer-group")
         self._report_btn.setObjectName("primary")
         for b in [self._save_map_btn, self._save_img_btn,
                   self._report_btn, self._save_prof_btn]:

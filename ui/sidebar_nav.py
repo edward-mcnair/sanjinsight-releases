@@ -16,8 +16,19 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore  import Qt, pyqtSignal, QPoint
 from PyQt5.QtGui   import (
     QColor, QFont, QPainter, QPen, QCursor,
-    QPainterPath, QFontMetrics,
+    QPainterPath, QFontMetrics, QPixmap,
 )
+
+# ── qtawesome (optional — degrades to unicode glyphs if not installed) ──────
+try:
+    import qtawesome as qta
+    _QTA_AVAILABLE = True
+except ImportError:
+    qta = None
+    _QTA_AVAILABLE = False
+
+# Module-level pixmap cache: (icon_name, color_hex) → QPixmap
+_pix_cache: dict = {}
 
 # ── Palette — sourced from ui.theme (single source of truth) ───────
 from ui.theme import PALETTE, FONT as _FONT
@@ -108,9 +119,18 @@ class _MenuItem(QWidget):
         icon_col = QColor(_ACCENT if self._active else
                          (_TEXT_NORM if self._hover else _TEXT_DIM))
 
-        p.setFont(QFont("Segoe UI Symbol", _ICON_FONT_PT))
-        p.setPen(icon_col)
-        p.drawText(x, 0, 26, h, Qt.AlignVCenter | Qt.AlignLeft, self._item.icon)
+        icon_name = self._item.icon
+        if _QTA_AVAILABLE and "." in icon_name:
+            cache_key = (icon_name, icon_col.name())
+            px = _pix_cache.get(cache_key)
+            if px is None:
+                px = qta.icon(icon_name, color=icon_col.name()).pixmap(16, 16)
+                _pix_cache[cache_key] = px
+            p.drawPixmap(x + 1, (h - 16) // 2, px)
+        else:
+            p.setFont(QFont("Segoe UI Symbol", _ICON_FONT_PT))
+            p.setPen(icon_col)
+            p.drawText(x, 0, 26, h, Qt.AlignVCenter | Qt.AlignLeft, icon_name)
 
         lf = QFont("Segoe UI", _ITEM_FONT_PT)
         if self._active:
@@ -199,9 +219,17 @@ class _CollapseHeader(QWidget):
         p.fillRect(0, 0, w, h, QColor(_BG_HOVER if self._hover else _BG))
         col = QColor(_TEXT_NORM if self._hover else _TEXT_DIM)
 
-        p.setFont(QFont("Segoe UI Symbol", _ICON_FONT_PT))
-        p.setPen(col)
-        p.drawText(18, 0, 26, h, Qt.AlignVCenter | Qt.AlignLeft, self._icon)
+        if _QTA_AVAILABLE and "." in self._icon:
+            cache_key = (self._icon, col.name())
+            px = _pix_cache.get(cache_key)
+            if px is None:
+                px = qta.icon(self._icon, color=col.name()).pixmap(16, 16)
+                _pix_cache[cache_key] = px
+            p.drawPixmap(19, (h - 16) // 2, px)
+        else:
+            p.setFont(QFont("Segoe UI Symbol", _ICON_FONT_PT))
+            p.setPen(col)
+            p.drawText(18, 0, 26, h, Qt.AlignVCenter | Qt.AlignLeft, self._icon)
 
         f = QFont("Segoe UI", _ITEM_FONT_PT)
         f.setWeight(QFont.DemiBold)

@@ -25,6 +25,7 @@ from PyQt5.QtGui     import (QPixmap, QImage, QFont, QColor,
 from .session         import Session, SessionMeta
 from .session_manager import SessionManager
 from .processing      import to_display, apply_colormap
+from ui.icons import set_btn_icon
 
 
 # ------------------------------------------------------------------ #
@@ -373,8 +374,10 @@ class DataTab(QWidget):
 
         # Buttons
         btns = QHBoxLayout()
-        self._folder_btn = QPushButton("📁  Set Folder")
-        self._refresh_btn = QPushButton("↻  Refresh")
+        self._folder_btn = QPushButton("Set Folder")
+        set_btn_icon(self._folder_btn, "fa5s.folder")
+        self._refresh_btn = QPushButton("Refresh")
+        set_btn_icon(self._refresh_btn, "fa5s.sync-alt")
         self._folder_btn.clicked.connect(self._set_folder)
         self._refresh_btn.clicked.connect(self._refresh)
         for b in [self._folder_btn, self._refresh_btn]:
@@ -438,12 +441,17 @@ class DataTab(QWidget):
         cl = QVBoxLayout(ctrl_box)
         cl.setSpacing(6)
 
-        self._rename_btn   = QPushButton("✎  Rename")
-        self._notes_btn    = QPushButton("📝  Edit Notes")
-        self._export_btn   = QPushButton("💾  Export Files")
-        self._report_btn   = QPushButton("📄  Generate PDF Report")
+        self._rename_btn   = QPushButton("Rename")
+        set_btn_icon(self._rename_btn, "fa5s.pencil-alt")
+        self._notes_btn    = QPushButton("Edit Notes")
+        set_btn_icon(self._notes_btn, "fa5s.sticky-note")
+        self._export_btn   = QPushButton("Export Files")
+        set_btn_icon(self._export_btn, "fa5s.file-export")
+        self._report_btn   = QPushButton("Generate PDF Report")
+        set_btn_icon(self._report_btn, "fa5s.file-pdf")
         self._report_btn.setObjectName("primary")
-        self._delete_btn   = QPushButton("🗑  Delete")
+        self._delete_btn   = QPushButton("Delete")
+        set_btn_icon(self._delete_btn, "fa5s.trash", "#ff6666")
         self._delete_btn.setObjectName("danger")
         self._cmp_a_btn    = QPushButton("Set as A")
         self._cmp_b_btn    = QPushButton("Set as B")
@@ -473,7 +481,8 @@ class DataTab(QWidget):
         cl.addWidget(self._cmp_a_lbl)
         cl.addWidget(self._cmp_b_lbl)
 
-        self._compare_btn = QPushButton("▶  Compare A vs B")
+        self._compare_btn = QPushButton("Compare A vs B")
+        set_btn_icon(self._compare_btn, "fa5s.exchange-alt", "#00d4aa")
         self._compare_btn.setObjectName("primary")
         self._compare_btn.setFixedHeight(32)
         self._compare_btn.setEnabled(False)

@@ -23,6 +23,7 @@ import numpy as np
 from typing import Optional
 
 from ui.button_utils import RunningButton, apply_hand_cursor
+from ui.icons import set_btn_icon
 from ui.theme import FONT, PALETTE
 
 from PyQt5.QtWidgets import (
@@ -174,10 +175,12 @@ class MovieTab(QWidget):
         run_box = QGroupBox("Run")
         rl = QVBoxLayout(run_box)
 
-        self._run_btn   = QPushButton("▶  Run Movie")
+        self._run_btn   = QPushButton("Run Movie")
+        set_btn_icon(self._run_btn, "fa5s.play", "#00d4aa")
         self._run_btn.setObjectName("primary")
         self._run_btn.setFixedHeight(34)
-        self._abort_btn = QPushButton("■  Abort")
+        self._abort_btn = QPushButton("Abort")
+        set_btn_icon(self._abort_btn, "fa5s.stop", "#ff6666")
         self._abort_btn.setObjectName("danger")
         self._abort_btn.setFixedHeight(32)
         self._abort_btn.setEnabled(False)
@@ -204,7 +207,8 @@ class MovieTab(QWidget):
         lay.addWidget(run_box)
 
         # ── Save ──────────────────────────────────────────────────────
-        self._save_btn = QPushButton("💾  Save Cube…")
+        self._save_btn = QPushButton("Save Cube…")
+        set_btn_icon(self._save_btn, "fa5s.save")
         self._save_btn.setEnabled(False)
         self._save_btn.setFixedHeight(30)
         self._save_btn.clicked.connect(self._save)

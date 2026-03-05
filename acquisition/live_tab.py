@@ -18,6 +18,7 @@ import time
 import numpy as np
 
 from ui.button_utils import RunningButton, apply_hand_cursor
+from ui.icons import set_btn_icon
 
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -593,17 +594,22 @@ class LiveTab(QWidget):
         lay.setContentsMargins(12, 0, 12, 0)
         lay.setSpacing(8)
 
-        self._start_btn  = QPushButton("▶  Start")
-        self._stop_btn   = QPushButton("■  Stop")
-        self._freeze_btn = QPushButton("❄  Freeze")
-        self._capture_btn= QPushButton("📷  Capture")
-        self._reset_btn  = QPushButton("↺  Reset EMA")
+        self._start_btn  = QPushButton("Start")
+        set_btn_icon(self._start_btn, "fa5s.play", "#00d4aa")
+        self._stop_btn   = QPushButton("Stop")
+        set_btn_icon(self._stop_btn, "fa5s.stop", "#ff6666")
+        self._freeze_btn = QPushButton("Freeze")
+        set_btn_icon(self._freeze_btn, "fa5s.snowflake", "#66aaff")
+        self._capture_btn= QPushButton("Capture")
+        set_btn_icon(self._capture_btn, "fa5s.camera")
+        self._reset_btn  = QPushButton("Reset EMA")
+        set_btn_icon(self._reset_btn, "fa5s.undo")
 
         self._start_btn.setObjectName("primary")
         self._stop_btn.setObjectName("danger")
         self._stop_btn.setEnabled(False)
 
-        self._btn_runner = RunningButton(self._start_btn, idle_text="▶  Start")
+        self._btn_runner = RunningButton(self._start_btn, idle_text="Start")
         apply_hand_cursor(self._stop_btn, self._freeze_btn,
                           self._capture_btn, self._reset_btn)
 
@@ -734,7 +740,8 @@ class LiveTab(QWidget):
         lay.addWidget(depth_box)
 
         # Apply button
-        self._apply_btn = QPushButton("↻  Apply Settings")
+        self._apply_btn = QPushButton("Apply Settings")
+        set_btn_icon(self._apply_btn, "fa5s.sync-alt")
         self._apply_btn.setFixedHeight(30)
         self._apply_btn.clicked.connect(self._apply_config)
         lay.addWidget(self._apply_btn)

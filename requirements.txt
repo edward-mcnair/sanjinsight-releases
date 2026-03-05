@@ -55,6 +55,9 @@ PyYAML>=6.0
 #   pip install pyvisa pyvisa-py
 #   Or install NI-VISA from https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html
 
+# ── Icons ─────────────────────────────────────────────────────────────────────
+qtawesome>=1.3.0              # FontAwesome 5 vector icons for PyQt5
+
 # ── Optional: SVG logo rendering in header ────────────────────────────────────
 # PyQt5 includes SVG support — no extra package needed on most systems.
 # If the logo does not appear, install:  pip install PyQt5-sip

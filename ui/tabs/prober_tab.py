@@ -32,6 +32,7 @@ from PyQt5.QtGui  import (QPainter, QColor, QPen, QFont,
 
 from hardware.app_state import app_state
 from ui.theme import FONT, PALETTE
+from ui.icons import set_btn_icon
 
 
 # ------------------------------------------------------------------ #
@@ -245,14 +246,16 @@ class ProberTab(QWidget):
         needle_box = QGroupBox("Probe Needles")
         nl = QHBoxLayout(needle_box)
 
-        self._contact_btn = QPushButton("▼  Contact")
+        self._contact_btn = QPushButton("Contact")
+        set_btn_icon(self._contact_btn, "fa5s.arrow-down", "#00d4aa")
         self._contact_btn.setObjectName("primary")
         self._contact_btn.setFixedHeight(34)
         self._contact_btn.setToolTip(
             "Lower probe needles to make electrical contact with the DUT.")
         self._contact_btn.clicked.connect(self._contact)
 
-        self._lift_btn = QPushButton("▲  Lift")
+        self._lift_btn = QPushButton("Lift")
+        set_btn_icon(self._lift_btn, "fa5s.arrow-up")
         self._lift_btn.setFixedHeight(34)
         self._lift_btn.setToolTip(
             "Raise probe needles to safe travel height before moving.")
@@ -292,10 +295,12 @@ class ProberTab(QWidget):
         # Home / Stop
         ctrl_box = QGroupBox("Controls")
         cl = QVBoxLayout(ctrl_box)
-        self._home_btn = QPushButton("⌂  Home All")
+        self._home_btn = QPushButton("Home All")
+        set_btn_icon(self._home_btn, "fa5s.home")
         self._home_btn.setFixedHeight(32)
         self._home_btn.clicked.connect(self._home)
-        self._stop_btn = QPushButton("■  Stop")
+        self._stop_btn = QPushButton("Stop")
+        set_btn_icon(self._stop_btn, "fa5s.stop", "#ff6666")
         self._stop_btn.setObjectName("danger")
         self._stop_btn.setFixedHeight(32)
         self._stop_btn.clicked.connect(self._stop)
