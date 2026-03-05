@@ -6,11 +6,14 @@ Works with any TecDriver — simulated, Meerstetter, or ATEC.
 Run:  python tec_panel.py
 """
 
+import logging
 import sys
 import time
 import threading
 import collections
 import numpy as np
+
+log = logging.getLogger(__name__)
 
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QDoubleSpinBox,
@@ -315,7 +318,7 @@ class TecPanel(QMainWindow):
         panel._plot.push(status.actual_temp, status.target_temp)
 
     def _on_error(self, msg):
-        print(f"TEC error: {msg}")
+        log.warning("TEC error: %s", msg)
 
     def closeEvent(self, event):
         self._running = False

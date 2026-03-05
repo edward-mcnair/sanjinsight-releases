@@ -14,10 +14,13 @@ Available drivers:
 Run:  python viewer.py
 """
 
+import logging
 import sys
 import time
 import threading
 import numpy as np
+
+log = logging.getLogger(__name__)
 
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QLabel,
                              QSlider, QPushButton, QHBoxLayout, QVBoxLayout,
@@ -69,8 +72,9 @@ def capture_loop():
         signals.error.emit(str(e))
         return
 
-    print(f"Camera open: {cam.info.driver} | {cam.info.model} "
-          f"| {cam.info.width}x{cam.info.height}")
+    log.info("Camera open: %s | %s | %dx%d",
+             cam.info.driver, cam.info.model,
+             cam.info.width, cam.info.height)
     S.running = True
 
     while S.running:
@@ -88,7 +92,7 @@ def capture_loop():
         signals.new_frame.emit()
 
     cam.close()
-    print("Camera closed.")
+    log.info("Camera closed.")
 
 
 # ------------------------------------------------------------------ #
@@ -233,7 +237,7 @@ class MainWindow(QMainWindow):
             fname = f"frame_{int(time.time())}.png"
             cv2.imwrite(fname, frame.data)
             self.status_lbl.setText(f"Saved: {fname}")
-            print(f"Saved: {fname}")
+            log.info("Saved: %s", fname)
 
     def _on_error(self, msg):
         self.status_lbl.setText(f"ERROR: {msg}")

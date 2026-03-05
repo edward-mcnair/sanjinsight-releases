@@ -128,7 +128,7 @@ class SimulatedDriver(CameraDriver):
     def set_gain(self, db: float) -> None:
         self._gain_db        = db
         self._cfg["gain"]    = db
-        print(f"  [SIM] Gain = {db:.1f} dB")
+        log.debug("[SIM] Gain = %.1f dB", db)
 
     def exposure_range(self) -> tuple:
         return (50.0, 200_000.0)

@@ -33,7 +33,7 @@ class SimulatedTec(TecDriver):
 
     def connect(self) -> None:
         self._connected = True
-        print(f"[SIM] TEC connected (initial temp: {self._actual:.1f}°C)")
+        log.debug("[SIM] TEC connected (initial temp: %.1f°C)", self._actual)
 
     def disconnect(self) -> None:
         self._connected = False

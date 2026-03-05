@@ -8,10 +8,13 @@ Utilities for processing and displaying AcquisitionResult data.
 - Export to TIFF, NPY, CSV
 """
 
+import logging
 import numpy as np
 import os
 import time
 from typing import Optional, Tuple
+
+log = logging.getLogger(__name__)
 
 
 def to_display(
@@ -153,5 +156,5 @@ def export_result(result, output_dir: str = ".") -> dict:
             f.write(f"Notes:           {result.notes}\n")
     saved["metadata"] = p
 
-    print(f"Saved {len(saved)} files to {output_dir}")
+    log.info("Saved %d files to %s", len(saved), output_dir)
     return saved

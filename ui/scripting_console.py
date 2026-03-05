@@ -50,6 +50,7 @@ import traceback
 from contextlib import redirect_stdout, redirect_stderr
 from typing import List, Optional
 
+import config as _config_module
 import numpy as np
 
 from PyQt5.QtWidgets import (
@@ -160,6 +161,10 @@ class ScriptingConsoleTab(QWidget):
         self._app_state = app_state
         self._history:    List[str] = []
         self._hist_idx:   int       = -1
+        # Read config gate — defaults to disabled for safety.
+        dev_cfg = _config_module.get("developer") or {}
+        self._console_enabled: bool = bool(
+            dev_cfg.get("enable_script_console", False))
         self._build()
 
     # ── UI ──────────────────────────────────────────────────────────
@@ -269,6 +274,34 @@ class ScriptingConsoleTab(QWidget):
                              " padding:2px 4px;")
         root.addWidget(ns_lbl)
 
+        # ─ Console enabled/disabled gate ─
+        if self._console_enabled:
+            warn_lbl = QLabel(
+                "⚠  Script console enabled — executes arbitrary Python in-process."
+                "  Enable only for trusted operators.")
+            warn_lbl.setStyleSheet(
+                "background:#4a3200; color:#ffcc55; font-size:11pt;"
+                " padding:4px 8px; border-radius:3px;")
+            warn_lbl.setWordWrap(True)
+            root.addWidget(warn_lbl)
+        else:
+            disabled_lbl = QLabel(
+                "🔒  Script console is disabled.  "
+                "Set  developer.enable_script_console: true  in config.yaml to enable.")
+            disabled_lbl.setStyleSheet(
+                "background:#1a1a1a; color:#666; font-size:11pt;"
+                " padding:4px 8px; border-radius:3px;")
+            disabled_lbl.setWordWrap(True)
+            root.addWidget(disabled_lbl)
+            self._run_btn.setEnabled(False)
+            self._run_btn.setStyleSheet(
+                "background:#222; color:#555; font-weight:600; "
+                "border-radius:3px; padding:0 10px;")
+            self._editor.setReadOnly(True)
+            self._editor.setStyleSheet(
+                "background:#0a0a0a; color:#444; border:none; "
+                "selection-background-color:#264f78;")
+
         # Print banner
         self._print_to_output(_BANNER, color="#5ec4a0")
 
@@ -314,6 +347,12 @@ class ScriptingConsoleTab(QWidget):
     # ── Execution ────────────────────────────────────────────────────
 
     def _run_script(self):
+        if not self._console_enabled:
+            self._print_to_output(
+                "Script console is disabled — enable via developer.enable_script_console "
+                "in config.yaml.", color="#f44747")
+            return
+
         script = self._editor.toPlainText().strip()
         if not script:
             return

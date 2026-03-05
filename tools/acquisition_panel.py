@@ -12,10 +12,13 @@ Shows:
 Run:  python acquisition_panel.py
 """
 
+import logging
 import sys
 import time
 import threading
 import numpy as np
+
+log = logging.getLogger(__name__)
 
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QPushButton,
@@ -140,7 +143,7 @@ def live_capture_loop():
         signals.error.emit(str(e))
         return
 
-    print(f"Camera: {cam.info.driver} | {cam.info.model}")
+    log.info("Camera: %s | %s", cam.info.driver, cam.info.model)
 
     while running:
         if pipeline.state == AcqState.CAPTURING:
