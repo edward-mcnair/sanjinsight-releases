@@ -44,6 +44,9 @@ class ContextBuilder:
     def build(self) -> str:
         """Return a compact JSON string describing current instrument state."""
         data: dict = {"tab": self._active_tab}
+        # Tracks which sections raised an exception; written into the JSON so
+        # the LLM knows the context may be incomplete.
+        _incomplete: list = []
 
         # Camera
         try:
@@ -57,7 +60,9 @@ class ContextBuilder:
             else:
                 data["cam"] = {"connected": False}
         except Exception:
+            log.debug("ContextBuilder.build: camera section failed", exc_info=True)
             data["cam"] = {"connected": False}
+            _incomplete.append("cam")
 
         # FPGA
         try:
@@ -73,7 +78,9 @@ class ContextBuilder:
             else:
                 data["fpga"] = {"connected": False}
         except Exception:
+            log.debug("ContextBuilder.build: FPGA section failed", exc_info=True)
             data["fpga"] = {"connected": False}
+            _incomplete.append("fpga")
 
         # Stage
         try:
@@ -89,7 +96,9 @@ class ContextBuilder:
             else:
                 data["stage"] = {"connected": False}
         except Exception:
+            log.debug("ContextBuilder.build: stage section failed", exc_info=True)
             data["stage"] = {"connected": False}
+            _incomplete.append("stage")
 
         # Bias
         try:
@@ -104,7 +113,9 @@ class ContextBuilder:
             else:
                 data["bias"] = {"connected": False}
         except Exception:
+            log.debug("ContextBuilder.build: bias section failed", exc_info=True)
             data["bias"] = {"connected": False}
+            _incomplete.append("bias")
 
         # LDD (Laser Diode Driver — illumination source)
         try:
@@ -124,7 +135,9 @@ class ContextBuilder:
             else:
                 data["ldd"] = {"connected": False}
         except Exception:
+            log.debug("ContextBuilder.build: LDD section failed", exc_info=True)
             data["ldd"] = {"connected": False}
+            _incomplete.append("ldd")
 
         # System model (EZ500 / NT220 / PT410A) — from config or auto-detected
         try:
@@ -140,7 +153,8 @@ class ContextBuilder:
                     "objectives":      spec.objectives,
                 }
         except Exception:
-            pass
+            log.debug("ContextBuilder.build: system_model section failed", exc_info=True)
+            _incomplete.append("system_model")
 
         # Active measurement profile (material + wavelength + C_T)
         try:
@@ -153,7 +167,8 @@ class ContextBuilder:
                     "category":      prof.category,
                 }
         except Exception:
-            pass
+            log.debug("ContextBuilder.build: profile section failed", exc_info=True)
+            _incomplete.append("profile")
 
         # TECs
         try:
@@ -170,7 +185,8 @@ class ContextBuilder:
             if tec_data:
                 data["tecs"] = tec_data
         except Exception:
-            pass
+            log.debug("ContextBuilder.build: TECs section failed", exc_info=True)
+            _incomplete.append("tecs")
 
         # Active acquisition modality (omit default 'thermoreflectance' to save tokens)
         try:
@@ -178,7 +194,8 @@ class ContextBuilder:
             if modality and modality != "thermoreflectance":
                 data["modality"] = modality
         except Exception:
-            pass
+            log.debug("ContextBuilder.build: modality section failed", exc_info=True)
+            _incomplete.append("modality")
 
         # Prober (probe-station chuck — distinct from microscope scan stage)
         try:
@@ -203,7 +220,9 @@ class ContextBuilder:
             else:
                 data["prober"] = {"connected": False}
         except Exception:
+            log.debug("ContextBuilder.build: prober section failed", exc_info=True)
             data["prober"] = {"connected": False}
+            _incomplete.append("prober")
 
         # Active objective (from motorized turret — drives FOV, pixel size, autofocus range)
         try:
@@ -218,12 +237,14 @@ class ContextBuilder:
                     obj_data["fov_um"] = round(obj.fov_um(), 1)
                     obj_data["px_um"]  = round(obj.px_size_um(), 4)
                 except Exception:
-                    pass
+                    log.debug("ContextBuilder.build: objective fov/px_size failed",
+                              exc_info=True)
                 data["objective"] = obj_data
             elif app_state.turret is not None:
                 data["objective"] = {"connected": True}
         except Exception:
-            pass
+            log.debug("ContextBuilder.build: objective section failed", exc_info=True)
+            _incomplete.append("objective")
 
         # Metrics snapshot
         if self._metrics is not None:
@@ -238,7 +259,8 @@ class ContextBuilder:
                     data["metrics"]["focus"] = cam_metrics.get("focus_score", None)
                     data["metrics"]["saturation_pct"] = cam_metrics.get("saturation_pct", None)
             except Exception:
-                pass
+                log.debug("ContextBuilder.build: metrics section failed", exc_info=True)
+                _incomplete.append("metrics")
 
         # Diagnostic rule results — warn/fail only, compact format for token budget
         if self._diagnostics is not None:
@@ -255,7 +277,15 @@ class ContextBuilder:
                         for r in issues
                     ]
             except Exception:
-                pass
+                log.debug("ContextBuilder.build: diagnostics section failed",
+                          exc_info=True)
+                _incomplete.append("diagnostics")
+
+        # Inject fallback flag so the LLM knows some device state may be missing
+        if _incomplete:
+            data["context_incomplete"] = True
+            log.debug("ContextBuilder.build: incomplete sections — %s",
+                      ", ".join(_incomplete))
 
         return json.dumps(_strip_none(data), separators=(",", ":"))
 
