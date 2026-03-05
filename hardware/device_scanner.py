@@ -10,12 +10,15 @@ against the device registry where possible.
 """
 
 from __future__ import annotations
+import logging
 import sys
 import time
 import socket
 import threading
 from dataclasses  import dataclass, field
 from typing       import List, Optional, Callable
+
+log = logging.getLogger(__name__)
 
 from .device_registry import (
     DeviceDescriptor, DEVICE_REGISTRY,
@@ -108,7 +111,8 @@ class SerialScanner:
                     v, p = vp.split(":")
                     vid, pid = int(v, 16), int(p, 16)
                 except Exception:
-                    pass
+                    log.debug("SerialScanner: VID:PID parse failed for hwid=%r — "
+                              "skipping VID/PID match", hwid, exc_info=True)
 
             descriptor = None
             if vid and pid:
@@ -166,14 +170,20 @@ class UsbScanner:
             try:
                 mfr = usb.util.get_string(dev, dev.iManufacturer) or ""
             except Exception:
+                log.debug("UsbScanner: get_string(iManufacturer) failed for "
+                          "%04X:%04X", vid, pid, exc_info=True)
                 mfr = ""
             try:
                 prod = usb.util.get_string(dev, dev.iProduct) or ""
             except Exception:
+                log.debug("UsbScanner: get_string(iProduct) failed for "
+                          "%04X:%04X", vid, pid, exc_info=True)
                 prod = ""
             try:
                 sn = usb.util.get_string(dev, dev.iSerialNumber) or ""
             except Exception:
+                log.debug("UsbScanner: get_string(iSerialNumber) failed for "
+                          "%04X:%04X", vid, pid, exc_info=True)
                 sn = ""
 
             descriptor = find_by_usb(vid, pid)
@@ -249,7 +259,8 @@ class NetworkScanner:
                     try:
                         banner = s.recv(256).decode("ascii", errors="replace")
                     except Exception:
-                        pass
+                        log.debug("NetworkScanner.probe: banner recv failed "
+                                  "for %s:%s", ip, port, exc_info=True)
 
                     desc = banner.strip()[:80] or hint
                     descriptor = None
@@ -294,6 +305,8 @@ class NetworkScanner:
             s.close()
             return ".".join(ip.split(".")[:3])
         except Exception:
+            log.debug("NetworkScanner._detect_subnet: socket probe failed — "
+                      "network scan will be skipped", exc_info=True)
             return ""
 
 
@@ -346,9 +359,9 @@ class NiScanner:
                         descriptor      = descriptor,
                     ))
         except ImportError:
-            pass
+            log.debug("NiScanner.scan: pyvisa not installed — skipping VISA resource scan")
         except Exception:
-            pass
+            log.warning("NiScanner.scan: pyvisa list_resources() failed", exc_info=True)
 
         return results, error
 
@@ -368,7 +381,8 @@ class NiScanner:
                     found.append(rname)
             return found
         except Exception:
-            pass
+            log.debug("NiScanner._probe_ni_resources: pyvisa enumeration failed — "
+                      "trying nidaqmx fallback", exc_info=True)
 
         # Fallback: NI-DAQmx device list
         try:
@@ -376,7 +390,8 @@ class NiScanner:
             system = nidaqmx.system.System.local()
             return [d.name for d in system.devices]
         except Exception:
-            pass
+            log.debug("NiScanner._probe_ni_resources: nidaqmx enumeration failed — "
+                      "returning empty NI resource list", exc_info=True)
 
         return []
 
@@ -434,6 +449,8 @@ class CameraScanner:
                 try:
                     ip = di.GetIpAddress()
                 except Exception:
+                    log.debug("CameraScanner._scan_pylon: GetIpAddress() failed for "
+                              "device %r — treating as USB camera", model, exc_info=True)
                     ip = ""
 
                 conn    = CONN_ETHERNET if ip else CONN_CAMERA
@@ -461,7 +478,9 @@ class CameraScanner:
                     descriptor      = descriptor,
                 ))
             except Exception:
-                continue   # skip malformed device info
+                log.debug("CameraScanner._scan_pylon: skipping malformed Pylon "
+                          "device info entry", exc_info=True)
+                continue
 
         return results, None
 
@@ -590,6 +609,8 @@ class DeviceScanner:
                     if err:
                         report.errors[name] = err
             except Exception as e:
+                log.warning("DeviceScanner: %s scanner raised an unexpected exception",
+                            name, exc_info=True)
                 with lock:
                     report.errors[name] = str(e)
             if progress_cb:
