@@ -250,7 +250,11 @@ class _DeviceListPanel(QWidget):
         root.addWidget(self._status)
 
         self._scan_btn.clicked.connect(self.start_scan)
-        self._populate()
+        # Defer the initial populate so the dialog appears instantly.
+        # Calling _populate() synchronously here creates 20+ widget hierarchies
+        # on the GUI thread before the window is shown, which blocks for
+        # 5-10 seconds on Windows due to Qt's stylesheet cascade evaluation.
+        QTimer.singleShot(0, self._populate)
 
     def _populate(self):
         # Clear existing rows and section headers
@@ -308,26 +312,37 @@ class _DeviceListPanel(QWidget):
         self._status.setText("Scanning all ports…")
 
         def _run():
-            scanner = DeviceScanner()
-            report  = scanner.scan(
-                include_network=self._net_chk.isChecked(),
-                progress_cb=lambda msg: QTimer.singleShot(
-                    0, lambda m=msg: self._status.setText(m)))
-            self._mgr.update_from_scan(report)
-            QTimer.singleShot(0, self._on_scan_done)
+            try:
+                scanner = DeviceScanner()
+                report  = scanner.scan(
+                    include_network=self._net_chk.isChecked(),
+                    progress_cb=lambda msg: QTimer.singleShot(
+                        0, lambda m=msg: self._status.setText(m)))
+                self._mgr.update_from_scan(report)
+            except Exception as exc:
+                QTimer.singleShot(0, lambda e=str(exc):
+                    self._status.setText(f"Scan error: {e}"))
+            finally:
+                QTimer.singleShot(0, self._on_scan_done)
 
         threading.Thread(target=_run, daemon=True).start()
 
     def _on_scan_done(self):
-        self._populate()
-        self._scan_btn.setEnabled(True)
-        self._scan_btn.setText("🔍  Scan")
-        entries = self._mgr.all()
-        found   = sum(1 for e in entries
-                      if e.state != DeviceState.ABSENT)
-        self._status.setText(
-            f"{found} device(s) found  ·  "
-            f"{sum(1 for e in entries if e.is_connected)} connected")
+        try:
+            self._populate()
+        except Exception:
+            pass
+        try:
+            self._scan_btn.setEnabled(True)
+            self._scan_btn.setText("🔍  Scan")
+            entries = self._mgr.all()
+            found   = sum(1 for e in entries
+                          if e.state != DeviceState.ABSENT)
+            self._status.setText(
+                f"{found} device(s) found  ·  "
+                f"{sum(1 for e in entries if e.is_connected)} connected")
+        except RuntimeError:
+            pass  # panel was destroyed before scan finished
 
 
 # ------------------------------------------------------------------ #
@@ -1086,9 +1101,13 @@ class DeviceManagerDialog(QDialog):
 
     def _initial_scan(self):
         def _run():
-            from hardware.device_scanner import DeviceScanner
-            scanner = DeviceScanner()
-            report  = scanner.scan(include_network=False)
-            self._mgr.update_from_scan(report)
-            QTimer.singleShot(0, self._list_panel._on_scan_done)
+            try:
+                from hardware.device_scanner import DeviceScanner
+                scanner = DeviceScanner()
+                report  = scanner.scan(include_network=False)
+                self._mgr.update_from_scan(report)
+            except Exception:
+                pass
+            finally:
+                QTimer.singleShot(0, self._list_panel._on_scan_done)
         threading.Thread(target=_run, daemon=True).start()
