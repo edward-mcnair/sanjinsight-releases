@@ -536,15 +536,21 @@ class _DeviceProfilePanel(QWidget):
                     ports = []
 
                 def _apply():
-                    combo.clear()
-                    for p in ports:
-                        combo.addItem(p)
-                    if addr and addr not in ports:
-                        combo.insertItem(0, addr)
-                    idx = combo.findText(addr or "")
-                    if idx >= 0:
-                        combo.setCurrentIndex(idx)
-                    combo.setEnabled(True)
+                    # Guard: the combo (and its parent panel) may have been
+                    # deleted via deleteLater() if the user clicked a different
+                    # device or the dialog was closed before the scan finished.
+                    try:
+                        combo.clear()
+                        for p in ports:
+                            combo.addItem(p)
+                        if addr and addr not in ports:
+                            combo.insertItem(0, addr)
+                        idx = combo.findText(addr or "")
+                        if idx >= 0:
+                            combo.setCurrentIndex(idx)
+                        combo.setEnabled(True)
+                    except RuntimeError:
+                        pass  # widget was deleted; silently discard
 
                 QTimer.singleShot(0, _apply)
 

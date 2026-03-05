@@ -1652,7 +1652,7 @@ if __name__ == "__main__":
     hw_service.log_message.connect(signals.log_message)
     hw_service.device_connected.connect(
         lambda key, ok: signals.log_message.emit(
-            f"{{'✓' if ok else '✗'}} {key}: {{'connected' if ok else 'connection failed'}}"))
+            f"{'✓' if ok else '✗'} {key}: {'connected' if ok else 'connection failed'}"))
 
     # ── High-DPI support ──────────────────────────────────────────────
     # MUST be set before QApplication() is created.
