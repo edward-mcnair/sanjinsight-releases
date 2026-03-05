@@ -125,14 +125,14 @@ class _DeviceRow(QWidget):
 
         self._addr = QLabel("")
         self._addr.setStyleSheet(
-            _pt("font-family:Menlo,monospace; font-size:7.5pt; color:#555;"))
+            _pt("font-family:Menlo,monospace; font-size:8.5pt; color:#888;"))
         self._addr.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
         conn_icon = CONN_ICONS.get(
             entry.descriptor.connection_type, "?")
         icon_lbl = QLabel(conn_icon)
         # color:#777 — visible against the dark background (#333 was near-invisible)
-        icon_lbl.setStyleSheet(_pt("font-size:8pt; color:#777;"))
+        icon_lbl.setStyleSheet(_pt("font-size:8.5pt; color:#777;"))
         icon_lbl.setFixedWidth(18 if sys.platform == 'win32' else 14)
 
         lay.addWidget(self._dot)
@@ -145,10 +145,10 @@ class _DeviceRow(QWidget):
 
     def update_entry(self, entry: DeviceEntry):
         self._dot.setStyleSheet(
-            _pt(f"color:{entry.status_color}; font-size:8pt;"))
+            _pt(f"color:{entry.status_color}; font-size:8.5pt;"))
         self._name.setStyleSheet(
             _pt(f"font-size:8.5pt; "
-                f"color:{'#ccc' if entry.state != DeviceState.ABSENT else '#444'};"
+                f"color:{'#ccc' if entry.state != DeviceState.ABSENT else '#888'};"
                 ))
         addr = entry.address
         if len(addr) > 22:
@@ -187,7 +187,8 @@ class _DeviceListPanel(QWidget):
     def __init__(self, device_manager: DeviceManager):
         super().__init__()
         self._mgr   = device_manager
-        self._rows:  Dict[str, _DeviceRow] = {}
+        self._rows:    Dict[str, _DeviceRow] = {}
+        self._sec_hdrs: list = []          # section-header QLabels (cleared on repopulate)
         self._selected_uid: Optional[str] = None
         self.setMinimumWidth(180)
 
@@ -203,14 +204,14 @@ class _DeviceListPanel(QWidget):
         hl.setContentsMargins(12, 0, 8, 0)
         title = QLabel("DEVICES")
         title.setStyleSheet(
-            "font-size:7.5pt; letter-spacing:2px; color:#444;")
+            "font-size:9.5pt; letter-spacing:2px; color:#888;")
         self._scan_btn = QPushButton("🔍  Scan")
         self._scan_btn.setFixedHeight(24)
         self._scan_btn.setStyleSheet("""
             QPushButton {
                 background:#1a1a1a; color:#00d4aa;
                 border:1px solid #00d4aa33; border-radius:3px;
-                font-size:8pt; padding:0 8px;
+                font-size:8.5pt; padding:0 8px;
             }
             QPushButton:hover { background:#0d2a1a; }
             QPushButton:disabled { color:#333; border-color:#222; }
@@ -221,7 +222,7 @@ class _DeviceListPanel(QWidget):
             "Also scan the local subnet for Ethernet instruments.\n"
             "Slower (~3 s) — disable on corporate networks with IDS.")
         self._net_chk.setStyleSheet(
-            "QCheckBox { color:#555; font-size:8pt; } "
+            "QCheckBox { color:#888; font-size:8.5pt; } "
             "QCheckBox::indicator { width:12px; height:12px; }")
         hl.addWidget(title, 1)
         hl.addWidget(self._net_chk)
@@ -244,7 +245,7 @@ class _DeviceListPanel(QWidget):
         # Scan status
         self._status = QLabel("")
         self._status.setStyleSheet(
-            "font-size:7.5pt; color:#444; padding:4px 12px;")
+            "font-size:8.5pt; color:#888; padding:4px 12px;")
         self._status.setWordWrap(True)
         root.addWidget(self._status)
 
@@ -252,11 +253,15 @@ class _DeviceListPanel(QWidget):
         self._populate()
 
     def _populate(self):
-        # Clear existing rows
+        # Clear existing rows and section headers
         for row in list(self._rows.values()):
             self._layout.removeWidget(row)
             row.deleteLater()
         self._rows.clear()
+        for hdr in self._sec_hdrs:
+            self._layout.removeWidget(hdr)
+            hdr.deleteLater()
+        self._sec_hdrs.clear()
 
         entries = self._mgr.all()
         by_type: Dict[str, list] = {t: [] for t in TYPE_ORDER}
@@ -271,10 +276,11 @@ class _DeviceListPanel(QWidget):
             # Section header
             sec = QLabel(TYPE_LABELS.get(dtype, dtype).upper())
             sec.setStyleSheet(
-                "font-size:7pt; letter-spacing:1.5px; color:#333;"
+                "font-size:9.5pt; letter-spacing:1.5px; color:#777;"
                 " padding:6px 10px 2px 10px;")
             idx = self._layout.count() - 1
             self._layout.insertWidget(idx, sec)
+            self._sec_hdrs.append(sec)
 
             for entry in sorted(group, key=lambda e: e.display_name):
                 row = _DeviceRow(entry)
@@ -345,7 +351,7 @@ class _DeviceProfilePanel(QWidget):
         hl  = QHBoxLayout(hdr)
         hl.setContentsMargins(12, 0, 12, 0)
         t = QLabel("DEVICE PROFILE")
-        t.setStyleSheet("font-size:7.5pt; letter-spacing:2px; color:#444;")
+        t.setStyleSheet("font-size:9.5pt; letter-spacing:2px; color:#888;")
         hl.addWidget(t)
         root.addWidget(hdr)
 
@@ -384,7 +390,7 @@ class _DeviceProfilePanel(QWidget):
     def _show_placeholder(self):
         self._clear()
         lbl = QLabel("Select a device to view its profile.")
-        lbl.setStyleSheet("color:#333; font-size:9pt; font-style:italic;")
+        lbl.setStyleSheet("color:#888; font-size:8.5pt; font-style:italic;")
         lbl.setAlignment(Qt.AlignCenter)
         self._body_layout.addStretch()
         self._body_layout.addWidget(lbl)
@@ -423,7 +429,7 @@ class _DeviceProfilePanel(QWidget):
         badge.setStyleSheet(
             f"background:{entry.status_color}22; color:{entry.status_color};"
             f" border:1px solid {entry.status_color}44;"
-            f" border-radius:4px; font-size:8pt; padding:0 8px;")
+            f" border-radius:4px; font-size:8.5pt; padding:0 8px;")
         top.addWidget(name_lbl, 1)
         top.addWidget(badge)
         self._body_layout.addLayout(top)
@@ -432,7 +438,7 @@ class _DeviceProfilePanel(QWidget):
         if desc.description:
             desc_lbl = QLabel(desc.description)
             desc_lbl.setWordWrap(True)
-            desc_lbl.setStyleSheet("font-size:8.5pt; color:#555;")
+            desc_lbl.setStyleSheet("font-size:8.5pt; color:#888;")
             self._body_layout.addWidget(desc_lbl)
 
         sep = QFrame()
@@ -460,11 +466,11 @@ class _DeviceProfilePanel(QWidget):
 
         for r, (k, v) in enumerate(rows):
             kl = QLabel(k)
-            kl.setStyleSheet("font-size:8pt; color:#444;")
+            kl.setStyleSheet("font-size:8.5pt; color:#888;")
             kl.setFixedWidth(110)
             vl = QLabel(str(v))
             vl.setStyleSheet(
-                f"font-family:Menlo,monospace; font-size:8pt; "
+                f"font-family:Menlo,monospace; font-size:8.5pt; "
                 f"color:{'#ff5555' if k == 'Last Error' else '#aaa'}; "
                 f"word-break:break-all;")
             vl.setWordWrap(True)
@@ -485,13 +491,13 @@ class _DeviceProfilePanel(QWidget):
                 f'<a href="{desc.datasheet_url}" style="color:#00d4aa66;">'
                 f'Datasheet / Documentation</a>')
             ds.setOpenExternalLinks(True)
-            ds.setStyleSheet("font-size:8pt;")
+            ds.setStyleSheet("font-size:8.5pt;")
             self._body_layout.addWidget(ds)
 
         if desc.notes:
             notes = QLabel(f"ⓘ  {desc.notes}")
             notes.setWordWrap(True)
-            notes.setStyleSheet("font-size:8pt; color:#444; font-style:italic;")
+            notes.setStyleSheet("font-size:8.5pt; color:#888; font-style:italic;")
             self._body_layout.addWidget(notes)
 
         # ---- Action buttons ----
@@ -652,7 +658,7 @@ class _DeviceProfilePanel(QWidget):
 
     def _sublabel(self, text: str) -> QLabel:
         l = QLabel(text)
-        l.setStyleSheet("font-size:8pt; color:#444;")
+        l.setStyleSheet("font-size:8.5pt; color:#888;")
         return l
 
 
@@ -678,7 +684,7 @@ class _DriverCard(QFrame):
         # Top row: name + version badge
         top = QHBoxLayout()
         name = QLabel(entry.display_name)
-        name.setStyleSheet("font-size:9pt; font-weight:bold; color:#bbb;")
+        name.setStyleSheet("font-size:9.5pt; font-weight:bold; color:#bbb;")
 
         ver_color = "#00d4aa" if not entry.already_current else "#444"
         ver_bg    = "#0d2a1a"  if not entry.already_current else "#1a1a1a"
@@ -691,7 +697,7 @@ class _DriverCard(QFrame):
         ver_badge.setStyleSheet(
             f"background:{ver_bg}; color:{ver_color}; "
             f"border:1px solid {ver_color}44; border-radius:3px; "
-            f"font-size:7.5pt; font-family:Menlo,monospace;"
+            f"font-size:8.5pt; font-family:Menlo,monospace;"
             f" padding:1px 6px;")
         top.addWidget(name, 1)
         top.addWidget(ver_badge)
@@ -700,7 +706,7 @@ class _DriverCard(QFrame):
         # Changelog
         cl = QLabel(entry.changelog[:90] + "…"
                     if len(entry.changelog) > 90 else entry.changelog)
-        cl.setStyleSheet("font-size:8pt; color:#444;")
+        cl.setStyleSheet("font-size:8.5pt; color:#888;")
         cl.setWordWrap(True)
         lay.addWidget(cl)
 
@@ -709,8 +715,8 @@ class _DriverCard(QFrame):
         hl_lbl = QLabel(
             "⚡ Hot-loadable" if entry.hot_loadable else "↻ Requires restart")
         hl_lbl.setStyleSheet(
-            f"font-size:7.5pt; "
-            f"color:{'#00d4aa66' if entry.hot_loadable else '#44444a'};")
+            f"font-size:8.5pt; "
+            f"color:{'#00d4aa66' if entry.hot_loadable else '#888'};")
 
         if entry.already_current:
             self._btn = QPushButton("✓  Up to date")
@@ -718,14 +724,14 @@ class _DriverCard(QFrame):
             self._btn.setStyleSheet(
                 "QPushButton{background:#111; color:#333; "
                 "border:1px solid #1e1e1e; border-radius:3px; "
-                "font-size:8pt; padding:2px 10px;}")
+                "font-size:8.5pt; padding:2px 10px;}")
         else:
             self._btn = QPushButton("⬇  Install")
             self._btn.setStyleSheet("""
                 QPushButton {
                     background:#0d2a1a; color:#00d4aa;
                     border:1px solid #00d4aa44; border-radius:3px;
-                    font-size:8pt; padding:2px 10px;
+                    font-size:8.5pt; padding:2px 10px;
                 }
                 QPushButton:hover { background:#0d3a22; }
                 QPushButton:disabled { color:#333; border-color:#1e1e1e;
@@ -765,14 +771,14 @@ class _DriverStorePanel(QWidget):
         hl  = QHBoxLayout(hdr)
         hl.setContentsMargins(12, 0, 8, 0)
         t = QLabel("DRIVER STORE")
-        t.setStyleSheet("font-size:7.5pt; letter-spacing:2px; color:#444;")
+        t.setStyleSheet("font-size:9.5pt; letter-spacing:2px; color:#888;")
         self._refresh_btn = QPushButton("🌐  Check")
         self._refresh_btn.setFixedHeight(24)
         self._refresh_btn.setStyleSheet("""
             QPushButton {
                 background:#1a1a2a; color:#6688cc;
                 border:1px solid #33448866; border-radius:3px;
-                font-size:8pt; padding:0 8px;
+                font-size:8.5pt; padding:0 8px;
             }
             QPushButton:hover { background:#1e1e3a; }
             QPushButton:disabled { color:#333; border-color:#222; }
@@ -784,7 +790,7 @@ class _DriverStorePanel(QWidget):
         # Progress / status bar
         self._status = QLabel("Click 'Check' to fetch available driver updates.")
         self._status.setStyleSheet(
-            "font-size:8pt; color:#444; padding:6px 12px; "
+            "font-size:8.5pt; color:#888; padding:6px 12px; "
             "background:#0d0d0d; border-bottom:1px solid #1a1a1a;")
         self._status.setWordWrap(True)
         root.addWidget(self._status)
@@ -840,7 +846,7 @@ class _DriverStorePanel(QWidget):
         if updates:
             sec = QLabel(f"UPDATES AVAILABLE  ({len(updates)})")
             sec.setStyleSheet(
-                "font-size:7pt; letter-spacing:1.5px; color:#00d4aa66; "
+                "font-size:9.5pt; letter-spacing:1.5px; color:#00d4aa66; "
                 "padding:4px 2px;")
             self._card_layout.insertWidget(
                 self._card_layout.count() - 1, sec)
@@ -860,7 +866,7 @@ class _DriverStorePanel(QWidget):
         self._refresh_btn.setEnabled(True)
         self._status.setText(f"⚠  {err}")
         self._status.setStyleSheet(
-            "font-size:8pt; color:#ff8800; padding:6px 12px; "
+            "font-size:8.5pt; color:#ff8800; padding:6px 12px; "
             "background:#0d0d0d; border-bottom:1px solid #1a1a1a;")
 
     def _install_driver(self, entry: RemoteDriverEntry):
@@ -916,7 +922,7 @@ class DeviceManagerDialog(QDialog):
                 background:#111;
             }
             QGroupBox {
-                color:#555; font-size:8pt; letter-spacing:1px;
+                color:#555; font-size:9.5pt; letter-spacing:1px;
                 border:1px solid #1e1e1e; border-radius:4px;
                 margin-top:10px; padding-top:10px;
             }
@@ -924,7 +930,7 @@ class DeviceManagerDialog(QDialog):
                 subcontrol-origin:margin; left:8px;
                 padding:0 4px;
             }
-            QLabel { color:#888; font-size:8pt; }
+            QLabel { color:#888; font-size:8.5pt; }
             QComboBox, QLineEdit, QSpinBox, QDoubleSpinBox {
                 background:#1a1a1a; color:#aaa;
                 border:1px solid #2a2a2a; border-radius:3px;
@@ -974,7 +980,7 @@ class DeviceManagerDialog(QDialog):
         self._log_btn.setFixedSize(72, 28)
         self._log_btn.setCheckable(True)
         self._log_btn.setStyleSheet(
-            "QPushButton { font-size:8pt; padding:0 6px; }"
+            "QPushButton { font-size:8.5pt; padding:0 6px; }"
             "QPushButton:checked { background:#0d2a1a; color:#00d4aa; "
             "border-color:#00d4aa44; }")
         self._log_btn.clicked.connect(self._toggle_log)
