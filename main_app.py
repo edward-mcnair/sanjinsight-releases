@@ -69,6 +69,10 @@ from profiles.profiles        import MaterialProfile
 from profiles.profile_manager import ProfileManager
 from profiles.profile_tab     import ProfileTab
 from ui.settings_tab          import SettingsTab
+from ui.widgets.safe_mode_banner import SafeModeBanner
+from hardware.requirements_resolver import (
+    check_readiness, OP_ACQUIRE, OP_SCAN,
+)
 
 # ------------------------------------------------------------------ #
 #  App-wide style                                                     #
@@ -406,6 +410,13 @@ class MainWindow(QMainWindow):
         # Header
         self._header = StatusHeader()
         root.addWidget(self._header)
+
+        # Safe-mode banner — shown when a required device is absent.
+        # Sits between the header and content area; hidden by default.
+        self._safe_banner = SafeModeBanner()
+        self._safe_banner.device_manager_requested.connect(
+            self._open_device_manager)
+        root.addWidget(self._safe_banner)
 
         # Tabs
         # Mode stack — index 0 = Standard (wizard), index 1 = Advanced (tabs)
@@ -804,6 +815,42 @@ class MainWindow(QMainWindow):
         except Exception:
             log.debug("hotplug refresh failed", exc_info=True)
 
+        # Re-evaluate required-device readiness after every hotplug event
+        self._update_safe_mode()
+
+    def _update_safe_mode(self) -> None:
+        """
+        Re-evaluate operation readiness and update the safe-mode banner.
+
+        Uses OP_ACQUIRE as the "most demanding single-shot operation" to
+        determine whether the required camera is present.  OP_SCAN
+        additionally requires a stage; if the scan is the only blocked
+        operation we show a degraded-mode warning instead of full safe mode.
+
+        Called:
+          • on every device hotplug / disconnect event
+          • once at startup (first showEvent)
+        """
+        try:
+            acq_rdy  = check_readiness(OP_ACQUIRE, app_state)
+            scan_rdy = check_readiness(OP_SCAN,    app_state)
+
+            if not acq_rdy.ready:
+                # Required device absent → activate safe mode / block start
+                self._device_mgr.set_safe_mode(acq_rdy.blocked_reason)
+                self._safe_banner.activate(acq_rdy.blocked_reason)
+            else:
+                self._device_mgr.clear_safe_mode()
+                self._safe_banner.deactivate()
+
+                # Scan additionally requires a stage — show a softer warning
+                # in the scan tab title if the stage is missing.
+                if not scan_rdy.ready:
+                    log.debug("Scan blocked (stage absent): %s",
+                              scan_rdy.blocked_reason)
+        except Exception:
+            log.debug("_update_safe_mode failed", exc_info=True)
+
     def _open_device_manager(self):
         self._device_mgr_dlg.show()
         self._device_mgr_dlg.raise_()
@@ -957,8 +1004,22 @@ class MainWindow(QMainWindow):
         try:
             if self._scan_tab._btn_runner.is_running:
                 self._scan_tab._abort_btn.click()
-            else:
-                self._scan_tab._run_btn.click()
+                return
+            # Gate on required devices (camera + stage) before starting
+            rdns = check_readiness(OP_SCAN, app_state)
+            if not rdns.ready:
+                box = QMessageBox(self)
+                box.setWindowTitle("Cannot Start Scan")
+                box.setIcon(QMessageBox.Critical)
+                box.setText(
+                    f"Scan is blocked because a required device is missing.\n\n"
+                    f"{rdns.blocked_reason}\n\n"
+                    f"Connect the device in Device Manager to proceed."
+                )
+                box.setStandardButtons(QMessageBox.Ok)
+                box.exec_()
+                return
+            self._scan_tab._run_btn.click()
         except Exception:
             pass
 
@@ -1421,6 +1482,7 @@ class MainWindow(QMainWindow):
         """
         Readiness gate: intercept acquisition start, warn or block on C/D grades.
 
+        Required-device check (safe mode) → hard block, no override.
         Grade A/B → proceed immediately.
         Grade C   → warning dialog, user can override.
         Grade D   → critical dialog, user can still override but is strongly warned.
@@ -1428,6 +1490,23 @@ class MainWindow(QMainWindow):
         Always captures the pre-acquisition grade and issue snapshot so the
         post-acquisition session report can reference conditions at start time.
         """
+        # ── Required-device gate (safe mode) ─────────────────────────────
+        # Hard block — no override path — if a required device is absent.
+        if self._device_mgr.safe_mode:
+            rdns = check_readiness(OP_ACQUIRE, app_state)
+            msg  = rdns.blocked_reason or self._device_mgr.safe_mode_reason
+            box  = QMessageBox(self)
+            box.setWindowTitle("Cannot Start Acquisition")
+            box.setIcon(QMessageBox.Critical)
+            box.setText(
+                f"Acquisition is blocked because a required device is missing.\n\n"
+                f"{msg}\n\n"
+                f"Connect the device in Device Manager to proceed."
+            )
+            box.setStandardButtons(QMessageBox.Ok)
+            box.exec_()
+            return
+
         try:
             results = self._diagnostic_engine.evaluate()
             grade   = self._compute_grade(results)
@@ -1528,6 +1607,9 @@ class MainWindow(QMainWindow):
         if not getattr(self, '_layout_restored', False):
             self._layout_restored = True
             self._restore_layout()
+            # Evaluate device readiness at startup so the safe-mode banner
+            # appears immediately if hardware is not connected.
+            self._update_safe_mode()
 
     def _restore_layout(self):
         """Restore persisted window geometry and tab splitter sizes."""

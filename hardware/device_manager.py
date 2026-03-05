@@ -163,6 +163,10 @@ class DeviceManager:
         self._status_cb: Optional[Callable[[str, DeviceState, str], None]] = None
         self._log_cb:    Optional[Callable[[str], None]] = None
 
+        # Safe-mode state — set when a required device is absent
+        self._safe_mode:        bool = False
+        self._safe_mode_reason: str  = ""
+
         # Initialise an entry for every known device
         for uid, desc in DEVICE_REGISTRY.items():
             self._entries[uid] = DeviceEntry(descriptor=desc)
@@ -590,3 +594,62 @@ class DeviceManager:
             entry.driver_ver = new_version
             return True
         return False
+
+    # ---------------------------------------------------------------- #
+    #  Safe-mode state machine                                          #
+    # ---------------------------------------------------------------- #
+
+    @property
+    def safe_mode(self) -> bool:
+        """True when a required device is absent and operations must be blocked."""
+        return self._safe_mode
+
+    @property
+    def safe_mode_reason(self) -> str:
+        """Human-readable explanation of why safe mode is active."""
+        return self._safe_mode_reason
+
+    def set_safe_mode(self, reason: str) -> None:
+        """
+        Activate safe mode.
+
+        Safe mode is set by the application when ``check_readiness()``
+        finds that one or more *required* devices are missing.  The
+        reason string is displayed in the UI banner and recorded in the
+        event timeline.
+
+        Calling this when safe mode is already active with the same
+        reason is a no-op (avoids spurious event-bus traffic).
+        """
+        if self._safe_mode and self._safe_mode_reason == reason:
+            return
+        self._safe_mode        = True
+        self._safe_mode_reason = reason
+        log.warning("Safe mode ACTIVE: %s", reason)
+        try:
+            from events import emit_warning, EVT_SAFE_MODE_ACTIVE
+            emit_warning("hardware.device_manager", EVT_SAFE_MODE_ACTIVE,
+                         f"Safe mode active: {reason}", reason=reason)
+        except Exception:
+            log.debug("DeviceManager.set_safe_mode: event bus emit failed",
+                      exc_info=True)
+
+    def clear_safe_mode(self) -> None:
+        """
+        Deactivate safe mode.
+
+        Called when ``check_readiness()`` confirms that all required
+        devices for the most demanding operation are present.
+        """
+        if not self._safe_mode:
+            return
+        self._safe_mode        = False
+        self._safe_mode_reason = ""
+        log.info("Safe mode CLEARED — all required devices present")
+        try:
+            from events import emit_info, EVT_SAFE_MODE_CLEARED
+            emit_info("hardware.device_manager", EVT_SAFE_MODE_CLEARED,
+                      "Safe mode cleared — all required devices present")
+        except Exception:
+            log.debug("DeviceManager.clear_safe_mode: event bus emit failed",
+                      exc_info=True)
