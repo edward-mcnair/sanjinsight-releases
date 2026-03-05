@@ -372,22 +372,10 @@ class StatusHeader(QWidget):
             QPushButton:hover { background:#222; }
         """)
 
-        # Load the SVG as a QIcon — Qt resolves the correct SVG plugin on every
-        # platform without needing a manual QSvgRenderer/QPixmap/QPainter chain
-        # (which was silently failing on Windows and falling back to "HW" text).
-        # _MEIPASS handles PyInstaller frozen builds; falls back to source tree.
-        import sys as _sys
-        from PyQt5.QtGui import QIcon as _QIcon
-        from PyQt5.QtCore import QSize as _QSize
-        _base = getattr(_sys, "_MEIPASS", None) or os.path.normpath(
-            os.path.join(os.path.dirname(__file__), "..", ".."))
-        _svg = os.path.join(_base, "assets", "icon-device-manager.svg")
-        _icon = _QIcon(_svg)
-        if not _icon.isNull():
-            btn.setIcon(_icon)
-            btn.setIconSize(_QSize(22, 22))
-        else:
-            btn.setText("HW")
+        # Use qtawesome for a cross-platform vector icon (the old SVG file
+        # path was silently failing on Windows and falling back to "HW" text).
+        from ui.icons import set_btn_icon
+        set_btn_icon(btn, "fa5s.server", color="#00d4aa", size=18)
 
         btn.clicked.connect(callback)
         self.layout().addWidget(btn)
