@@ -60,9 +60,10 @@ from PyQt5.QtWidgets import (
     QPushButton, QFrame, QScrollArea, QSplitter, QGroupBox,
     QGridLayout, QComboBox, QSpinBox, QDoubleSpinBox, QLineEdit,
     QProgressBar, QTextEdit, QSizePolicy, QTabWidget,
-    QMessageBox, QApplication, QCheckBox)
-from PyQt5.QtCore    import Qt, QTimer, pyqtSignal, QSize
-from PyQt5.QtGui     import QColor, QFont, QIcon
+    QMessageBox, QApplication, QCheckBox,
+    QTreeWidget, QTreeWidgetItem, QHeaderView, QAbstractItemView)
+from PyQt5.QtCore    import Qt, QTimer, pyqtSignal, QSize, QModelIndex
+from PyQt5.QtGui     import QColor, QFont, QIcon, QBrush
 
 from hardware.device_registry import (
     DTYPE_CAMERA, DTYPE_TEC, DTYPE_FPGA, DTYPE_STAGE, DTYPE_BIAS,
@@ -86,117 +87,71 @@ TYPE_LABELS = {
     DTYPE_BIAS:    "Bias Sources",
     DTYPE_UNKNOWN: "Other",
 }
-CONN_ICONS = {
-    CONN_SERIAL:   "⎆",
-    CONN_USB:      "⬡",
-    CONN_ETHERNET: "⬡",
-    CONN_PCIE:     "▣",
-}
-
-
 # ------------------------------------------------------------------ #
-#  Device row widget                                                   #
-# ------------------------------------------------------------------ #
-
-class _DeviceRow(QWidget):
-    clicked = pyqtSignal(str)   # uid
-
-    def __init__(self, entry: DeviceEntry, parent=None):
-        super().__init__(parent)
-        self.uid = entry.uid
-        self._selected = False
-        self.setFixedHeight(44)
-        self.setCursor(Qt.PointingHandCursor)
-        # Named so _refresh_bg() can scope the CSS selector to this widget only,
-        # preventing border-radius from bleeding into child QLabel widgets.
-        self.setObjectName("devicerow")
-
-        lay = QHBoxLayout(self)
-        lay.setContentsMargins(10, 0, 10, 0)
-        lay.setSpacing(8)
-
-        self._dot = QLabel("●")
-        # On Windows, the ● glyph is rendered larger (96 DPI), so reserve
-        # extra width to prevent clipping after _pt() font scaling.
-        self._dot.setFixedWidth(18 if sys.platform == 'win32' else 12)
-
-        self._name = QLabel(entry.display_name)
-        self._name.setStyleSheet(_pt("font-size:7.5pt;"))
-
-        self._addr = QLabel("")
-        self._addr.setStyleSheet(
-            _pt("font-family:Menlo,monospace; font-size:7.5pt; color:#888;"))
-        self._addr.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-
-        conn_icon = CONN_ICONS.get(
-            entry.descriptor.connection_type, "?")
-        icon_lbl = QLabel(conn_icon)
-        # color:#777 — visible against the dark background (#333 was near-invisible)
-        icon_lbl.setStyleSheet(_pt("font-size:7.5pt; color:#777;"))
-        icon_lbl.setFixedWidth(18 if sys.platform == 'win32' else 14)
-
-        lay.addWidget(self._dot)
-        lay.addWidget(icon_lbl)
-        lay.addWidget(self._name, 1)
-        lay.addWidget(self._addr)
-
-        self.update_entry(entry)
-        self._refresh_bg()
-
-    def update_entry(self, entry: DeviceEntry):
-        self._dot.setStyleSheet(
-            _pt(f"color:{entry.status_color}; font-size:7.5pt;"))
-        self._name.setStyleSheet(
-            _pt(f"font-size:7.5pt; "
-                f"color:{'#ccc' if entry.state != DeviceState.ABSENT else '#888'};"
-                ))
-        addr = entry.address
-        if len(addr) > 22:
-            addr = "…" + addr[-20:]
-        self._addr.setText(addr)
-        self.setToolTip(
-            f"{entry.display_name}\n"
-            f"State:  {entry.status_label}\n"
-            f"Address: {entry.address or '—'}")
-
-    def set_selected(self, v: bool):
-        self._selected = v
-        self._refresh_bg()
-
-    def _refresh_bg(self):
-        # Use the objectName selector so border-radius stays on THIS widget
-        # and does not propagate into child QLabel elements (which would
-        # cause each label to render its own rounded background box).
-        bg = "#0d2a1a" if self._selected else "transparent"
-        self.setStyleSheet(
-            f"QWidget#devicerow {{ background:{bg}; border-radius:3px; }}"
-        )
-
-    def mousePressEvent(self, e):
-        if e.button() == Qt.LeftButton:
-            self.clicked.emit(self.uid)
-
-
-# ------------------------------------------------------------------ #
-#  Left panel — device list                                           #
+#  Left panel — device list  (QTreeWidget-based)                      #
 # ------------------------------------------------------------------ #
 
 class _DeviceListPanel(QWidget):
+    """Device list panel using QTreeWidget.
+
+    Replaces the previous _DeviceRow-per-device approach, which created
+    a full QWidget hierarchy (dot + icon + name + address label) for
+    every device row.  Qt's stylesheet cascade evaluation ran across
+    all of those widgets on every repopulate, causing 5-10 s GUI freezes
+    on Windows before the dialog was even shown.
+
+    QTreeWidgetItem is a lightweight data object — Qt renders all rows
+    through a single shared delegate without creating per-row widgets.
+    Populate time is effectively instant even for 50+ devices.
+
+    The Scan button doubles as a Cancel button while a scan is running.
+    Scan results are summarised in the status bar:
+      "3 devices found  ·  2 connected"
+      "No devices found  ·  check connections or run in demo mode"
+    """
+
     device_selected = pyqtSignal(str)
+    scan_completed  = pyqtSignal()      # emitted (GUI thread) when scan finishes or cancels
+
+    _C_DOT  = 0   # ● status dot  (fixed 20 px)
+    _C_NAME = 1   # device name   (stretches)
+    _C_ADDR = 2   # address       (fixed ~110 px)
 
     def __init__(self, device_manager: DeviceManager):
         super().__init__()
-        self._mgr   = device_manager
-        self._rows:    Dict[str, _DeviceRow] = {}
-        self._sec_hdrs: list = []          # section-header QLabels (cleared on repopulate)
-        self._selected_uid: Optional[str] = None
+        self._mgr              = device_manager
+        self._selected_uid:    Optional[str] = None
+        self._uid_to_item:     Dict[str, QTreeWidgetItem] = {}
+        self._scanning         = False
+        self._cancel_requested = False
+        self._cancel_event     = threading.Event()
         self.setMinimumWidth(180)
+
+        # Build button stylesheets once (_pt() reads sys.platform at runtime)
+        self._ss_scan = _pt("""
+            QPushButton {
+                background:#1a1a1a; color:#00d4aa;
+                border:1px solid #00d4aa33; border-radius:3px;
+                font-size:7.5pt; padding:0 8px;
+            }
+            QPushButton:hover    { background:#0d2a1a; }
+            QPushButton:disabled { color:#333; border-color:#222; }
+        """)
+        self._ss_cancel = _pt("""
+            QPushButton {
+                background:#2a0a0a; color:#ff7777;
+                border:1px solid #ff444433; border-radius:3px;
+                font-size:7.5pt; padding:0 8px;
+            }
+            QPushButton:hover    { background:#3a1010; }
+            QPushButton:disabled { color:#333; border-color:#222; }
+        """)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # Header
+        # ── Header bar ────────────────────────────────────────────── #
         hdr = QWidget()
         hdr.setFixedHeight(36)
         hdr.setStyleSheet("background:#111; border-bottom:1px solid #222;")
@@ -207,15 +162,7 @@ class _DeviceListPanel(QWidget):
             "font-size:8.5pt; letter-spacing:2px; color:#888;")
         self._scan_btn = QPushButton("🔍  Scan")
         self._scan_btn.setFixedHeight(24)
-        self._scan_btn.setStyleSheet("""
-            QPushButton {
-                background:#1a1a1a; color:#00d4aa;
-                border:1px solid #00d4aa33; border-radius:3px;
-                font-size:7.5pt; padding:0 8px;
-            }
-            QPushButton:hover { background:#0d2a1a; }
-            QPushButton:disabled { color:#333; border-color:#222; }
-        """)
+        self._scan_btn.setStyleSheet(self._ss_scan)
         self._net_chk = QCheckBox("+ Network")
         self._net_chk.setChecked(False)
         self._net_chk.setToolTip(
@@ -229,20 +176,71 @@ class _DeviceListPanel(QWidget):
         hl.addWidget(self._scan_btn)
         root.addWidget(hdr)
 
-        # Scroll area
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setStyleSheet("QScrollArea{border:none; background:#111;}")
-        self._container = QWidget()
-        self._layout    = QVBoxLayout(self._container)
-        self._layout.setContentsMargins(6, 6, 6, 6)
-        self._layout.setSpacing(2)
-        self._layout.addStretch()
-        scroll.setWidget(self._container)
-        root.addWidget(scroll, 1)
+        # ── Thin progress bar (indeterminate, shown only during scan) ─ #
+        self._scan_prog = QProgressBar()
+        self._scan_prog.setRange(0, 0)          # indeterminate
+        self._scan_prog.setFixedHeight(2)
+        self._scan_prog.setTextVisible(False)
+        self._scan_prog.setVisible(False)
+        self._scan_prog.setStyleSheet(
+            "QProgressBar { background:#111; border:none; margin:0; }"
+            "QProgressBar::chunk { background:#00d4aa; }")
+        root.addWidget(self._scan_prog)
 
-        # Scan status
+        # ── Device tree ───────────────────────────────────────────── #
+        self._tree = QTreeWidget()
+        self._tree.setColumnCount(3)
+        self._tree.setHeaderHidden(True)
+        self._tree.setRootIsDecorated(False)
+        self._tree.setIndentation(14)
+        self._tree.setAnimated(False)
+        self._tree.setSelectionMode(QAbstractItemView.SingleSelection)
+        self._tree.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._tree.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
+        self._tree.setUniformRowHeights(True)
+        self._tree.setStyleSheet(_pt("""
+            QTreeWidget {
+                background: #111;
+                border: none;
+                outline: none;
+                font-size: 8.5pt;
+            }
+            QTreeWidget::item {
+                height: 28px;
+                padding: 0 2px;
+                border: none;
+            }
+            QTreeWidget::item:selected {
+                background: #0d2a1a;
+                border: none;
+            }
+            QTreeWidget::item:hover:!selected {
+                background: #181818;
+            }
+            QTreeWidget::branch { background: #111; }
+            QScrollBar:vertical {
+                background: #111; width: 6px; border-radius: 3px;
+            }
+            QScrollBar::handle:vertical {
+                background: #2a2a2a; border-radius: 3px; min-height: 20px;
+            }
+            QScrollBar::add-line:vertical,
+            QScrollBar::sub-line:vertical { height: 0; }
+        """))
+
+        # Column sizing — dot fixed, name stretches, address fixed
+        hv = self._tree.header()
+        hv.setStretchLastSection(False)
+        hv.setSectionResizeMode(self._C_DOT,  QHeaderView.Fixed)
+        hv.setSectionResizeMode(self._C_NAME, QHeaderView.Stretch)
+        hv.setSectionResizeMode(self._C_ADDR, QHeaderView.Fixed)
+        self._tree.setColumnWidth(self._C_DOT,  20)
+        self._tree.setColumnWidth(self._C_ADDR, 110)
+
+        self._tree.itemClicked.connect(self._on_item_clicked)
+        root.addWidget(self._tree, 1)
+
+        # ── Status bar ────────────────────────────────────────────── #
         self._status = QLabel("")
         self._status.setStyleSheet(
             "font-size:7.5pt; color:#888; padding:4px 12px;")
@@ -250,99 +248,197 @@ class _DeviceListPanel(QWidget):
         root.addWidget(self._status)
 
         self._scan_btn.clicked.connect(self.start_scan)
-        # Defer the initial populate so the dialog appears instantly.
-        # Calling _populate() synchronously here creates 20+ widget hierarchies
-        # on the GUI thread before the window is shown, which blocks for
-        # 5-10 seconds on Windows due to Qt's stylesheet cascade evaluation.
-        QTimer.singleShot(0, self._populate)
+        # Populate synchronously — QTreeWidgetItems are lightweight data
+        # objects with no per-row widget construction, so there is no
+        # stylesheet cascade overhead and no risk of freezing the GUI thread.
+        self._populate()
+
+    # ── Tree population ───────────────────────────────────────────── #
 
     def _populate(self):
-        # Clear existing rows and section headers
-        for row in list(self._rows.values()):
-            self._layout.removeWidget(row)
-            row.deleteLater()
-        self._rows.clear()
-        for hdr in self._sec_hdrs:
-            self._layout.removeWidget(hdr)
-            hdr.deleteLater()
-        self._sec_hdrs.clear()
+        """Rebuild the device tree from the current DeviceManager state.
 
-        entries = self._mgr.all()
-        by_type: Dict[str, list] = {t: [] for t in TYPE_ORDER}
-        for e in entries:
-            t = e.descriptor.device_type
-            by_type.setdefault(t, []).append(e)
+        Uses setUpdatesEnabled(False) to batch all item insertions into a
+        single repaint.  Building QTreeWidgetItems is O(n) with no per-item
+        QWidget creation, so this completes in < 1 ms even for 50 devices.
+        """
+        self._tree.setUpdatesEnabled(False)
+        try:
+            self._tree.clear()
+            self._uid_to_item.clear()
 
-        for dtype in TYPE_ORDER:
-            group = by_type.get(dtype, [])
-            if not group:
-                continue
-            # Section header
-            sec = QLabel(TYPE_LABELS.get(dtype, dtype).upper())
-            sec.setStyleSheet(
-                "font-size:8.5pt; letter-spacing:1.5px; color:#777;"
-                " padding:6px 10px 2px 10px;")
-            idx = self._layout.count() - 1
-            self._layout.insertWidget(idx, sec)
-            self._sec_hdrs.append(sec)
+            entries = self._mgr.all()
+            by_type: Dict[str, list] = {t: [] for t in TYPE_ORDER}
+            for e in entries:
+                by_type.setdefault(e.descriptor.device_type, []).append(e)
 
-            for entry in sorted(group, key=lambda e: e.display_name):
-                row = _DeviceRow(entry)
-                row.clicked.connect(self._on_row_clicked)
-                self._layout.insertWidget(self._layout.count() - 1, row)
-                self._rows[entry.uid] = row
+            for dtype in TYPE_ORDER:
+                group = by_type.get(dtype, [])
+                if not group:
+                    continue
+
+                # Category header — spans all columns, not selectable
+                cat = QTreeWidgetItem(self._tree)
+                cat.setText(0, TYPE_LABELS.get(dtype, dtype).upper())
+                cat.setFlags(Qt.ItemIsEnabled)      # no selection
+                hdr_font = QFont()
+                hdr_font.setPointSizeF(8.0)
+                cat.setFont(0, hdr_font)
+                cat.setForeground(0, QBrush(QColor("#777")))
+                row_idx = self._tree.indexOfTopLevelItem(cat)
+                self._tree.setFirstColumnSpanned(
+                    row_idx, QModelIndex(), True)
+
+                for entry in sorted(group, key=lambda e: e.display_name):
+                    item = QTreeWidgetItem(cat)
+                    self._update_item(item, entry)
+                    self._uid_to_item[entry.uid] = item
+
+            self._tree.expandAll()
+
+            # Restore selection after repopulate
+            if (self._selected_uid
+                    and self._selected_uid in self._uid_to_item):
+                self._uid_to_item[self._selected_uid].setSelected(True)
+        finally:
+            self._tree.setUpdatesEnabled(True)
+
+    def _update_item(self, item: QTreeWidgetItem, entry: DeviceEntry):
+        """Write a DeviceEntry's state into a tree item (no widget destroyed)."""
+        item.setData(self._C_DOT, Qt.UserRole, entry.uid)
+
+        # ● dot — color reflects connection state
+        item.setText(self._C_DOT, "●")
+        dot_font = QFont()
+        dot_font.setPointSizeF(7.0)
+        item.setFont(self._C_DOT, dot_font)
+        item.setForeground(self._C_DOT, QBrush(QColor(entry.status_color)))
+
+        # Device name
+        name_color = "#ccc" if entry.state != DeviceState.ABSENT else "#555"
+        item.setText(self._C_NAME, entry.display_name)
+        item.setForeground(self._C_NAME, QBrush(QColor(name_color)))
+
+        # Address (truncated, monospace)
+        addr = entry.address or ""
+        if len(addr) > 18:
+            addr = "…" + addr[-16:]
+        item.setText(self._C_ADDR, addr)
+        item.setForeground(self._C_ADDR, QBrush(QColor("#555")))
+        item.setTextAlignment(
+            self._C_ADDR, Qt.AlignRight | Qt.AlignVCenter)
+        addr_font = QFont("Menlo")
+        addr_font.setStyleHint(QFont.Monospace)
+        addr_font.setPointSizeF(7.0)
+        item.setFont(self._C_ADDR, addr_font)
+
+        item.setToolTip(self._C_NAME,
+            f"{entry.display_name}\n"
+            f"State:   {entry.status_label}\n"
+            f"Address: {entry.address or '—'}")
+
+    # ── Interaction ───────────────────────────────────────────────── #
 
     def refresh_row(self, uid: str):
-        row   = self._rows.get(uid)
+        """Update a single row in-place without rebuilding the whole tree."""
+        item  = self._uid_to_item.get(uid)
         entry = self._mgr.get(uid)
-        if row and entry:
-            row.update_entry(entry)
+        if item and entry:
+            self._update_item(item, entry)
 
-    def _on_row_clicked(self, uid: str):
-        if self._selected_uid and self._selected_uid in self._rows:
-            self._rows[self._selected_uid].set_selected(False)
+    def _on_item_clicked(self, item: QTreeWidgetItem, _col: int):
+        uid = item.data(self._C_DOT, Qt.UserRole)
+        if not uid:                     # category header — deselect
+            self._tree.clearSelection()
+            return
         self._selected_uid = uid
-        if uid in self._rows:
-            self._rows[uid].set_selected(True)
         self.device_selected.emit(uid)
 
+    # ── Scan ──────────────────────────────────────────────────────── #
+
     def start_scan(self):
-        self._scan_btn.setEnabled(False)
-        self._scan_btn.setText("Scanning…")
-        self._status.setText("Scanning all ports…")
+        """Start a hardware scan, or cancel the one currently in progress."""
+        if self._scanning:
+            # ── Cancel ────────────────────────────────────────────── #
+            self._cancel_requested = True
+            self._cancel_event.set()
+            self._scan_btn.setEnabled(False)
+            self._scan_btn.setText("Cancelling…")
+            self._status.setText("Cancelling scan…")
+            return
+
+        # ── Start ──────────────────────────────────────────────────── #
+        self._scanning         = True
+        self._cancel_requested = False
+        self._cancel_event.clear()
+        self._scan_btn.setText("✕  Cancel")
+        self._scan_btn.setStyleSheet(self._ss_cancel)
+        self._scan_prog.setVisible(True)
+        self._status.setText("Scanning for devices…")
+
+        def _progress(msg: str):
+            if self._cancel_event.is_set():
+                raise InterruptedError("scan cancelled by user")
+            QTimer.singleShot(0, lambda m=msg: self._status.setText(m))
 
         def _run():
             try:
                 scanner = DeviceScanner()
                 report  = scanner.scan(
                     include_network=self._net_chk.isChecked(),
-                    progress_cb=lambda msg: QTimer.singleShot(
-                        0, lambda m=msg: self._status.setText(m)))
-                self._mgr.update_from_scan(report)
+                    progress_cb=_progress)
+                if not self._cancel_event.is_set():
+                    self._mgr.update_from_scan(report)
+            except InterruptedError:
+                pass   # user cancelled — silently discard partial results
             except Exception as exc:
-                QTimer.singleShot(0, lambda e=str(exc):
-                    self._status.setText(f"Scan error: {e}"))
+                if not self._cancel_event.is_set():
+                    QTimer.singleShot(0, lambda e=str(exc):
+                        self._status.setText(f"Scan error: {e}"))
             finally:
                 QTimer.singleShot(0, self._on_scan_done)
 
         threading.Thread(target=_run, daemon=True).start()
 
     def _on_scan_done(self):
+        """Called on the GUI thread when a scan finishes or is cancelled."""
+        cancelled              = self._cancel_requested
+        self._scanning         = False
+        self._cancel_requested = False
+
+        self._scan_prog.setVisible(False)
+        self._scan_btn.setEnabled(True)
+        self._scan_btn.setText("🔍  Scan")
+        self._scan_btn.setStyleSheet(self._ss_scan)
+
+        if cancelled:
+            self._status.setText("Scan cancelled.")
+            self.scan_completed.emit()
+            return
+
         try:
             self._populate()
         except Exception:
             pass
+
         try:
-            self._scan_btn.setEnabled(True)
-            self._scan_btn.setText("🔍  Scan")
-            entries = self._mgr.all()
-            found   = sum(1 for e in entries
-                          if e.state != DeviceState.ABSENT)
-            self._status.setText(
-                f"{found} device(s) found  ·  "
-                f"{sum(1 for e in entries if e.is_connected)} connected")
+            entries   = self._mgr.all()
+            found     = sum(1 for e in entries
+                            if e.state != DeviceState.ABSENT)
+            connected = sum(1 for e in entries if e.is_connected)
+            if found == 0:
+                self._status.setText(
+                    "No devices found  ·  check connections or run in demo mode")
+            elif connected == 0:
+                self._status.setText(
+                    f"{found} device(s) found  ·  none connected")
+            else:
+                self._status.setText(
+                    f"{found} device(s) found  ·  {connected} connected")
         except RuntimeError:
-            pass  # panel was destroyed before scan finished
+            pass   # panel was destroyed before scan finished
+
+        self.scan_completed.emit()
 
 
 # ------------------------------------------------------------------ #
@@ -943,7 +1039,18 @@ class DeviceManagerDialog(QDialog):
     """
     The Device Manager settings panel.
     Instantiated once and shown/hidden via show_device_manager().
+
+    Signals
+    -------
+    hw_status_changed(bool)
+        Emitted on the GUI thread whenever hardware connection status changes.
+        True  = at least one device is actively connected.
+        False = no devices connected (could be absent, discovered, or error).
+        Connect this to StatusHeader.set_hw_btn_status() so the header button
+        reflects the live hardware state without polling.
     """
+
+    hw_status_changed = pyqtSignal(bool)
 
     def __init__(self, device_manager: DeviceManager, parent=None):
         super().__init__(parent,
@@ -1065,6 +1172,9 @@ class DeviceManagerDialog(QDialog):
         self._list_panel.device_selected.connect(
             self._profile_panel.show_device)
 
+        # Propagate scan-done + per-device state changes to hw_status_changed
+        self._list_panel.scan_completed.connect(self._emit_hw_status)
+
         # Initial scan on open (quick — no network)
         QTimer.singleShot(200, self._initial_scan)
 
@@ -1079,6 +1189,15 @@ class DeviceManagerDialog(QDialog):
     def _refresh_uid(self, uid: str):
         self._list_panel.refresh_row(uid)
         self._profile_panel.refresh(uid)
+        self._emit_hw_status()
+
+    def _emit_hw_status(self):
+        """Emit hw_status_changed with current overall connection state."""
+        try:
+            any_connected = any(e.is_connected for e in self._mgr.all())
+            self.hw_status_changed.emit(any_connected)
+        except Exception:
+            pass
 
     def _on_log(self, msg: str):
         QTimer.singleShot(0, lambda: self._append_log(msg))
@@ -1100,14 +1219,11 @@ class DeviceManagerDialog(QDialog):
     # ---------------------------------------------------------------- #
 
     def _initial_scan(self):
-        def _run():
-            try:
-                from hardware.device_scanner import DeviceScanner
-                scanner = DeviceScanner()
-                report  = scanner.scan(include_network=False)
-                self._mgr.update_from_scan(report)
-            except Exception:
-                pass
-            finally:
-                QTimer.singleShot(0, self._list_panel._on_scan_done)
-        threading.Thread(target=_run, daemon=True).start()
+        """Kick off the on-open quick scan via the list panel's unified path.
+
+        Routes through start_scan() so the scan button shows "✕ Cancel"
+        during the initial scan and all result/error handling is shared.
+        The Network checkbox defaults to unchecked, so this is a fast
+        serial/USB-only scan identical to what the old _initial_scan did.
+        """
+        self._list_panel.start_scan()

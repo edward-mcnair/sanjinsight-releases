@@ -360,10 +360,18 @@ class StatusHeader(QWidget):
         self._estop_btn.style().polish(self._estop_btn)
 
     def add_device_manager_button(self, callback):
-        """Add a Device Manager button with the hardware SVG icon."""
+        """Add a Device Manager button with a hardware status colour indicator.
+
+        The button icon starts red (no hardware detected) and transitions to
+        green once DeviceManagerDialog reports at least one connected device.
+        Call set_hw_btn_status(True/False) to update it at any time.
+        """
         btn = QPushButton()
-        btn.setFixedSize(44, 30)   # wider than the old 36px — icon needs breathing room
-        btn.setToolTip("Device Manager — manage hardware connections and drivers")
+        btn.setFixedSize(44, 30)
+        btn.setToolTip(
+            "Device Manager — manage hardware connections and drivers\n"
+            "● Red: no hardware connected\n"
+            "● Green: hardware connected")
         btn.setStyleSheet("""
             QPushButton {
                 background:#1a1a1a;
@@ -372,13 +380,31 @@ class StatusHeader(QWidget):
             QPushButton:hover { background:#222; }
         """)
 
-        # Use qtawesome for a cross-platform vector icon (the old SVG file
-        # path was silently failing on Windows and falling back to "HW" text).
+        # Start red — updated to green by set_hw_btn_status() once a device
+        # is detected.  Uses qtawesome so the icon renders on all platforms
+        # (the old SVG path silently failed on Windows, showing "HW" text).
         from ui.icons import set_btn_icon
-        set_btn_icon(btn, "fa5s.server", color="#00d4aa", size=18)
+        set_btn_icon(btn, "fa5s.server", color="#cc3333", size=18)
 
+        self._hw_btn = btn
         btn.clicked.connect(callback)
         self.layout().addWidget(btn)
+
+    def set_hw_btn_status(self, connected: bool):
+        """Update the Device Manager button colour to reflect hardware state.
+
+        connected=True  → green icon  (at least one device actively connected)
+        connected=False → red icon    (no devices connected)
+        """
+        if not hasattr(self, "_hw_btn"):
+            return
+        from ui.icons import set_btn_icon
+        color = "#00d4aa" if connected else "#cc3333"
+        set_btn_icon(self._hw_btn, "fa5s.server", color=color, size=18)
+        tip_state = "connected" if connected else "no hardware connected"
+        self._hw_btn.setToolTip(
+            f"Device Manager ({tip_state})\n"
+            "Click to manage hardware connections and drivers")
 
     def add_update_badge(self) -> "UpdateBadge":
         """Add the update-available badge to the header and return it."""

@@ -570,10 +570,14 @@ class MainWindow(QMainWindow):
             self._header.set_mode(True)
             self._mode_stack.setCurrentIndex(1)
 
-        # Device manager
-        self._device_mgr    = DeviceManager()
-        self._device_mgr_dlg: DeviceManagerDialog = None
+        # Device manager — dialog created eagerly (hidden) so hw_status_changed
+        # is wired from app start.  The 200 ms initial scan fires automatically;
+        # the header button turns green once hardware is detected.
+        self._device_mgr     = DeviceManager()
+        self._device_mgr_dlg = DeviceManagerDialog(self._device_mgr, parent=self)
         self._header.add_device_manager_button(self._open_device_manager)
+        self._device_mgr_dlg.hw_status_changed.connect(
+            self._header.set_hw_btn_status)
 
         # Emergency stop — wire header button to hw_service
         self._header.connect_estop(
@@ -801,9 +805,6 @@ class MainWindow(QMainWindow):
             pass
 
     def _open_device_manager(self):
-        if self._device_mgr_dlg is None:
-            self._device_mgr_dlg = DeviceManagerDialog(
-                self._device_mgr, parent=self)
         self._device_mgr_dlg.show()
         self._device_mgr_dlg.raise_()
         self._device_mgr_dlg.activateWindow()
