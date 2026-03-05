@@ -55,27 +55,73 @@ class AutosaveManager:
     # ── Public API ────────────────────────────────────────────────────────────
 
     def has_checkpoint(self) -> bool:
-        """Return True if an unsaved checkpoint exists on disk."""
-        return os.path.isfile(self._npz) and os.path.isfile(self._meta)
+        """
+        Return True if a complete checkpoint (both files) exists on disk.
+
+        If only one file exists the pair is incomplete (crash mid-write);
+        the orphan is removed and False is returned.
+        """
+        npz_ok  = os.path.isfile(self._npz)
+        meta_ok = os.path.isfile(self._meta)
+        if npz_ok and meta_ok:
+            return True
+        if npz_ok or meta_ok:
+            # Partial write survived a crash — clean up the orphan.
+            for path in (self._npz, self._meta):
+                try:
+                    if os.path.isfile(path):
+                        os.remove(path)
+                        log.warning("AutosaveManager[%s]: removed orphan %s "
+                                    "(incomplete checkpoint from previous crash)",
+                                    self._kind, os.path.basename(path))
+                except Exception as exc:
+                    log.warning("AutosaveManager[%s]: could not remove orphan — %s",
+                                self._kind, exc)
+        return False
 
     def save(self, arrays: dict, metadata: dict) -> None:
         """
-        Persist a checkpoint.
+        Persist a checkpoint atomically.
+
+        Both files are written to ``.tmp`` siblings first, then renamed
+        with :func:`os.replace` so a crash between the two writes never
+        produces a partial checkpoint.
 
         Parameters
         ----------
         arrays   : dict of {name: np.ndarray}
         metadata : dict of JSON-serialisable scalars/strings
         """
+        # Strip the trailing ".npz" so numpy re-adds it to the .tmp stem,
+        # giving us "autosave_<kind>.tmp.npz" as the staging file.
+        npz_tmp  = self._npz[:-4] + ".tmp"   # numpy will append .npz → .tmp.npz
+        meta_tmp = self._meta + ".tmp"
         try:
             os.makedirs(_AUTOSAVE_DIR, exist_ok=True)
-            np.savez_compressed(self._npz, **arrays)
-            with open(self._meta, "w", encoding="utf-8") as f:
+
+            # Write to temporaries
+            np.savez_compressed(npz_tmp, **arrays)          # → <npz_tmp>.npz
+            with open(meta_tmp, "w", encoding="utf-8") as f:
                 json.dump({"_saved_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
                            **metadata}, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+
+            # Atomic rename — on POSIX replaces the target in one syscall;
+            # on Windows os.replace() is atomic at the file-system level.
+            os.replace(npz_tmp + ".npz", self._npz)
+            os.replace(meta_tmp, self._meta)
+
             log.debug("AutosaveManager[%s]: checkpoint saved", self._kind)
         except Exception as exc:
             log.warning("AutosaveManager[%s]: save failed — %s", self._kind, exc)
+            # Clean up any leftover temporaries
+            for path in (npz_tmp + ".npz", meta_tmp):
+                try:
+                    if os.path.isfile(path):
+                        os.remove(path)
+                except Exception:
+                    pass
 
     def load(self) -> Optional[dict]:
         """
