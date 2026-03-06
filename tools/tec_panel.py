@@ -23,6 +23,7 @@ from PyQt5.QtCore  import Qt, QTimer, pyqtSignal, QObject
 from PyQt5.QtGui   import QColor, QPainter, QPen, QFont
 
 import config
+from ui.font_utils import mono_font
 from hardware.tec import create_tec
 
 # How often to poll the TEC for status (ms)
@@ -81,8 +82,7 @@ class TempPlot(QWidget):
         p.setPen(QPen(self._grid, 1))
         step = max(1, int(span / 5))
         t    = (int(lo / step) - 1) * step
-        font = QFont("Consolas", 8)
-        p.setFont(font)
+        p.setFont(mono_font(8))
         p.setPen(QPen(self._grid, 1))
         while t <= hi + step:
             y = to_y(t)
