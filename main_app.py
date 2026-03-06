@@ -518,9 +518,15 @@ class MainWindow(QMainWindow):
         self._settings_tab.check_for_updates_requested.connect(
             self._on_manual_update_check)
 
-        # Wire Settings tab → AI service
+        # Wire Settings tab → AI service (local)
         self._settings_tab.ai_enable_requested.connect(self._on_ai_enable)
         self._settings_tab.ai_disable_requested.connect(self._ai_service.disable)
+
+        # Wire Settings tab → AI service (cloud)
+        self._settings_tab.cloud_ai_connect_requested.connect(
+            self._on_cloud_ai_connect)
+        self._settings_tab.cloud_ai_disconnect_requested.connect(
+            self._on_cloud_ai_disconnect)
 
         # Wire Settings tab ↔ ModelDownloader
         self._settings_tab.download_model_requested.connect(
@@ -1752,6 +1758,9 @@ class MainWindow(QMainWindow):
         self._ai_panel.on_status_changed(status)
         self._header.set_ai_status(status)
         self._settings_tab.set_ai_status(status)
+        # Also update the cloud status label if the active backend is remote
+        if self._ai_service._active_backend == "remote":
+            self._settings_tab.set_cloud_ai_status(status)
         if status == "ready":
             self._status.showMessage("AI Assistant ready", 3000)
         elif status == "error":
@@ -1763,6 +1772,17 @@ class MainWindow(QMainWindow):
         self._ai_service.enable(model_path, n_gpu_layers)
         # Show the panel automatically when loading starts
         self._ai_dock.show()
+
+    def _on_cloud_ai_connect(self, provider: str, api_key: str, model_id: str) -> None:
+        """Called when Settings tab emits cloud_ai_connect_requested."""
+        self._ai_panel.clear_display()
+        self._ai_service.enable_remote(provider, api_key, model_id)
+        self._ai_dock.show()
+
+    def _on_cloud_ai_disconnect(self) -> None:
+        """Called when Settings tab emits cloud_ai_disconnect_requested."""
+        self._ai_service.disable()
+        self._settings_tab.set_cloud_ai_status("off")
 
     def _on_download_model_requested(self, url: str, dest_path: str) -> None:
         """Start a background model download requested by the Settings tab."""

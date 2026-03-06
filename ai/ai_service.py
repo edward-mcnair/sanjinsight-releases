@@ -32,6 +32,7 @@ from PyQt5.QtCore import QObject, pyqtSignal
 
 import config as cfg_mod
 from ai.model_runner import ModelRunner, llama_available
+from ai.remote_runner import RemoteRunner
 from ai.context_builder import ContextBuilder
 from ai import prompt_templates as tmpl
 from ai import manual_rag
@@ -79,13 +80,15 @@ class AIService(QObject):
 
     def __init__(self, parent: Optional[QObject] = None):
         super().__init__(parent)
-        self._runner  = ModelRunner(parent=self)
-        self._ctx     = ContextBuilder()
-        self._status  = "off"
+        self._runner         = ModelRunner(parent=self)
+        self._remote_runner: Optional[RemoteRunner] = None
+        self._active_backend = "local"   # "local" | "remote"
+        self._ctx            = ContextBuilder()
+        self._status         = "off"
         self._history: list[dict] = []   # alternating user / assistant messages
         self._n_ctx:  int = tmpl.DEFAULT_N_CTX  # updated in enable() from catalog
 
-        # Wire runner signals
+        # Wire local runner signals
         self._runner.load_complete.connect(self._on_load_complete)
         self._runner.load_failed.connect(self._on_load_failed)
         self._runner.token_ready.connect(self.response_token)
@@ -125,9 +128,43 @@ class AIService(QObject):
         self._runner.load(model_path, n_gpu_layers=n_gpu_layers,
                           n_ctx=self._n_ctx)
 
-    def disable(self) -> None:
-        """Unload the model and transition to 'off'."""
+    def enable_remote(self, provider: str, api_key: str, model_id: str) -> None:
+        """
+        Connect to a cloud AI provider.
+
+        Validates credentials asynchronously, then transitions to 'ready'.
+        Unloads any active local model first.
+        """
+        if self._status in ("loading", "thinking"):
+            return
+        # Unload local model if loaded
         self._runner.unload()
+        # Disconnect previous remote runner if any
+        if self._remote_runner is not None:
+            self._remote_runner.disconnect()
+
+        runner = RemoteRunner(parent=self)
+        runner.load_complete.connect(self._on_load_complete)
+        runner.load_failed.connect(self._on_load_failed)
+        runner.token_ready.connect(self.response_token)
+        runner.response_complete.connect(self._on_response_complete)
+        runner.error.connect(self._on_error)
+        self._remote_runner  = runner
+        self._active_backend = "remote"
+
+        # Cloud models have large context — always include full system prompt
+        self._n_ctx = 100_000
+
+        self._set_status("loading")
+        runner.connect(provider, api_key, model_id)
+
+    def disable(self) -> None:
+        """Unload the local model (or disconnect cloud) and transition to 'off'."""
+        self._runner.unload()
+        if self._remote_runner is not None:
+            self._remote_runner.disconnect()
+            self._remote_runner  = None
+        self._active_backend = "local"
         self._history.clear()
         self._set_status("off")
 
@@ -221,7 +258,10 @@ class AIService(QObject):
             del self._history[:-max_stored]
 
         self._set_status("thinking")
-        self._runner.infer(full_msgs)
+        if self._active_backend == "remote" and self._remote_runner is not None:
+            self._remote_runner.infer(full_msgs)
+        else:
+            self._runner.infer(full_msgs)
 
     def _set_status(self, status: str) -> None:
         if status != self._status:

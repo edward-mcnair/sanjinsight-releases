@@ -133,11 +133,13 @@ class SettingsTab(QWidget):
     download_cancel_requested         — emitted when user cancels a download
     """
 
-    check_for_updates_requested = pyqtSignal()
-    ai_enable_requested         = pyqtSignal(str, int)
-    ai_disable_requested        = pyqtSignal()
-    download_model_requested    = pyqtSignal(str, str)
-    download_cancel_requested   = pyqtSignal()
+    check_for_updates_requested   = pyqtSignal()
+    ai_enable_requested           = pyqtSignal(str, int)
+    ai_disable_requested          = pyqtSignal()
+    download_model_requested      = pyqtSignal(str, str)
+    download_cancel_requested     = pyqtSignal()
+    cloud_ai_connect_requested    = pyqtSignal(str, str, str)  # provider, api_key, model_id
+    cloud_ai_disconnect_requested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -174,8 +176,11 @@ class SettingsTab(QWidget):
         # ── Software updates ──────────────────────────────────────────
         lay.addWidget(self._build_updates_group())
 
-        # ── AI Assistant ──────────────────────────────────────────────
+        # ── AI Assistant (local) ──────────────────────────────────────
         lay.addWidget(self._build_ai_group())
+
+        # ── Cloud AI ──────────────────────────────────────────────────
+        lay.addWidget(self._build_cloud_ai_group())
 
         # ── Support ───────────────────────────────────────────────────
         lay.addWidget(self._build_support_group())
@@ -631,6 +636,246 @@ class SettingsTab(QWidget):
 
         self._update_ai_controls()
         return g
+
+    def _build_cloud_ai_group(self) -> QGroupBox:
+        from ai.remote_runner import CLOUD_PROVIDERS
+
+        g = _group("Cloud AI  (Optional — requires API key)")
+        lay = QVBoxLayout(g)
+        lay.setSpacing(12)
+
+        # ── Privacy notice ────────────────────────────────────────────────
+        warn_frame = QFrame()
+        warn_frame.setStyleSheet(
+            f"QFrame {{ background:#1f1a0a; border:1px solid {_AMBER}55; "
+            f"border-radius:5px; }}"
+        )
+        wf_lay = QHBoxLayout(warn_frame)
+        wf_lay.setContentsMargins(10, 8, 10, 8)
+        wf_lay.setSpacing(10)
+        warn_icon = QLabel("⚠")
+        warn_icon.setStyleSheet(f"font-size:14pt; color:{_AMBER}; border:none;")
+        warn_icon.setFixedWidth(22)
+        wf_lay.addWidget(warn_icon)
+        warn_text = QLabel(
+            "Questions and instrument data will be sent to the provider's servers. "
+            "Do not use Cloud AI if your work is confidential or export-controlled."
+        )
+        warn_text.setWordWrap(True)
+        warn_text.setStyleSheet(f"font-size:11pt; color:{_AMBER}; border:none;")
+        wf_lay.addWidget(warn_text, 1)
+        lay.addWidget(warn_frame)
+
+        # ── Provider selector ─────────────────────────────────────────────
+        provider_row = QHBoxLayout()
+        provider_lbl = QLabel("Provider:")
+        provider_lbl.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
+        provider_row.addWidget(provider_lbl)
+
+        self._cloud_provider_combo = QComboBox()
+        self._cloud_provider_combo.setStyleSheet(_COMBO)
+        self._cloud_provider_ids: list[str] = []
+        for pid, pdata in CLOUD_PROVIDERS.items():
+            self._cloud_provider_ids.append(pid)
+            self._cloud_provider_combo.addItem(pdata["name"])
+        saved_provider = cfg_mod.get_pref("ai.cloud.provider", "claude")
+        try:
+            self._cloud_provider_combo.setCurrentIndex(
+                self._cloud_provider_ids.index(saved_provider))
+        except ValueError:
+            pass
+        self._cloud_provider_combo.currentIndexChanged.connect(
+            self._on_cloud_provider_changed)
+        provider_row.addWidget(self._cloud_provider_combo, 1)
+        lay.addLayout(provider_row)
+
+        # ── Model selector ────────────────────────────────────────────────
+        model_row = QHBoxLayout()
+        model_lbl = QLabel("Model:")
+        model_lbl.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
+        model_row.addWidget(model_lbl)
+
+        self._cloud_model_combo = QComboBox()
+        self._cloud_model_combo.setStyleSheet(_COMBO)
+        self._cloud_model_ids: list[str] = []
+        self._cloud_model_combo.currentIndexChanged.connect(
+            self._on_cloud_model_changed)
+        model_row.addWidget(self._cloud_model_combo, 1)
+        lay.addLayout(model_row)
+
+        # Populate model combo from initial provider selection
+        self._refresh_cloud_model_combo()
+
+        # ── API key input ─────────────────────────────────────────────────
+        key_row = QHBoxLayout()
+        key_lbl = QLabel("API Key:")
+        key_lbl.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
+        key_row.addWidget(key_lbl)
+
+        self._cloud_key_edit = QLineEdit()
+        self._cloud_key_edit.setPlaceholderText("Paste your API key here…")
+        self._cloud_key_edit.setEchoMode(QLineEdit.Password)
+        self._cloud_key_edit.setStyleSheet(
+            f"QLineEdit {{ background:{_BG2}; color:{_TEXT}; "
+            f"border:1px solid {_BORDER}; border-radius:4px; "
+            f"font-size:12pt; padding:5px 8px; }}"
+        )
+        saved_key = cfg_mod.get_pref("ai.cloud.api_key", "")
+        self._cloud_key_edit.setText(saved_key)
+        self._cloud_key_edit.textChanged.connect(
+            lambda t: cfg_mod.set_pref("ai.cloud.api_key", t))
+        key_row.addWidget(self._cloud_key_edit, 1)
+
+        self._cloud_key_show_btn = QPushButton("Show")
+        self._cloud_key_show_btn.setStyleSheet(_BTN_SECONDARY)
+        self._cloud_key_show_btn.setFixedWidth(70)
+        self._cloud_key_show_btn.setCheckable(True)
+        self._cloud_key_show_btn.toggled.connect(self._on_cloud_key_show_toggled)
+        key_row.addWidget(self._cloud_key_show_btn)
+        lay.addLayout(key_row)
+
+        # Get key link
+        self._cloud_key_link_lbl = QLabel("")
+        self._cloud_key_link_lbl.setStyleSheet(
+            f"font-size:10pt; color:{_ACCENT};")
+        self._cloud_key_link_lbl.setOpenExternalLinks(True)
+        lay.addWidget(self._cloud_key_link_lbl)
+        self._update_cloud_key_link()
+
+        lay.addWidget(_sep())
+
+        # ── Connect / Disconnect row ──────────────────────────────────────
+        action_row = QHBoxLayout()
+        self._cloud_connect_btn = QPushButton("Connect")
+        self._cloud_connect_btn.setStyleSheet(_BTN_PRIMARY)
+        self._cloud_connect_btn.setFixedWidth(120)
+        self._cloud_connect_btn.clicked.connect(self._on_cloud_connect_clicked)
+        action_row.addWidget(self._cloud_connect_btn)
+
+        self._cloud_status_lbl = QLabel("○  Not connected")
+        self._cloud_status_lbl.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
+        action_row.addWidget(self._cloud_status_lbl, 1)
+        lay.addLayout(action_row)
+
+        return g
+
+    # ── Cloud AI helpers ──────────────────────────────────────────────
+
+    def _refresh_cloud_model_combo(self) -> None:
+        from ai.remote_runner import CLOUD_PROVIDERS
+        idx = self._cloud_provider_combo.currentIndex() \
+              if hasattr(self, "_cloud_provider_combo") else 0
+        if idx < 0 or idx >= len(self._cloud_provider_ids):
+            return
+        pid    = self._cloud_provider_ids[idx]
+        models = CLOUD_PROVIDERS[pid]["models"]
+        self._cloud_model_ids = [m["id"] for m in models]
+
+        self._cloud_model_combo.blockSignals(True)
+        self._cloud_model_combo.clear()
+        for m in models:
+            self._cloud_model_combo.addItem(m["name"])
+
+        saved_model = cfg_mod.get_pref("ai.cloud.model", "")
+        try:
+            self._cloud_model_combo.setCurrentIndex(
+                self._cloud_model_ids.index(saved_model))
+        except ValueError:
+            self._cloud_model_combo.setCurrentIndex(1)   # default: Recommended
+        self._cloud_model_combo.blockSignals(False)
+
+    def _update_cloud_key_link(self) -> None:
+        from ai.remote_runner import CLOUD_PROVIDERS
+        if not hasattr(self, "_cloud_provider_ids") \
+                or not hasattr(self, "_cloud_key_link_lbl"):
+            return
+        idx = self._cloud_provider_combo.currentIndex() \
+              if hasattr(self, "_cloud_provider_combo") else 0
+        if idx < 0 or idx >= len(self._cloud_provider_ids):
+            return
+        pid = self._cloud_provider_ids[idx]
+        url = CLOUD_PROVIDERS[pid].get("api_key_url", "")
+        if url:
+            name = CLOUD_PROVIDERS[pid]["name"]
+            self._cloud_key_link_lbl.setText(
+                f'<a href="{url}" style="color:{_ACCENT};">'
+                f'Get a {name} API key ↗</a>')
+        else:
+            self._cloud_key_link_lbl.setText("")
+
+    def _on_cloud_provider_changed(self, idx: int) -> None:
+        if idx >= 0 and idx < len(self._cloud_provider_ids):
+            cfg_mod.set_pref("ai.cloud.provider", self._cloud_provider_ids[idx])
+        self._refresh_cloud_model_combo()
+        self._update_cloud_key_link()
+
+    def _on_cloud_model_changed(self, idx: int) -> None:
+        if hasattr(self, "_cloud_model_ids") and 0 <= idx < len(self._cloud_model_ids):
+            cfg_mod.set_pref("ai.cloud.model", self._cloud_model_ids[idx])
+
+    def _on_cloud_key_show_toggled(self, checked: bool) -> None:
+        if hasattr(self, "_cloud_key_edit"):
+            self._cloud_key_edit.setEchoMode(
+                QLineEdit.Normal if checked else QLineEdit.Password)
+        if hasattr(self, "_cloud_key_show_btn"):
+            self._cloud_key_show_btn.setText("Hide" if checked else "Show")
+
+    def _on_cloud_connect_clicked(self) -> None:
+        if not hasattr(self, "_cloud_connect_btn"):
+            return
+        # If currently connected, disconnect
+        if self._cloud_connect_btn.text() == "Disconnect":
+            self.cloud_ai_disconnect_requested.emit()
+            return
+
+        provider = self._cloud_provider_ids[
+            self._cloud_provider_combo.currentIndex()]
+        api_key = self._cloud_key_edit.text().strip() \
+                  if hasattr(self, "_cloud_key_edit") else ""
+        if not api_key:
+            self.set_cloud_ai_status("error", "No API key entered")
+            return
+        idx      = self._cloud_model_combo.currentIndex() \
+                   if hasattr(self, "_cloud_model_combo") else 0
+        model_id = self._cloud_model_ids[idx] \
+                   if hasattr(self, "_cloud_model_ids") and \
+                   0 <= idx < len(self._cloud_model_ids) else ""
+
+        self._cloud_connect_btn.setEnabled(False)
+        self.set_cloud_ai_status("loading", "◌  Connecting…")
+        self.cloud_ai_connect_requested.emit(provider, api_key, model_id)
+
+    def set_cloud_ai_status(self, status: str, message: str = "") -> None:
+        """Called by MainWindow when cloud AI connection changes."""
+        if not hasattr(self, "_cloud_status_lbl"):
+            return
+        _colors = {
+            "off":      _MUTED,
+            "loading":  _AMBER,
+            "ready":    _GREEN,
+            "error":    "#ff5555",
+        }
+        color = _colors.get(status, _MUTED)
+        if not message:
+            _msgs = {
+                "off":     "○  Not connected",
+                "loading": "◌  Connecting…",
+                "ready":   "●  Connected",
+                "error":   "⊗  Connection failed",
+            }
+            message = _msgs.get(status, status)
+        self._cloud_status_lbl.setText(message)
+        self._cloud_status_lbl.setStyleSheet(f"font-size:12pt; color:{color};")
+
+        if hasattr(self, "_cloud_connect_btn"):
+            if status == "ready":
+                self._cloud_connect_btn.setText("Disconnect")
+                self._cloud_connect_btn.setEnabled(True)
+            elif status in ("off", "error"):
+                self._cloud_connect_btn.setText("Connect")
+                self._cloud_connect_btn.setEnabled(True)
+            else:
+                self._cloud_connect_btn.setEnabled(False)
 
     def _build_support_group(self) -> QGroupBox:
         g = _group("Support & About")
