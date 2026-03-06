@@ -118,6 +118,13 @@ class MetricsService(QObject):
         self._active_issues: Set[str]         = set()
         self._issue_messages: Dict[str, str]  = {}
 
+        # ── Frame-processing throttle ─────────────────────────────────
+        # The camera emits up to 30 fps; computing saturation, drift, and
+        # focus on every frame at 30 Hz saturates the GUI thread on Windows.
+        # We only need metrics at EMIT_RATE_HZ (4 Hz), so skip frames that
+        # arrive before the next processing window opens.
+        self._last_proc_t: float = 0.0
+
         # ── Emit throttle ─────────────────────────────────────────────
         self._last_emit_t: float = 0.0
 
@@ -146,6 +153,15 @@ class MetricsService(QObject):
     def _on_camera_frame(self, frame) -> None:
         self._cam_connected = True
         self._clear_issue(CAM_DISCONNECTED)
+
+        # Skip expensive NumPy work (saturation, drift, focus) unless the
+        # processing window has elapsed.  The camera fires at up to 30 fps
+        # but metrics don't need to update faster than EMIT_RATE_HZ (4 Hz).
+        # This removes ~26 full-frame reductions per second from the GUI thread.
+        now = time.monotonic()
+        if now - self._last_proc_t < (1.0 / self.EMIT_RATE_HZ):
+            return
+        self._last_proc_t = now
 
         data = frame.data.astype(np.float32)
         h, w = data.shape[:2]

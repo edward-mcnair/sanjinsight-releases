@@ -696,6 +696,22 @@ class HardwareService(QObject):
 
     def _run_camera(self):
         cfg = config_module.get("hardware").get("camera", {})
+
+        # In demo mode, always use the simulated camera driver regardless of
+        # what config.yaml says.  On macOS the camera factory auto-falls back
+        # to "simulated" for Windows-only drivers, but on Windows the factory
+        # would attempt (and fail) to load the real driver, causing the camera
+        # thread to exit immediately and leaving demo mode without a live feed.
+        if app_state.demo_mode:
+            cfg = {
+                "driver":      "simulated",
+                "width":       cfg.get("width",       1920),
+                "height":      cfg.get("height",      1200),
+                "fps":         cfg.get("fps",         30),
+                "exposure_us": cfg.get("exposure_us", 5000),
+                "noise_level": cfg.get("noise_level", 40),
+            }
+
         try:
             cam = create_camera(cfg)
             self._connect_with_retry(cam.open, label="camera")

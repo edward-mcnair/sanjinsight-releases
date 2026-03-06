@@ -1555,15 +1555,19 @@ class MainWindow(QMainWindow):
     def _activate_demo_mode(self):
         """Switch to demo mode from any in-app trigger (Device Manager, etc.).
 
-        Safe to call at any point after MainWindow is constructed.  Shuts down
-        any partially-initialised real hardware, then starts all simulated
-        drivers via HardwareService.start_demo().
+        Safe to call at any point after MainWindow is constructed.  Updates the
+        UI immediately, then shuts down any partially-initialised real hardware
+        and starts all simulated drivers on a background thread so the GUI stays
+        responsive during the handover (hw_service.shutdown() joins threads, which
+        can block for up to 4 s each on Windows if hardware is still initialising).
         """
+        import threading as _threading
         from hardware.app_state import app_state as _app_state
         if _app_state.demo_mode:
             return  # already in demo mode — nothing to do
 
-        hw_service.shutdown()
+        # Update state and UI immediately so the user sees the mode change
+        # even before the hardware handover thread finishes.
         _app_state.demo_mode = True
         _app_state.tecs      = []
         self._header.set_demo_mode(True)
@@ -1571,8 +1575,19 @@ class MainWindow(QMainWindow):
             f"SanjINSIGHT {version_string()}  \u2014  DEMO MODE  "
             f"(simulated hardware)", 0)
         signals.log_message.emit(
-            "Demo mode activated \u2014 all hardware replaced with simulated drivers")
-        hw_service.start_demo()
+            "Demo mode activated \u2014 switching hardware to simulated drivers…")
+
+        # Shutdown real hardware and start demo drivers off the GUI thread.
+        # hw_service.shutdown() calls t.join(timeout=4 s) for every thread, so
+        # running it on the GUI thread makes the window go "Not Responding" on
+        # Windows for the full join duration.
+        def _switch_to_demo():
+            hw_service.shutdown()
+            hw_service.start_demo()
+
+        _threading.Thread(
+            target=_switch_to_demo, daemon=True, name="hw.demo_switch"
+        ).start()
 
     # ── AI assistant handlers ──────────────────────────────────────────
 
