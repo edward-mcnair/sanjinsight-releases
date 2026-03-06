@@ -200,6 +200,71 @@ class CameraTab(QWidget):
         ql.addStretch()
         root.addWidget(qual_box)
 
+        # ── Simulated Camera panel (visible only when driver == "simulated") ──
+        self._simcam_panel = CollapsiblePanel(
+            "Simulated Camera", start_collapsed=False)
+
+        simcam_inner = QWidget()
+        simcam_grid  = QGridLayout(simcam_inner)
+        simcam_grid.setContentsMargins(0, 4, 0, 0)
+        simcam_grid.setSpacing(8)
+
+        # Current resolution readout
+        simcam_grid.addWidget(QLabel("Resolution"), 0, 0)
+        self._simcam_res_lbl = QLabel("—")
+        self._simcam_res_lbl.setStyleSheet(
+            f"font-family:Menlo,monospace; font-size:{FONT['readoutSm']}pt;"
+            f" color:{PALETTE['accent']};")
+        simcam_grid.addWidget(self._simcam_res_lbl, 0, 1)
+
+        # Resolution preset buttons
+        _PRESETS = [
+            ("320×240",    320,  240),
+            ("640×480",    640,  480),
+            ("1280×720",  1280,  720),
+            ("1920×1080", 1920, 1080),
+            ("3840×2160", 3840, 2160),
+        ]
+        pr2 = QHBoxLayout()
+        for lbl, w, h in _PRESETS:
+            b = QPushButton(lbl)
+            b.setFixedWidth(80)
+            b.clicked.connect(lambda _, ww=w, hh=h: self._set_simcam_res(ww, hh))
+            pr2.addWidget(b)
+        pr2.addStretch()
+        simcam_grid.addLayout(pr2, 1, 1)
+
+        sub_res = QLabel("lower = faster, higher = more detail  ·  applied immediately")
+        sub_res.setStyleSheet(
+            f"font-size:{FONT['caption']}pt; color:{PALETTE['textDim']};"
+            f" padding-left:2px;")
+        simcam_grid.addWidget(sub_res, 2, 1)
+
+        # FPS slider
+        simcam_grid.addWidget(QLabel("Frame rate"), 3, 0)
+        self._simcam_fps_slider = QSlider(Qt.Horizontal)
+        self._simcam_fps_slider.setRange(5, 60)
+        self._simcam_fps_slider.setValue(30)
+        self._simcam_fps_lbl = QLabel("30 fps")
+        self._simcam_fps_lbl.setStyleSheet(
+            f"font-family:Menlo,monospace; font-size:{FONT['readoutSm']}pt;"
+            f" color:{PALETTE['accent']};")
+        self._simcam_fps_slider.valueChanged.connect(
+            lambda v: self._simcam_fps_lbl.setText(f"{v} fps"))
+        self._simcam_fps_slider.sliderReleased.connect(self._on_simcam_fps)
+        simcam_grid.addWidget(self._simcam_fps_slider, 3, 1)
+        simcam_grid.addWidget(self._simcam_fps_lbl, 3, 2)
+
+        sub_fps = QLabel("higher fps = smoother preview but more CPU  ·  max 60 fps")
+        sub_fps.setStyleSheet(
+            f"font-size:{FONT['caption']}pt; color:{PALETTE['textDim']};"
+            f" padding-left:2px;")
+        simcam_grid.addWidget(sub_fps, 4, 1)
+
+        self._simcam_panel.addWidget(simcam_inner)
+        self._simcam_panel.setVisible(False)   # shown only for simulated driver
+        root.addWidget(self._simcam_panel)
+
         # ── Frame Statistics (collapsible) ────────────────────────────
         stats_panel = CollapsiblePanel("Frame statistics", start_collapsed=True)
 
@@ -334,10 +399,54 @@ class CameraTab(QWidget):
         from ui.app_signals import signals
         signals.log_message.emit(f"Saved: {path}")
 
+    # ── Simulated camera controls ──────────────────────────────────────
+
+    def _refresh_simcam(self):
+        """Show/hide the Simulated Camera panel and sync controls to current state."""
+        cam    = app_state.cam
+        is_sim = (cam is not None and
+                  getattr(cam, "supports_runtime_resolution", lambda: False)())
+        self._simcam_panel.setVisible(is_sim)
+        if not is_sim:
+            return
+        w   = cam.info.width
+        h   = cam.info.height
+        fps = max(5, min(60, int(round(cam.info.max_fps))))
+        self._simcam_res_lbl.setText(f"{w} × {h}")
+        self._simcam_fps_slider.blockSignals(True)
+        self._simcam_fps_slider.setValue(fps)
+        self._simcam_fps_slider.blockSignals(False)
+        self._simcam_fps_lbl.setText(f"{fps} fps")
+
+    def _set_simcam_res(self, width: int, height: int):
+        """Apply a resolution preset to the simulated camera and persist."""
+        if self._hw:
+            self._hw.cam_set_resolution(width, height)
+        else:
+            cam = app_state.cam
+            if cam and hasattr(cam, "set_resolution"):
+                cam.set_resolution(width, height)
+        self._simcam_res_lbl.setText(f"{width} × {height}")
+        import config as _cfg
+        _cfg.update_camera_config({"width": width, "height": height})
+
+    def _on_simcam_fps(self):
+        """Apply the FPS slider value to the simulated camera and persist."""
+        fps = self._simcam_fps_slider.value()
+        if self._hw:
+            self._hw.cam_set_fps(float(fps))
+        else:
+            cam = app_state.cam
+            if cam and hasattr(cam, "set_fps"):
+                cam.set_fps(float(fps))
+        import config as _cfg
+        _cfg.update_camera_config({"fps": fps})
+
     # ── Objective turret ───────────────────────────────────────────────
 
     def showEvent(self, e):
         self._refresh_turret()
+        self._refresh_simcam()
         super().showEvent(e)
 
     def _refresh_turret(self):

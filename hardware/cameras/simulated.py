@@ -30,6 +30,11 @@ class SimulatedDriver(CameraDriver):
     Synthetic camera — no hardware required.
     Frame brightness scales with exposure and gain, noise is Poisson.
     Useful for UI development, CI/CD testing, and demos.
+
+    Thread-safety: set_resolution() and set_fps() may be called from the
+    GUI thread while grab() runs on a background thread.  _lock serialises
+    access to the mutable frame-geometry state (_W, _H, _pattern) so that
+    grab() never reads a partially-updated pattern.
     """
 
     def __init__(self, cfg: dict):
@@ -44,6 +49,10 @@ class SimulatedDriver(CameraDriver):
         self._running     = False
         self._last_grab   = 0.0
         self._pattern     = None
+        # Guards concurrent access to _W, _H, _fps, and _pattern.
+        # grab() holds it only for the short array-math section, not the
+        # time.sleep(), so set_resolution() is never blocked for long.
+        self._lock        = threading.Lock()
 
     def _make_pattern(self) -> np.ndarray:
         """Generate a static synthetic thermoreflectance-like base pattern."""
@@ -90,35 +99,83 @@ class SimulatedDriver(CameraDriver):
         if not self._running:
             return None
 
-        # Simulate frame rate
-        period = 1.0 / self._fps
-        now    = time.time()
+        # Simulate frame rate — sleep OUTSIDE the lock so set_resolution()
+        # is never blocked during the inter-frame idle period.
+        with self._lock:
+            fps = self._fps
+        period  = 1.0 / fps
+        now     = time.time()
         elapsed = now - self._last_grab
         if elapsed < period:
             time.sleep(period - elapsed)
         self._last_grab = time.time()
 
-        # Scale intensity by exposure and gain
-        gain_linear = 10 ** (self._gain_db / 20.0)
-        scale       = (self._exposure_us / 5000.0) * gain_linear
-        base        = np.clip(self._pattern * scale, 0, 4095)
+        # Hold the lock only for the array-math section so that a concurrent
+        # set_resolution() call never reads a partially-updated pattern.
+        with self._lock:
+            gain_linear = 10 ** (self._gain_db / 20.0)
+            scale       = (self._exposure_us / 5000.0) * gain_linear
+            base        = np.clip(self._pattern * scale, 0, 4095)
 
-        # Add Poisson-like noise
-        noise = np.random.normal(0, self._noise, base.shape).astype(np.float32)
-        frame = np.clip(base + noise, 0, 4095).astype(np.uint16)
+            # Add Poisson-like noise
+            noise = np.random.normal(0, self._noise, base.shape).astype(np.float32)
+            frame = np.clip(base + noise, 0, 4095).astype(np.uint16)
 
-        # Add slow drift to simulate thermal change
-        drift = int(50 * np.sin(time.time() * 0.2))
-        frame = np.clip(frame.astype(np.int32) + drift, 0, 4095).astype(np.uint16)
+            # Add slow drift to simulate thermal change
+            drift = int(50 * np.sin(time.time() * 0.2))
+            frame = np.clip(frame.astype(np.int32) + drift, 0, 4095).astype(np.uint16)
 
-        self._frame_idx += 1
-        return CameraFrame(
-            data        = frame,
-            frame_index = self._frame_idx,
-            exposure_us = self._exposure_us,
-            gain_db     = self._gain_db,
-            timestamp   = time.time(),
-        )
+            self._frame_idx += 1
+            return CameraFrame(
+                data        = frame,
+                frame_index = self._frame_idx,
+                exposure_us = self._exposure_us,
+                gain_db     = self._gain_db,
+                timestamp   = time.time(),
+            )
+
+    def supports_runtime_resolution(self) -> bool:
+        return True
+
+    def set_resolution(self, width: int, height: int) -> None:
+        """Change the synthetic frame size at runtime (thread-safe)."""
+        width  = max(1, int(width))
+        height = max(1, int(height))
+        with self._lock:
+            if width == self._W and height == self._H:
+                return
+            self._W = width
+            self._H = height
+            self._pattern = self._make_pattern()          # regenerate under lock
+            self._info = CameraInfo(
+                driver    = self._info.driver,
+                model     = self._info.model,
+                serial    = self._info.serial,
+                width     = self._W,
+                height    = self._H,
+                bit_depth = self._info.bit_depth,
+                max_fps   = self._info.max_fps,
+            )
+            self._cfg["width"]  = width
+            self._cfg["height"] = height
+        log.debug("[SIM] Resolution = %dx%d", width, height)
+
+    def set_fps(self, fps: float) -> None:
+        """Change the target frame rate at runtime (thread-safe)."""
+        fps = max(1.0, float(fps))
+        with self._lock:
+            self._fps          = fps
+            self._cfg["fps"]   = fps
+            self._info = CameraInfo(
+                driver    = self._info.driver,
+                model     = self._info.model,
+                serial    = self._info.serial,
+                width     = self._info.width,
+                height    = self._info.height,
+                bit_depth = self._info.bit_depth,
+                max_fps   = fps,
+            )
+        log.debug("[SIM] FPS = %.1f", fps)
 
     def set_exposure(self, microseconds: float) -> None:
         self._exposure_us            = microseconds

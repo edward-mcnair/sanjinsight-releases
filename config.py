@@ -190,6 +190,43 @@ def get(section: str, default=None) -> dict:
     return _config.get(section, {} if default is None else default)
 
 
+def update_camera_config(updates: dict) -> None:
+    """
+    Merge *updates* into the in-memory camera config section and write the
+    result back to disk so the settings survive an app restart.
+
+    Only the keys present in *updates* are changed — other hardware settings
+    (TEC, FPGA, polling intervals, etc.) are left untouched.
+
+    Example::
+        config.update_camera_config({"width": 1280, "height": 720, "fps": 15})
+    """
+    global _config
+    # Update in-memory config
+    cam_section = _config.setdefault("hardware", {}).setdefault("camera", {})
+    cam_section.update(updates)
+
+    # Write the full config back to disk, preserving all non-camera settings.
+    try:
+        # Read the on-disk file first so we don't clobber comments or
+        # keys that exist on disk but not in _config.
+        config_file = CONFIG_PATH
+        if config_file.exists():
+            with open(config_file, "r") as f:
+                on_disk = yaml.safe_load(f) or {}
+        else:
+            on_disk = {}
+        # Apply the camera updates to the disk copy
+        on_disk.setdefault("hardware", {}).setdefault("camera", {}).update(updates)
+        with open(config_file, "w") as f:
+            yaml.dump(on_disk, f, default_flow_style=False, sort_keys=False)
+        logging.getLogger(__name__).debug(
+            "Camera config updated on disk: %s", updates)
+    except Exception as exc:
+        logging.getLogger(__name__).warning(
+            "Could not persist camera config to disk: %s", exc)
+
+
 def reload(path: str = None) -> None:
     """
     Reload config.yaml from disk into the shared _config dict in-place.

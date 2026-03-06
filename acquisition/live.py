@@ -188,10 +188,16 @@ class LiveProcessor:
             # the ``is None`` check below and the arithmetic in the else-branch,
             # producing a TypeError.  Hold _lock for the entire read-modify-write
             # and take local snapshots so downstream ΔR/R is also race-free.
+            #
+            # Shape-change guard: if the camera resolution changed (e.g. the user
+            # picked a new resolution in the simulated camera panel), the new frame
+            # shape will differ from the stored EMA.  Treat this as a reset so we
+            # never attempt to blend arrays of incompatible shapes.
             alpha = 1.0 / max(cfg.accumulation, 1)
 
             with self._lock:
-                if self._cold_ema is None:
+                if (self._cold_ema is None or
+                        cold_frame.shape != self._cold_ema.shape):
                     self._cold_ema = cold_frame.copy()
                     self._hot_ema  = hot_frame.copy()
                 else:
@@ -277,7 +283,12 @@ class LiveProcessor:
             time.sleep(cfg.trigger_delay_ms / 1000.0)
 
     def _grab_avg(self, n: int, cfg: LiveConfig) -> Optional[np.ndarray]:
-        """Grab N frames and return their float32 average, with optional ROI crop."""
+        """Grab N frames and return their float32 average, with optional ROI crop.
+
+        If the frame shape changes mid-accumulation (e.g. because set_resolution()
+        was called on a simulated camera), the accumulator is restarted so we never
+        attempt to add arrays of incompatible shapes.
+        """
         if self._cam is None:
             return self._synthetic_frame(cfg)
 
@@ -293,6 +304,12 @@ class LiveProcessor:
             if cfg.roi_w > 0 and cfg.roi_h > 0:
                 x, y, w, h = cfg.roi_x, cfg.roi_y, cfg.roi_w, cfg.roi_h
                 data = data[y:y+h, x:x+w]
+
+            # Shape-change guard: restart accumulator if the resolution changed
+            # mid-accumulation so we never add arrays of incompatible shapes.
+            if acc is not None and data.shape != acc.shape:
+                acc   = None
+                count = 0
 
             acc   = data if acc is None else acc + data
             count += 1

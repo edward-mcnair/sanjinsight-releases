@@ -123,6 +123,39 @@ class CameraDriver(ABC):
         """
         pass
 
+    def supports_runtime_resolution(self) -> bool:
+        """
+        Return True if this driver can change resolution after open().
+        Real hardware drivers almost always return False — the sensor
+        binning / ROI must be configured before streaming begins.
+        The simulated driver returns True.
+        """
+        return False
+
+    def set_resolution(self, width: int, height: int) -> None:
+        """
+        Change the capture resolution at runtime.
+
+        Only meaningful for drivers where supports_runtime_resolution()
+        returns True.  The default implementation is a no-op so callers
+        can safely invoke it without checking the support flag first.
+
+        Implementations must be thread-safe (called from the GUI thread
+        while the camera grab loop runs on a background thread).
+        After returning, info.width / info.height reflect the new size.
+        """
+        pass
+
+    def set_fps(self, fps: float) -> None:
+        """
+        Change the target frame rate at runtime.
+
+        Default implementation is a no-op.  Override in drivers that
+        support runtime frame-rate adjustment.
+        After returning, info.max_fps reflects the new rate.
+        """
+        pass
+
     # ---------------------------------------------------------------- #
     #  Introspection                                                    #
     # ---------------------------------------------------------------- #

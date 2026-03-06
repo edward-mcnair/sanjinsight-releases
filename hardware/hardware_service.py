@@ -516,6 +516,24 @@ class HardwareService(QObject):
         if cam:
             self._dispatch(cam.set_gain, float(db))
 
+    def cam_set_resolution(self, width: int, height: int) -> None:
+        """
+        Change the camera resolution at runtime.
+
+        Only has effect for drivers where supports_runtime_resolution()
+        returns True (currently only SimulatedDriver).  Silently ignored
+        for real hardware so callers do not need to check the flag first.
+        """
+        cam = app_state.cam
+        if cam and getattr(cam, "supports_runtime_resolution", lambda: False)():
+            self._dispatch(cam.set_resolution, int(width), int(height))
+
+    def cam_set_fps(self, fps: float) -> None:
+        """Change the camera target frame rate at runtime (simulated cameras only)."""
+        cam = app_state.cam
+        if cam and getattr(cam, "supports_runtime_resolution", lambda: False)():
+            self._dispatch(cam.set_fps, float(fps))
+
     # ── TEC ───────────────────────────────────────────────────────────
 
     def tec_enable(self, idx: int) -> None:
