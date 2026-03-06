@@ -143,9 +143,13 @@ class LiveProcessor:
 
     def reset_ema(self):
         """Force EMA restart (e.g. after sample change)."""
-        self._cold_ema = None
-        self._hot_ema  = None
-        self._cycle    = 0
+        # Guard with the same lock used by _loop() so we cannot write None into
+        # _cold_ema between the worker's ``is None`` check and its subsequent
+        # arithmetic — which would produce a TypeError at runtime.
+        with self._lock:
+            self._cold_ema = None
+            self._hot_ema  = None
+            self._cycle    = 0
 
     @property
     def is_running(self) -> bool:
@@ -178,25 +182,33 @@ class LiveProcessor:
                 time.sleep(0.02)
                 continue
 
-            # ---- EMA update ----
+            # ---- EMA update (lock guards against reset_ema() race) ----
+            # reset_ema() may be called from the GUI thread at any time.
+            # Without the lock, reset_ema() could set _cold_ema = None between
+            # the ``is None`` check below and the arithmetic in the else-branch,
+            # producing a TypeError.  Hold _lock for the entire read-modify-write
+            # and take local snapshots so downstream ΔR/R is also race-free.
             alpha = 1.0 / max(cfg.accumulation, 1)
 
-            if self._cold_ema is None:
-                self._cold_ema = cold_frame.copy()
-                self._hot_ema  = hot_frame.copy()
-            else:
-                self._cold_ema = (alpha * cold_frame +
-                                  (1.0 - alpha) * self._cold_ema)
-                self._hot_ema  = (alpha * hot_frame +
-                                  (1.0 - alpha) * self._hot_ema)
+            with self._lock:
+                if self._cold_ema is None:
+                    self._cold_ema = cold_frame.copy()
+                    self._hot_ema  = hot_frame.copy()
+                else:
+                    self._cold_ema = (alpha * cold_frame +
+                                      (1.0 - alpha) * self._cold_ema)
+                    self._hot_ema  = (alpha * hot_frame +
+                                      (1.0 - alpha) * self._hot_ema)
 
-            self._cycle += 1
+                self._cycle += 1
+                # Snapshot under the lock — subsequent reads use these locals
+                # and cannot be interrupted by a concurrent reset_ema().
+                cold_ema = self._cold_ema
+                hot_ema  = self._hot_ema
 
             # ---- ΔR/R ----
-            cold_safe = np.where(
-                self._cold_ema > 1.0, self._cold_ema, 1.0)
-            drr = ((self._hot_ema - self._cold_ema) /
-                   cold_safe).astype(np.float32)
+            cold_safe = np.where(cold_ema > 1.0, cold_ema, 1.0)
+            drr = ((hot_ema - cold_ema) / cold_safe).astype(np.float32)
 
             # ---- SNR estimate ----
             snr = self._estimate_snr(drr)
@@ -226,8 +238,8 @@ class LiveProcessor:
 
             frame = LiveFrame(
                 drr      = drr,
-                cold_avg = self._cold_ema.copy(),
-                hot_avg  = self._hot_ema.copy(),
+                cold_avg = cold_ema.copy(),   # use local snapshot, not self._*
+                hot_avg  = hot_ema.copy(),
                 dt_map   = dt,
                 snr_db   = snr,
                 cycle    = self._cycle,

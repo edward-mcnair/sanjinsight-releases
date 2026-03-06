@@ -18,6 +18,7 @@ When running from source (development) all paths remain next to config.py.
 import sys
 import yaml
 import logging
+import logging.handlers
 import os
 from pathlib import Path
 
@@ -152,7 +153,10 @@ def setup_logging(cfg: dict):
         if not log_file.is_absolute():
             log_file = _user_data_dir() / log_file
         log_file.parent.mkdir(parents=True, exist_ok=True)
-        handlers.append(logging.FileHandler(log_file))
+        # Use RotatingFileHandler so logs never grow without bound.
+        # 2 MB per file, 5 rotated backups = 10 MB maximum on disk.
+        handlers.append(logging.handlers.RotatingFileHandler(
+            log_file, maxBytes=2 * 1024 * 1024, backupCount=5))
 
     logging.basicConfig(
         level=level,
