@@ -31,7 +31,8 @@ from PyQt5.QtGui  import (QPainter, QColor, QPen, QFont,
                            QBrush, QFontMetrics)
 
 from hardware.app_state import app_state
-from ui.theme import FONT, PALETTE
+from ui.theme      import FONT, PALETTE
+from ui.font_utils import mono_font
 from ui.icons import set_btn_icon
 
 
@@ -106,7 +107,7 @@ class DieGrid(QWidget):
 
         if self._n_cols < 1 or self._n_rows < 1:
             p.setPen(QColor(60, 60, 60))
-            p.setFont(QFont("Helvetica", 11))
+            p.setFont(mono_font(11))
             p.drawText(self.rect(), Qt.AlignCenter,
                        "No wafer map\n(MAPSIZE? returned 0)")
             p.end()
@@ -132,7 +133,7 @@ class DieGrid(QWidget):
                 if r.width() >= 22 and r.height() >= 14:
                     p.setPen(QColor(80, 80, 80) if not is_cur
                              else QColor(0, 0, 0))
-                    p.setFont(QFont("Menlo", 7))
+                    p.setFont(mono_font(7))
                     p.drawText(r, Qt.AlignCenter, f"{col},{row}")
 
         p.end()

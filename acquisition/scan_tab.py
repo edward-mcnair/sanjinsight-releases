@@ -15,6 +15,7 @@ import os, time
 import numpy as np
 
 from ui.button_utils import RunningButton, apply_hand_cursor
+from ui.font_utils   import sans_font
 
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -123,7 +124,7 @@ class ScanMapView(QWidget):
 
         if self._pixmap is None:
             p.setPen(QColor(60, 60, 60))
-            p.setFont(QFont("Helvetica", 15))
+            p.setFont(sans_font(15))
             p.drawText(self.rect(), Qt.AlignCenter,
                        "No scan data\n\nConfigure grid and run scan")
             p.end()
@@ -159,21 +160,21 @@ class ScanMapView(QWidget):
             bar_y   = oy + dh - 14
             p.setPen(QPen(QColor(255, 255, 255, 180), 2))
             p.drawLine(bar_x, bar_y, bar_x + bar_px, bar_y)
-            p.setFont(QFont("Helvetica", 11))
+            p.setFont(sans_font(11))
             p.setPen(QColor(220, 220, 220))
             p.drawText(bar_x, bar_y - 2, f"{bar_um:.0f} μm")
 
         # Title
         if self._title:
             p.setPen(QColor(100, 100, 100))
-            p.setFont(QFont("Helvetica", 12))
+            p.setFont(sans_font(12))
             p.drawText(self.rect().adjusted(8, 4, -8, -4),
                        Qt.AlignTop | Qt.AlignRight, self._title)
 
         # Zoom indicator
         if abs(self._zoom - 1.0) > 0.05:
             p.setPen(QColor(180, 180, 180, 200))
-            p.setFont(QFont("Helvetica", 11))
+            p.setFont(sans_font(11))
             p.drawText(8, self.height() - 8, f"×{self._zoom:.2f}")
 
         p.end()

@@ -27,7 +27,8 @@ from PyQt5.QtGui     import (QImage, QPixmap, QPainter, QPen, QColor,
                               QBrush, QFont, QCursor)
 
 from .roi import Roi
-from ui.icons import set_btn_icon
+from ui.icons        import set_btn_icon
+from ui.font_utils   import mono_font
 
 
 class RoiCanvas(QWidget):
@@ -240,7 +241,7 @@ class RoiCanvas(QWidget):
             # Dimension label
             if not drag_roi.is_empty:
                 label = f"{drag_roi.w} × {drag_roi.h} px"
-                p.setFont(QFont("Menlo", 8))
+                p.setFont(mono_font(8))
                 p.setPen(QPen(QColor(255, 255, 0)))
                 p.drawText(
                     min(self._drag_start.x(), self._drag_end.x()),

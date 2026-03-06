@@ -18,6 +18,7 @@ import time
 import numpy as np
 
 from ui.button_utils import RunningButton, apply_hand_cursor
+from ui.font_utils   import mono_font, sans_font
 from ui.icons import set_btn_icon
 
 from PyQt5.QtWidgets import (
@@ -88,7 +89,7 @@ class SnrBar(QWidget):
 
         # Scale ticks
         p.setPen(QColor(60, 60, 60))
-        p.setFont(QFont("Menlo", 10))
+        p.setFont(mono_font(10))
         for db in [40, 20, 0, -20]:
             tf = (db - self._min) / (self._max - self._min)
             ty = int(pad_top + bar_h * (1.0 - tf))
@@ -98,7 +99,7 @@ class SnrBar(QWidget):
             p.setPen(QColor(60, 60, 60))
 
         # Value label — rect form keeps text inside the widget at all heights
-        p.setFont(QFont("Menlo", 11))
+        p.setFont(mono_font(11))
         p.setPen(QColor(0, 200, 130) if frac > 0.4 else QColor(200, 80, 40))
         p.drawText(0, H - pad_bot + 4, W, pad_bot - 6, Qt.AlignCenter,
                    f"{self._value:.1f}dB")
@@ -212,7 +213,7 @@ class TempPlot(QWidget):
 
         if len(self._buf) < 2:
             p.setPen(QColor(50, 50, 50))
-            p.setFont(QFont("Menlo", 9))
+            p.setFont(mono_font(9))
             p.drawText(self.rect(), Qt.AlignCenter,
                        "Move cursor\nover image")
             p.end()
@@ -259,7 +260,7 @@ class TempPlot(QWidget):
 
         # Current value label (top-left)
         p.setPen(QColor(0, 180, 140))
-        p.setFont(QFont("Menlo", 8))
+        p.setFont(mono_font(8))
         p.drawText(PAD + 2, PAD + 10, f"{data[-1]:.4e}")
 
         p.end()
@@ -376,7 +377,7 @@ class LiveCanvas(QWidget):
 
         if self._pixmap is None:
             p.setPen(QColor(45, 45, 45))
-            p.setFont(QFont("Helvetica", 18))
+            p.setFont(sans_font(18))
             p.drawText(self.rect(), Qt.AlignCenter,
                        "Live ΔR/R\n\nPress  ▶  Start  to begin")
             if self._frozen:
@@ -415,13 +416,13 @@ class LiveCanvas(QWidget):
                 p.drawRect(QRect(QPoint(rx0, ry0), QPoint(rx1, ry1)))
                 p.setBrush(Qt.NoBrush)
                 p.setPen(QColor(255, 200, 0, 220))
-                p.setFont(QFont("Helvetica", 10))
+                p.setFont(sans_font(10))
                 p.drawText(rx0 + 4, ry0 + 14, "ROI")
 
         # Zoom level indicator (when zoomed in)
         if abs(self._zoom - 1.0) > 0.05:
             p.setPen(QColor(180, 180, 180, 200))
-            p.setFont(QFont("Helvetica", 11))
+            p.setFont(sans_font(11))
             p.drawText(8, self.height() - 8, f"×{self._zoom:.2f}")
 
         if self._frozen:

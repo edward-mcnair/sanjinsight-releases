@@ -18,7 +18,8 @@ from typing import Optional
 
 import numpy as np
 
-from ui.icons import set_btn_icon
+from ui.icons      import set_btn_icon
+from ui.font_utils import sans_font
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QDoubleSpinBox, QSpinBox, QGroupBox, QGridLayout, QSplitter,
@@ -139,7 +140,7 @@ class OverlayCanvas(QWidget):
         p.fillRect(self.rect(), QColor(13, 13, 13))
         if self._pixmap is None:
             p.setPen(QColor(40, 40, 40))
-            p.setFont(QFont("Helvetica", 18))
+            p.setFont(sans_font(18))
             p.drawText(self.rect(), Qt.AlignCenter,
                        "No analysis result\n\nPress  ▶  Run Analysis")
             p.end()

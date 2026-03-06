@@ -22,7 +22,8 @@ from PyQt5.QtGui     import QPainter, QColor, QPen, QFont, QBrush
 
 from hardware.app_state  import app_state
 from hardware.autofocus  import create_autofocus, AfState
-from ui.theme import FONT, PALETTE
+from ui.theme      import FONT, PALETTE
+from ui.font_utils import mono_font
 from ui.icons import set_btn_icon
 
 # Module-level autofocus driver (set by AutofocusTab._run())
@@ -357,7 +358,7 @@ class FocusPlot(QWidget):
 
         if len(self._z) < 2:
             p.setPen(QPen(QColor(60, 60, 60)))
-            p.setFont(QFont("Menlo", 14))
+            p.setFont(mono_font(14))
             p.drawText(W//2 - 80, H//2, "No data yet")
             p.end()
             return
@@ -371,7 +372,7 @@ class FocusPlot(QWidget):
         def ty(s): return int(H - pad - (s - s_min) / s_span * (H - 2*pad))
 
         # Grid
-        p.setFont(QFont("Menlo", 11))
+        p.setFont(mono_font(11))
         for i in range(5):
             frac = i / 4
             y    = int(pad + frac * (H - 2*pad))
@@ -407,13 +408,13 @@ class FocusPlot(QWidget):
             p.setPen(QPen(QColor(255, 170, 68), 1, Qt.DashLine))
             p.drawLine(bx, pad, bx, H - pad)
             p.setPen(QPen(QColor(255, 170, 68)))
-            p.setFont(QFont("Menlo", 12))
+            p.setFont(mono_font(12))
             p.drawText(bx + 4, pad + 14,
                        f"best: {self._best_z:.1f}μm")
 
         # Axis labels
         p.setPen(QPen(QColor(80, 80, 80)))
-        p.setFont(QFont("Menlo", 12))
+        p.setFont(mono_font(12))
         p.drawText(W//2 - 20, H - 1, "Z position (μm)")
 
         p.end()

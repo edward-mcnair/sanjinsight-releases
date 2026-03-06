@@ -41,6 +41,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui  import QImage, QPixmap, QPainter, QPen, QColor, QFont
 
+from ui.font_utils import mono_font, sans_font
 from .transient_pipeline import (
     TransientAcquisitionPipeline, TransientAcqState,
     TransientProgress, TransientResult)
@@ -86,7 +87,7 @@ class TransientCurve(QWidget):
 
         if self._values is None or len(self._values) < 2:
             p.setPen(QColor(50, 50, 50))
-            p.setFont(QFont("Helvetica", 10))
+            p.setFont(sans_font(10))
             p.drawText(self.rect(), Qt.AlignCenter, "No data")
             p.end()
             return
@@ -134,7 +135,7 @@ class TransientCurve(QWidget):
 
         # X-axis label (first and last delay in ms)
         p.setPen(QColor(80, 80, 80))
-        p.setFont(QFont("Menlo", 8))
+        p.setFont(mono_font(8))
         if self._times_s is not None and len(self._times_s) >= 2:
             t0 = self._times_s[0] * 1e3
             t1 = self._times_s[-1] * 1e3

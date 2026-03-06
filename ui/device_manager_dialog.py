@@ -69,6 +69,7 @@ from hardware.device_registry import (
     DTYPE_CAMERA, DTYPE_TEC, DTYPE_FPGA, DTYPE_STAGE, DTYPE_BIAS,
     DTYPE_UNKNOWN, CONN_SERIAL, CONN_ETHERNET, CONN_USB, CONN_PCIE)
 from hardware.device_manager  import DeviceManager, DeviceState, DeviceEntry
+from ui.font_utils import mono_font
 from hardware.device_scanner  import DeviceScanner
 from hardware.driver_store    import DriverStore, RemoteDriverEntry
 
@@ -328,9 +329,7 @@ class _DeviceListPanel(QWidget):
         item.setForeground(self._C_ADDR, QBrush(QColor("#555")))
         item.setTextAlignment(
             self._C_ADDR, Qt.AlignRight | Qt.AlignVCenter)
-        addr_font = QFont("Menlo")
-        addr_font.setStyleHint(QFont.Monospace)
-        addr_font.setPointSizeF(7.0)
+        addr_font = mono_font(7)
         item.setFont(self._C_ADDR, addr_font)
 
         item.setToolTip(self._C_NAME,

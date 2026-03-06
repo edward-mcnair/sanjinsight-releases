@@ -23,6 +23,7 @@ from PyQt5.QtCore import Qt, QRect, pyqtSignal
 from PyQt5.QtGui  import (QImage, QPixmap, QPainter, QPen, QColor,
                            QBrush, QFont, QLinearGradient)
 
+from ui.font_utils import mono_font
 from .calibration        import Calibration, CalibrationResult
 from .calibration_runner import CalibrationRunner, CalibrationProgress
 from .processing         import to_display
@@ -66,7 +67,7 @@ class ColourBar(QWidget):
         p.drawRect(pad, 4, W - 2*pad, H - 8)
 
         p.setPen(QPen(QColor(120, 120, 120)))
-        p.setFont(QFont("Menlo", 11))
+        p.setFont(mono_font(11))
         lo_s = format(self._lo, self._fmt)
         hi_s = format(self._hi, self._fmt)
         # Pin each label to its margin using the rect form of drawText so

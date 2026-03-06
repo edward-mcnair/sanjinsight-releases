@@ -22,7 +22,6 @@ import sys
 
 from PyQt5.QtCore    import pyqtSignal, Qt
 from PyQt5.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton
-from PyQt5.QtGui     import QFont
 
 # Amber palette — high visibility without looking like an error
 _BG       = "#5a3a00"
@@ -62,16 +61,16 @@ class SafeModeBanner(QWidget):
         lay.setContentsMargins(12, 0, 8, 0)
         lay.setSpacing(10)
 
-        # Icon + reason label
+        # Icon + reason label — use CSS font-size so Qt picks the correct
+        # system UI font on every platform (Segoe UI on Windows, SF on macOS).
         self._label = QLabel()
-        self._label.setFont(QFont("Helvetica Neue", _PT))
-        self._label.setStyleSheet(f"color: {_FG}; background: transparent;")
+        self._label.setStyleSheet(
+            f"color: {_FG}; background: transparent; font-size: {_PT}pt;")
         self._label.setTextFormat(Qt.PlainText)
         lay.addWidget(self._label, stretch=1)
 
         # Action button
         self._btn = QPushButton("Open Device Manager")
-        self._btn.setFont(QFont("Helvetica Neue", _PT))
         self._btn.setFixedHeight(24)
         self._btn.setCursor(Qt.PointingHandCursor)
         self._btn.setStyleSheet(

@@ -16,6 +16,8 @@ from PyQt5.QtWidgets import QWidget, QSizePolicy
 from PyQt5.QtCore    import Qt
 from PyQt5.QtGui     import QPainter, QColor, QPen, QFont
 
+from ui.font_utils import mono_font
+
 
 class TempPlot(QWidget):
     HISTORY = 120
@@ -61,7 +63,7 @@ class TempPlot(QWidget):
             # appear broken (plain black rectangle) on Windows or when hardware
             # is disconnected.
             p.setPen(QColor(40, 40, 40))
-            p.setFont(QFont("Menlo", 11))
+            p.setFont(mono_font(11))
             p.drawText(self.rect(), Qt.AlignCenter, "No data")
             p.end()
             return
@@ -85,7 +87,7 @@ class TempPlot(QWidget):
         p.setPen(QPen(QColor(35,35,35), 1))
         step = max(1, int(span/4))
         t = (int(lo/step)-1)*step
-        p.setFont(QFont("Menlo", 11))
+        p.setFont(mono_font(11))
         while t <= hi+step:
             y = ty(t)
             if pad <= y <= H-pad:
@@ -110,7 +112,7 @@ class TempPlot(QWidget):
                 y = ty(limit)
                 if 0 <= y <= H:
                     p.drawLine(pad, y, W-pad, y)
-                    p.setFont(QFont("Menlo", 10))
+                    p.setFont(mono_font(10))
                     p.setPen(QPen(QColor(255, 100, 100), 1))
                     is_min = warn_offset > 0
                     label  = f"{'min' if is_min else 'max'} {limit:.0f}°"

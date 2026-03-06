@@ -30,6 +30,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QSize
 from PyQt5.QtGui  import (QColor, QPainter, QPen, QFont,
                            QImage, QPixmap, QLinearGradient)
+from ui.font_utils import sans_font
 
 
 # ------------------------------------------------------------------ #
@@ -93,7 +94,7 @@ class WizardStepBar(QWidget):
             # Number / checkmark
             p.setPen(QColor(255, 255, 255) if (active or done)
                      else QColor(60, 60, 60))
-            p.setFont(QFont("Helvetica", 12, QFont.Bold))
+            p.setFont(sans_font(12, bold=True))
             text = "✓" if done else str(i + 1)
             p.drawText(cx - r, cy - r, r * 2, r * 2,
                        Qt.AlignCenter, text)
@@ -102,8 +103,7 @@ class WizardStepBar(QWidget):
             p.setPen(QColor(180, 180, 180) if active
                      else QColor(100, 100, 100) if done
                      else QColor(50, 50, 50))
-            p.setFont(QFont("Helvetica", 12,
-                            QFont.Bold if active else QFont.Normal))
+            p.setFont(sans_font(12, bold=active))
             p.drawText(cx - 50, cy + r + 4, 100, 16,
                        Qt.AlignCenter, label)
 

@@ -35,7 +35,8 @@ from PyQt5.QtWidgets import (
     QTextEdit, QLineEdit, QSizePolicy, QFrame)
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QCursor, QTextCharFormat, QColor, QFont
-from ui.icons import set_btn_icon
+from ui.icons      import set_btn_icon
+from ui.font_utils import mono_font
 
 log = logging.getLogger(__name__)
 
@@ -318,25 +319,25 @@ class AIPanelWidget(QWidget):
         # ── User header ──────────────────────────────────────────────────
         fmt_you = QTextCharFormat()
         fmt_you.setForeground(QColor(_GREEN))
-        fmt_you.setFont(QFont("Menlo", 11, QFont.Bold))
+        fmt_you.setFont(mono_font(11, bold=True))
         cursor.insertText(f"\n▷ You  {ts}\n", fmt_you)
 
         # ── User question body ───────────────────────────────────────────
         fmt_body = QTextCharFormat()
         fmt_body.setForeground(QColor("#aaaaaa"))
-        fmt_body.setFont(QFont("Menlo", 11))
+        fmt_body.setFont(mono_font(11))
         cursor.insertText(f"  {label}\n\n", fmt_body)
 
         # ── AI response header ───────────────────────────────────────────
         fmt_ai_hdr = QTextCharFormat()
         fmt_ai_hdr.setForeground(QColor(_PURPLE))
-        fmt_ai_hdr.setFont(QFont("Menlo", 11, QFont.Bold))
+        fmt_ai_hdr.setFont(mono_font(11, bold=True))
         cursor.insertText("◉ AI\n", fmt_ai_hdr)
 
         # Reset char format so streaming tokens arrive in normal colour
         fmt_reset = QTextCharFormat()
         fmt_reset.setForeground(QColor(_TEXT))
-        fmt_reset.setFont(QFont("Menlo", 11))
+        fmt_reset.setFont(mono_font(11))
         cursor.setCharFormat(fmt_reset)
         self._display.setTextCursor(cursor)
 
@@ -380,7 +381,7 @@ class AIPanelWidget(QWidget):
             cursor.movePosition(cursor.End)
             fmt_sep = QTextCharFormat()
             fmt_sep.setForeground(QColor(_MUTED))
-            fmt_sep.setFont(QFont("Menlo", 9))
+            fmt_sep.setFont(mono_font(9))
             cursor.insertText(
                 "\n─────────────────────────────────────────────\n\n",
                 fmt_sep)
@@ -395,11 +396,11 @@ class AIPanelWidget(QWidget):
             cursor.movePosition(cursor.End)
             fmt_err = QTextCharFormat()
             fmt_err.setForeground(QColor(_RED))
-            fmt_err.setFont(QFont("Menlo", 11))
+            fmt_err.setFont(mono_font(11))
             cursor.insertText(f"\n⚠  {msg}\n", fmt_err)
             fmt_sep = QTextCharFormat()
             fmt_sep.setForeground(QColor(_MUTED))
-            fmt_sep.setFont(QFont("Menlo", 9))
+            fmt_sep.setFont(mono_font(9))
             cursor.insertText(
                 "\n─────────────────────────────────────────────\n\n",
                 fmt_sep)
