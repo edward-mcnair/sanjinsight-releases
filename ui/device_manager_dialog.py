@@ -1280,11 +1280,19 @@ class DeviceManagerDialog(QDialog):
         The Network checkbox defaults to unchecked, so this is a fast
         serial/USB-only scan identical to what the old _initial_scan did.
 
-        Suppressed at startup (see suppress_next_scan()) to avoid racing
-        with hw_service NI/pyvisa initialisation on Windows/Parallels.
+        At app startup (see suppress_next_scan()), the scan is deferred by
+        3 seconds instead of starting immediately.  This avoids a race with
+        hw_service which also initialises the NI/pyvisa DLL on startup:
+        two threads loading the same Windows DLL concurrently causes a 10–30 s
+        stall in Parallels.  By the time the deferred scan fires, hw_service
+        will have already loaded the DLL, so the DM scan itself completes in
+        well under one second.  The demo-mode offer dialog then appears as
+        normal once the (fast) deferred scan finds no devices.
         """
         if self._suppress_auto_scan:
             self._suppress_auto_scan = False   # one-shot
+            # Defer rather than skip — the demo-mode dialog must still appear.
+            QTimer.singleShot(3_000, self._list_panel.start_scan)
             return
         self._list_panel.start_scan()
 

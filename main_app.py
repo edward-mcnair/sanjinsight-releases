@@ -242,6 +242,15 @@ QMenuBar::item:selected { background: #222; color: #ddd; }
 QMenu { background: #1a1a1a; color: #ccc; border: 1px solid #333; font-size:13pt; }
 QMenu::item:selected { background: #252525; color: #fff; }
 QMenu::separator { height: 1px; background: #333; margin: 4px 0; }
+QToolTip {
+    background-color: #2a2a2a;
+    color: #d0d0d0;
+    border: 1px solid #555;
+    padding: 4px 8px;
+    border-radius: 3px;
+    font-size: 11pt;
+    opacity: 230;
+}
 """
 
 # ── Windows stylesheet font-size fix ─────────────────────────────────────────
