@@ -1182,11 +1182,9 @@ class DeviceManagerDialog(QDialog):
         # Demo Mode choices instead of leaving the user with a status-bar hint.
         self._list_panel.no_devices_found.connect(self._offer_demo_dialog)
 
-        # Guard so the auto-scan fires once on first open, not at __init__ time.
-        # Deferring to showEvent prevents the NI/pyvisa sub-scanner from
-        # running during app startup while hardware drivers are still
-        # initialising — on Windows that causes 10–30 s GUI freezes.
-        self._opened_once = False
+        # Auto-scan is deferred to showEvent() so it never runs at __init__
+        # time (i.e. during app startup).  The _list_panel._scanning flag
+        # prevents concurrent scans if the user opens/closes/reopens quickly.
 
     # ---------------------------------------------------------------- #
     #  Callbacks from DeviceManager                                     #
@@ -1233,16 +1231,18 @@ class DeviceManagerDialog(QDialog):
     # ---------------------------------------------------------------- #
 
     def showEvent(self, event):
-        """Trigger a quick scan the first time the dialog is opened.
+        """Trigger a quick scan every time the dialog is opened.
 
         Deferring to showEvent (rather than firing from __init__) ensures the
         scan never starts during app startup — at that point the NI/pyvisa
         sub-scanner can hold Windows COM objects for 10–30 s, which competes
         with the hardware-service init threads and causes "Not Responding".
+
+        The ``_list_panel._scanning`` guard prevents a second concurrent scan
+        if the user opens the dialog while a previous scan is still running.
         """
         super().showEvent(event)
-        if not self._opened_once:
-            self._opened_once = True
+        if not self._list_panel._scanning:
             QTimer.singleShot(200, self._initial_scan)
 
     def _initial_scan(self):

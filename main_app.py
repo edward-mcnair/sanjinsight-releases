@@ -2041,12 +2041,23 @@ if __name__ == "__main__":
             _startup_dlg.demo_requested.connect(_on_demo_requested)
             _startup_dlg.show()
 
-            # Start hardware AFTER the dialog is fully connected.
-            # If start() were called earlier (before the signal connection above),
-            # fast-connecting devices — especially the simulated camera — emit
-            # startup_status before the slot exists and the dialog never receives
-            # the notification, leaving it open indefinitely.
-            hw_service.start()
+            # Start hardware AFTER the dialog is fully connected AND after the
+            # Qt event loop has started (app.exec_() below).
+            #
+            # On Windows, hardware threads that use pyvisa / NI IMAQdx DLLs
+            # call CoInitialize() which creates a COM MTA.  COM calls from MTA
+            # threads are marshalled to the main thread's STA message queue.
+            # If app.exec_() hasn't started yet, nothing is pumping that queue
+            # and every marshalled call stalls for 10-30 s waiting for the main
+            # thread to process its inbox — showing as "Not Responding" and a
+            # 10-20 s delay on the very first button click.
+            #
+            # QTimer.singleShot(0, …) schedules the call for the first idle
+            # tick of app.exec_(), so the message queue is live when hardware
+            # threads start.  Signals already emitted before the dialog's slots
+            # were connected are fine — QTimer fires after show() so the dialog
+            # is fully wired before any startup_status arrives.
+            QTimer.singleShot(0, hw_service.start)
 
             # Safety net: close after 30 s even if a device never reports back
             # (e.g. auto-reconnect loop keeps a device perpetually "connecting").
@@ -2055,11 +2066,10 @@ if __name__ == "__main__":
                 lambda: _startup_dlg.accept() if _startup_dlg.isVisible() else None)
 
         else:
-            # No devices configured — start camera thread anyway (simulated
-            # fallback) and offer demo mode via a QMessageBox so the user has
-            # a real button to click (the old toast only mentioned --demo,
-            # which is not discoverable from a desktop shortcut).
-            hw_service.start()
+            # No devices configured — start camera thread (simulated fallback)
+            # and offer demo mode via a QMessageBox.  Defer hw_service.start()
+            # for the same COM-message-pump reason as the hardware path above.
+            QTimer.singleShot(0, hw_service.start)
             def _offer_demo():
                 from PyQt5.QtWidgets import QMessageBox as _QMB
                 box = _QMB(window)
