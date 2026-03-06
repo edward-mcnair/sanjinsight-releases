@@ -354,3 +354,78 @@ class TestCalibrationTabPresets:
         assert len(tab._temp_rows) == 6
         tab._set_preset(CAL_IR_TEMPS_C)
         assert len(tab._temp_rows) == 7
+
+
+# ================================================================== #
+#  5. font_utils — cross-platform font helpers                        #
+# ================================================================== #
+
+class TestFontUtils:
+    """
+    Unit tests for ui/font_utils.py.
+
+    Verify that mono_font() and sans_font() always return a QFont with:
+    - the correct point size
+    - the correct boldness
+    - a non-empty family name
+    - the expected style hint (prevents Qt from silently falling back to
+      the proportional application default on Windows)
+    """
+
+    def test_mono_font_returns_qfont(self):
+        from ui.font_utils import mono_font
+        from PyQt5.QtGui import QFont
+        f = mono_font(11)
+        assert isinstance(f, QFont)
+
+    def test_mono_font_point_size(self):
+        from ui.font_utils import mono_font
+        assert mono_font(9).pointSize()  == 9
+        assert mono_font(14).pointSize() == 14
+
+    def test_mono_font_bold(self):
+        from ui.font_utils import mono_font
+        assert not mono_font(11).bold()
+        assert mono_font(11, bold=True).bold()
+
+    def test_mono_font_style_hint_is_monospace(self):
+        """styleHint must be Monospace so Qt finds a proper fallback."""
+        from ui.font_utils import mono_font
+        from PyQt5.QtGui import QFont
+        assert mono_font(11).styleHint() == QFont.Monospace
+
+    def test_mono_font_family_not_empty(self):
+        from ui.font_utils import mono_font
+        assert mono_font(11).family() != ""
+
+    def test_sans_font_returns_qfont(self):
+        from ui.font_utils import sans_font
+        from PyQt5.QtGui import QFont
+        f = sans_font(12)
+        assert isinstance(f, QFont)
+
+    def test_sans_font_point_size(self):
+        from ui.font_utils import sans_font
+        assert sans_font(10).pointSize() == 10
+        assert sans_font(18).pointSize() == 18
+
+    def test_sans_font_bold(self):
+        from ui.font_utils import sans_font
+        assert not sans_font(11).bold()
+        assert sans_font(11, bold=True).bold()
+
+    def test_sans_font_style_hint_is_sansserif(self):
+        """styleHint must be SansSerif so Qt finds a proper fallback."""
+        from ui.font_utils import sans_font
+        from PyQt5.QtGui import QFont
+        assert sans_font(11).styleHint() == QFont.SansSerif
+
+    def test_sans_font_family_not_empty(self):
+        from ui.font_utils import sans_font
+        assert sans_font(11).family() != ""
+
+    def test_mono_font_different_from_sans_font(self):
+        """mono_font and sans_font must use different logical classes."""
+        from ui.font_utils import mono_font, sans_font
+        from PyQt5.QtGui import QFont
+        assert mono_font(11).styleHint() != sans_font(11).styleHint()

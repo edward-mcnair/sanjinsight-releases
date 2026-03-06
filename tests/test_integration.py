@@ -559,3 +559,119 @@ class TestMetricsService:
         flat = np.full((64, 64), 2000.0, dtype=np.float32)
         score = MetricsService._compute_focus(flat)
         assert score == 0.0
+
+    def test_throttle_bypassed_when_active_issues(self, hw_stub, svc):
+        """
+        The frame-rate throttle must be bypassed when active issues exist,
+        so issues clear promptly even if frames arrive faster than EMIT_RATE_HZ.
+        """
+        from ai.metrics_service import CAM_SATURATED
+        # Step 1: emit saturated frame → issue is raised and _last_proc_t is set
+        sat = np.full((100, 100), 4095, dtype=np.uint16)
+        hw_stub.camera_frame.emit(self._make_frame(sat))
+        assert CAM_SATURATED in svc.active_issue_codes
+
+        # Step 2: immediately emit a normal frame (within throttle window).
+        # With the issue-aware bypass, this MUST be processed.
+        cleared = []
+        svc.issue_cleared.connect(lambda code: cleared.append(code))
+        normal = np.full((100, 100), 2000, dtype=np.uint16)
+        hw_stub.camera_frame.emit(self._make_frame(normal))
+
+        assert CAM_SATURATED not in svc.active_issue_codes, (
+            "throttle incorrectly blocked the normal frame — "
+            "active-issue bypass is not working"
+        )
+        assert CAM_SATURATED in cleared
+
+    def test_throttle_applied_when_no_active_issues(self, hw_stub, svc):
+        """
+        When there are no active issues, rapid duplicate frames within the
+        throttle window must be dropped (only the first is processed).
+        """
+        # Ensure no active issues and reset the throttle clock
+        svc._last_proc_t = 0.0
+        assert len(svc.active_issue_codes) == 0
+
+        emit_count = []
+        svc.metrics_updated.connect(lambda snap: emit_count.append(1))
+
+        # Emit first frame — should be processed (resets throttle clock)
+        svc._last_proc_t = 0.0
+        hw_stub.camera_frame.emit(self._make_frame(
+            np.full((50, 50), 2000, dtype=np.uint16)))
+        count_after_first = len(emit_count)
+
+        # Immediately emit a second frame — throttle window not yet elapsed
+        hw_stub.camera_frame.emit(self._make_frame(
+            np.full((50, 50), 2001, dtype=np.uint16)))
+        count_after_second = len(emit_count)
+
+        # The second frame should have been dropped by the throttle
+        assert count_after_second == count_after_first, (
+            "throttle did not drop the rapid second frame"
+        )
+
+
+# ================================================================== #
+#  5. HardwareService — demo-mode camera config override              #
+# ================================================================== #
+
+class TestDemoModeCamera:
+    """
+    Verify that _run_camera() replaces the config driver with "simulated"
+    when app_state.demo_mode is True, regardless of what config.yaml says.
+
+    We test this by monkeypatching the camera factory so no thread is
+    actually started — only the config argument is captured and inspected.
+    """
+
+    @pytest.fixture(scope="class")
+    def qapp(self):
+        from PyQt5.QtWidgets import QApplication
+        return QApplication.instance() or QApplication([])
+
+    def test_demo_mode_forces_simulated_driver(self, monkeypatch, qapp):
+        """When demo_mode=True the camera factory must receive driver='simulated'."""
+        import hardware.hardware_service as hs_mod
+        from hardware.app_state import app_state
+
+        # Capture the config dict passed to create_camera
+        captured = []
+
+        class _FakeCamera:
+            class info:
+                model = "Simulated"
+                width = 320
+                height = 240
+            def open(self): pass
+            def start(self): pass
+            def stop(self): pass
+
+        def _fake_create_camera(cfg):
+            captured.append(dict(cfg))
+            return _FakeCamera()
+
+        monkeypatch.setattr(hs_mod, "create_camera", _fake_create_camera)
+        # Patch _connect_with_retry to a no-op so it doesn't actually retry
+        monkeypatch.setattr(hs_mod.HardwareService, "_connect_with_retry",
+                            lambda self, fn, **kw: fn())
+        # Ensure app_state reports demo mode
+        with app_state:
+            app_state._demo_mode = True
+
+        try:
+            svc = hs_mod.HardwareService()
+            svc._running = True          # prevent the thread from exiting early
+            svc._run_camera()            # call directly (no thread needed)
+        except Exception:
+            pass                          # cleanup failures from missing pipeline etc.
+        finally:
+            with app_state:
+                app_state._demo_mode = False
+                app_state._cam = None
+
+        assert len(captured) > 0, "_run_camera() never called create_camera()"
+        assert captured[0]["driver"] == "simulated", (
+            f"Expected driver='simulated' in demo mode, got {captured[0]['driver']!r}"
+        )
