@@ -155,11 +155,15 @@ class MetricsService(QObject):
         self._clear_issue(CAM_DISCONNECTED)
 
         # Skip expensive NumPy work (saturation, drift, focus) unless the
-        # processing window has elapsed.  The camera fires at up to 30 fps
-        # but metrics don't need to update faster than EMIT_RATE_HZ (4 Hz).
-        # This removes ~26 full-frame reductions per second from the GUI thread.
+        # processing window has elapsed OR there are active issues that need
+        # a chance to clear.  The camera fires at up to 30 fps; when the
+        # instrument is healthy we only need 4 Hz — saving ~26 full-frame
+        # reductions per second on the GUI thread.  When an issue is already
+        # flagged we skip the gate so the next normal frame clears it promptly
+        # (rather than waiting up to 250 ms for the window to reopen).
         now = time.monotonic()
-        if now - self._last_proc_t < (1.0 / self.EMIT_RATE_HZ):
+        if (now - self._last_proc_t < (1.0 / self.EMIT_RATE_HZ)
+                and not self._active_issues):
             return
         self._last_proc_t = now
 
