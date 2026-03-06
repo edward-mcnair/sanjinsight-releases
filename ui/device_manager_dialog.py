@@ -1058,6 +1058,7 @@ class DeviceManagerDialog(QDialog):
         super().__init__(parent,
                          Qt.Window | Qt.WindowCloseButtonHint)
         self._mgr = device_manager
+        self._suppress_auto_scan = False   # set True by suppress_next_scan()
         self.setWindowTitle("Device Manager")
         self.setMinimumSize(920, 580)
         self.resize(1080, 660)
@@ -1229,6 +1230,20 @@ class DeviceManagerDialog(QDialog):
     #  First-open auto-scan                                           #
     # ---------------------------------------------------------------- #
 
+    def suppress_next_scan(self):
+        """Skip the auto-scan on the next showEvent.
+
+        Call this before show() at app startup so the Device Manager's
+        hardware discovery scan does not overlap with hw_service.start(),
+        which initialises pyvisa / NI DLLs concurrently on its own threads.
+        Two concurrent pyvisa.ResourceManager() calls inside Parallels (or on
+        Windows with NI drivers installed) can block for 10–30 s and cause the
+        whole UI to freeze.
+
+        The suppression is one-shot: subsequent opens scan normally.
+        """
+        self._suppress_auto_scan = True
+
     def showEvent(self, event):
         """Trigger a quick scan every time the dialog is opened.
 
@@ -1251,7 +1266,13 @@ class DeviceManagerDialog(QDialog):
         during the initial scan and all result/error handling is shared.
         The Network checkbox defaults to unchecked, so this is a fast
         serial/USB-only scan identical to what the old _initial_scan did.
+
+        Suppressed at startup (see suppress_next_scan()) to avoid racing
+        with hw_service NI/pyvisa initialisation on Windows/Parallels.
         """
+        if self._suppress_auto_scan:
+            self._suppress_auto_scan = False   # one-shot
+            return
         self._list_panel.start_scan()
 
     # ---------------------------------------------------------------- #

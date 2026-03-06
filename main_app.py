@@ -2035,8 +2035,17 @@ if __name__ == "__main__":
         # Show Device Manager modally so the user sees scan results before
         # the main interface is accessible.  Modality is removed once the
         # user closes the DM so subsequent deliberate opens are non-blocking.
+        #
+        # suppress_next_scan() prevents the DM's auto-scan from firing at
+        # startup.  hw_service.start() (posted to the same first idle tick)
+        # is already spawning NI/pyvisa init threads; a concurrent DM scan
+        # would race on pyvisa.ResourceManager() initialisation inside the
+        # NI VISA DLL and cause 10–30 s freezes on Windows / Parallels.
+        # Subsequent DM opens (user-initiated) scan normally — only this
+        # first programmatic show() is suppressed.
         def _show_startup_dm():
             dm = window._device_mgr_dlg
+            dm.suppress_next_scan()
             dm.setWindowModality(Qt.ApplicationModal)
             dm.show()
             dm.finished.connect(lambda _: dm.setWindowModality(Qt.NonModal))

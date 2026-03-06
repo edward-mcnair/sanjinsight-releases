@@ -80,6 +80,16 @@ _DEFAULT_CONFIG: dict = {
         "tec_atec":        {"driver": "simulated", "port": "COM4"},
         "stage":           {"driver": "simulated"},
         "bias":            {"driver": "simulated"},
+        # Poll intervals — increase these on slow USB/VM setups (e.g. Parallels)
+        # to reduce USB passthrough traffic.  Values in seconds.
+        # Default: tec=0.5 s, fpga=0.25 s, bias=0.25 s, stage=0.10 s.
+        # Recommended for Parallels: stage_interval_s: 0.5
+        "polling": {
+            "tec_interval_s":   0.50,
+            "fpga_interval_s":  0.25,
+            "bias_interval_s":  0.25,
+            "stage_interval_s": 0.10,
+        },
     },
     "acquisition": {
         "default_n_frames":       16,
