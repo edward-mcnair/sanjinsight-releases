@@ -1261,14 +1261,13 @@ class DeviceManagerDialog(QDialog):
         The ``_list_panel._scanning`` guard prevents a second concurrent scan
         if the user opens the dialog while a previous scan is still running.
 
-        In demo mode the automatic scan is suppressed entirely — the user is
-        already running with simulated hardware and doesn't need the app to
-        probe for real devices on every DM open.  They can still trigger a
-        discovery scan manually via the Scan button.
+        Note: the scan runs even when in demo mode.  The user requirement is
+        "when the user launches the Device Manager it should scan for devices"
+        regardless of the current mode.  If no devices are found while already
+        in demo mode, _offer_demo_dialog shows the "already in demo mode"
+        variant instead of the normal demo-mode offer.
         """
         super().showEvent(event)
-        if self._demo_mode_getter and self._demo_mode_getter():
-            return   # demo mode — don't auto-scan; user must click Scan
         if not self._list_panel._scanning:
             QTimer.singleShot(200, self._initial_scan)
 
@@ -1292,7 +1291,15 @@ class DeviceManagerDialog(QDialog):
         if self._suppress_auto_scan:
             self._suppress_auto_scan = False   # one-shot
             # Defer rather than skip — the demo-mode dialog must still appear.
-            QTimer.singleShot(3_000, self._list_panel.start_scan)
+            # Guard: only fire if the DM is still visible when the timer
+            # expires.  If the user closed the startup DM before 3 s the
+            # QMessageBox that follows would have a hidden parent and either
+            # fail to render or appear behind the main window.  The next
+            # manual DM open triggers a fresh scan through the normal path.
+            def _deferred_scan():
+                if self.isVisible():
+                    self._list_panel.start_scan()
+            QTimer.singleShot(3_000, _deferred_scan)
             return
         self._list_panel.start_scan()
 
