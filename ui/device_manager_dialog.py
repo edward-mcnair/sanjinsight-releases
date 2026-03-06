@@ -1291,15 +1291,11 @@ class DeviceManagerDialog(QDialog):
         if self._suppress_auto_scan:
             self._suppress_auto_scan = False   # one-shot
             # Defer rather than skip — the demo-mode dialog must still appear.
-            # Guard: only fire if the DM is still visible when the timer
-            # expires.  If the user closed the startup DM before 3 s the
-            # QMessageBox that follows would have a hidden parent and either
-            # fail to render or appear behind the main window.  The next
-            # manual DM open triggers a fresh scan through the normal path.
-            def _deferred_scan():
-                if self.isVisible():
-                    self._list_panel.start_scan()
-            QTimer.singleShot(3_000, _deferred_scan)
+            # We do NOT guard on isVisible() here: if the user closes the
+            # startup DM before the 3 s timer fires (it looks idle because
+            # no scan is running yet), _offer_demo_dialog will re-show the DM
+            # so the QMessageBox always has a visible parent widget.
+            QTimer.singleShot(3_000, self._list_panel.start_scan)
             return
         self._list_panel.start_scan()
 
@@ -1321,6 +1317,12 @@ class DeviceManagerDialog(QDialog):
         no mode change needed.
         """
         already_demo = bool(self._demo_mode_getter and self._demo_mode_getter())
+
+        # If the scan completed while the DM was hidden (e.g. the user closed
+        # the startup DM before the 3-second deferred scan fired), re-show it
+        # so the QMessageBox has a visible parent and renders correctly.
+        if not self.isVisible():
+            self.show()
 
         box = QMessageBox(self)
         box.setWindowTitle("No Devices Found")
@@ -1346,8 +1348,8 @@ class DeviceManagerDialog(QDialog):
         scan_btn = box.addButton("Scan Again", QMessageBox.AcceptRole)
 
         if already_demo:
-            box.addButton("Continue in Demo Mode", QMessageBox.RejectRole)
-            box.addButton("Add Manually",          QMessageBox.ActionRole)
+            continue_btn = box.addButton("Continue in Demo Mode", QMessageBox.RejectRole)
+            box.addButton("Add Manually",                         QMessageBox.ActionRole)
         else:
             demo_btn = box.addButton("Demo Mode",    QMessageBox.ActionRole)
             box.addButton(           "Add Manually", QMessageBox.RejectRole)
@@ -1361,3 +1363,5 @@ class DeviceManagerDialog(QDialog):
         elif not already_demo and clicked is demo_btn:
             self.close()          # hide DM before switching mode
             self.demo_requested.emit()
+        elif already_demo and clicked is continue_btn:
+            self.close()          # user confirmed staying in demo mode — close DM
