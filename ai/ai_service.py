@@ -214,6 +214,11 @@ class AIService(QObject):
 
         # Record the user turn now (before inference, so cancel still records it)
         self._history.append(user_msg)
+        # Keep only the messages that will ever be used in context; trimming here
+        # prevents unbounded memory growth over long sessions.
+        max_stored = self._MAX_HISTORY_TURNS * 2
+        if len(self._history) > max_stored:
+            del self._history[:-max_stored]
 
         self._set_status("thinking")
         self._runner.infer(full_msgs)
@@ -240,6 +245,9 @@ class AIService(QObject):
         # Record the assistant turn so follow-up questions have context
         if text.strip():
             self._history.append({"role": "assistant", "content": text})
+            max_stored = self._MAX_HISTORY_TURNS * 2
+            if len(self._history) > max_stored:
+                del self._history[:-max_stored]
         self._set_status("ready")
         self.response_complete.emit(text, elapsed)
 

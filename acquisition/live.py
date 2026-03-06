@@ -102,21 +102,33 @@ class LiveProcessor:
     # ---------------------------------------------------------------- #
 
     def start(self):
-        if self._running:
-            return
-        self._running = True
-        self._cold_ema = None
-        self._hot_ema  = None
-        self._cycle    = 0
-        self._thread   = threading.Thread(
-            target=self._loop, daemon=True, name="LiveProcessor")
-        self._thread.start()
+        # Acquire the lock to make the check-then-set atomic, preventing two
+        # concurrent callers (permitted by the "Thread-safe" contract) from
+        # each passing the guard and spawning a second worker thread.
+        with self._lock:
+            if self._running:
+                return
+            self._running  = True
+            self._cold_ema = None
+            self._hot_ema  = None
+            self._cycle    = 0
+            t = threading.Thread(
+                target=self._loop, daemon=True, name="LiveProcessor")
+            self._thread = t
+        # Start OUTSIDE the lock — the thread must be able to acquire _lock
+        # on its very first iteration; starting under the lock would deadlock.
+        t.start()
 
     def stop(self):
-        self._running = False
-        if self._thread:
-            self._thread.join(timeout=3.0)
-            self._thread = None
+        # Signal the loop to exit, then wait for it to finish.  The join()
+        # is intentionally outside the lock so the worker thread can acquire
+        # it one final time (to read cfg) before observing _running=False.
+        with self._lock:
+            self._running = False
+            t = self._thread
+            self._thread  = None
+        if t:
+            t.join(timeout=3.0)
 
     def get_frame(self, timeout: float = 0.05) -> Optional[LiveFrame]:
         """Return the latest LiveFrame, or None if none available yet."""

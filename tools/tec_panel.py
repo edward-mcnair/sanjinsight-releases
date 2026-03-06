@@ -145,7 +145,11 @@ class TecPanel(QMainWindow):
         self.setWindowTitle("Microsanj TEC Controller")
         self._tecs    = [t for t in [tec_a, tec_b] if t is not None]
         self._signals = [TecSignals() for _ in self._tecs]
-        self._running = True
+        # Use threading.Event instead of a plain bool so the GUI thread's
+        # write in closeEvent is guaranteed visible to the poll threads on all
+        # Python implementations (not just CPython with its GIL).
+        self._running = threading.Event()
+        self._running.set()   # start in the "running" state
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -284,7 +288,7 @@ class TecPanel(QMainWindow):
         threading.Thread(target=tec.disable, daemon=True).start()
 
     def _poll_loop(self, tec, sig: TecSignals):
-        while self._running:
+        while self._running.is_set():
             try:
                 status = tec.get_status()
                 sig.status_updated.emit(status)
@@ -321,7 +325,7 @@ class TecPanel(QMainWindow):
         log.warning("TEC error: %s", msg)
 
     def closeEvent(self, event):
-        self._running = False
+        self._running.clear()   # signals all _poll_loop threads to exit
         for tec in self._tecs:
             try:
                 tec.disconnect()

@@ -366,6 +366,9 @@ class ScriptingConsoleTab(QWidget):
             return
 
         self._history.append(script)
+        # Cap history to prevent unbounded growth in long sessions
+        if len(self._history) > 200:
+            del self._history[:-200]
         self._hist_idx = len(self._history)
 
         self._print_to_output(
