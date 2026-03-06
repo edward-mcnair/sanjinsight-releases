@@ -19,6 +19,31 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.1.1] — 2026-03-06
+
+### Added
+
+- **Cloud AI providers (Claude & ChatGPT)** — optional third-party AI backends
+  alongside the existing local LLM. Connect to Anthropic Claude (Opus 4.6,
+  Sonnet 4.6, Haiku 4.5) or OpenAI ChatGPT (GPT-4o, GPT-4o Mini) using your
+  own API key. Cloud models receive the full system prompt and Quickstart Guide
+  in every request. Implemented via stdlib `http.client` — no new dependencies.
+  Privacy warning displayed prominently in Settings.
+- **Image-based demo mode** — simulated camera now loads real IC chip images
+  (`assets/demo_background.png`, `assets/demo_signal.png`) instead of using
+  only a parametric mathematical model; falls back to the parametric model if
+  the assets are absent.
+
+### Fixed
+
+- Startup demo offer dialog now always appears correctly on first launch.
+- Device Manager closes automatically when demo mode is confirmed.
+- Device Manager always triggers a fresh scan when opened.
+- Deferred startup scan visibility guard prevents race on slow systems.
+- Dark tooltip styling corrected on Windows.
+
+---
+
 ## [1.1.0] — 2026-03-02
 
 ### Added
