@@ -712,6 +712,10 @@ class MainWindow(QMainWindow):
         self._evidence_timer.start()
 
     def _on_frame(self, frame):
+        # Ack immediately so the camera thread can queue the next frame while
+        # we process this one.  This keeps Qt's event queue bounded to ≤1
+        # pending frame regardless of camera fps or VM event-loop latency.
+        hw_service.ack_camera_frame()
         self._camera_tab.update_frame(frame)
         self._acquire_tab.update_live(frame)
         self._roi_tab.update_frame(frame.data)

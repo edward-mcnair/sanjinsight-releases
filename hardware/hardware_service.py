@@ -129,6 +129,22 @@ class HardwareService(QObject):
         self._threads: list[threading.Thread] = []
         self._lock = threading.Lock()
 
+        # ── Camera preview back-pressure gate ─────────────────────────
+        # camera_frame is a cross-thread Qt signal.  Every emit() serialises
+        # the 4+ MB numpy array into Qt's queued-connection event queue.  If
+        # the camera produces frames faster than the GUI thread drains them
+        # (common in VMs / Parallels where the event loop is slower), the
+        # queue grows without bound and the process runs out of memory.
+        #
+        # _cam_preview_free starts SET ("slot is free").  _run_camera() only
+        # emits when it is set, then immediately clears it.  The GUI calls
+        # ack_camera_frame() at the top of _on_frame() to re-set the flag,
+        # allowing the next frame to be queued.  This guarantees at most ONE
+        # camera frame is ever pending in Qt's event queue, regardless of the
+        # camera frame rate or VM event-loop latency.
+        self._cam_preview_free = threading.Event()
+        self._cam_preview_free.set()   # initially free
+
         # Mirror device_connected Qt signal → event bus timeline.
         self.device_connected.connect(self._on_device_connected_evt)
 
@@ -152,6 +168,16 @@ class HardwareService(QObject):
         else:
             emit_warning("hardware.service", EVT_DEVICE_DISCONNECT,
                          f"{key}: disconnected or failed", device=key)
+
+    def ack_camera_frame(self) -> None:
+        """Signal that the GUI has finished with the last delivered frame.
+
+        Call this at the TOP of the camera_frame slot (before doing any widget
+        updates) so the next frame can be queued into Qt's event loop as soon
+        as possible, minimising the chance of dropping frames while still
+        preventing unbounded queue growth.
+        """
+        self._cam_preview_free.set()
 
     # ================================================================ #
     #  Public API                                                       #
@@ -703,10 +729,14 @@ class HardwareService(QObject):
         # would attempt (and fail) to load the real driver, causing the camera
         # thread to exit immediately and leaving demo mode without a live feed.
         if app_state.demo_mode:
+            # Use a compact default resolution for the simulated camera so the
+            # demo doesn't allocate 4+ MB per frame (1920×1200 uint16).
+            # 640×480 is plenty for the live-view display; if the user has a
+            # real camera configured its resolution is preserved via cfg.get().
             cfg = {
                 "driver":      "simulated",
-                "width":       cfg.get("width",       1920),
-                "height":      cfg.get("height",      1200),
+                "width":       cfg.get("width",       640),
+                "height":      cfg.get("height",      480),
                 "fps":         cfg.get("fps",         30),
                 "exposure_us": cfg.get("exposure_us", 5000),
                 "noise_level": cfg.get("noise_level", 40),
@@ -762,7 +792,14 @@ class HardwareService(QObject):
                 try:
                     frame = cam.grab(timeout_ms=500)
                     if frame:
-                        self.camera_frame.emit(frame)
+                        # Only queue a preview frame when the GUI has finished
+                        # with the previous one.  This keeps the Qt queued-
+                        # connection event queue bounded to ≤1 frame at all
+                        # times — critical on slow/VM hosts where the event loop
+                        # runs at well below the camera frame rate.
+                        if self._cam_preview_free.is_set():
+                            self._cam_preview_free.clear()
+                            self.camera_frame.emit(frame)
                         last_frame_t = time.monotonic()
                     elif (time.monotonic() - last_frame_t
                             > self._CAMERA_RECONNECT_TIMEOUT_S):
