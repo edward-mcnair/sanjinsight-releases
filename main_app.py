@@ -587,7 +587,13 @@ class MainWindow(QMainWindow):
         # is wired from app start.  The auto-scan now fires on first open (not
         # at __init__ time) so it never competes with the startup hw-init threads.
         self._device_mgr     = DeviceManager()
-        self._device_mgr_dlg = DeviceManagerDialog(self._device_mgr, parent=self)
+        self._device_mgr_dlg = DeviceManagerDialog(
+            self._device_mgr, parent=self,
+            # Suppress auto-scan in demo mode — user must click Scan explicitly.
+            # The getter is evaluated lazily on each showEvent so it tracks the
+            # current mode correctly throughout the session.
+            demo_mode_getter=lambda: app_state.demo_mode,
+        )
         self._header.add_device_manager_button(self._open_device_manager)
         self._device_mgr_dlg.hw_status_changed.connect(
             self._header.set_hw_btn_status)

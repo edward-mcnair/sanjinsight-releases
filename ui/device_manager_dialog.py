@@ -1054,11 +1054,17 @@ class DeviceManagerDialog(QDialog):
     hw_status_changed = pyqtSignal(bool)
     demo_requested    = pyqtSignal()    # user chose "Run in Demo Mode" from the no-devices dialog
 
-    def __init__(self, device_manager: DeviceManager, parent=None):
+    def __init__(self, device_manager: DeviceManager, parent=None,
+                 demo_mode_getter=None):
         super().__init__(parent,
                          Qt.Window | Qt.WindowCloseButtonHint)
         self._mgr = device_manager
         self._suppress_auto_scan = False   # set True by suppress_next_scan()
+        # Optional zero-argument callable that returns True while demo mode is
+        # active.  When set, showEvent suppresses the automatic scan so the UI
+        # never probes for hardware just because the user opened the dialog —
+        # the user must deliberately click Scan if they want discovery to run.
+        self._demo_mode_getter = demo_mode_getter
         self.setWindowTitle("Device Manager")
         self.setMinimumSize(920, 580)
         self.resize(1080, 660)
@@ -1254,8 +1260,15 @@ class DeviceManagerDialog(QDialog):
 
         The ``_list_panel._scanning`` guard prevents a second concurrent scan
         if the user opens the dialog while a previous scan is still running.
+
+        In demo mode the automatic scan is suppressed entirely — the user is
+        already running with simulated hardware and doesn't need the app to
+        probe for real devices on every DM open.  They can still trigger a
+        discovery scan manually via the Scan button.
         """
         super().showEvent(event)
+        if self._demo_mode_getter and self._demo_mode_getter():
+            return   # demo mode — don't auto-scan; user must click Scan
         if not self._list_panel._scanning:
             QTimer.singleShot(200, self._initial_scan)
 
@@ -1282,34 +1295,54 @@ class DeviceManagerDialog(QDialog):
     def _offer_demo_dialog(self):
         """Modal dialog shown when a completed scan finds zero devices.
 
-        Replaces the silent status-bar text with an actionable choice:
+        When not in demo mode:
           • Scan Again    — reruns the scan immediately
           • Demo Mode     — emits demo_requested so main_app.py can activate it
           • Add Manually  — dismisses dialog; Device Manager stays open so the
                             user can add devices via the Add button
+
+        When already in demo mode the "Demo Mode" button is replaced with
+        "Continue in Demo Mode" which simply dismisses the dialog — there is
+        no mode change needed.
         """
+        already_demo = bool(self._demo_mode_getter and self._demo_mode_getter())
+
         box = QMessageBox(self)
         box.setWindowTitle("No Devices Found")
         box.setIcon(QMessageBox.Warning)
-        box.setText(
-            "<b>No compatible hardware was detected.</b>")
-        box.setInformativeText(
-            "Check that all devices are powered on and their cables are "
-            "connected, then scan again.\n\n"
-            "Select <i>Demo Mode</i> to explore the full interface with "
-            "simulated hardware — no physical devices required.\n\n"
-            "Select <i>Add Manually</i> to configure devices by hand in "
-            "the Device Manager.")
+        box.setText("<b>No compatible hardware was detected.</b>")
 
-        scan_btn   = box.addButton("Scan Again",   QMessageBox.AcceptRole)
-        demo_btn   = box.addButton("Demo Mode",    QMessageBox.ActionRole)
-        box.addButton(             "Add Manually", QMessageBox.RejectRole)
+        if already_demo:
+            box.setInformativeText(
+                "No new hardware was found.  You are already running in "
+                "Demo Mode with simulated hardware.\n\n"
+                "Power on your device, check its cable, and click "
+                "<i>Scan Again</i> — or close this dialog to keep working "
+                "in Demo Mode.")
+        else:
+            box.setInformativeText(
+                "Check that all devices are powered on and their cables are "
+                "connected, then scan again.\n\n"
+                "Select <i>Demo Mode</i> to explore the full interface with "
+                "simulated hardware — no physical devices required.\n\n"
+                "Select <i>Add Manually</i> to configure devices by hand in "
+                "the Device Manager.")
+
+        scan_btn = box.addButton("Scan Again", QMessageBox.AcceptRole)
+
+        if already_demo:
+            box.addButton("Continue in Demo Mode", QMessageBox.RejectRole)
+            box.addButton("Add Manually",          QMessageBox.ActionRole)
+        else:
+            demo_btn = box.addButton("Demo Mode",    QMessageBox.ActionRole)
+            box.addButton(           "Add Manually", QMessageBox.RejectRole)
+
         box.setDefaultButton(scan_btn)
         box.exec_()
 
         clicked = box.clickedButton()
         if clicked is scan_btn:
             self._list_panel.start_scan()
-        elif clicked is demo_btn:
+        elif not already_demo and clicked is demo_btn:
             self.close()          # hide DM before switching mode
             self.demo_requested.emit()
