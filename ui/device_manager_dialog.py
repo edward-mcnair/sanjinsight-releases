@@ -1263,9 +1263,10 @@ class DeviceManagerDialog(QDialog):
         """Modal dialog shown when a completed scan finds zero devices.
 
         Replaces the silent status-bar text with an actionable choice:
-          • Scan Again  — reruns the scan immediately
-          • Demo Mode   — emits demo_requested so main_app.py can activate it
-          • Close       — dismisses with no action (status bar text remains)
+          • Scan Again    — reruns the scan immediately
+          • Demo Mode     — emits demo_requested so main_app.py can activate it
+          • Add Manually  — dismisses dialog; Device Manager stays open so the
+                            user can add devices via the Add button
         """
         box = QMessageBox(self)
         box.setWindowTitle("No Devices Found")
@@ -1276,11 +1277,13 @@ class DeviceManagerDialog(QDialog):
             "Check that all devices are powered on and their cables are "
             "connected, then scan again.\n\n"
             "Select <i>Demo Mode</i> to explore the full interface with "
-            "simulated hardware — no physical devices required.")
+            "simulated hardware — no physical devices required.\n\n"
+            "Select <i>Add Manually</i> to configure devices by hand in "
+            "the Device Manager.")
 
-        scan_btn = box.addButton("Scan Again",   QMessageBox.AcceptRole)
-        demo_btn = box.addButton("Demo Mode",    QMessageBox.ActionRole)
-        box.addButton(           "Close",        QMessageBox.RejectRole)
+        scan_btn   = box.addButton("Scan Again",   QMessageBox.AcceptRole)
+        demo_btn   = box.addButton("Demo Mode",    QMessageBox.ActionRole)
+        box.addButton(             "Add Manually", QMessageBox.RejectRole)
         box.setDefaultButton(scan_btn)
         box.exec_()
 

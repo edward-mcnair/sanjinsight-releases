@@ -63,8 +63,7 @@ from ui.scripting_console        import ScriptingConsoleTab # ← Python console
 from ui.sidebar_nav              import SidebarNav          # ← grouped sidebar nav
 from hardware.device_manager     import DeviceManager
 from ui.device_manager_dialog    import DeviceManagerDialog
-from ui.notifications            import (StartupProgressDialog,   # ← notifications
-                                          ToastManager, get_guidance)
+from ui.notifications            import (ToastManager, get_guidance)  # ← notifications
 from profiles.profiles        import MaterialProfile
 from profiles.profile_manager import ProfileManager
 from profiles.profile_tab     import ProfileTab
@@ -1982,112 +1981,51 @@ if __name__ == "__main__":
         signals.log_message.emit("Running in demo mode \u2014 all hardware is simulated")
         hw_service.start_demo()
 
-    # ── Normal startup: amber dots + startup progress dialog ──────────
+    # ── Normal startup: Device Manager as the startup gate ───────────
     else:
         hw_cfg = config.get("hardware", {})
-        _configured_devices = []
+
+        # Set amber connecting dots in the header for all enabled devices so
+        # the user has immediate visual feedback while hardware initialises.
         if hw_cfg.get("camera", {}).get("enabled", True):
-            _configured_devices.append("camera")
             window._header.set_connecting("camera")
         for _tec_key, _dot_key in [("tec_meerstetter", "tec0"), ("tec_atec", "tec1")]:
             if hw_cfg.get(_tec_key, {}).get("enabled", False):
-                _configured_devices.append(_dot_key)
                 window._header.set_connecting(_dot_key)
-        if hw_cfg.get("fpga", {}).get("enabled", False):
-            _configured_devices.append("fpga")
+        if hw_cfg.get("fpga",  {}).get("enabled", False):
             window._header.set_connecting("fpga")
-        if hw_cfg.get("bias", {}).get("enabled", False):
-            _configured_devices.append("bias")
+        if hw_cfg.get("bias",  {}).get("enabled", False):
             window._header.set_connecting("bias")
         if hw_cfg.get("stage", {}).get("enabled", False):
-            _configured_devices.append("stage")
             window._header.set_connecting("stage")
 
-        if _configured_devices:
-            _startup_dlg = StartupProgressDialog(
-                expected_devices=_configured_devices,
-                parent=window)
-            hw_service.startup_status.connect(_startup_dlg.on_device_status)
-
-            # Track whether any device connects as simulated so we can
-            # show an advisory in the status bar when no real hardware
-            # is present (but the user didn't explicitly request demo mode).
-            _simulated_keys: list = []
-            def _on_startup_status_sim(key: str, ok: bool, detail: str):
-                if ok and 'simulated' in detail.lower():
-                    _simulated_keys.append(key)
-            hw_service.startup_status.connect(_on_startup_status_sim)
-
-            def _on_startup_finished():
-                if _simulated_keys and not app_state.demo_mode:
-                    keys_str = ', '.join(_simulated_keys)
+        # Show a status-bar advisory when any device falls back to simulation
+        # (so the user can distinguish "real HW connected" from "simulated").
+        _simulated_keys: list = []
+        def _on_startup_status_sim(key: str, ok: bool, detail: str):
+            if ok and "simulated" in detail.lower():
+                _simulated_keys.append(key)
+                if not app_state.demo_mode:
+                    keys_str = ", ".join(_simulated_keys)
                     window._status.showMessage(
                         f"SanjINSIGHT {version_string()}  \u2014  "
-                        f"Simulated hardware  ({keys_str} — no real hardware connected)",
+                        f"Simulated hardware  ({keys_str} \u2014 no real hardware connected)",
                         0)
-            _startup_dlg.finished.connect(_on_startup_finished)
+        hw_service.startup_status.connect(_on_startup_status_sim)
 
-            def _on_demo_requested():
-                hw_service.shutdown()
-                app_state.demo_mode = True
-                app_state.tecs      = []
-                window._header.set_demo_mode(True)
-                window._status.showMessage(
-                    f"SanjINSIGHT {version_string()}  \u2014  DEMO MODE", 0)
-                signals.log_message.emit(
-                    "Demo mode activated \u2014 all hardware replaced with simulated drivers")
-                hw_service.start_demo()
+        # Start hardware after the Qt event loop begins (see COM STA
+        # message-pump explanation in the QTimer.singleShot comment above).
+        QTimer.singleShot(0, hw_service.start)
 
-            _startup_dlg.demo_requested.connect(_on_demo_requested)
-            _startup_dlg.show()
-
-            # Start hardware AFTER the dialog is fully connected AND after the
-            # Qt event loop has started (app.exec_() below).
-            #
-            # On Windows, hardware threads that use pyvisa / NI IMAQdx DLLs
-            # call CoInitialize() which creates a COM MTA.  COM calls from MTA
-            # threads are marshalled to the main thread's STA message queue.
-            # If app.exec_() hasn't started yet, nothing is pumping that queue
-            # and every marshalled call stalls for 10-30 s waiting for the main
-            # thread to process its inbox — showing as "Not Responding" and a
-            # 10-20 s delay on the very first button click.
-            #
-            # QTimer.singleShot(0, …) schedules the call for the first idle
-            # tick of app.exec_(), so the message queue is live when hardware
-            # threads start.  Signals already emitted before the dialog's slots
-            # were connected are fine — QTimer fires after show() so the dialog
-            # is fully wired before any startup_status arrives.
-            QTimer.singleShot(0, hw_service.start)
-
-            # Safety net: close after 30 s even if a device never reports back
-            # (e.g. auto-reconnect loop keeps a device perpetually "connecting").
-            QTimer.singleShot(
-                30_000,
-                lambda: _startup_dlg.accept() if _startup_dlg.isVisible() else None)
-
-        else:
-            # No devices configured — start camera thread (simulated fallback)
-            # and offer demo mode via a QMessageBox.  Defer hw_service.start()
-            # for the same COM-message-pump reason as the hardware path above.
-            QTimer.singleShot(0, hw_service.start)
-            def _offer_demo():
-                from PyQt5.QtWidgets import QMessageBox as _QMB
-                box = _QMB(window)
-                box.setWindowTitle("No Hardware Configured")
-                box.setIcon(_QMB.Warning)
-                box.setText("<b>No devices are enabled in config.yaml.</b>")
-                box.setInformativeText(
-                    "Open config.yaml and set <i>enabled: true</i> for each "
-                    "connected device, then restart.\n\n"
-                    "Or click <i>Demo Mode</i> to explore the full interface "
-                    "with simulated hardware — no physical devices required.")
-                demo_btn = box.addButton("Demo Mode",    _QMB.ActionRole)
-                box.addButton(           "Configure Later", _QMB.RejectRole)
-                box.setDefaultButton(demo_btn)
-                box.exec_()
-                if box.clickedButton() is demo_btn:
-                    window._activate_demo_mode()
-            QTimer.singleShot(800, _offer_demo)
+        # Show Device Manager modally so the user sees scan results before
+        # the main interface is accessible.  Modality is removed once the
+        # user closes the DM so subsequent deliberate opens are non-blocking.
+        def _show_startup_dm():
+            dm = window._device_mgr_dlg
+            dm.setWindowModality(Qt.ApplicationModal)
+            dm.show()
+            dm.finished.connect(lambda _: dm.setWindowModality(Qt.NonModal))
+        QTimer.singleShot(0, _show_startup_dm)
 
     # Scan existing sessions on startup
     try:
