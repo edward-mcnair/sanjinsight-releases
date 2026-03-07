@@ -304,7 +304,7 @@ from ui.app_signals import AppSignals, signals
 # New code should use:
 #     from hardware.app_state       import app_state
 from hardware.hardware_service import HardwareService
-from version import __version__, APP_NAME, APP_VENDOR, version_string
+from version import __version__, APP_NAME, APP_VENDOR, version_string, SUPPORT_EMAIL
 #     cam = app_state.cam
 #
 
@@ -1039,6 +1039,10 @@ class MainWindow(QMainWindow):
 
         help_menu.addSeparator()
 
+        act_license = help_menu.addAction("License…")
+        act_license.setToolTip("View or activate your SanjINSIGHT license key")
+        act_license.triggered.connect(self._show_license_dialog)
+
         act_support = help_menu.addAction("Get Support…")
         act_support.setToolTip(
             "Open a pre-filled support email with system info and recent log")
@@ -1137,6 +1141,58 @@ class MainWindow(QMainWindow):
         from ui.dialogs.bundle_dialog import BundleDialog
         dlg = BundleDialog(device_manager=self._device_mgr, parent=self)
         dlg.exec_()
+
+    # ── Update checker ─────────────────────────────────────────────
+
+    # ── License ────────────────────────────────────────────────────────
+
+    def _load_license(self):
+        """Load and validate the stored license key; update app_state."""
+        import config as _cfg
+        from licensing.license_validator import load_license
+        from licensing.license_model import LicenseTier
+        from hardware.app_state import app_state as _app_state
+
+        info = load_license(_cfg)
+        _app_state.license_info = info
+
+        if info.tier == LicenseTier.UNLICENSED:
+            log.info("No valid license key — running in demo/unlicensed mode")
+        else:
+            log.info(
+                f"License: {info.tier_display} / {info.customer!r} "
+                f"(expires: {info.expires or 'never'})"
+            )
+            # Warn if expiry is within 30 days
+            days = info.days_until_expiry
+            if days is not None and 0 < days <= 30:
+                from PyQt5.QtCore import QTimer
+                QTimer.singleShot(
+                    3000,   # wait 3 s after startup before showing dialog
+                    lambda: self._show_license_expiry_warning(info)
+                )
+
+    def _show_license_dialog(self):
+        """Open Help → License… dialog."""
+        from ui.license_dialog import LicenseDialog
+        dlg = LicenseDialog(parent=self)
+        dlg.license_changed.connect(self._load_license)
+        dlg.license_changed.connect(self._settings_tab.refresh_license_status)
+        dlg.exec_()
+
+    def _show_license_expiry_warning(self, info):
+        """Show a one-time amber warning when the license expires within 30 days."""
+        from PyQt5.QtWidgets import QMessageBox
+        days = info.days_until_expiry
+        if days is None or days > 30:
+            return
+        QMessageBox.warning(
+            self,
+            "License Expiring Soon",
+            f"Your SanjINSIGHT license for {info.customer!r} expires in "
+            f"{days} day{'s' if days != 1 else ''}.\n\n"
+            f"Contact {SUPPORT_EMAIL} to renew.",
+        )
 
     # ── Update checker ─────────────────────────────────────────────
 
@@ -2138,6 +2194,7 @@ if __name__ == "__main__":
         signals.log_message.emit(f"Sessions: could not scan {session_mgr.root}: {e}")
 
     window.show()
+    window._load_license()           # validate stored license key
     window._start_update_checker()   # background check, non-blocking
 
     # ── Autosave recovery check ──────────────────────────────────────

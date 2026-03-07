@@ -55,6 +55,9 @@ PyYAML>=6.0
 #   pip install pyvisa pyvisa-py
 #   Or install NI-VISA from https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html
 
+# ── Licensing ─────────────────────────────────────────────────────────────────
+cryptography>=42.0.0          # Ed25519 license key validation (ships in installer)
+
 # ── Icons ─────────────────────────────────────────────────────────────────────
 qtawesome>=1.3.0              # FontAwesome 5 vector icons for PyQt5
 

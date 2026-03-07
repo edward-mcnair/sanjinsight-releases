@@ -182,6 +182,9 @@ class SettingsTab(QWidget):
         # ── Cloud AI ──────────────────────────────────────────────────
         lay.addWidget(self._build_cloud_ai_group())
 
+        # ── License ───────────────────────────────────────────────────
+        lay.addWidget(self._build_license_group())
+
         # ── Support ───────────────────────────────────────────────────
         lay.addWidget(self._build_support_group())
 
@@ -876,6 +879,91 @@ class SettingsTab(QWidget):
                 self._cloud_connect_btn.setEnabled(True)
             else:
                 self._cloud_connect_btn.setEnabled(False)
+
+    def _build_license_group(self) -> QGroupBox:
+        """License status card with a shortcut to the License dialog."""
+        g = _group("License")
+        lay = QVBoxLayout(g)
+        lay.setSpacing(12)
+
+        # Status row
+        status_row = QWidget()
+        status_row.setStyleSheet("background:transparent;")
+        sr_lay = QHBoxLayout(status_row)
+        sr_lay.setContentsMargins(0, 0, 0, 0)
+        sr_lay.setSpacing(10)
+
+        self._lic_status_icon  = QLabel("○")
+        self._lic_status_icon.setStyleSheet(f"font-size:14pt; color:{_AMBER};")
+        self._lic_status_label = QLabel("Loading…")
+        self._lic_status_label.setStyleSheet(f"font-size:12pt; color:{_TEXT};")
+
+        sr_lay.addWidget(self._lic_status_icon)
+        sr_lay.addWidget(self._lic_status_label, 1)
+
+        manage_btn = QPushButton("Manage License…")
+        manage_btn.setStyleSheet(_BTN_PRIMARY)
+        manage_btn.setFixedHeight(30)
+        manage_btn.setToolTip("View license details or activate a new key")
+        manage_btn.clicked.connect(self._on_manage_license)
+        sr_lay.addWidget(manage_btn)
+
+        lay.addWidget(status_row)
+
+        # Detail line (customer name / expiry)
+        self._lic_detail_label = QLabel("")
+        self._lic_detail_label.setStyleSheet(f"font-size:11pt; color:{_MUTED};")
+        self._lic_detail_label.setWordWrap(True)
+        lay.addWidget(self._lic_detail_label)
+
+        # Populate immediately
+        self.refresh_license_status()
+
+        return g
+
+    def refresh_license_status(self):
+        """Re-read the current license from app_state and update the card."""
+        from hardware.app_state import app_state
+        from licensing.license_model import LicenseTier
+
+        info = app_state.license_info
+
+        if info is None or info.tier == LicenseTier.UNLICENSED:
+            self._lic_status_icon.setText("○")
+            self._lic_status_icon.setStyleSheet(f"font-size:14pt; color:{_AMBER};")
+            self._lic_status_label.setText("Unlicensed — demo mode only")
+            self._lic_status_label.setStyleSheet(f"font-size:12pt; color:{_AMBER};")
+            self._lic_detail_label.setText(
+                "Activate a license key to enable full hardware access.")
+        else:
+            days = info.days_until_expiry
+            if days is not None and days <= 30:
+                icon_color = _AMBER
+                status_text = f"Active — expires in {days} day{'s' if days != 1 else ''}"
+            else:
+                icon_color = _GREEN
+                status_text = "Active"
+
+            self._lic_status_icon.setText("●")
+            self._lic_status_icon.setStyleSheet(f"font-size:14pt; color:{icon_color};")
+            self._lic_status_label.setText(status_text)
+            self._lic_status_label.setStyleSheet(f"font-size:12pt; color:{icon_color};")
+
+            detail_parts = [f"{info.tier_display}  ·  {info.customer}"]
+            if info.email:
+                detail_parts.append(info.email)
+            if not info.is_perpetual:
+                detail_parts.append(f"Expires {info.expires}")
+            self._lic_detail_label.setText("  ·  ".join(detail_parts))
+
+    def _on_manage_license(self):
+        """Open the License dialog from the Settings tab."""
+        from ui.license_dialog import LicenseDialog
+        from PyQt5.QtWidgets import QApplication
+        parent = QApplication.activeWindow()
+        dlg = LicenseDialog(parent=parent)
+        dlg.license_changed.connect(self.refresh_license_status)
+        dlg.exec_()
 
     def _build_support_group(self) -> QGroupBox:
         g = _group("Support & About")

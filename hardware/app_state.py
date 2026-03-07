@@ -77,6 +77,12 @@ class ApplicationState:
         # ── Demo mode ───────────────────────────────────────────────
         self._demo_mode: bool = False     # True when running on simulated hardware
 
+        # ── License ──────────────────────────────────────────────────
+        # Populated at startup by main_app._load_license().
+        # Use app_state.license_info to read; never import LicenseInfo here
+        # to keep this module free of the cryptography dependency.
+        self._license_info = None         # LicenseInfo | None
+
     # ── Context manager (use for compound operations) ───────────────
 
     def __enter__(self):
@@ -85,6 +91,25 @@ class ApplicationState:
 
     def __exit__(self, *_):
         self._lock.release()
+
+    # ── License property ─────────────────────────────────────────────
+
+    @property
+    def license_info(self):
+        """Current LicenseInfo (or None before startup completes)."""
+        with self._lock:
+            return self._license_info
+
+    @license_info.setter
+    def license_info(self, value) -> None:
+        with self._lock:
+            self._license_info = value
+
+    @property
+    def is_licensed(self) -> bool:
+        """True when a valid, non-expired, non-UNLICENSED key is loaded."""
+        info = self._license_info
+        return info is not None and info.is_active
 
     # ── Demo mode property ───────────────────────────────────────────
 
