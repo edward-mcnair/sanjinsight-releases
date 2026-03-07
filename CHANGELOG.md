@@ -176,14 +176,24 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## How to add a new release entry
 
-1. Duplicate the `[Unreleased]` section below, set the version and date.
+> **Repo layout**
+> - **Source** (private): `github.com/edward-mcnair/sanjinsight` — code lives here
+> - **Releases** (public): `github.com/edward-mcnair/sanjinsight-releases` — installers + release notes only
+
+1. Duplicate the `[Unreleased]` section above, set the version and today's date.
 2. Move items from Unreleased into the new section.
-3. Update `version.py` — change `__version__` and `BUILD_DATE`.
-4. Commit, tag, and push:
+3. Update `version.py` — change `__version__`, `VERSION_TUPLE`, and `BUILD_DATE`.
+4. Commit, tag, and push the **source** repo:
    ```
-   git add -A
+   git add CHANGELOG.md version.py
    git commit -m "Release v1.x.x"
    git tag -a v1.x.x -m "Release v1.x.x"
    git push origin main --tags
    ```
-5. Create a GitHub Release from the tag, paste the changelog section as release notes, and attach the Windows installer .exe.
+5. Build the Windows installer (PyInstaller).
+6. Create a GitHub Release on the **public releases repo**
+   (`github.com/edward-mcnair/sanjinsight-releases/releases/new`):
+   - Tag: `v1.x.x`
+   - Title: `SanjINSIGHT v1.x.x`
+   - Body: paste the CHANGELOG section for this version
+   - Attach: `SanjINSIGHT-Setup-1.x.x.exe`

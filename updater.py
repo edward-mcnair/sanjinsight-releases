@@ -12,15 +12,21 @@ How it works
    in control.
 
 GitHub API endpoint used:
-    GET https://api.github.com/repos/microsanj/sanjinsight/releases/latest
+    GET https://api.github.com/repos/edward-mcnair/sanjinsight-releases/releases/latest
     Returns JSON with tag_name, body (markdown release notes), assets[].browser_download_url
 
-Adding a real GitHub repo
---------------------------
-1. Create the repo at github.com/microsanj/sanjinsight
-2. Publish releases with tags matching v{version.py __version__}
-3. Attach the Windows installer .exe as a release asset named
-   SanjINSIGHT-Setup-{version}.exe
+Release workflow
+----------------
+Source code lives in a private repo (edward-mcnair/sanjinsight).
+Releases are published to a separate PUBLIC repo (edward-mcnair/sanjinsight-releases)
+so the update checker can reach the API without authentication.
+
+To publish a release:
+1. Build the Windows installer (.exe)
+2. Go to github.com/edward-mcnair/sanjinsight-releases/releases/new
+3. Tag: v{version}  |  Title: SanjINSIGHT v{version}
+4. Paste the CHANGELOG.md section as the release body
+5. Attach SanjINSIGHT-Setup-{version}.exe as a release asset
 """
 
 from __future__ import annotations

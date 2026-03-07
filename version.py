@@ -27,11 +27,17 @@ APP_VENDOR     = "Microsanj"
 APP_FULL_NAME  = f"{APP_VENDOR} {APP_NAME}"
 
 # ── Update channel ────────────────────────────────────────────────────────────
-# GitHub repo where releases are published.
-# The updater hits:  https://api.github.com/repos/{GITHUB_REPO}/releases/latest
-GITHUB_REPO         = "edward-mcnair/sanjinsight"
-UPDATE_CHECK_URL    = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
-RELEASES_PAGE_URL   = f"https://github.com/{GITHUB_REPO}/releases"
+# Public releases-only repo (no source code).  The source repo is kept private.
+# To publish a new release:
+#   1. Build the installer
+#   2. Create a GitHub Release on RELEASES_REPO (not the source repo)
+#   3. Attach the .exe as a release asset
+# The updater hits:  https://api.github.com/repos/{RELEASES_REPO}/releases/latest
+SOURCE_REPO         = "edward-mcnair/sanjinsight"          # private — source code
+RELEASES_REPO       = "edward-mcnair/sanjinsight-releases" # public  — installers only
+GITHUB_REPO         = RELEASES_REPO                        # alias used by updater
+UPDATE_CHECK_URL    = f"https://api.github.com/repos/{RELEASES_REPO}/releases/latest"
+RELEASES_PAGE_URL   = f"https://github.com/{RELEASES_REPO}/releases"
 DOCS_URL            = f"https://docs.microsanj.com/sanjinsight"
 SUPPORT_EMAIL       = "software-support@microsanj.com"
 
