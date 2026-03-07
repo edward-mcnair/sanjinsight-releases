@@ -101,12 +101,7 @@ class UpdateChecker:
     def _run(self, delay_s: float) -> None:
         if delay_s:
             time.sleep(delay_s)
-        result = self._fetch()
-        if result:
-            try:
-                self._on_update(result)
-            except Exception as e:
-                log.warning(f"Update callback error: {e}")
+        self._fetch()   # callbacks (_on_update / _on_no_update / _on_error) fired inside
 
     def _fetch(self) -> Optional[UpdateInfo]:
         try:
@@ -146,6 +141,10 @@ class UpdateChecker:
                 is_prerelease = data.get("prerelease", False),
             )
             log.info(f"Update available: v{remote_version} (running v{__version__})")
+            try:
+                self._on_update(info)
+            except Exception as e:
+                log.warning(f"Update callback error: {e}")
             return info
 
         except urllib.error.URLError as e:
