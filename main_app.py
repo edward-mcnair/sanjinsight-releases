@@ -1141,6 +1141,10 @@ class MainWindow(QMainWindow):
         """Start the background update check if enabled in preferences."""
         from updater import UpdateChecker, should_check_now, record_check_date
         import config as _cfg
+        from hardware.app_state import app_state
+        if app_state.demo_mode:
+            log.debug("Update check skipped — running in demo mode")
+            return
         if not should_check_now(_cfg):
             return
         record_check_date(_cfg)
@@ -1170,7 +1174,13 @@ class MainWindow(QMainWindow):
     def _on_manual_update_check(self):
         """Triggered by Settings tab "Check Now" or Help → Check for Updates."""
         from updater import UpdateChecker
+        from hardware.app_state import app_state
         import threading
+
+        if app_state.demo_mode:
+            self._settings_tab.set_check_result(
+                "Update checks are disabled in demo mode", "#8892a4")
+            return
 
         def _check():
             checker = UpdateChecker(
