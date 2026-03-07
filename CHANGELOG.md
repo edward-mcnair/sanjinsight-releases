@@ -19,6 +19,22 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.1.2] — 2026-03-07
+
+### Fixed
+
+- "No Devices Found" dialog: `<i>` HTML tags now render correctly instead of
+  appearing as literal text on Windows. Button names shown in quotes instead.
+- Update checker: `on_update` callback now fires correctly from `check_sync()`
+  so the "Check Now" button in Settings properly shows the update dialog.
+- Update checker now points to the public releases repo
+  (`edward-mcnair/sanjinsight-releases`) instead of the private source repo,
+  so the GitHub API is reachable without authentication.
+- Update checks are skipped in demo mode to avoid network errors on offline
+  demo machines.
+
+---
+
 ## [1.1.1] — 2026-03-06
 
 ### Added

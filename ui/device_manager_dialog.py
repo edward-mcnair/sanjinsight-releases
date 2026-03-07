@@ -1334,15 +1334,15 @@ class DeviceManagerDialog(QDialog):
                 "No new hardware was found.  You are already running in "
                 "Demo Mode with simulated hardware.\n\n"
                 "Power on your device, check its cable, and click "
-                "<i>Scan Again</i> — or close this dialog to keep working "
+                "\"Scan Again\" — or close this dialog to keep working "
                 "in Demo Mode.")
         else:
             box.setInformativeText(
                 "Check that all devices are powered on and their cables are "
                 "connected, then scan again.\n\n"
-                "Select <i>Demo Mode</i> to explore the full interface with "
+                "Select \"Demo Mode\" to explore the full interface with "
                 "simulated hardware — no physical devices required.\n\n"
-                "Select <i>Add Manually</i> to configure devices by hand in "
+                "Select \"Add Manually\" to configure devices by hand in "
                 "the Device Manager.")
 
         scan_btn = box.addButton("Scan Again", QMessageBox.AcceptRole)
