@@ -590,6 +590,9 @@ class MainWindow(QMainWindow):
         # Connect mode toggle button
         self._header.connect_mode_toggle(self._on_mode_change)
 
+        # Connect demo mode exit button
+        self._header.exit_demo_requested.connect(self._deactivate_demo_mode)
+
         # Restore last-used mode from preferences
         import config as _cfg
         saved_mode = _cfg.get_pref("ui.mode", "standard")
@@ -1174,13 +1177,7 @@ class MainWindow(QMainWindow):
     def _on_manual_update_check(self):
         """Triggered by Settings tab "Check Now" or Help → Check for Updates."""
         from updater import UpdateChecker
-        from hardware.app_state import app_state
         import threading
-
-        if app_state.demo_mode:
-            self._settings_tab.set_check_result(
-                "Update checks are disabled in demo mode", "#8892a4")
-            return
 
         def _check():
             checker = UpdateChecker(
@@ -1622,6 +1619,36 @@ class MainWindow(QMainWindow):
 
         _threading.Thread(
             target=_switch_to_demo, daemon=True, name="hw.demo_switch"
+        ).start()
+
+    def _deactivate_demo_mode(self):
+        """Exit demo mode and open the Device Manager to scan for real hardware.
+
+        Called when the user clicks the '✕ Exit' button in the demo banner.
+        Shuts down simulated drivers on a background thread, clears the demo
+        flag, hides the banner, then opens the Device Manager so the user can
+        scan for their instrument.
+        """
+        import threading as _threading
+        from hardware.app_state import app_state as _app_state
+        if not _app_state.demo_mode:
+            return  # not in demo mode — nothing to do
+
+        _app_state.demo_mode = False
+        self._header.set_demo_mode(False)
+        self._status.showMessage(
+            f"SanjINSIGHT {version_string()}  —  exiting demo mode…", 4000)
+        signals.log_message.emit(
+            "Exiting demo mode — shutting down simulated drivers…")
+
+        def _switch_to_real():
+            hw_service.shutdown()          # stop simulated drivers
+            # Device Manager opened on GUI thread after shutdown completes
+            from PyQt5.QtCore import QTimer
+            QTimer.singleShot(0, self._device_mgr_dlg.show)
+
+        _threading.Thread(
+            target=_switch_to_real, daemon=True, name="hw.exit_demo"
         ).start()
 
     # ── AI assistant handlers ──────────────────────────────────────────

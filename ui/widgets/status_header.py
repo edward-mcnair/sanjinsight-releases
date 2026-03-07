@@ -123,6 +123,8 @@ class _ModeToggle(QWidget):
 
 
 class StatusHeader(QWidget):
+    exit_demo_requested = pyqtSignal()   # emitted when user clicks Exit in the demo banner
+
     def __init__(self):
         super().__init__()
         self.setMaximumHeight(64)
@@ -223,7 +225,7 @@ class StatusHeader(QWidget):
         self._demo_banner.setStyleSheet(
             "background:#ff990022; border:1px solid #ff990066; border-radius:4px;")
         db_lay = QHBoxLayout(self._demo_banner)
-        db_lay.setContentsMargins(10, 0, 10, 0)
+        db_lay.setContentsMargins(10, 0, 6, 0)
         db_lay.setSpacing(6)
         db_icon = QLabel("▶")
         db_icon.setStyleSheet("color:#ff9900; font-size:13pt;")
@@ -231,8 +233,22 @@ class StatusHeader(QWidget):
         db_text.setStyleSheet(
             "color:#ff9900; font-size:12pt; font-family:Menlo,monospace; "
             "letter-spacing:2px; font-weight:bold;")
+        db_exit = QPushButton("✕ Exit")
+        db_exit.setToolTip("Exit demo mode and scan for real hardware")
+        db_exit.setStyleSheet("""
+            QPushButton {
+                background: #ff990033; color: #ff9900;
+                border: 1px solid #ff990066; border-radius: 3px;
+                font-size: 11pt; font-weight: 600; padding: 2px 8px;
+            }
+            QPushButton:hover   { background: #ff990066; }
+            QPushButton:pressed { background: #ff990099; }
+        """)
+        db_exit.clicked.connect(self.exit_demo_requested)
         db_lay.addWidget(db_icon)
         db_lay.addWidget(db_text)
+        db_lay.addSpacing(4)
+        db_lay.addWidget(db_exit)
         self._demo_banner.setToolTip(
             "Running with simulated hardware — no instrument connected.\n"
             "All measurements use synthetic data.")
