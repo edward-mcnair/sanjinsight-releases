@@ -300,17 +300,11 @@ jobs:
           echo "INSTALLER_PATH=$installer" >> $env:GITHUB_ENV
         shell: pwsh
 
-      # ── 14. Upload installer as build artifact ────────────────────────────
-      # Only kept for manual (workflow_dispatch) builds — tag builds attach
-      # the .exe directly to the GitHub Release so no artifact copy is needed.
-      # Short retention prevents artifact storage quota from filling up.
-      - name: Upload installer artifact
-        if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v4
-        with:
-          name: SanjINSIGHT-Setup-${{ steps.version.outputs.version }}
-          path: installer_output/*.exe
-          retention-days: 7
+      # ── 14. (Artifact upload removed) ────────────────────────────────────
+      # Tag builds attach the .exe directly to the GitHub Release (step 16).
+      # Manual (workflow_dispatch) builds: the installer is built and verified
+      # but not stored as a GitHub artifact — use a tag push when you need
+      # a distributable installer.  This keeps artifact storage at zero.
 
       # ── 15. Extract release notes from CHANGELOG.md ───────────────────────
       - name: Extract release notes
