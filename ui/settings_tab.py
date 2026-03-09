@@ -42,6 +42,7 @@ _MUTED   = "#8892a4"
 _ACCENT  = "#4e73df"
 _GREEN   = "#00d4aa"
 _AMBER   = "#f5a623"
+_DANGER  = "#ff5555"
 
 _BTN_PRIMARY = f"""
     QPushButton {{
@@ -140,6 +141,8 @@ class SettingsTab(QWidget):
     download_cancel_requested     = pyqtSignal()
     cloud_ai_connect_requested    = pyqtSignal(str, str, str)  # provider, api_key, model_id
     cloud_ai_disconnect_requested = pyqtSignal()
+    ollama_connect_requested      = pyqtSignal(str)   # model_id
+    ollama_disconnect_requested   = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -181,6 +184,9 @@ class SettingsTab(QWidget):
 
         # ── Cloud AI ──────────────────────────────────────────────────
         lay.addWidget(self._build_cloud_ai_group())
+
+        # ── Ollama (local AI server) ───────────────────────────────────
+        lay.addWidget(self._build_ollama_group())
 
         # ── License ───────────────────────────────────────────────────
         lay.addWidget(self._build_license_group())
@@ -761,6 +767,166 @@ class SettingsTab(QWidget):
         lay.addLayout(action_row)
 
         return g
+
+    # ── Ollama (local AI server) ──────────────────────────────────────
+
+    def _build_ollama_group(self) -> QGroupBox:
+        g = _group("Ollama  (Local AI Server — free, private, GPU-accelerated)")
+        lay = QVBoxLayout(g)
+        lay.setSpacing(12)
+
+        # ── Description ───────────────────────────────────────────────────
+        desc = QLabel(
+            "Ollama runs AI models locally on your PC — no internet or API key needed. "
+            "It supports dozens of open-source models (Llama 3, Mistral, Gemma …) "
+            "and uses your GPU automatically when available.\n\n"
+            "Install Ollama, then use  ollama pull <model>  to download a model. "
+            "SanjINSIGHT connects to the Ollama server running on this machine."
+        )
+        desc.setWordWrap(True)
+        desc.setStyleSheet(f"font-size:11pt; color:{_MUTED};")
+        lay.addWidget(desc)
+
+        # ── Install Ollama link ───────────────────────────────────────────
+        install_lbl = QLabel(
+            '<a href="https://ollama.com" style="color:{c};">'
+            "Download Ollama from ollama.com ↗</a>"
+            "  &nbsp;(free, Windows/macOS/Linux)".format(c=_ACCENT)
+        )
+        install_lbl.setOpenExternalLinks(True)
+        install_lbl.setStyleSheet(f"font-size:11pt; color:{_MUTED};")
+        lay.addWidget(install_lbl)
+
+        lay.addWidget(_sep())
+
+        # ── Model selector + Refresh ──────────────────────────────────────
+        model_row = QHBoxLayout()
+        model_lbl = QLabel("Model:")
+        model_lbl.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
+        model_lbl.setFixedWidth(70)
+        model_row.addWidget(model_lbl)
+
+        self._ollama_model_combo = QComboBox()
+        self._ollama_model_combo.setStyleSheet(_COMBO)
+        self._ollama_model_combo.setEditable(False)
+        self._ollama_model_combo.setPlaceholderText("(refresh to load installed models)")
+        model_row.addWidget(self._ollama_model_combo, 1)
+
+        self._ollama_refresh_btn = QPushButton("⟳ Refresh")
+        self._ollama_refresh_btn.setStyleSheet(_BTN_SECONDARY)
+        self._ollama_refresh_btn.setFixedWidth(90)
+        self._ollama_refresh_btn.setToolTip("Query Ollama for installed models")
+        self._ollama_refresh_btn.clicked.connect(self._ollama_refresh_models)
+        model_row.addWidget(self._ollama_refresh_btn)
+        lay.addLayout(model_row)
+
+        # ── Status + Connect row ──────────────────────────────────────────
+        action_row = QHBoxLayout()
+        self._ollama_connect_btn = QPushButton("Connect")
+        self._ollama_connect_btn.setStyleSheet(_BTN_PRIMARY)
+        self._ollama_connect_btn.setFixedWidth(120)
+        self._ollama_connect_btn.clicked.connect(self._on_ollama_connect_clicked)
+        action_row.addWidget(self._ollama_connect_btn)
+
+        self._ollama_status_lbl = QLabel("○  Not connected")
+        self._ollama_status_lbl.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
+        action_row.addWidget(self._ollama_status_lbl, 1)
+        lay.addLayout(action_row)
+
+        # Pre-populate models from a saved preference or live query
+        self._ollama_refresh_models(silent=True)
+        return g
+
+    def _ollama_refresh_models(self, silent: bool = False) -> None:
+        """Query the running Ollama server for installed models and populate the combo."""
+        from ai.remote_runner import get_ollama_models, is_ollama_running
+        if not hasattr(self, "_ollama_model_combo"):
+            return
+
+        running = is_ollama_running(timeout=1.5)
+        if not running:
+            if not silent:
+                self._ollama_status_lbl.setText(
+                    "⊗  Ollama not running — start Ollama and try again")
+                self._ollama_status_lbl.setStyleSheet(
+                    f"font-size:12pt; color:{_DANGER};")
+            return
+
+        models = get_ollama_models()
+        self._ollama_model_combo.blockSignals(True)
+        self._ollama_model_combo.clear()
+        if models:
+            self._ollama_model_ids = [m["id"] for m in models]
+            for m in models:
+                self._ollama_model_combo.addItem(m["name"])
+            saved = cfg_mod.get_pref("ai.ollama.model", "")
+            try:
+                self._ollama_model_combo.setCurrentIndex(
+                    self._ollama_model_ids.index(saved))
+            except ValueError:
+                self._ollama_model_combo.setCurrentIndex(0)
+            if not silent:
+                self._ollama_status_lbl.setText(
+                    f"✓  Ollama running — {len(models)} model(s) installed")
+                self._ollama_status_lbl.setStyleSheet(
+                    f"font-size:12pt; color:{_GREEN};")
+        else:
+            self._ollama_model_ids = []
+            if not silent:
+                self._ollama_status_lbl.setText(
+                    "⚠  Ollama running but no models installed. "
+                    "Run:  ollama pull llama3")
+                self._ollama_status_lbl.setStyleSheet(
+                    f"font-size:12pt; color:{_AMBER};")
+        self._ollama_model_combo.blockSignals(False)
+
+    def _on_ollama_connect_clicked(self) -> None:
+        if not hasattr(self, "_ollama_connect_btn"):
+            return
+        if self._ollama_connect_btn.text() == "Disconnect":
+            self.ollama_disconnect_requested.emit()
+            return
+
+        if not hasattr(self, "_ollama_model_ids") or not self._ollama_model_ids:
+            self._ollama_refresh_models(silent=False)
+            if not hasattr(self, "_ollama_model_ids") or not self._ollama_model_ids:
+                return
+
+        idx = self._ollama_model_combo.currentIndex()
+        if idx < 0 or idx >= len(self._ollama_model_ids):
+            return
+        model_id = self._ollama_model_ids[idx]
+        cfg_mod.set_pref("ai.ollama.model", model_id)
+        self.set_ollama_status("loading", "◌  Connecting to Ollama…")
+        self.ollama_connect_requested.emit(model_id)
+
+    def set_ollama_status(self, status: str, message: str = "") -> None:
+        """
+        Called by main_app.py when the Ollama connection state changes.
+
+        status: "loading" | "ready" | "error" | "off"
+        """
+        if not hasattr(self, "_ollama_status_lbl"):
+            return
+        if status == "loading":
+            self._ollama_status_lbl.setText(message or "◌  Connecting…")
+            self._ollama_status_lbl.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
+            self._ollama_connect_btn.setEnabled(False)
+        elif status == "ready":
+            self._ollama_status_lbl.setText("●  Connected")
+            self._ollama_status_lbl.setStyleSheet(f"font-size:12pt; color:{_GREEN};")
+            self._ollama_connect_btn.setText("Disconnect")
+            self._ollama_connect_btn.setEnabled(True)
+        elif status == "error":
+            self._ollama_status_lbl.setText(f"⊗  {message}" if message else "⊗  Error")
+            self._ollama_status_lbl.setStyleSheet(f"font-size:12pt; color:{_DANGER};")
+            self._ollama_connect_btn.setText("Connect")
+            self._ollama_connect_btn.setEnabled(True)
+        else:   # "off"
+            self._ollama_status_lbl.setText("○  Not connected")
+            self._ollama_status_lbl.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
+            self._ollama_connect_btn.setText("Connect")
+            self._ollama_connect_btn.setEnabled(True)
 
     # ── Cloud AI helpers ──────────────────────────────────────────────
 

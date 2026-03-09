@@ -539,11 +539,13 @@ class AIPanelWidget(QWidget):
         lay.addWidget(icon)
 
         msg = QLabel(
-            "AI assistant requires llama-cpp-python.\n\n"
-            "Install it with:\n\n"
-            "pip install llama-cpp-python\n\n"
-            "For GPU acceleration (Metal/CUDA):\n"
-            "CMAKE_ARGS=\"-DGGML_METAL=on\" pip install llama-cpp-python"
+            "Local AI model not available.\n\n"
+            "Easiest option — use Ollama (free, GPU-accelerated):\n"
+            "  1. Download from  ollama.com\n"
+            "  2. Run:  ollama pull llama3\n"
+            "  3. Connect in  Settings → Ollama\n\n"
+            "Alternative — install llama-cpp-python directly:\n"
+            "  pip install llama-cpp-python"
         )
         msg.setAlignment(Qt.AlignCenter)
         msg.setWordWrap(True)

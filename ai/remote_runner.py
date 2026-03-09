@@ -1,7 +1,7 @@
 """
 ai/remote_runner.py
 
-RemoteRunner — QObject wrapper for cloud AI providers (Anthropic Claude, OpenAI ChatGPT).
+RemoteRunner — QObject wrapper for remote AI providers.
 
 Same signal interface as ModelRunner so AIService can swap backends transparently.
 
@@ -9,6 +9,9 @@ Providers
 ---------
   "claude"   Anthropic Messages API   (https://api.anthropic.com)
   "openai"   OpenAI Chat Completions  (https://api.openai.com)
+  "ollama"   Ollama local server      (http://localhost:11434)
+             No API key required. Install from https://ollama.com, then
+             run  ollama pull <model>  to download a model.
 
 No external SDK required — raw HTTP via stdlib http.client.
 Streaming implemented via Server-Sent Events (SSE).
@@ -30,7 +33,7 @@ from PyQt5.QtCore import QObject, pyqtSignal
 
 log = logging.getLogger(__name__)
 
-# ── Cloud model catalogue ─────────────────────────────────────────────────────
+# ── Provider catalogue ────────────────────────────────────────────────────────
 
 CLOUD_PROVIDERS: dict[str, dict] = {
     "claude": {
@@ -50,11 +53,60 @@ CLOUD_PROVIDERS: dict[str, dict] = {
             {"id": "gpt-4o-mini", "name": "GPT-4o Mini  — Fast & Economical"},
         ],
     },
+    # Ollama is handled separately from cloud — no API key, local HTTP.
+    # Its model list is fetched live from the running Ollama server.
 }
 
 _ANTHROPIC_HOST = "api.anthropic.com"
 _OPENAI_HOST    = "api.openai.com"
 _ANTHROPIC_VER  = "2023-06-01"
+
+# ── Ollama constants ──────────────────────────────────────────────────────────
+
+_OLLAMA_HOST = "localhost"
+_OLLAMA_PORT = 11434
+
+
+def get_ollama_models(timeout: float = 3.0) -> list[dict]:
+    """
+    Query the running Ollama server for installed models.
+
+    Returns a list of dicts with keys  "id"  and  "name", e.g.::
+
+        [{"id": "llama3:8b", "name": "llama3:8b  (4.7 GB)"},
+         {"id": "mistral",   "name": "mistral  (4.1 GB)"}]
+
+    Returns an empty list if Ollama is not running or reachable.
+    """
+    try:
+        conn = http.client.HTTPConnection(_OLLAMA_HOST, _OLLAMA_PORT, timeout=timeout)
+        conn.request("GET", "/api/tags")
+        resp = conn.getresponse()
+        if resp.status != 200:
+            return []
+        data = json.loads(resp.read())
+        conn.close()
+        models = []
+        for m in data.get("models", []):
+            mid  = m.get("name", "")
+            size = m.get("size", 0)
+            size_str = f"  ({size / 1e9:.1f} GB)" if size else ""
+            models.append({"id": mid, "name": f"{mid}{size_str}"})
+        return models
+    except Exception:
+        return []
+
+
+def is_ollama_running(timeout: float = 2.0) -> bool:
+    """Return True if an Ollama server is reachable on localhost:11434."""
+    try:
+        conn = http.client.HTTPConnection(_OLLAMA_HOST, _OLLAMA_PORT, timeout=timeout)
+        conn.request("GET", "/api/tags")
+        resp = conn.getresponse()
+        conn.close()
+        return resp.status == 200
+    except Exception:
+        return False
 
 
 def _ssl_ctx() -> ssl.SSLContext:
@@ -142,17 +194,19 @@ class RemoteRunner(QObject):
                 self._validate_anthropic()
             elif self._provider == "openai":
                 self._validate_openai()
+            elif self._provider == "ollama":
+                self._validate_ollama()
             else:
                 self.load_failed.emit(f"Unknown provider: {self._provider!r}")
                 return
-            log.info("Cloud AI connected: provider=%s model=%s",
+            log.info("AI backend connected: provider=%s model=%s",
                      self._provider, self._model_id)
             self.load_complete.emit()
         except _AuthError as exc:
-            log.warning("Cloud AI auth failed: %s", exc)
+            log.warning("AI backend auth/connection failed: %s", exc)
             self.load_failed.emit(str(exc))
         except Exception as exc:
-            log.exception("Cloud AI connection error")
+            log.exception("AI backend connection error")
             self.load_failed.emit(f"Connection error: {exc}")
 
     def _validate_anthropic(self) -> None:
@@ -181,6 +235,36 @@ class RemoteRunner(QObject):
         if status not in (200,):
             raise _AuthError(f"OpenAI API returned HTTP {status}")
 
+    def _validate_ollama(self) -> None:
+        """Check that the local Ollama server is running and has the selected model."""
+        try:
+            conn = http.client.HTTPConnection(_OLLAMA_HOST, _OLLAMA_PORT, timeout=5)
+            conn.request("GET", "/api/tags")
+            resp = conn.getresponse()
+            body = resp.read()
+            conn.close()
+        except OSError as exc:
+            raise _AuthError(
+                f"Cannot reach Ollama at localhost:{_OLLAMA_PORT}.\n"
+                "Make sure Ollama is installed and running.\n"
+                f"Details: {exc}") from exc
+
+        if resp.status != 200:
+            raise _AuthError(f"Ollama server returned HTTP {resp.status}")
+
+        if self._model_id:
+            try:
+                data = json.loads(body)
+                installed = [m.get("name", "") for m in data.get("models", [])]
+                if self._model_id not in installed:
+                    # model not found but server is alive — warn, don't block
+                    log.warning(
+                        "Ollama: model %r not found in installed models %r. "
+                        "Run: ollama pull %s",
+                        self._model_id, installed, self._model_id)
+            except Exception:
+                pass   # can't parse tag list — server is alive, continue
+
     # ------------------------------------------------------------------ #
     #  Internal inference                                                  #
     # ------------------------------------------------------------------ #
@@ -194,14 +278,16 @@ class RemoteRunner(QObject):
                 text = self._stream_anthropic(messages, max_tokens, temperature)
             elif self._provider == "openai":
                 text = self._stream_openai(messages, max_tokens, temperature)
+            elif self._provider == "ollama":
+                text = self._stream_ollama(messages, max_tokens, temperature)
             else:
                 self.error.emit(f"Unknown provider: {self._provider!r}")
                 return
             elapsed = time.monotonic() - t0
             self.response_complete.emit(text, elapsed)
         except Exception as exc:
-            log.exception("Cloud AI inference error")
-            self.error.emit(f"Cloud AI error: {exc}")
+            log.exception("AI inference error (provider=%s)", self._provider)
+            self.error.emit(f"AI error: {exc}")
         finally:
             self._busy = False
 
@@ -269,6 +355,58 @@ class RemoteRunner(QObject):
 
         full_text: list[str] = []
         for line in resp_obj:
+            line = line.decode("utf-8", errors="replace").rstrip()
+            if not line.startswith("data: "):
+                continue
+            data = line[6:].strip()
+            if data == "[DONE]":
+                break
+            try:
+                obj = json.loads(data)
+            except json.JSONDecodeError:
+                continue
+            token = (obj.get("choices", [{}])[0]
+                        .get("delta", {})
+                        .get("content", ""))
+            if token:
+                full_text.append(token)
+                self.token_ready.emit(token)
+        return "".join(full_text)
+
+    # ── Ollama streaming (OpenAI-compatible, plain HTTP, localhost) ───────
+
+    def _stream_ollama(self, messages: list[dict],
+                       max_tokens: int, temperature: float) -> str:
+        """
+        Stream a response from a local Ollama server.
+
+        Ollama exposes an OpenAI-compatible endpoint at
+        http://localhost:11434/v1/chat/completions  — no API key required.
+        """
+        payload = {
+            "model":       self._model_id,
+            "max_tokens":  max_tokens,
+            "temperature": temperature,
+            "messages":    messages,
+            "stream":      True,
+        }
+        body = json.dumps(payload).encode()
+        headers = {"content-type": "application/json"}
+        try:
+            conn = http.client.HTTPConnection(
+                _OLLAMA_HOST, _OLLAMA_PORT, timeout=120)
+            conn.request("POST", "/v1/chat/completions",
+                         body=body, headers=headers)
+            resp = conn.getresponse()
+        except OSError as exc:
+            raise RuntimeError(
+                f"Cannot reach Ollama at localhost:{_OLLAMA_PORT}: {exc}") from exc
+
+        if resp.status != 200:
+            raise RuntimeError(f"Ollama HTTP {resp.status}")
+
+        full_text: list[str] = []
+        for line in resp:
             line = line.decode("utf-8", errors="replace").rstrip()
             if not line.startswith("data: "):
                 continue

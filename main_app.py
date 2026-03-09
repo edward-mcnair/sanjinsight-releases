@@ -528,6 +528,12 @@ class MainWindow(QMainWindow):
         self._settings_tab.cloud_ai_disconnect_requested.connect(
             self._on_cloud_ai_disconnect)
 
+        # Wire Settings tab → AI service (Ollama)
+        self._settings_tab.ollama_connect_requested.connect(
+            self._on_ollama_connect)
+        self._settings_tab.ollama_disconnect_requested.connect(
+            self._on_ollama_disconnect)
+
         # Wire Settings tab ↔ ModelDownloader
         self._settings_tab.download_model_requested.connect(
             self._on_download_model_requested)
@@ -1851,9 +1857,16 @@ class MainWindow(QMainWindow):
         self._ai_panel.on_status_changed(status)
         self._header.set_ai_status(status)
         self._settings_tab.set_ai_status(status)
-        # Also update the cloud status label if the active backend is remote
+        # Also update cloud / Ollama status labels when the remote backend is active
         if self._ai_service._active_backend == "remote":
-            self._settings_tab.set_cloud_ai_status(status)
+            provider = getattr(self._ai_service, "_runner", None)
+            # Determine which remote backend is active
+            remote = self._ai_service._remote_runner
+            remote_provider = getattr(remote, "_provider", "") if remote else ""
+            if remote_provider == "ollama":
+                self._settings_tab.set_ollama_status(status)
+            else:
+                self._settings_tab.set_cloud_ai_status(status)
         if status == "ready":
             self._status.showMessage("AI Assistant ready", 3000)
         elif status == "error":
@@ -1876,6 +1889,18 @@ class MainWindow(QMainWindow):
         """Called when Settings tab emits cloud_ai_disconnect_requested."""
         self._ai_service.disable()
         self._settings_tab.set_cloud_ai_status("off")
+
+    def _on_ollama_connect(self, model_id: str) -> None:
+        """Called when Settings tab emits ollama_connect_requested."""
+        self._ai_panel.clear_display()
+        # Ollama uses the OpenAI-compatible endpoint — no API key needed
+        self._ai_service.enable_remote("ollama", "", model_id)
+        self._ai_dock.show()
+
+    def _on_ollama_disconnect(self) -> None:
+        """Called when Settings tab emits ollama_disconnect_requested."""
+        self._ai_service.disable()
+        self._settings_tab.set_ollama_status("off")
 
     def _on_download_model_requested(self, url: str, dest_path: str) -> None:
         """Start a background model download requested by the Settings tab."""
