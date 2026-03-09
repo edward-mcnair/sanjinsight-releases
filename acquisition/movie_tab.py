@@ -29,33 +29,42 @@ from ui.theme import FONT, PALETTE
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QDoubleSpinBox, QSpinBox, QGroupBox, QGridLayout, QProgressBar,
-    QCheckBox, QSplitter, QSizePolicy, QFileDialog, QMessageBox)
+    QCheckBox, QComboBox, QSplitter, QSizePolicy, QFileDialog, QMessageBox)
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui  import QImage, QPixmap, QColor, QFont
 
 from .movie_pipeline import (
     MovieAcquisitionPipeline, MovieAcqState, MovieProgress, MovieResult)
+from .processing import to_display, apply_colormap, COLORMAP_OPTIONS, COLORMAP_TOOLTIPS
 from ai.instrument_knowledge import (
     MOVIE_DEFAULT_N_FRAMES, MOVIE_DEFAULT_SETTLE_MS,
     MOVIE_MIN_N_FRAMES, MOVIE_MAX_N_FRAMES)
+import config as cfg_mod
 
 
 # ------------------------------------------------------------------ #
-#  Simple image label helper                                          #
+#  Image rendering helper                                             #
 # ------------------------------------------------------------------ #
 
-def _array_to_pixmap(data: np.ndarray) -> Optional[QPixmap]:
-    """Convert float32 2D array to a QPixmap using signed red/blue colourmap."""
+def _array_to_pixmap(data: np.ndarray, cmap: str = "Thermal Delta") -> Optional[QPixmap]:
+    """Convert float32 2D array to a QPixmap using the given colourmap."""
     try:
         d = data.astype(np.float32)
-        limit = float(np.percentile(np.abs(d[np.isfinite(d)]), 99.5)) or 1e-9
-        normed = np.clip(d / limit, -1.0, 1.0)
-        r = (np.clip( normed, 0, 1) * 255).astype(np.uint8)
-        b = (np.clip(-normed, 0, 1) * 255).astype(np.uint8)
-        g = np.zeros_like(r)
-        rgb = np.stack([r, g, b], axis=-1)
+        if cmap in ("Thermal Delta", "signed"):
+            finite = d[np.isfinite(d)]
+            limit  = float(np.percentile(np.abs(finite), 99.5)) if finite.size else 1e-9
+            limit  = limit or 1e-9
+            normed = np.clip(d / limit, -1.0, 1.0)
+            r = (np.clip( normed, 0, 1) * 255).astype(np.uint8)
+            b = (np.clip(-normed, 0, 1) * 255).astype(np.uint8)
+            g = np.zeros_like(r)
+            rgb = np.stack([r, g, b], axis=-1)
+        else:
+            gray = to_display(d, mode="percentile")
+            rgb  = apply_colormap(gray, cmap)
         h, w = rgb.shape[:2]
-        qi = QImage(rgb.tobytes(), w, h, w * 3, QImage.Format_RGB888)
+        buf = rgb.tobytes()
+        qi = QImage(buf, w, h, w * 3, QImage.Format_RGB888)
         return QPixmap.fromImage(qi)
     except Exception:
         return None
@@ -259,6 +268,25 @@ class MovieTab(QWidget):
         # ── Image display (max ΔR/R projection) ───────────────────────
         img_box = QGroupBox("Max ΔR/R Projection  (max over time axis)")
         il = QVBoxLayout(img_box)
+
+        # Colormap selector row
+        cmap_row = QHBoxLayout()
+        cmap_row.addWidget(QLabel("Colourmap:"))
+        self._cmap_combo = QComboBox()
+        for i, c in enumerate(COLORMAP_OPTIONS):
+            self._cmap_combo.addItem(c)
+            self._cmap_combo.setItemData(i, COLORMAP_TOOLTIPS.get(c, ""), Qt.ToolTipRole)
+        self._cmap_combo.setFixedWidth(130)
+        saved_cmap = cfg_mod.get_pref("display.colormap", "Thermal Delta")
+        if saved_cmap in COLORMAP_OPTIONS:
+            self._cmap_combo.setCurrentText(saved_cmap)
+        self._cmap_combo.currentTextChanged.connect(self._redisplay)
+        self._cmap_combo.currentTextChanged.connect(
+            lambda c: cfg_mod.set_pref("display.colormap", c))
+        cmap_row.addWidget(self._cmap_combo)
+        cmap_row.addStretch()
+        il.addLayout(cmap_row)
+
         self._img_lbl = QLabel()
         self._img_lbl.setMinimumSize(400, 300)
         self._img_lbl.setSizePolicy(
@@ -402,12 +430,7 @@ class MovieTab(QWidget):
             if valid.size > 0:
                 self._stats["min_drr"].setText(f"{float(valid.min()):.3e}")
                 self._stats["max_drr"].setText(f"{float(valid.max()):.3e}")
-            max_proj = np.nanmax(cube, axis=0)
-            px = _array_to_pixmap(max_proj)
-            if px is not None:
-                self._img_lbl.setPixmap(
-                    px.scaled(self._img_lbl.size(),
-                              Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            self._redisplay()
         elif result.frame_cube is not None:
             # No reference → show last raw frame
             last = result.frame_cube[-1].astype(np.float32)
@@ -427,6 +450,17 @@ class MovieTab(QWidget):
             app_state.active_modality = "thermoreflectance"
         except Exception:
             pass
+
+    def _redisplay(self):
+        """Re-render the max-projection with the currently selected colormap."""
+        if self._result is None or self._result.delta_r_cube is None:
+            return
+        max_proj = np.nanmax(self._result.delta_r_cube, axis=0)
+        px = _array_to_pixmap(max_proj, self._cmap_combo.currentText())
+        if px is not None:
+            self._img_lbl.setPixmap(
+                px.scaled(self._img_lbl.size(),
+                          Qt.KeepAspectRatio, Qt.SmoothTransformation))
 
     # ---------------------------------------------------------------- #
     #  Save                                                             #
