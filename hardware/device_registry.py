@@ -158,9 +158,11 @@ DEVICE_REGISTRY: dict[str, DeviceDescriptor] = {
         driver_module  = "hardware.tec.meerstetter",
         driver_version = "builtin",
         hot_loadable   = True,
-        usb_vid        = 0x0403,   # FTDI
+        usb_vid        = 0x0403,   # FTDI (some cables)
         usb_pid        = 0x6001,
-        serial_patterns= ["Meerstetter", "TEC-1089", "0403:6001"],
+        serial_patterns= ["Meerstetter", "TEC-1089", "0403:6001",
+                          "067B:2303", "067B:23A3",   # Prolific PL2303 variants
+                          "PL2303", "Prolific"],       # NT220 uses Prolific adapters
         default_baud   = 57600,
         description    = "Single-channel TEC controller with USB/serial interface. "
                          "Used for precise sample temperature control and calibration.",
@@ -193,7 +195,9 @@ DEVICE_REGISTRY: dict[str, DeviceDescriptor] = {
         driver_module  = "hardware.tec.atec",
         driver_version = "builtin",
         hot_loadable   = True,
-        serial_patterns= ["ATEC", "Arroyo", "0403:6001"],
+        serial_patterns= ["ATEC", "Arroyo", "0403:6001",
+                          "067B:2303", "067B:23A3",   # Prolific PL2303 variants
+                          "PL2303", "Prolific"],       # NT220 uses Prolific adapters
         default_baud   = 38400,
         description    = "RS-232 TEC controller with Modbus-style protocol. "
                          "Used as secondary TEC in dual-channel configurations.",
@@ -454,7 +458,11 @@ DEVICE_REGISTRY: dict[str, DeviceDescriptor] = {
         driver_module  = "hardware.turret.olympus_linx",
         driver_version = "builtin",
         hot_loadable   = True,
-        serial_patterns= ["Arduino", "CH340", "CP210", "Turret"],
+        serial_patterns= ["CH340", "CP210", "Turret", "LINX"],
+        # Note: "Arduino" intentionally omitted — Arduino Mega 2560 boards are
+        # also used as stage controllers on the NT220 (COM7/COM22) and would
+        # cause false positive matches. Match only on the interface chip
+        # (CH340/CP210) or custom turret firmware identifier (LINX).
         default_baud   = 115200,
         description    = "Olympus IX motorized objective turret controlled via "
                          "Arduino/LINX serial interface. "
