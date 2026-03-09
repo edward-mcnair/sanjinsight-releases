@@ -8,7 +8,7 @@ Change  driver:  in config.yaml to switch cameras — no code changes needed.
 Available drivers:
     ni_imaqdx   Basler via NI Vision Acquisition Software (current system)
     pypylon      Basler via official Pylon SDK (no NI required)
-    directshow   FLIR Boson, webcams (Windows DirectShow)
+    directshow   USB thermal cameras, webcams (Windows DirectShow)
     simulated    Synthetic frames for testing without hardware
 
 Run:  python viewer.py

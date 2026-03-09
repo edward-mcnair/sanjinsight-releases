@@ -82,15 +82,18 @@ def _signed_colormap(data: np.ndarray, clip_pct: float) -> np.ndarray:
 # Keys are passed to apply_colormap() and to the canvas _rebuild methods.
 COLORMAP_OPTIONS: list[str] = [
     "signed",       # Diverging blue-black-red — default for ΔR/R
-    "ironbow",      # FLIR Ironbow: black→purple→orange→white (INFERNO)
-    "white hot",    # Grayscale: warm = white  (classic thermal)
-    "black hot",    # Grayscale: warm = black  (inverted, favored in IR)
-    "rainbow",      # Full spectrum low→high
-    "lava",         # Black→red→yellow→white  (FLIR Lava / HOT)
-    "plasma",       # Purple→magenta→orange    (perceptually uniform)
-    "viridis",      # Blue→green→yellow        (perceptually uniform)
-    "turbo",        # High-contrast rainbow    (Google Turbo)
-    "jet",          # Classic rainbow          (legacy / reference)
+    "Emberline",    # Black→purple→orange→white  (INFERNO)
+    "Polarflare",   # Grayscale: warm = white
+    "Umbra Heat",   # Grayscale: warm = black  (inverted)
+    "Prismshift",   # Full spectrum low→high    (RAINBOW)
+    "Magmafall",    # Black→red→yellow→white    (HOT)
+    "Borealis",     # Cool blue-green arctic palette (WINTER)
+    "Hearthtone",   # Warm sepia-autumn tones   (AUTUMN)
+    "Ghostscale",   # Blue-tinted grayscale      (BONE)
+    "plasma",       # Purple→magenta→orange      (perceptually uniform)
+    "viridis",      # Blue→green→yellow          (perceptually uniform)
+    "turbo",        # High-contrast rainbow
+    "jet",          # Classic rainbow            (legacy / reference)
     "cool",         # Cyan→magenta
 ]
 
@@ -102,14 +105,23 @@ def _build_cv_maps() -> dict:
     except ImportError:
         return {}
     m = {
-        "ironbow":   cv2.COLORMAP_INFERNO,   # closest match to FLIR Ironbow
-        "rainbow":   cv2.COLORMAP_RAINBOW,
-        "lava":      cv2.COLORMAP_HOT,       # black→red→yellow→white
-        "hot":       cv2.COLORMAP_HOT,       # kept for back-compat
-        "cool":      cv2.COLORMAP_COOL,
-        "viridis":   cv2.COLORMAP_VIRIDIS,
-        "plasma":    cv2.COLORMAP_PLASMA,
-        "jet":       cv2.COLORMAP_JET,
+        # Branded palette names
+        "Emberline":  cv2.COLORMAP_INFERNO,
+        "Prismshift": cv2.COLORMAP_RAINBOW,
+        "Magmafall":  cv2.COLORMAP_HOT,
+        "Borealis":   cv2.COLORMAP_WINTER,
+        "Hearthtone": cv2.COLORMAP_AUTUMN,
+        "Ghostscale": cv2.COLORMAP_BONE,
+        # Generic scientific names
+        "plasma":     cv2.COLORMAP_PLASMA,
+        "viridis":    cv2.COLORMAP_VIRIDIS,
+        "jet":        cv2.COLORMAP_JET,
+        "cool":       cv2.COLORMAP_COOL,
+        # Legacy keys — not shown in UI, kept for backwards compatibility
+        "hot":        cv2.COLORMAP_HOT,
+        "ironbow":    cv2.COLORMAP_INFERNO,
+        "rainbow":    cv2.COLORMAP_RAINBOW,
+        "lava":       cv2.COLORMAP_HOT,
     }
     # COLORMAP_TURBO added in OpenCV 4.1 — skip gracefully on older installs
     if hasattr(cv2, "COLORMAP_TURBO"):
@@ -123,23 +135,23 @@ def _build_cv_maps() -> dict:
 _CV_MAPS: dict | None = None
 
 
-def apply_colormap(gray: np.ndarray, cmap: str = "ironbow") -> np.ndarray:
+def apply_colormap(gray: np.ndarray, cmap: str = "Emberline") -> np.ndarray:
     """
     Apply a named colormap to a uint8 grayscale image.
     Returns uint8 RGB (H, W, 3).
 
     Special cases handled without OpenCV:
-        "white hot" / "gray" — identity grayscale (warm = white)
-        "black hot"          — inverted grayscale (warm = black)
+        "Polarflare" / "white hot" / "gray" — identity grayscale (warm = white)
+        "Umbra Heat" / "black hot"           — inverted grayscale (warm = black)
 
     All other keys require opencv-python and map to cv2.COLORMAP_*.
     Falls back to grayscale if OpenCV is unavailable.
     """
     global _CV_MAPS
     # Grayscale variants — no OpenCV needed
-    if cmap in ("white hot", "gray"):
+    if cmap in ("Polarflare", "white hot", "gray"):
         return np.stack([gray, gray, gray], axis=-1)
-    if cmap == "black hot":
+    if cmap in ("Umbra Heat", "black hot"):
         inv = 255 - gray
         return np.stack([inv, inv, inv], axis=-1)
 

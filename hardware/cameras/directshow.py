@@ -2,7 +2,7 @@
 hardware/cameras/directshow.py
 
 Camera driver for cameras accessible via Windows DirectShow (cv2.VideoCapture).
-Use for: FLIR Boson thermal cameras, generic USB cameras, webcams.
+Use for: USB thermal cameras, generic USB cameras, webcams.
 NOT for the Basler acA1920-155um (it uses NI IMAQdx, not DirectShow).
 
 Requires: pip install opencv-python
@@ -30,7 +30,7 @@ from .base import CameraDriver, CameraFrame, CameraInfo
 class DirectShowDriver(CameraDriver):
     """
     DirectShow camera driver via OpenCV.
-    Works with FLIR Boson, FLIR Lepton, USB webcams, and any
+    Works with USB thermal cameras, webcams, and any
     Windows DirectShow-compatible camera.
     """
 

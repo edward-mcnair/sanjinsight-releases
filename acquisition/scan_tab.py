@@ -102,9 +102,9 @@ class ScanMapView(QWidget):
             b = (np.clip(-normed, 0, 1) * 255).astype(np.uint8)
             g = np.zeros_like(r)
             rgb = np.stack([r, g, b], axis=-1)
-        elif self._cmap in ("white hot", "gray"):
+        elif self._cmap in ("Polarflare", "white hot", "gray"):
             rgb = np.stack([disp]*3, axis=-1)
-        elif self._cmap == "black hot":
+        elif self._cmap in ("Umbra Heat", "black hot"):
             inv = 255 - disp
             rgb = np.stack([inv]*3, axis=-1)
         else:
