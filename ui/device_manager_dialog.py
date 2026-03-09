@@ -75,6 +75,64 @@ from hardware.driver_store    import DriverStore, RemoteDriverEntry
 
 
 # ------------------------------------------------------------------ #
+#  Live log handler — routes Python logging to the log panel          #
+# ------------------------------------------------------------------ #
+
+import logging as _logging
+
+class _QTextEditHandler(_logging.Handler):
+    """
+    Appends Python log records to a QTextEdit in real-time.
+
+    Colours:
+      DEBUG    → #555 (dim grey)
+      INFO     → #888 (grey)
+      WARNING  → #cc8800 (amber)
+      ERROR    → #ff5555 (red)
+      CRITICAL → #ff0000 (bright red)
+    """
+    _COLOURS = {
+        _logging.DEBUG:    "#555",
+        _logging.INFO:     "#888",
+        _logging.WARNING:  "#cc8800",
+        _logging.ERROR:    "#ff5555",
+        _logging.CRITICAL: "#ff0000",
+    }
+    _FMT = _logging.Formatter("%(asctime)s [%(levelname)-8s] %(name)s: %(message)s",
+                               datefmt="%H:%M:%S")
+
+    def __init__(self, text_edit):
+        super().__init__()
+        self._edit = text_edit
+        self.setFormatter(self._FMT)
+
+    def emit(self, record):
+        try:
+            msg   = self.format(record)
+            color = self._COLOURS.get(record.levelno, "#888")
+            # Escape HTML characters so angle-brackets in log messages
+            # don't break the rich-text rendering.
+            msg = (msg.replace("&", "&amp;")
+                      .replace("<", "&lt;")
+                      .replace(">", "&gt;"))
+            html = f'<span style="color:{color};">{msg}</span>'
+            # QTextEdit.append() must be called on the GUI thread.
+            # Use QTimer.singleShot so background log threads are safe.
+            from PyQt5.QtCore import QTimer
+            QTimer.singleShot(0, lambda h=html: self._safe_append(h))
+        except Exception:
+            pass   # never let a log handler crash the app
+
+    def _safe_append(self, html: str):
+        try:
+            self._edit.append(html)
+            sb = self._edit.verticalScrollBar()
+            sb.setValue(sb.maximum())
+        except Exception:
+            pass
+
+
+# ------------------------------------------------------------------ #
 #  Constants                                                           #
 # ------------------------------------------------------------------ #
 
@@ -1157,21 +1215,55 @@ class DeviceManagerDialog(QDialog):
 
         # ---- Log panel (collapsible) ----
         self._log_widget = QWidget()
-        self._log_widget.setFixedHeight(120)
         self._log_widget.setVisible(False)
         ll = QVBoxLayout(self._log_widget)
         ll.setContentsMargins(0, 0, 0, 0)
+        ll.setSpacing(0)
         sep = QFrame()
         sep.setFrameShape(QFrame.HLine)
         sep.setStyleSheet("color:#1e1e1e;")
         ll.addWidget(sep)
+
+        # Log toolbar: label + Copy button
+        log_toolbar = QWidget()
+        log_toolbar.setFixedHeight(26)
+        log_toolbar.setStyleSheet("background:#0d0d0d;")
+        lt = QHBoxLayout(log_toolbar)
+        lt.setContentsMargins(10, 0, 6, 0)
+        log_lbl = QLabel("Startup Diagnostics — live log output")
+        log_lbl.setStyleSheet("font-size:7.5pt; color:#555; font-style:italic;")
+        lt.addWidget(log_lbl, 1)
+        copy_btn = QPushButton("Copy")
+        copy_btn.setFixedSize(48, 18)
+        copy_btn.setStyleSheet(
+            "QPushButton{font-size:7pt; padding:0; background:#1a1a1a; "
+            "color:#666; border:1px solid #2a2a2a; border-radius:3px;}"
+            "QPushButton:hover{color:#aaa; border-color:#444;}")
+        copy_btn.clicked.connect(self._copy_log)
+        lt.addWidget(copy_btn)
+        ll.addWidget(log_toolbar)
+
         self._log_edit = QTextEdit()
         self._log_edit.setReadOnly(True)
+        self._log_edit.setMinimumHeight(120)
+        self._log_edit.setMaximumHeight(220)
         self._log_edit.setStyleSheet(
-            "background:#0a0a0a; color:#555; font-family:Menlo,monospace; "
+            "background:#0a0a0a; color:#555; font-family:Menlo,Consolas,monospace; "
             "font-size:8pt; border:none;")
         ll.addWidget(self._log_edit)
         root.addWidget(self._log_widget)
+
+        # Python logging → log panel: attach a handler so all app log
+        # messages are visible in real-time when the panel is open.
+        self._log_handler = _QTextEditHandler(self._log_edit)
+
+        # Auto-open the log panel when --debug / --verbose was passed
+        import sys as _sys
+        if "--debug" in _sys.argv or "--verbose" in _sys.argv:
+            self._log_widget.setVisible(True)
+            self._log_btn.setChecked(True)
+            import logging as _logging
+            _logging.getLogger().addHandler(self._log_handler)
 
         # Wire up manager callbacks
         device_manager.set_status_callback(self._on_status_change)
@@ -1227,6 +1319,21 @@ class DeviceManagerDialog(QDialog):
 
     def _toggle_log(self, checked: bool):
         self._log_widget.setVisible(checked)
+        import logging as _logging
+        root_logger = _logging.getLogger()
+        if checked:
+            if self._log_handler not in root_logger.handlers:
+                root_logger.addHandler(self._log_handler)
+        else:
+            root_logger.removeHandler(self._log_handler)
+
+    def _copy_log(self):
+        """Copy the full log panel text to the clipboard."""
+        try:
+            from PyQt5.QtWidgets import QApplication
+            QApplication.clipboard().setText(self._log_edit.toPlainText())
+        except Exception:
+            pass
 
     # ---------------------------------------------------------------- #
     #  Initial quick scan (serial + USB only, no network)              #
