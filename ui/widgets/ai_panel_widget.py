@@ -150,10 +150,6 @@ class AIPanelWidget(QWidget):
         div.setStyleSheet(f"color:{_BORDER};")
         lay.addWidget(div)
 
-        if not llama_installed:
-            self._build_not_installed_view(lay)
-            return
-
         # ── Evidence panel ──
         self._evidence_frame = QFrame()
         self._evidence_frame.setStyleSheet(
@@ -249,9 +245,14 @@ class AIPanelWidget(QWidget):
             f"font-size:12pt; font-family:Menlo,monospace; padding:6px; }}"
         )
         self._display.setPlaceholderText(
-            "Conversation will appear here.\n\n"
-            "Load a model in Settings → AI Assistant, then click\n"
-            "\"Explain this tab\", \"Diagnose\", or type a question below."
+            "AI not connected yet.\n\n"
+            "Quick start with Ollama (free, local, GPU-accelerated):\n"
+            "  1. Open  Settings → Ollama  section\n"
+            "  2. Click  ⬇ Install Ollama for me  (if not installed)\n"
+            "  3. Click  ⬇ Pull Model  to download phi3\n"
+            "  4. Click  Connect\n\n"
+            "Or connect a cloud model (Claude / ChatGPT) in\n"
+            "Settings → Cloud AI — just paste an API key."
         )
         self._display.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         lay.addWidget(self._display, 1)
@@ -530,26 +531,6 @@ class AIPanelWidget(QWidget):
         self.start_user_turn(q)
         self.ask_requested.emit(q)
 
-    def _build_not_installed_view(self, lay: QVBoxLayout) -> None:
-        lay.addStretch()
-
-        icon = QLabel("🤖")
-        icon.setAlignment(Qt.AlignCenter)
-        icon.setStyleSheet("font-size:32pt;")
-        lay.addWidget(icon)
-
-        msg = QLabel(
-            "AI not connected yet.\n\n"
-            "To connect using Ollama (free, local, GPU-accelerated):\n"
-            "  1. Install from  ollama.com  (if not done)\n"
-            "  2. Run:  ollama pull phi3  (in a terminal)\n"
-            "  3. Open  Settings → scroll down to\n"
-            "     the  Ollama  section → click  Connect\n\n"
-            "If you already did steps 1 & 2, just go to\n"
-            "Settings and click Connect in the Ollama section."
-        )
-        msg.setAlignment(Qt.AlignCenter)
-        msg.setWordWrap(True)
-        msg.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
-        lay.addWidget(msg)
-        lay.addStretch()
+    # _build_not_installed_view() was removed — the panel now always builds
+    # the full chat UI.  "Not connected" state is communicated through the
+    # display widget's placeholder text and the status dot in the header.

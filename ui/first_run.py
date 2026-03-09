@@ -601,7 +601,30 @@ class _PageCamera(_PageBase):
         self._hint = QLabel("")
         self._hint.setStyleSheet(_LABEL_HINT)
         self._hint.setWordWrap(True)
+        self._hint.setOpenExternalLinks(True)
         fl.addRow(self._hint)
+
+        # Pylon SDK install notice (shown only when pypylon driver selected
+        # and the pylon runtime is not importable)
+        self._pylon_notice = QLabel(
+            '⚠  Basler pylon SDK is not installed on this machine.<br>'
+            'The pylon SDK provides the USB3 Vision driver that Windows '
+            'needs to see your camera.<br>'
+            '<a href="https://www.baslerweb.com/en-us/downloads/software/'
+            '2360853512/?downloadCategory.values.label.data=pylon">'
+            'Download pylon 8 for Windows ↗</a>'
+            '&nbsp;&nbsp;|&nbsp;&nbsp;'
+            '<a href="https://www.baslerweb.com/en-us/software/pylon/pypylon/">'
+            'About pypylon ↗</a>'
+        )
+        self._pylon_notice.setOpenExternalLinks(True)
+        self._pylon_notice.setWordWrap(True)
+        self._pylon_notice.setStyleSheet(
+            f"font-size:{FONT['caption']}pt; color:{PALETTE['warning']}; "
+            "background:#1a1500; border:1px solid #4a3800; border-radius:4px; "
+            "padding:8px;")
+        self._pylon_notice.setVisible(False)
+        fl.addRow(self._pylon_notice)
 
         # Detection badge — hidden until apply_scan() runs
         self._detection_label = QLabel("")
@@ -632,13 +655,36 @@ class _PageCamera(_PageBase):
 
     def _update_hints(self, driver: str):
         hints = {
-            "pypylon":    "Uses Basler Pylon SDK. Install from basler.com, then: pip install pypylon",
+            "pypylon": (
+                "Uses Basler pylon SDK + pypylon.  "
+                "Supports USB3 Vision and GigE cameras.  "
+                "Click  Test Camera  to check if the pylon SDK is installed."
+            ),
             "ni_imaqdx":  "Uses NI IMAQdx. Install NI Vision Acquisition Software; "
                           "camera name comes from NI MAX (auto-detected if connected).",
             "directshow": "Generic Windows DirectShow camera (development/fallback only).",
             "simulated":  "No real camera required. Generates synthetic frames.",
         }
         self._hint.setText(hints.get(driver, ""))
+
+        # Auto-check pypylon availability when the driver is selected
+        if driver == "pypylon":
+            self._check_pylon_available()
+        else:
+            if hasattr(self, "_pylon_notice"):
+                self._pylon_notice.setVisible(False)
+
+    def _check_pylon_available(self) -> bool:
+        """Return True if pypylon is importable; show/hide the notice accordingly."""
+        try:
+            import pypylon.pylon  # noqa: F401
+            if hasattr(self, "_pylon_notice"):
+                self._pylon_notice.setVisible(False)
+            return True
+        except ImportError:
+            if hasattr(self, "_pylon_notice"):
+                self._pylon_notice.setVisible(True)
+            return False
 
     def _test_camera(self):
         """Quick enumeration test using the currently selected driver."""
@@ -655,22 +701,30 @@ class _PageCamera(_PageBase):
         if driver == "pypylon":
             try:
                 from pypylon import pylon
+                if hasattr(self, "_pylon_notice"):
+                    self._pylon_notice.setVisible(False)
                 tlf  = pylon.TlFactory.GetInstance()
                 devs = tlf.EnumerateDevices()
                 if devs:
+                    names = ", ".join(
+                        d.GetModelName() for d in devs[:3])
                     self._cam_test_lbl.setText(
-                        f"✓  {len(devs)} Basler camera(s) found")
+                        f"✓  {len(devs)} Basler camera(s): {names}")
                     self._cam_test_lbl.setStyleSheet(ok_ss)
                 else:
                     self._cam_test_lbl.setText(
-                        "⚠  No Basler cameras found — check USB/GigE connection")
+                        "⚠  pylon SDK found but no cameras detected — "
+                        "check USB cable / power")
                     self._cam_test_lbl.setStyleSheet(warn_ss)
             except ImportError:
+                # pylon SDK not installed — show the notice with download link
+                if hasattr(self, "_pylon_notice"):
+                    self._pylon_notice.setVisible(True)
                 self._cam_test_lbl.setText(
-                    "⚠  pypylon not installed — pip install pypylon")
-                self._cam_test_lbl.setStyleSheet(warn_ss)
+                    "⊗  Basler pylon SDK not found — see download link above")
+                self._cam_test_lbl.setStyleSheet(err_ss)
             except Exception as e:
-                self._cam_test_lbl.setText(f"⊗  {str(e)[:60]}")
+                self._cam_test_lbl.setText(f"⊗  {str(e)[:80]}")
                 self._cam_test_lbl.setStyleSheet(err_ss)
             return
 
