@@ -31,7 +31,8 @@ from PyQt5.QtGui  import (QImage, QPixmap, QPainter, QPen, QColor,
                            QBrush, QFont, QLinearGradient, QFontMetrics)
 
 from .live       import LiveProcessor, LiveConfig, LiveFrame
-from .processing import to_display
+from .processing import to_display, COLORMAP_OPTIONS, _build_cv_maps
+import config as cfg_mod
 
 
 # ------------------------------------------------------------------ #
@@ -343,15 +344,19 @@ class LiveCanvas(QWidget):
             rgb = np.stack([r, g, b], axis=-1)
         else:
             disp = to_display(d, mode="percentile")
-            try:
-                import cv2
-                cv_maps = {"hot":     cv2.COLORMAP_HOT,
-                           "cool":    cv2.COLORMAP_COOL,
-                           "viridis": cv2.COLORMAP_VIRIDIS}
-                rgb = cv2.applyColorMap(
-                    disp, cv_maps.get(self._cmap, cv2.COLORMAP_HOT))
-            except ImportError:
+            if self._cmap in ("white hot", "gray"):
                 rgb = np.stack([disp]*3, axis=-1)
+            elif self._cmap == "black hot":
+                inv = 255 - disp
+                rgb = np.stack([inv]*3, axis=-1)
+            else:
+                try:
+                    import cv2
+                    cv_maps = _build_cv_maps()
+                    cv_id = cv_maps.get(self._cmap, cv2.COLORMAP_HOT)
+                    rgb = cv2.applyColorMap(disp, cv_id)
+                except ImportError:
+                    rgb = np.stack([disp]*3, axis=-1)
 
         h, w = rgb.shape[:2]
         qi = QImage(rgb.tobytes(), w, h, w * 3, QImage.Format_RGB888)
@@ -666,12 +671,17 @@ class LiveTab(QWidget):
         # Colourmap selector in toolbar
         lay.addWidget(QLabel("Cmap:"))
         self._cmap_combo = QComboBox()
-        for c in ["signed", "hot", "cool", "viridis"]:
+        for c in COLORMAP_OPTIONS:
             self._cmap_combo.addItem(c)
-        self._cmap_combo.setFixedWidth(80)
+        self._cmap_combo.setFixedWidth(110)
         self._cmap_combo.setFixedHeight(28)
+        saved_cmap = cfg_mod.get_pref("display.colormap", "signed")
+        if saved_cmap in COLORMAP_OPTIONS:
+            self._cmap_combo.setCurrentText(saved_cmap)
+            self._canvas.set_cmap(saved_cmap)
+        self._cmap_combo.currentTextChanged.connect(self._canvas.set_cmap)
         self._cmap_combo.currentTextChanged.connect(
-            lambda c: self._canvas.set_cmap(c))
+            lambda c: cfg_mod.set_pref("display.colormap", c))
         lay.addWidget(self._cmap_combo)
 
         self._start_btn.clicked.connect(self._start)

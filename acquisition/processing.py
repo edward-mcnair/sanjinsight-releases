@@ -76,25 +76,81 @@ def _signed_colormap(data: np.ndarray, clip_pct: float) -> np.ndarray:
     return np.stack([r, g, b], axis=-1).astype(np.uint8)
 
 
-def apply_colormap(gray: np.ndarray, cmap: str = "hot") -> np.ndarray:
+# ── Colormap registry ─────────────────────────────────────────────────────────
+# Single source of truth for all colormap combo-boxes in the UI.
+# Order determines the order shown in drop-downs.
+# Keys are passed to apply_colormap() and to the canvas _rebuild methods.
+COLORMAP_OPTIONS: list[str] = [
+    "signed",       # Diverging blue-black-red — default for ΔR/R
+    "ironbow",      # FLIR Ironbow: black→purple→orange→white (INFERNO)
+    "white hot",    # Grayscale: warm = white  (classic thermal)
+    "black hot",    # Grayscale: warm = black  (inverted, favored in IR)
+    "rainbow",      # Full spectrum low→high
+    "lava",         # Black→red→yellow→white  (FLIR Lava / HOT)
+    "plasma",       # Purple→magenta→orange    (perceptually uniform)
+    "viridis",      # Blue→green→yellow        (perceptually uniform)
+    "turbo",        # High-contrast rainbow    (Google Turbo)
+    "jet",          # Classic rainbow          (legacy / reference)
+    "cool",         # Cyan→magenta
+]
+
+
+def _build_cv_maps() -> dict:
+    """Build the key→cv2 constant mapping, skipping entries absent in older OpenCV."""
+    try:
+        import cv2
+    except ImportError:
+        return {}
+    m = {
+        "ironbow":   cv2.COLORMAP_INFERNO,   # closest match to FLIR Ironbow
+        "rainbow":   cv2.COLORMAP_RAINBOW,
+        "lava":      cv2.COLORMAP_HOT,       # black→red→yellow→white
+        "hot":       cv2.COLORMAP_HOT,       # kept for back-compat
+        "cool":      cv2.COLORMAP_COOL,
+        "viridis":   cv2.COLORMAP_VIRIDIS,
+        "plasma":    cv2.COLORMAP_PLASMA,
+        "jet":       cv2.COLORMAP_JET,
+    }
+    # COLORMAP_TURBO added in OpenCV 4.1 — skip gracefully on older installs
+    if hasattr(cv2, "COLORMAP_TURBO"):
+        m["turbo"] = cv2.COLORMAP_TURBO
+    else:
+        m["turbo"] = cv2.COLORMAP_JET       # reasonable fallback
+    return m
+
+
+# Module-level cache (populated on first use of apply_colormap)
+_CV_MAPS: dict | None = None
+
+
+def apply_colormap(gray: np.ndarray, cmap: str = "ironbow") -> np.ndarray:
     """
     Apply a named colormap to a uint8 grayscale image.
     Returns uint8 RGB (H, W, 3).
 
-    Available: "hot", "cool", "viridis", "gray"
-    Requires opencv-python.
+    Special cases handled without OpenCV:
+        "white hot" / "gray" — identity grayscale (warm = white)
+        "black hot"          — inverted grayscale (warm = black)
+
+    All other keys require opencv-python and map to cv2.COLORMAP_*.
+    Falls back to grayscale if OpenCV is unavailable.
     """
-    import cv2
-    maps = {
-        "hot":     cv2.COLORMAP_HOT,
-        "cool":    cv2.COLORMAP_COOL,
-        "viridis": cv2.COLORMAP_VIRIDIS,
-        "jet":     cv2.COLORMAP_JET,
-        "gray":    None,
-    }
-    if cmap == "gray" or cmap not in maps:
+    global _CV_MAPS
+    # Grayscale variants — no OpenCV needed
+    if cmap in ("white hot", "gray"):
         return np.stack([gray, gray, gray], axis=-1)
-    return cv2.applyColorMap(gray, maps[cmap])
+    if cmap == "black hot":
+        inv = 255 - gray
+        return np.stack([inv, inv, inv], axis=-1)
+
+    # All other colormaps via OpenCV
+    if _CV_MAPS is None:
+        _CV_MAPS = _build_cv_maps()
+    if not _CV_MAPS or cmap not in _CV_MAPS:
+        return np.stack([gray, gray, gray], axis=-1)
+
+    import cv2
+    return cv2.applyColorMap(gray, _CV_MAPS[cmap])
 
 
 def export_result(result, output_dir: str = ".") -> dict:

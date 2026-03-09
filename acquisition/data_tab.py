@@ -24,7 +24,8 @@ from PyQt5.QtGui     import (QPixmap, QImage, QFont, QColor,
 
 from .session         import Session, SessionMeta
 from .session_manager import SessionManager
-from .processing      import to_display, apply_colormap
+from .processing      import to_display, apply_colormap, COLORMAP_OPTIONS
+import config as cfg_mod
 from ui.icons import set_btn_icon
 
 
@@ -501,10 +502,15 @@ class DataTab(QWidget):
         self._pane_cmp  = DataImagePane("COMPARISON  A − B  ΔR/R")
 
         self._cmap_combo = QComboBox()
-        for c in ["signed", "hot", "cool", "viridis", "gray"]:
+        for c in COLORMAP_OPTIONS:
             self._cmap_combo.addItem(c)
-        self._cmap_combo.setFixedWidth(90)
+        self._cmap_combo.setFixedWidth(110)
+        saved_cmap = cfg_mod.get_pref("display.colormap", "signed")
+        if saved_cmap in COLORMAP_OPTIONS:
+            self._cmap_combo.setCurrentText(saved_cmap)
         self._cmap_combo.currentTextChanged.connect(self._redisplay_drr)
+        self._cmap_combo.currentTextChanged.connect(
+            lambda c: cfg_mod.set_pref("display.colormap", c))
 
         drr_wrapper = QWidget()
         dw = QVBoxLayout(drr_wrapper)

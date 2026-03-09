@@ -22,6 +22,8 @@ from ui.icons import set_btn_icon
 from hardware.app_state import app_state
 from acquisition        import AcquisitionProgress, AcqState
 from acquisition        import export_result
+from acquisition.processing import COLORMAP_OPTIONS
+import config as cfg_mod
 from ui.widgets.image_pane import ImagePane
 
 
@@ -78,9 +80,14 @@ class AcquireTab(QWidget):
 
         cl.addWidget(self._sub("ΔR/R colormap"), 2, 0)
         self._cmap = QComboBox()
-        for c in ["signed", "hot", "cool", "viridis", "gray"]:
+        for c in COLORMAP_OPTIONS:
             self._cmap.addItem(c)
-        self._cmap.setFixedWidth(90)
+        self._cmap.setFixedWidth(110)
+        saved_cmap = cfg_mod.get_pref("display.colormap", "signed")
+        if saved_cmap in COLORMAP_OPTIONS:
+            self._cmap.setCurrentText(saved_cmap)
+        self._cmap.currentTextChanged.connect(
+            lambda c: cfg_mod.set_pref("display.colormap", c))
         cl.addWidget(self._cmap, 2, 1)
 
         # Buttons

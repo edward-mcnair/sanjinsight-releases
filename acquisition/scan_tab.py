@@ -28,7 +28,8 @@ from PyQt5.QtGui  import (QImage, QPixmap, QPainter, QPen, QColor,
                            QBrush, QFont)
 
 from .scan       import ScanProgress, ScanResult
-from .processing import to_display
+from .processing import to_display, COLORMAP_OPTIONS, _build_cv_maps
+import config as cfg_mod
 
 
 # ------------------------------------------------------------------ #
@@ -101,16 +102,17 @@ class ScanMapView(QWidget):
             b = (np.clip(-normed, 0, 1) * 255).astype(np.uint8)
             g = np.zeros_like(r)
             rgb = np.stack([r, g, b], axis=-1)
+        elif self._cmap in ("white hot", "gray"):
+            rgb = np.stack([disp]*3, axis=-1)
+        elif self._cmap == "black hot":
+            inv = 255 - disp
+            rgb = np.stack([inv]*3, axis=-1)
         else:
             try:
                 import cv2
-                cv_maps = {"hot":    cv2.COLORMAP_HOT,
-                           "cool":   cv2.COLORMAP_COOL,
-                           "viridis":cv2.COLORMAP_VIRIDIS}
-                if self._cmap in cv_maps:
-                    rgb = cv2.applyColorMap(disp, cv_maps[self._cmap])
-                else:
-                    rgb = np.stack([disp]*3, axis=-1)
+                cv_maps = _build_cv_maps()
+                cv_id = cv_maps.get(self._cmap, cv2.COLORMAP_HOT)
+                rgb = cv2.applyColorMap(disp, cv_id)
             except ImportError:
                 rgb = np.stack([disp]*3, axis=-1)
 
@@ -476,10 +478,15 @@ class ScanTab(QWidget):
         cmap_row = QHBoxLayout()
         cmap_row.addWidget(QLabel("Colourmap:"))
         self._cmap_combo = QComboBox()
-        for c in ["signed", "hot", "cool", "viridis", "gray"]:
+        for c in COLORMAP_OPTIONS:
             self._cmap_combo.addItem(c)
-        self._cmap_combo.setFixedWidth(90)
+        self._cmap_combo.setFixedWidth(110)
+        saved_cmap = cfg_mod.get_pref("display.colormap", "signed")
+        if saved_cmap in COLORMAP_OPTIONS:
+            self._cmap_combo.setCurrentText(saved_cmap)
         self._cmap_combo.currentTextChanged.connect(self._redisplay)
+        self._cmap_combo.currentTextChanged.connect(
+            lambda c: cfg_mod.set_pref("display.colormap", c))
         self._grid_chk = QCheckBox("Show tile grid")
         self._grid_chk.setChecked(True)
         self._grid_chk.stateChanged.connect(
