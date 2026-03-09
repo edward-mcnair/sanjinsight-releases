@@ -39,21 +39,33 @@ PyYAML>=6.0
 #
 # llama-cpp-python>=0.2.0
 
-# ── Hardware (install only what applies to your system) ───────────────────────
-# Basler camera (pypylon driver):
+# ── Hardware drivers — pure Python, no OS SDK required ────────────────────────
+# These install cleanly on any machine and are bundled unconditionally in the
+# PyInstaller .exe.  The app falls back gracefully when the matching hardware
+# is not present.
+
+pyserial>=3.5                 # Serial port I/O (TEC, LDD, serial stages)
+pyMeCom>=0.1.0                # Meerstetter MeCom protocol (TEC-1089, LDD-1121)
+                              #   https://github.com/meerstetter/pyMeCom
+pyvisa>=1.13.0                # VISA instrument control (Keithley SMU, SCPI supplies)
+pyvisa-py>=0.7.0              # Pure-Python VISA backend — no NI-VISA install needed
+pydp832                       # Rigol DP832 native LAN driver (no NI-VISA required)
+                              #   https://github.com/tspspi/pydp832
+dcps>=0.10.0                  # DC Power Supply helpers — Keithley 2400, Rigol DP800
+                              #   https://github.com/sgoadhouse/dcps
+thorlabs-apt-device>=0.5.0    # Thorlabs APT/Kinesis stage controllers (USB)
+
+# ── Hardware drivers — require OS-level SDK (install SDK first, then pip) ──────
+# These Python packages only work once the vendor SDK is installed at the OS level.
+# They are bundled in the .exe only when present on the build machine.
+
+# Basler camera — needs pylon 8 SDK (installs USB3 Vision filter driver):
+#   https://www.baslerweb.com/en-us/downloads/software-downloads/
 #   pip install pypylon
-#   Also install Basler Pylon SDK from https://www.baslerweb.com/en/downloads/software-downloads/
 #
-# NI FPGA (ni9637 driver):
+# NI FPGA — needs NI-RIO drivers:
+#   https://www.ni.com/en/support/downloads/drivers/download.ni-rio.html
 #   pip install nifpga
-#   Also install NI-RIO drivers from https://www.ni.com/en/support/downloads/drivers/download.ni-rio.html
-#
-# Meerstetter TEC controller:
-#   pip install pyMeCom
-#
-# VISA instruments (Keithley bias source etc.):
-#   pip install pyvisa pyvisa-py
-#   Or install NI-VISA from https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html
 
 # ── Licensing ─────────────────────────────────────────────────────────────────
 cryptography>=42.0.0          # Ed25519 license key validation (ships in installer)

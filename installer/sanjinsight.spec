@@ -80,39 +80,36 @@ hidden_imports = [
     'llama_cpp.llama_cpp',
 ]
 
-# ── Optional hardware packages — bundled when installed on the build machine ──
-# pyMeCom (import name: mecom) — Meerstetter serial protocol for TEC + LDD
-# Pure Python; pip install pyMeCom  |  https://github.com/meerstetter/pyMeCom
-if importlib.util.find_spec('mecom'):
-    hidden_imports += collect_submodules('mecom')
+# ── Pure-Python hardware packages — always bundled (in requirements.txt) ───────
+# These are guaranteed to be installed on the build machine via requirements.txt
+# so collect_submodules() is called unconditionally.
 
-# pyvisa — VISA instrument control (Keithley SMU, signal generators …)
-if importlib.util.find_spec('pyvisa'):
-    hidden_imports += collect_submodules('pyvisa')
+# pyMeCom — Meerstetter MeCom serial protocol (TEC-1089, LDD-1121)
+# Import name is 'mecom'; pip name is 'pyMeCom'
+hidden_imports += collect_submodules('mecom')
 
-# pypylon — Basler camera SDK Python bindings
-# https://www.baslerweb.com/en-us/software/pylon/pypylon/
-if importlib.util.find_spec('pypylon'):
-    hidden_imports += collect_submodules('pypylon')
+# pyvisa + pyvisa-py — VISA instrument control (Keithley SMU, Rigol DP832, …)
+hidden_imports += collect_submodules('pyvisa')
 
-# pydp832 — Native Ethernet driver for Rigol DP832 power supply (no VISA needed)
-# Pure Python; pip install pydp832  |  https://github.com/tspspi/pydp832
-# pydp832 may expose its classes from top-level or sub-module; bundle both paths.
+# pydp832 — Rigol DP832 native LAN driver (no NI-VISA required)
+# The module may be named 'pydp832' or 'dp832' depending on version; try both.
 for _pydp832_mod in ('pydp832', 'dp832'):
     if importlib.util.find_spec(_pydp832_mod):
         hidden_imports += collect_submodules(_pydp832_mod)
         break
 
-# dcps — DC Power Supply control library (Keithley 2400, Rigol DP800, and more)
-# Wraps pyvisa with instrument-specific SCPI helpers.
-# pip install dcps  |  https://github.com/sgoadhouse/dcps
-if importlib.util.find_spec('dcps'):
-    hidden_imports += collect_submodules('dcps')
+# dcps — DC Power Supply helpers (Keithley 2400, Rigol DP800, …)
+hidden_imports += collect_submodules('dcps')
 
-# thorlabs_apt_device — Thorlabs APT/Kinesis stage controller Python bindings
-# pip install thorlabs-apt-device  |  https://github.com/ap--/thorlabs-apt-device
-if importlib.util.find_spec('thorlabs_apt_device'):
-    hidden_imports += collect_submodules('thorlabs_apt_device')
+# thorlabs_apt_device — Thorlabs APT/Kinesis motorised stage controllers
+hidden_imports += collect_submodules('thorlabs_apt_device')
+
+# ── SDK-dependent packages — bundled only when the OS SDK is also installed ───
+# pypylon works only when Basler pylon SDK is installed at the OS level.
+# Bundle the Python glue if present on the build machine; the end-user still
+# needs to install pylon SDK separately (USB3 Vision filter driver, etc.).
+if importlib.util.find_spec('pypylon'):
+    hidden_imports += collect_submodules('pypylon')
 
 # ── Data files (non-Python assets bundled alongside the exe) ─────────────────
 datas = [
