@@ -150,7 +150,7 @@ def _build_cv_maps() -> dict:
 
 
 # Module-level cache (populated on first use of apply_colormap)
-_CV_MAPS: dict | None = None
+_CV_MAPS = None  # type: dict | None
 
 
 def apply_colormap(gray: np.ndarray, cmap: str = "Emberline") -> np.ndarray:
@@ -183,7 +183,8 @@ def apply_colormap(gray: np.ndarray, cmap: str = "Emberline") -> np.ndarray:
         return np.stack([gray, gray, gray], axis=-1)
 
     import cv2
-    return cv2.applyColorMap(gray, _CV_MAPS[cmap])
+    bgr = cv2.applyColorMap(gray, _CV_MAPS[cmap])
+    return cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
 
 
 def export_result(result, output_dir: str = ".") -> dict:

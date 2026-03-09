@@ -112,12 +112,14 @@ class ScanMapView(QWidget):
                 import cv2
                 cv_maps = _build_cv_maps()
                 cv_id = cv_maps.get(self._cmap, cv2.COLORMAP_HOT)
-                rgb = cv2.applyColorMap(disp, cv_id)
-            except ImportError:
+                bgr = cv2.applyColorMap(disp, cv_id)
+                rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+            except Exception:
                 rgb = np.stack([disp]*3, axis=-1)
 
         h, w = rgb.shape[:2]
-        qi = QImage(rgb.tobytes(), w, h, w*3, QImage.Format_RGB888)
+        buf = rgb.tobytes()   # keep ref alive for QImage
+        qi = QImage(buf, w, h, w*3, QImage.Format_RGB888)
         self._pixmap = QPixmap.fromImage(qi)
 
     def paintEvent(self, e):
@@ -625,10 +627,15 @@ class ScanTab(QWidget):
         try:
             from hardware.app_state import app_state
             _stage    = app_state.stage
-            _cam      = app_state.cam
             _tecs     = app_state.tecs
-            _pipeline = app_state.pipeline
             _cal      = app_state.active_calibration
+            if app_state.demo_mode:
+                # Use synthetic tiles so the demo map shows visible signal
+                _cam      = None
+                _pipeline = None
+            else:
+                _cam      = app_state.cam
+                _pipeline = app_state.pipeline
         except Exception:
             _stage = _cam = _pipeline = None
             _tecs  = []

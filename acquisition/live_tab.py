@@ -358,12 +358,14 @@ class LiveCanvas(QWidget):
                     import cv2
                     cv_maps = _build_cv_maps()
                     cv_id = cv_maps.get(self._cmap, cv2.COLORMAP_HOT)
-                    rgb = cv2.applyColorMap(disp, cv_id)
-                except ImportError:
+                    bgr = cv2.applyColorMap(disp, cv_id)
+                    rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+                except Exception:
                     rgb = np.stack([disp]*3, axis=-1)
 
         h, w = rgb.shape[:2]
-        qi = QImage(rgb.tobytes(), w, h, w * 3, QImage.Format_RGB888)
+        buf = rgb.tobytes()   # keep ref alive for QImage
+        qi = QImage(buf, w, h, w * 3, QImage.Format_RGB888)
         self._pixmap = QPixmap.fromImage(qi)
 
     def _draw_rect(self):
@@ -623,6 +625,10 @@ class LiveTab(QWidget):
         self._body_splitter.setSizes([220, 900, 200])
         root.addWidget(self._body_splitter, 1)
 
+        # Wire canvas colormap now that _canvas exists
+        self._canvas.set_cmap(self._saved_cmap)
+        self._cmap_combo.currentTextChanged.connect(self._canvas.set_cmap)
+
     # ---------------------------------------------------------------- #
     #  Toolbar                                                          #
     # ---------------------------------------------------------------- #
@@ -683,8 +689,8 @@ class LiveTab(QWidget):
         saved_cmap = cfg_mod.get_pref("display.colormap", "Thermal Delta")
         if saved_cmap in COLORMAP_OPTIONS:
             self._cmap_combo.setCurrentText(saved_cmap)
-            self._canvas.set_cmap(saved_cmap)
-        self._cmap_combo.currentTextChanged.connect(self._canvas.set_cmap)
+        # _canvas is created after the toolbar; connection deferred to __init__
+        self._saved_cmap = saved_cmap
         self._cmap_combo.currentTextChanged.connect(
             lambda c: cfg_mod.set_pref("display.colormap", c))
         lay.addWidget(self._cmap_combo)
