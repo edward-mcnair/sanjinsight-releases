@@ -140,71 +140,26 @@ class SerialScanner:
 
 class UsbScanner:
     """
-    Uses pyusb for non-serial USB device enumeration.
-    Falls back gracefully if pyusb or libusb is not installed.
+    Placeholder for raw USB device enumeration (pyusb / libusb).
+
+    pyusb loads libusb-1.0.dll (Windows) or libusb.dylib (macOS), a native
+    C++ library.  When NI USB hardware (e.g. NI USB-TC01, NI USB-6001) is
+    present on Windows the libusb backend can issue an access-violation
+    (0xFFFFFFFFFFFFFFFF) that bypasses Python exception handling and kills
+    the process.  SanjINSIGHT's instruments connect via serial (COM port) or
+    Ethernet, so raw USB enumeration is not required.
+
+    If USB enumeration becomes necessary in future, re-enable this scanner
+    only after verifying that libusb does not conflict with the NI-VISA / NI
+    driver stack on the target machine.
     """
 
-    # VIDs already covered by serial scanner — skip duplicates
+    # VIDs already covered by serial scanner — kept for documentation
     SERIAL_VIDS = {0x0403, 0x2341, 0x1A86}
 
     def scan(self) -> tuple[List[DiscoveredDevice], Optional[str]]:
-        try:
-            import usb.core
-            import usb.util
-        except ImportError:
-            return [], "pyusb not installed (pip install pyusb)"
-
-        results = []
-        try:
-            devices = usb.core.find(find_all=True)
-        except Exception as e:
-            return [], f"USB scan failed: {e}"
-
-        for dev in devices:
-            vid = dev.idVendor
-            pid = dev.idProduct
-
-            if vid in self.SERIAL_VIDS:
-                continue   # already handled by serial scanner
-
-            try:
-                mfr = usb.util.get_string(dev, dev.iManufacturer) or ""
-            except Exception:
-                log.debug("UsbScanner: get_string(iManufacturer) failed for "
-                          "%04X:%04X", vid, pid, exc_info=True)
-                mfr = ""
-            try:
-                prod = usb.util.get_string(dev, dev.iProduct) or ""
-            except Exception:
-                log.debug("UsbScanner: get_string(iProduct) failed for "
-                          "%04X:%04X", vid, pid, exc_info=True)
-                prod = ""
-            try:
-                sn = usb.util.get_string(dev, dev.iSerialNumber) or ""
-            except Exception:
-                log.debug("UsbScanner: get_string(iSerialNumber) failed for "
-                          "%04X:%04X", vid, pid, exc_info=True)
-                sn = ""
-
-            descriptor = find_by_usb(vid, pid)
-            if descriptor is None:
-                descriptor = find_by_serial_pattern(f"{mfr} {prod}")
-
-            addr = f"USB {vid:04X}:{pid:04X}"
-            if dev.bus and dev.address:
-                addr = f"USB bus{dev.bus} dev{dev.address} ({vid:04X}:{pid:04X})"
-
-            results.append(DiscoveredDevice(
-                connection_type = CONN_USB,
-                address         = addr,
-                description     = f"{mfr} {prod}".strip() or addr,
-                manufacturer    = mfr,
-                serial_number   = sn,
-                vid             = vid,
-                pid             = pid,
-                descriptor      = descriptor,
-            ))
-        return results, None
+        log.debug("UsbScanner: raw USB scanning is disabled — returning empty result")
+        return [], None
 
 
 # ------------------------------------------------------------------ #
@@ -340,164 +295,27 @@ class NiScanner:
 
 class CameraScanner:
     """
-    Enumerates cameras via the Basler Pylon SDK (pypylon) and NI IMAQdx DLL.
+    Placeholder for camera SDK enumeration (Basler pypylon / NI IMAQdx).
 
-    Falls back gracefully if neither SDK is installed or no cameras are
-    connected.  Results use CONN_CAMERA so first_run.py can distinguish
-    them from generic USB devices reported by UsbScanner.
+    Both SDKs load native C++ DLLs at import time:
+    - pypylon   → GeniCam + Basler pylon runtime (Win32/64 DLLs)
+    - niimaqdx  → NI Vision Acquisition Software DLL stack
+
+    On Windows systems that also have NI hardware (USB-TC01, NI-DAQmx, etc.)
+    these DLLs can trigger access-violations during initialisation that
+    bypass Python exception handling and terminate the process.  Cameras
+    supported by SanjINSIGHT (Basler acA series) are added manually via the
+    Device Manager dialog, so auto-discovery is not required for normal
+    operation.
+
+    If camera auto-discovery is needed in future, re-enable this scanner
+    only after confirming that the pypylon / IMAQdx DLL stack does not
+    conflict with the NI driver stack present on the target machine.
     """
 
     def scan(self) -> tuple[List[DiscoveredDevice], Optional[str]]:
-        results: List[DiscoveredDevice] = []
-        errors:  list[str]              = []
-
-        devs, err = self._scan_pylon()
-        results.extend(devs)
-        if err:
-            errors.append(err)
-
-        devs, err = self._scan_imaqdx()
-        results.extend(devs)
-        if err:
-            errors.append(err)
-
-        return results, ("; ".join(errors) if errors else None)
-
-    # ---------------------------------------------------------------- #
-    #  Basler Pylon                                                     #
-    # ---------------------------------------------------------------- #
-
-    def _scan_pylon(self) -> tuple[List[DiscoveredDevice], Optional[str]]:
-        try:
-            from pypylon import pylon
-        except ImportError:
-            return [], "pypylon not installed (pip install pypylon)"
-
-        try:
-            factory = pylon.TlFactory.GetInstance()
-            di_list = factory.EnumerateDevices()
-        except Exception as e:
-            return [], f"pypylon EnumerateDevices error: {e}"
-
-        results = []
-        for di in di_list:
-            try:
-                model  = di.GetModelName()
-                serial = di.GetSerialNumber()
-                try:
-                    ip = di.GetIpAddress()
-                except Exception:
-                    log.debug("CameraScanner._scan_pylon: GetIpAddress() failed for "
-                              "device %r — treating as USB camera", model, exc_info=True)
-                    ip = ""
-
-                conn    = CONN_ETHERNET if ip else CONN_CAMERA
-                address = ip if ip else f"Basler:{serial}"
-
-                # Match against camera entries in the registry
-                descriptor = None
-                for d in DEVICE_REGISTRY.values():
-                    if d.device_type != DTYPE_CAMERA:
-                        continue
-                    for pat in d.serial_patterns:
-                        if pat.lower() in model.lower():
-                            descriptor = d
-                            break
-                    if descriptor:
-                        break
-
-                desc = f"Basler {model}" + (f"  s/n {serial}" if serial else "")
-                results.append(DiscoveredDevice(
-                    connection_type = conn,
-                    address         = address,
-                    description     = desc,
-                    serial_number   = serial,
-                    manufacturer    = "Basler AG",
-                    descriptor      = descriptor,
-                ))
-            except Exception:
-                log.debug("CameraScanner._scan_pylon: skipping malformed Pylon "
-                          "device info entry", exc_info=True)
-                continue
-
-        return results, None
-
-    # ---------------------------------------------------------------- #
-    #  NI IMAQdx (Windows only)                                        #
-    # ---------------------------------------------------------------- #
-
-    def _scan_imaqdx(self) -> tuple[List[DiscoveredDevice], Optional[str]]:
-        if sys.platform != "win32":
-            return [], None   # silently skip on macOS / Linux
-
-        import ctypes
-
-        # IMAQdxCameraInformation struct layout (from niimaqdx.h)
-        # IMAQDX_MAX_API_STRING_LENGTH = 512
-        _S = 512
-
-        class _CamInfo(ctypes.Structure):
-            _fields_ = [
-                ("Type",             ctypes.c_uint32),
-                ("Version",          ctypes.c_uint32),
-                ("InterfaceName",    ctypes.c_char * _S),
-                ("AttributeType",    ctypes.c_uint32),   # IMAQdxAttributeType enum
-                ("CameraName",       ctypes.c_char * _S),
-                ("BusType",          ctypes.c_uint32),   # IMAQdxBusType enum
-                ("VendorName",       ctypes.c_char * _S),
-                ("ModelName",        ctypes.c_char * _S),
-                ("SerialNumberHigh", ctypes.c_uint32),
-                ("SerialNumberLow",  ctypes.c_uint32),
-                ("Flags",            ctypes.c_uint32),
-            ]
-
-        try:
-            lib = ctypes.windll.LoadLibrary("niimaqdx.dll")
-        except OSError:
-            return [], "NI IMAQdx not found (install NI Vision Acquisition Software)"
-
-        try:
-            # First call: get count of connected cameras
-            count = ctypes.c_uint32(0)
-            rc = lib.IMAQdxEnumerateCameras(
-                None, ctypes.byref(count), ctypes.c_uint32(1))
-            if rc != 0 or count.value == 0:
-                return [], None
-
-            # Second call: fill the array
-            arr = (_CamInfo * count.value)()
-            rc = lib.IMAQdxEnumerateCameras(
-                arr, ctypes.byref(count), ctypes.c_uint32(1))
-            if rc != 0:
-                return [], f"IMAQdxEnumerateCameras error code {rc}"
-
-            results = []
-            for i in range(count.value):
-                cam = arr[i]
-
-                def _s(b: bytes) -> str:
-                    return b.rstrip(b"\x00").decode("utf-8", errors="replace").strip()
-
-                cam_name   = _s(cam.CameraName)
-                model_name = _s(cam.ModelName)
-                vendor     = _s(cam.VendorName)
-
-                descriptor = find_by_serial_pattern(f"{vendor} {model_name}")
-                serial_str = (f"{cam.SerialNumberHigh:08X}{cam.SerialNumberLow:08X}"
-                              if (cam.SerialNumberHigh or cam.SerialNumberLow) else "")
-
-                results.append(DiscoveredDevice(
-                    connection_type = CONN_CAMERA,
-                    address         = cam_name,   # e.g. "cam4" — the NI MAX name
-                    description     = f"{vendor} {model_name} ({cam_name})",
-                    serial_number   = serial_str,
-                    manufacturer    = vendor,
-                    descriptor      = descriptor,
-                ))
-            return results, None
-
-        except Exception as e:
-            return [], f"NI IMAQdx scan error: {e}"
+        log.debug("CameraScanner: camera SDK scanning is disabled — returning empty result")
+        return [], None
 
 
 # ------------------------------------------------------------------ #
@@ -510,13 +328,16 @@ class DeviceScanner:
     Each sub-scanner runs in its own thread; total scan time is
     bounded by the network timeout (≈3 seconds).
 
-    Scanners
-    --------
+    Active scanners
+    ---------------
     serial   — pyserial COM/ttyUSB port enumeration with VID/PID matching
-    usb      — pyusb raw USB enumeration (non-serial devices)
-    camera   — Basler pypylon SDK + NI IMAQdx DLL enumeration
-    pcie     — NI-FPGA / NI-VISA resource enumeration
     ethernet — subnet TCP probe (opt-in, disabled by default)
+
+    Disabled scanners (native DLL crash risk on Windows + NI hardware)
+    -------------------------------------------------------------------
+    usb      — pyusb/libusb raw USB enumeration  (see UsbScanner)
+    camera   — Basler pypylon SDK + NI IMAQdx    (see CameraScanner)
+    pcie     — NI-FPGA / NI-VISA resource scan   (see NiScanner)
 
     Network scanning notes
     ----------------------
