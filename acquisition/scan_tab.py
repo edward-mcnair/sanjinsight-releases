@@ -467,7 +467,7 @@ class ScanTab(QWidget):
         dw.setContentsMargins(4, 4, 4, 4)
 
         cmap_row = QHBoxLayout()
-        cmap_row.addWidget(QLabel("Colourmap:"))
+        cmap_row.addWidget(QLabel("Colormap:"))
         self._cmap_combo = QComboBox()
         self._cmap_combo.setFixedWidth(110)
         saved_cmap = cfg_mod.get_pref("display.colormap", "Thermal Delta")

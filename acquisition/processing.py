@@ -249,6 +249,22 @@ _CMAP_SAMPLE_IDX: dict = {
 }
 
 
+def get_mpl_cmap_name(cmap: str) -> str:
+    """Return the matplotlib colormap name for a COLORMAP_OPTIONS entry.
+
+    Used by matplotlib-based renderers (e.g. 3D surface plots) that pass
+    cmap names directly to matplotlib rather than through apply_colormap().
+    """
+    _specials = {
+        "Thermal Delta": "bwr",
+        "Polarflare":    "gray",
+        "Umbra Heat":    "gray_r",
+    }
+    if cmap in _specials:
+        return _specials[cmap]
+    return _MPL_NAMES.get(cmap, "gray")
+
+
 def get_cmap_preview_color(cmap: str) -> tuple:
     """Return (r, g, b) as a visually representative colour for *cmap*.
 
@@ -277,10 +293,25 @@ def setup_cmap_combo(combo, saved_cmap: str = "Thermal Delta") -> None:
       - sets a tooltip from COLORMAP_TOOLTIPS
       - tints the label text with a representative preview colour
 
+    A custom item delegate is installed so the colour survives dark-theme
+    QSS overrides that would otherwise force every item to white.
+
     The caller is responsible for setFixedWidth() and signal connections.
     """
     from PyQt5.QtCore import Qt
     from PyQt5.QtGui  import QBrush, QColor
+    from PyQt5.QtWidgets import QStyledItemDelegate
+
+    class _ColourDelegate(QStyledItemDelegate):
+        """Paints each combo item in its stored ForegroundRole colour."""
+        def initStyleOption(self, option, index):
+            super().initStyleOption(option, index)
+            brush = index.data(Qt.ForegroundRole)
+            if isinstance(brush, QBrush) and brush.color().isValid():
+                option.palette.setColor(option.palette.Text, brush.color())
+
+    combo.setItemDelegate(_ColourDelegate(combo))
+
     for i, c in enumerate(COLORMAP_OPTIONS):
         combo.addItem(c)
         combo.setItemData(i, COLORMAP_TOOLTIPS.get(c, ""), Qt.ToolTipRole)

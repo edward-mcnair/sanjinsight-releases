@@ -271,7 +271,7 @@ class MovieTab(QWidget):
 
         # Colormap selector row
         cmap_row = QHBoxLayout()
-        cmap_row.addWidget(QLabel("Colourmap:"))
+        cmap_row.addWidget(QLabel("Colormap:"))
         self._cmap_combo = QComboBox()
         self._cmap_combo.setFixedWidth(130)
         saved_cmap = cfg_mod.get_pref("display.colormap", "Thermal Delta")

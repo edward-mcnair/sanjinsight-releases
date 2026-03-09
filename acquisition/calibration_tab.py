@@ -26,7 +26,10 @@ from PyQt5.QtGui  import (QImage, QPixmap, QPainter, QPen, QColor,
 from ui.font_utils import mono_font
 from .calibration        import Calibration, CalibrationResult
 from .calibration_runner import CalibrationRunner, CalibrationProgress
-from .processing         import to_display
+from .processing         import (to_display, apply_colormap,
+                                 COLORMAP_OPTIONS, COLORMAP_TOOLTIPS,
+                                 setup_cmap_combo)
+import config as cfg_mod
 
 
 # ------------------------------------------------------------------ #
@@ -118,7 +121,7 @@ class MapPane(QWidget):
 
     def show_map(self, data: np.ndarray,
                  mask: np.ndarray = None,
-                 cmap: str = "diverging"):
+                 cmap: str = "Thermal Delta"):
         """Render float32 map to display."""
         if data is None:
             self._img_lbl.clear()
@@ -134,33 +137,16 @@ class MapPane(QWidget):
         hi = float(np.percentile(valid, 99))
         self._bar.set_range(lo, hi)
 
-        span = max(hi - lo, 1e-30)
-
-        if cmap == "diverging":
-            abs_lim = max(abs(lo), abs(hi))
-            abs_lim = abs_lim or 1e-30
+        if cmap in ("Thermal Delta", "signed", "diverging"):
+            abs_lim = max(abs(lo), abs(hi)) or 1e-30
             normed  = np.clip(d / abs_lim, -1.0, 1.0)
             r = (np.clip( normed, 0, 1) * 255).astype(np.uint8)
             b = (np.clip(-normed, 0, 1) * 255).astype(np.uint8)
             g = np.zeros_like(r)
             rgb = np.stack([r, g, b], axis=-1)
-        elif cmap == "hot":
-            scaled = np.clip((d - lo) / span * 255, 0, 255).astype(np.uint8)
-            try:
-                import cv2
-                rgb = cv2.applyColorMap(scaled, cv2.COLORMAP_HOT)
-            except Exception:
-                rgb = np.stack([scaled, scaled, scaled], axis=-1)
-        elif cmap == "viridis":
-            scaled = np.clip((d - lo) / span * 255, 0, 255).astype(np.uint8)
-            try:
-                import cv2
-                rgb = cv2.applyColorMap(scaled, cv2.COLORMAP_VIRIDIS)
-            except Exception:
-                rgb = np.stack([scaled, scaled, scaled], axis=-1)
-        else:  # gray
-            scaled = np.clip((d - lo) / span * 255, 0, 255).astype(np.uint8)
-            rgb = np.stack([scaled, scaled, scaled], axis=-1)
+        else:
+            disp = to_display(d, mode="percentile")
+            rgb  = apply_colormap(disp, cmap)
 
         # Dim masked-out pixels
         if mask is not None:
@@ -169,7 +155,8 @@ class MapPane(QWidget):
             rgb     = np.where(mask3, rgb, dimmed)
 
         h, w = rgb.shape[:2]
-        qi   = QImage(rgb.tobytes(), w, h, w*3, QImage.Format_RGB888)
+        buf  = rgb.tobytes()
+        qi   = QImage(buf, w, h, w*3, QImage.Format_RGB888)
         sz   = self._img_lbl.size()
         pix  = QPixmap.fromImage(qi).scaled(
             sz, Qt.KeepAspectRatio, Qt.SmoothTransformation)
@@ -427,12 +414,14 @@ class CalibrationTab(QWidget):
 
         # cmap selector
         cmap_row = QHBoxLayout()
-        cmap_row.addWidget(QLabel("Colourmap:"))
+        cmap_row.addWidget(QLabel("Colormap:"))
         self._cmap_combo = QComboBox()
-        for c in ["diverging", "hot", "viridis", "gray"]:
-            self._cmap_combo.addItem(c)
-        self._cmap_combo.setFixedWidth(100)
+        self._cmap_combo.setFixedWidth(130)
+        saved_cmap = cfg_mod.get_pref("display.colormap", "Thermal Delta")
+        setup_cmap_combo(self._cmap_combo, saved_cmap)
         self._cmap_combo.currentTextChanged.connect(self._redisplay)
+        self._cmap_combo.currentTextChanged.connect(
+            lambda c: cfg_mod.set_pref("display.colormap", c))
         cmap_row.addWidget(self._cmap_combo)
         cmap_row.addStretch()
 
@@ -653,7 +642,7 @@ class CalibrationTab(QWidget):
         cmap = self._cmap_combo.currentText()
         self._ct_pane.show_map(result.ct_map,  result.mask, cmap=cmap)
         self._r2_pane.show_map(result.r2_map,  result.mask, cmap="viridis")
-        self._res_pane.show_map(result.residual_map, result.mask, cmap="hot")
+        self._res_pane.show_map(result.residual_map, result.mask, cmap="Magmafall")
 
         valid_pct = 100.0 * result.mask.mean() if result.mask is not None else 0
         ct_mean   = (float(result.ct_map[result.mask].mean())

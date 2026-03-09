@@ -665,8 +665,8 @@ class LiveTab(QWidget):
 
         lay.addStretch()
 
-        # Colourmap selector in toolbar
-        lay.addWidget(QLabel("Cmap:"))
+        # Colormap selector in toolbar
+        lay.addWidget(QLabel("Colormap:"))
         self._cmap_combo = QComboBox()
         self._cmap_combo.setFixedWidth(110)
         self._cmap_combo.setFixedHeight(28)

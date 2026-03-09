@@ -36,12 +36,14 @@ from ui.theme import FONT, PALETTE
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QDoubleSpinBox, QSpinBox, QGroupBox, QGridLayout, QProgressBar,
-    QSlider, QSplitter, QSizePolicy, QFileDialog, QMessageBox,
+    QSlider, QComboBox, QSplitter, QSizePolicy, QFileDialog, QMessageBox,
     QCheckBox)
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui  import QImage, QPixmap, QPainter, QPen, QColor, QFont
 
 from ui.font_utils import mono_font, sans_font
+from .processing import to_display, apply_colormap, COLORMAP_OPTIONS, COLORMAP_TOOLTIPS, setup_cmap_combo
+import config as cfg_mod
 from .transient_pipeline import (
     TransientAcquisitionPipeline, TransientAcqState,
     TransientProgress, TransientResult)
@@ -453,6 +455,21 @@ class TransientTab(QWidget):
         # ── ΔR/R frame at selected delay ──────────────────────────────
         img_box = QGroupBox("ΔR/R Frame at Selected Delay")
         il = QVBoxLayout(img_box)
+
+        cmap_row = QHBoxLayout()
+        cmap_row.addWidget(self._sub("Colormap:"))
+        self._cmap_combo = QComboBox()
+        self._cmap_combo.setFixedWidth(130)
+        saved_cmap = cfg_mod.get_pref("display.colormap", "Thermal Delta")
+        setup_cmap_combo(self._cmap_combo, saved_cmap)
+        self._cmap_combo.currentTextChanged.connect(
+            lambda _: self._show_frame(self._delay_slider.value()))
+        self._cmap_combo.currentTextChanged.connect(
+            lambda c: cfg_mod.set_pref("display.colormap", c))
+        cmap_row.addWidget(self._cmap_combo)
+        cmap_row.addStretch()
+        il.addLayout(cmap_row)
+
         self._img_lbl = QLabel()
         self._img_lbl.setMinimumSize(400, 280)
         self._img_lbl.setSizePolicy(
@@ -687,14 +704,22 @@ class TransientTab(QWidget):
         finite = frame[np.isfinite(frame)]
         if finite.size == 0:
             return
-        limit = float(np.percentile(np.abs(finite), 99.5)) or 1e-9
-        normed = np.clip(frame / limit, -1.0, 1.0)
-        r = (np.clip( normed, 0, 1) * 255).astype(np.uint8)
-        b = (np.clip(-normed, 0, 1) * 255).astype(np.uint8)
-        g = np.zeros_like(r)
-        rgb = np.stack([r, g, b], axis=-1)
+
+        cmap = self._cmap_combo.currentText()
+        if cmap in ("Thermal Delta", "signed"):
+            limit = float(np.percentile(np.abs(finite), 99.5)) or 1e-9
+            normed = np.clip(frame / limit, -1.0, 1.0)
+            r = (np.clip( normed, 0, 1) * 255).astype(np.uint8)
+            b = (np.clip(-normed, 0, 1) * 255).astype(np.uint8)
+            g = np.zeros_like(r)
+            rgb = np.stack([r, g, b], axis=-1)
+        else:
+            disp = to_display(frame, mode="percentile")
+            rgb  = apply_colormap(disp, cmap)
+
         h, w = rgb.shape[:2]
-        qi  = QImage(rgb.tobytes(), w, h, w * 3, QImage.Format_RGB888)
+        buf = rgb.tobytes()
+        qi  = QImage(buf, w, h, w * 3, QImage.Format_RGB888)
         px  = QPixmap.fromImage(qi)
         self._img_lbl.setPixmap(
             px.scaled(self._img_lbl.size(),

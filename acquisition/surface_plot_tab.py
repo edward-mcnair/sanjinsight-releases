@@ -36,6 +36,9 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QTimer
 from ui.icons import set_btn_icon
+from .processing import (COLORMAP_OPTIONS, COLORMAP_TOOLTIPS,
+                         setup_cmap_combo, get_mpl_cmap_name)
+import config as cfg_mod
 
 import matplotlib
 if matplotlib.get_backend().lower() in ("", "agg"):
@@ -46,8 +49,6 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from mpl_toolkits.mplot3d import Axes3D   # noqa: F401 — registers 3D projection
 
 log = logging.getLogger(__name__)
-
-_CMAPS = ["inferno", "hot", "plasma", "viridis", "coolwarm", "RdBu_r", "jet"]
 
 
 class SurfacePlotTab(QWidget):
@@ -83,9 +84,13 @@ class SurfacePlotTab(QWidget):
         # Colormap
         toolbar.addWidget(QLabel("Colormap:"))
         self._cmap_combo = QComboBox()
-        self._cmap_combo.addItems(_CMAPS)
         self._cmap_combo.setFixedHeight(28)
-        self._cmap_combo.currentIndexChanged.connect(self._replot)
+        self._cmap_combo.setFixedWidth(130)
+        saved_cmap = cfg_mod.get_pref("display.colormap", "Emberline")
+        setup_cmap_combo(self._cmap_combo, saved_cmap)
+        self._cmap_combo.currentTextChanged.connect(self._replot)
+        self._cmap_combo.currentTextChanged.connect(
+            lambda c: cfg_mod.set_pref("display.colormap", c))
         toolbar.addWidget(self._cmap_combo)
 
         toolbar.addWidget(QLabel("  Z-stretch:"))
@@ -220,7 +225,7 @@ class SurfacePlotTab(QWidget):
             X, Y = np.meshgrid(X, Y)
 
             z_stretch  = self._z_spin.value()
-            cmap_name  = self._cmap_combo.currentText()
+            cmap_name  = get_mpl_cmap_name(self._cmap_combo.currentText())
 
             # Apply Z-stretch (vertical exaggeration around centre)
             z_min = float(np.nanmin(arr_ds))
