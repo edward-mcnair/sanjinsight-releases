@@ -204,6 +204,21 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,                     # compress binaries (requires UPX installed)
+    upx_exclude=[                 # NEVER let UPX touch Qt5 or VC++ runtime DLLs —
+        'Qt5Core.dll',            # UPX can corrupt them, causing DLL load failures
+        'Qt5Gui.dll',             # on machines without the full MSVC runtime.
+        'Qt5Widgets.dll',
+        'Qt5Network.dll',
+        'Qt5PrintSupport.dll',
+        'Qt5Svg.dll',
+        'Qt5XcbQpa.dll',
+        'vcruntime140.dll',
+        'vcruntime140_1.dll',
+        'msvcp140.dll',
+        'msvcp140_1.dll',
+        'concrt140.dll',
+        'python3*.dll',           # Python runtime — never compress
+    ],
     console=False,                # no black console window — GUI app
     disable_windowed_traceback=False,
     argv_emulation=False,
@@ -222,6 +237,12 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=True,
-    upx_exclude=[],
+    upx_exclude=[                 # keep in sync with EXE block above
+        'Qt5Core.dll', 'Qt5Gui.dll', 'Qt5Widgets.dll',
+        'Qt5Network.dll', 'Qt5PrintSupport.dll', 'Qt5Svg.dll',
+        'vcruntime140.dll', 'vcruntime140_1.dll',
+        'msvcp140.dll', 'msvcp140_1.dll', 'concrt140.dll',
+        'python3*.dll',
+    ],
     name='SanjINSIGHT',          # output folder: dist/SanjINSIGHT/
 )
