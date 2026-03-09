@@ -539,13 +539,14 @@ class AIPanelWidget(QWidget):
         lay.addWidget(icon)
 
         msg = QLabel(
-            "Local AI model not available.\n\n"
-            "Easiest option — use Ollama (free, GPU-accelerated):\n"
-            "  1. Download from  ollama.com\n"
-            "  2. Run:  ollama pull llama3\n"
-            "  3. Connect in  Settings → Ollama\n\n"
-            "Alternative — install llama-cpp-python directly:\n"
-            "  pip install llama-cpp-python"
+            "AI not connected yet.\n\n"
+            "To connect using Ollama (free, local, GPU-accelerated):\n"
+            "  1. Install from  ollama.com  (if not done)\n"
+            "  2. Run:  ollama pull phi3  (in a terminal)\n"
+            "  3. Open  Settings → scroll down to\n"
+            "     the  Ollama  section → click  Connect\n\n"
+            "If you already did steps 1 & 2, just go to\n"
+            "Settings and click Connect in the Ollama section."
         )
         msg.setAlignment(Qt.AlignCenter)
         msg.setWordWrap(True)

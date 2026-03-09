@@ -73,8 +73,15 @@ STATE_LABELS = {
 
 # Formal state machine: maps each state to the set of valid next states.
 # Any transition not listed here is illegal and will be logged + rejected.
+#
+# ABSENT → CONNECTING is intentionally allowed so that users can manually
+# trigger a connection attempt on a device that was not auto-discovered by
+# the scanner (e.g. a TEC controller on a Prolific USB-serial adapter that
+# doesn't match any registry pattern).  The connect worker checks that an
+# address has been configured before proceeding; if not, it emits a helpful
+# error message rather than silently failing.
 _VALID_TRANSITIONS: dict[DeviceState, set[DeviceState]] = {
-    DeviceState.ABSENT:        {DeviceState.DISCOVERED},
+    DeviceState.ABSENT:        {DeviceState.DISCOVERED, DeviceState.CONNECTING},
     DeviceState.DISCOVERED:    {DeviceState.CONNECTING, DeviceState.ABSENT},
     DeviceState.CONNECTING:    {DeviceState.CONNECTED,  DeviceState.ERROR, DeviceState.ABSENT},
     DeviceState.CONNECTED:     {DeviceState.DISCONNECTING, DeviceState.ERROR},
@@ -167,9 +174,20 @@ class DeviceManager:
         self._safe_mode:        bool = False
         self._safe_mode_reason: str  = ""
 
-        # Initialise an entry for every known device
+        # Initialise an entry for every known device and restore any
+        # connection parameters (port, baud, IP) saved in a previous session.
         for uid, desc in DEVICE_REGISTRY.items():
-            self._entries[uid] = DeviceEntry(descriptor=desc)
+            entry = DeviceEntry(descriptor=desc)
+            try:
+                import config as _cfg
+                saved = _cfg.get_pref(f"device_params.{uid}", {})
+                if saved.get("address"):    entry.address    = saved["address"]
+                if saved.get("baud_rate"):  entry.baud_rate  = saved["baud_rate"]
+                if saved.get("ip_address"): entry.ip_address = saved["ip_address"]
+                if saved.get("timeout_s"):  entry.timeout_s  = saved["timeout_s"]
+            except Exception:
+                pass   # config not yet initialised at import time — ignore
+            self._entries[uid] = entry
 
     # ---------------------------------------------------------------- #
     #  Callbacks                                                        #
@@ -283,6 +301,20 @@ class DeviceManager:
         driver_obj = None
 
         try:
+            # Guard: if the device was never auto-discovered and has no address
+            # configured, give the user a clear action rather than a cryptic
+            # driver error. Serial/USB/Ethernet devices all need an address.
+            needs_address = desc.connection_type in ("serial", "usb", "ethernet")
+            if needs_address and not entry.address:
+                raise ValueError(
+                    f"No port or address configured for {desc.display_name}.\n\n"
+                    "In the Device Manager, select this device → set the Port "
+                    "in Connection Parameters → click Apply Parameters, then "
+                    "try Connect again.\n\n"
+                    "Or open Settings → Hardware Setup to configure all ports "
+                    "at once using the step-by-step wizard."
+                )
+
             driver_obj = self._instantiate_driver(entry)
 
             # Enforce a hard timeout on connect() so the UI is never frozen.

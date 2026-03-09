@@ -865,17 +865,18 @@ class SettingsTab(QWidget):
                     self._ollama_model_ids.index(saved))
             except ValueError:
                 self._ollama_model_combo.setCurrentIndex(0)
-            if not silent:
-                self._ollama_status_lbl.setText(
-                    f"✓  Ollama running — {len(models)} model(s) installed")
-                self._ollama_status_lbl.setStyleSheet(
-                    f"font-size:12pt; color:{_GREEN};")
+            # Always show status when models are found — even on silent refresh —
+            # so users know Ollama is ready without having to click Refresh first.
+            self._ollama_status_lbl.setText(
+                f"✓  Ollama ready — {len(models)} model(s) — click Connect")
+            self._ollama_status_lbl.setStyleSheet(
+                f"font-size:12pt; color:{_GREEN};")
         else:
             self._ollama_model_ids = []
             if not silent:
                 self._ollama_status_lbl.setText(
                     "⚠  Ollama running but no models installed. "
-                    "Run:  ollama pull llama3")
+                    "Run:  ollama pull phi3")
                 self._ollama_status_lbl.setStyleSheet(
                     f"font-size:12pt; color:{_AMBER};")
         self._ollama_model_combo.blockSignals(False)
@@ -1228,11 +1229,12 @@ class SettingsTab(QWidget):
             "loading":  ("Loading model…", "#ffaa44"),
             "ready":    ("Ready", _GREEN),
             "thinking": ("Thinking…", "#8888ff"),
-            "error":    ("Error — see AI panel", "#ff5555"),
+            "error":    ("Local model failed — scroll down to use Ollama instead ↓",
+                         "#ff8800"),
         }
         msg, color = _msgs.get(status, (status, _MUTED))
         self._ai_status_lbl.setText(msg)
-        self._ai_status_lbl.setStyleSheet(f"font-size:12pt; color:{color};")
+        self._ai_status_lbl.setStyleSheet(f"font-size:11pt; color:{color};")
         if hasattr(self, "_ai_apply_btn"):
             self._ai_apply_btn.setEnabled(status not in ("loading", "thinking"))
 
