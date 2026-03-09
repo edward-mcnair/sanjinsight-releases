@@ -473,12 +473,14 @@ class _PageTEC(_PageBase):
         meerstetter_cfg = cfg.get("tec_meerstetter", {})
         atec_cfg        = cfg.get("tec_atec",        {})
 
-        # ── Meerstetter ───────────────────────────────────────────────
-        g1 = QGroupBox("Meerstetter TEC-1089")
-        g1.setStyleSheet(
+        _grp_ss = (
             "QGroupBox { color:#8892a4; font-size:12pt; border:1px solid #2a3249; "
             "border-radius:5px; margin-top:8px; padding:12px; }"
             "QGroupBox::title { subcontrol-origin:margin; left:10px; padding:0 4px; }")
+
+        # ── Meerstetter ───────────────────────────────────────────────
+        g1 = QGroupBox("Meerstetter TEC-1089")
+        g1.setStyleSheet(_grp_ss)
         fl1 = QFormLayout(g1)
         fl1.setSpacing(8)
 
@@ -486,6 +488,7 @@ class _PageTEC(_PageBase):
         self._meer_driver.addItems(["meerstetter", "simulated"])
         self._meer_driver.setCurrentText(meerstetter_cfg.get("driver", "simulated"))
         self._meer_driver.setStyleSheet(_INPUT_SS)
+        self._meer_driver.currentTextChanged.connect(self._on_meer_driver_changed)
         fl1.addRow(_lbl("Driver:"), self._meer_driver)
 
         self._meer_port = _PortRow("COM Port:", meerstetter_cfg.get("port", "COM3"))
@@ -496,11 +499,47 @@ class _PageTEC(_PageBase):
         addr_lbl.setStyleSheet(_LABEL_HINT)
         fl1.addRow(addr_lbl)
 
+        # pyMeCom notice — shown when pyMeCom is not importable
+        self._mecom_notice = QLabel(
+            '⚠  pyMeCom library is not installed in this application.<br>'
+            'pyMeCom provides the MeCom serial protocol used to communicate<br>'
+            'with Meerstetter TEC and LDD controllers.<br>'
+            '<a href="https://github.com/meerstetter/pyMeCom">'
+            'github.com/meerstetter/pyMeCom ↗</a>'
+            '&nbsp; — &nbsp;'
+            '<a href="https://pypi.org/project/pyMeCom/">'
+            'PyPI: pip install pyMeCom ↗</a>'
+        )
+        self._mecom_notice.setOpenExternalLinks(True)
+        self._mecom_notice.setWordWrap(True)
+        self._mecom_notice.setStyleSheet(
+            f"font-size:{FONT['caption']}pt; color:{PALETTE['warning']}; "
+            "background:#1a1500; border:1px solid #4a3800; border-radius:4px; "
+            "padding:8px;")
+        self._mecom_notice.setVisible(False)
+        fl1.addRow(self._mecom_notice)
+
+        # Test connection button + result label
+        meer_test_row = QHBoxLayout()
+        self._meer_test_btn = QPushButton("Test Connection")
+        self._meer_test_btn.setFixedHeight(30)
+        self._meer_test_btn.setToolTip(
+            "Try to open the selected COM port with the Meerstetter MeCom protocol")
+        self._meer_test_btn.setStyleSheet(
+            _BTN_SECONDARY.replace("padding:8px 22px", "padding:0 12px"))
+        self._meer_test_btn.clicked.connect(self._test_meer)
+        self._meer_test_lbl = QLabel("")
+        self._meer_test_lbl.setStyleSheet(_SS_BADGE_OK)
+        meer_test_row.addWidget(self._meer_test_btn)
+        meer_test_row.addSpacing(8)
+        meer_test_row.addWidget(self._meer_test_lbl, 1)
+        fl1.addRow(meer_test_row)
+
         self._content.addWidget(g1)
 
         # ── ATEC ──────────────────────────────────────────────────────
         g2 = QGroupBox("ATEC-302")
-        g2.setStyleSheet(g1.styleSheet())
+        g2.setStyleSheet(_grp_ss)
         fl2 = QFormLayout(g2)
         fl2.setSpacing(8)
 
@@ -520,6 +559,76 @@ class _PageTEC(_PageBase):
 
         self._content.addWidget(g2)
         self._content.addStretch(1)
+
+        # Show pyMeCom notice immediately if meerstetter driver is pre-selected
+        self._on_meer_driver_changed(self._meer_driver.currentText())
+
+    # ── pyMeCom helpers ───────────────────────────────────────────────
+
+    def _on_meer_driver_changed(self, driver: str) -> None:
+        if driver == "meerstetter":
+            self._check_mecom_available()
+        else:
+            if hasattr(self, "_mecom_notice"):
+                self._mecom_notice.setVisible(False)
+
+    def _check_mecom_available(self) -> bool:
+        """Return True if pyMeCom (import name: mecom) is importable."""
+        try:
+            import mecom  # noqa: F401
+            if hasattr(self, "_mecom_notice"):
+                self._mecom_notice.setVisible(False)
+            return True
+        except ImportError:
+            if hasattr(self, "_mecom_notice"):
+                self._mecom_notice.setVisible(True)
+            return False
+
+    def _test_meer(self) -> None:
+        """Try to connect to the Meerstetter TEC on the selected COM port."""
+        ok_ss   = _SS_BADGE_OK
+        warn_ss = _SS_BADGE_WARN
+        err_ss  = f"font-size:{FONT['caption']}pt; color:{PALETTE['danger']};"
+
+        driver = self._meer_driver.currentText()
+        if driver == "simulated":
+            self._meer_test_lbl.setText("✓  Simulated — no hardware required")
+            self._meer_test_lbl.setStyleSheet(ok_ss)
+            return
+
+        if not self._check_mecom_available():
+            self._meer_test_lbl.setText(
+                "⊗  pyMeCom not found — see download link above")
+            self._meer_test_lbl.setStyleSheet(err_ss)
+            return
+
+        port = self._meer_port.value
+        if not port:
+            self._meer_test_lbl.setText("⚠  Select a COM port first")
+            self._meer_test_lbl.setStyleSheet(warn_ss)
+            return
+
+        self._meer_test_lbl.setText("Connecting…")
+        self._meer_test_lbl.setStyleSheet(
+            f"font-size:{FONT['caption']}pt; color:{PALETTE['textDim']};")
+
+        try:
+            from mecom import MeComAPI
+            tec = MeComAPI(port)
+            info = tec.identify()
+            tec.session.close()
+            self._meer_test_lbl.setText(
+                f"✓  Connected: {info}" if info else f"✓  TEC responded on {port}")
+            self._meer_test_lbl.setStyleSheet(ok_ss)
+        except ImportError:
+            self._meer_test_lbl.setText("⊗  pyMeCom not importable")
+            self._meer_test_lbl.setStyleSheet(err_ss)
+        except Exception as e:
+            msg = str(e)[:80]
+            self._meer_test_lbl.setText(f"⊗  {msg}")
+            self._meer_test_lbl.setStyleSheet(err_ss)
+
+    # ── Scan results ──────────────────────────────────────────────────
 
     def apply_scan(self, report) -> int:
         """

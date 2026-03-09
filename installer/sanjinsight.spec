@@ -71,10 +71,6 @@ hidden_imports = [
     'serial.tools.list_ports',
     'serial.tools.list_ports_windows',
 
-    # ── Optional hardware packages (import gracefully if missing) ────
-    # nifpga, pypylon, pyMeCom, pyvisa — these are installed separately
-    # on the instrument PC. PyInstaller won't fail if they're absent.
-
     # ── AI assistant — llama-cpp-python (optional, graceful if missing) ──
     # These are imported conditionally in ai/model_runner.py.
     # PyInstaller needs them listed here so they are bundled when present.
@@ -82,6 +78,21 @@ hidden_imports = [
     'llama_cpp.llama',
     'llama_cpp.llama_cpp',
 ]
+
+# ── Optional hardware packages — bundled when installed on the build machine ──
+# pyMeCom (import name: mecom) — Meerstetter serial protocol for TEC + LDD
+# Pure Python; pip install pyMeCom  |  https://github.com/meerstetter/pyMeCom
+if importlib.util.find_spec('mecom'):
+    hidden_imports += collect_submodules('mecom')
+
+# pyvisa — VISA instrument control (Keithley SMU, signal generators …)
+if importlib.util.find_spec('pyvisa'):
+    hidden_imports += collect_submodules('pyvisa')
+
+# pypylon — Basler camera SDK Python bindings
+# https://www.baslerweb.com/en-us/software/pylon/pypylon/
+if importlib.util.find_spec('pypylon'):
+    hidden_imports += collect_submodules('pypylon')
 
 # ── Data files (non-Python assets bundled alongside the exe) ─────────────────
 datas = [
