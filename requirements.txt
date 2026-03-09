@@ -45,15 +45,21 @@ PyYAML>=6.0
 # is not present.
 
 pyserial>=3.5                 # Serial port I/O (TEC, LDD, serial stages)
-pyMeCom>=0.1.0                # Meerstetter MeCom protocol (TEC-1089, LDD-1121)
-                              #   https://github.com/meerstetter/pyMeCom
 pyvisa>=1.13.0                # VISA instrument control (Keithley SMU, SCPI supplies)
 pyvisa-py>=0.7.0              # Pure-Python VISA backend — no NI-VISA install needed
-pydp832                       # Rigol DP832 native LAN driver (no NI-VISA required)
-                              #   https://github.com/tspspi/pydp832
-dcps>=0.10.0                  # DC Power Supply helpers — Keithley 2400, Rigol DP800
+dcps>=0.8.0                   # DC Power Supply helpers — Keithley 2400, Rigol DP800
                               #   https://github.com/sgoadhouse/dcps
-thorlabs-apt-device>=0.5.0    # Thorlabs APT/Kinesis stage controllers (USB)
+thorlabs-apt-device>=0.3.0    # Thorlabs APT/Kinesis stage controllers (USB)
+                              #   https://pypi.org/project/thorlabs-apt-device/
+
+# ── Hardware drivers NOT on PyPI — install manually from GitHub if needed ─────
+# These are optional: the app falls back to simulated/VISA mode without them.
+#
+# Meerstetter MeCom protocol (TEC-1089, LDD-1121):
+#   pip install git+https://github.com/marcwimmer/pyMeCom
+#
+# Rigol DP832 native LAN driver (no NI-VISA required):
+#   pip install git+https://github.com/tspspi/pydp832
 
 # ── Hardware drivers — require OS-level SDK (install SDK first, then pip) ──────
 # These Python packages only work once the vendor SDK is installed at the OS level.

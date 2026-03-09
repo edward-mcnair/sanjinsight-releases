@@ -64,11 +64,25 @@ jobs:
 
       # ── 4. Install dependencies ────────────────────────────────────────────
       - name: Install Python dependencies
+        shell: bash
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pyinstaller pillow
+          python -m pip install -r requirements.txt
+          python -m pip install pyinstaller pillow
           # Pillow is used below to convert SVG → ICO
+
+      # ── 4b. Install optional hardware drivers from GitHub ─────────────────
+      # These are NOT on PyPI.  Failures are ignored — the app falls back to
+      # simulated/VISA mode and the bundle still works without them.
+      - name: Install optional GitHub-only hardware drivers
+        shell: bash
+        run: |
+          python -m pip install git+https://github.com/marcwimmer/pyMeCom \
+            && echo "[OK] pyMeCom installed" \
+            || echo "[SKIP] pyMeCom unavailable — TEC will use simulated mode in bundle"
+          python -m pip install git+https://github.com/tspspi/pydp832 \
+            && echo "[OK] pydp832 installed" \
+            || echo "[SKIP] pydp832 unavailable — Rigol DP832 native driver not bundled"
 
       # ── 5. Read version from version.py ───────────────────────────────────
       - name: Read version
@@ -183,9 +197,14 @@ jobs:
           print(f"[OK] version_info.txt generated for v{version}")
 
       # ── 8. PyInstaller ────────────────────────────────────────────────────
+      # IMPORTANT: use "python -m PyInstaller" — this guarantees the SAME
+      # Python interpreter that ran pip install is the one building the bundle.
+      # A bare "pyinstaller" command can resolve to a different Python on PATH
+      # and produce a broken ~13 MB bundle missing the scientific stack.
       - name: Build with PyInstaller
+        shell: bash
         run: |
-          pyinstaller installer/sanjinsight.spec --noconfirm --clean
+          python -m PyInstaller installer/sanjinsight.spec --noconfirm --clean
         env:
           # Suppress PyInstaller progress bars in CI logs
           PYTHONUNBUFFERED: '1'
