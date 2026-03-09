@@ -446,6 +446,7 @@ class _DeviceListPanel(QWidget):
                     include_network=self._net_chk.isChecked(),
                     progress_cb=_progress)
                 if not self._cancel_event.is_set():
+                    self._last_scan_report = report   # saved for _offer_demo_dialog
                     self._mgr.update_from_scan(report)
             except InterruptedError:
                 pass   # user cancelled — silently discard partial results
@@ -1109,8 +1110,9 @@ class DeviceManagerDialog(QDialog):
         reflects the live hardware state without polling.
     """
 
-    hw_status_changed = pyqtSignal(bool)
-    demo_requested    = pyqtSignal()    # user chose "Run in Demo Mode" from the no-devices dialog
+    hw_status_changed      = pyqtSignal(bool)
+    demo_requested         = pyqtSignal()   # user chose "Run in Demo Mode" from the no-devices dialog
+    setup_wizard_requested = pyqtSignal()   # user chose "Setup Wizard" from the no-devices dialog
 
     def __init__(self, device_manager: DeviceManager, parent=None,
                  demo_mode_getter=None):
@@ -1436,30 +1438,68 @@ class DeviceManagerDialog(QDialog):
         box.setIcon(QMessageBox.Warning)
         box.setText("<b>No compatible hardware was detected.</b>")
 
+        # Check whether the scan turned up any serial ports that weren't
+        # matched to a known device — they may be the user's instruments
+        # connected with a cable the auto-detector doesn't recognise yet.
+        unrecognized_ports = []
+        report = getattr(self, "_last_scan_report", None)
+        if report:
+            from hardware.device_registry import CONN_SERIAL
+            unrecognized_ports = [
+                d.address for d in report.devices
+                if d.connection_type == CONN_SERIAL and d.descriptor is None
+            ]
+
+        ports_hint = ""
+        if unrecognized_ports:
+            port_list = ", ".join(unrecognized_ports)
+            if len(unrecognized_ports) == 1:
+                ports_hint = (
+                    f"\n\n💡  The scan found one connected serial port "
+                    f"({port_list}) that wasn't automatically identified.\n"
+                    "This is likely one of your instruments.  Click "
+                    "\"Setup Wizard\" to assign it to the correct device."
+                )
+            else:
+                ports_hint = (
+                    f"\n\n💡  The scan found {len(unrecognized_ports)} connected "
+                    f"serial ports ({port_list}) that weren't automatically "
+                    "identified.  These are likely your instruments.  Click "
+                    "\"Setup Wizard\" to assign each port to the correct device."
+                )
+
         if already_demo:
             box.setInformativeText(
                 "No new hardware was found.  You are already running in "
                 "Demo Mode with simulated hardware.\n\n"
-                "Power on your device, check its cable, and click "
-                "\"Scan Again\" — or close this dialog to keep working "
-                "in Demo Mode.")
+                "Make sure your devices are powered on and their USB cables "
+                "are connected, then click \"Scan Again\"." + ports_hint)
         else:
             box.setInformativeText(
-                "Check that all devices are powered on and their cables are "
-                "connected, then scan again.\n\n"
-                "Select \"Demo Mode\" to explore the full interface with "
-                "simulated hardware — no physical devices required.\n\n"
-                "Select \"Add Manually\" to configure devices by hand in "
-                "the Device Manager.")
+                "Make sure all devices are powered on and their USB cables "
+                "are connected, then scan again.\n\n"
+                "Not ready to connect hardware?  Select \"Demo Mode\" to "
+                "explore the full interface with simulated devices — "
+                "no physical hardware required." + ports_hint)
 
-        scan_btn = box.addButton("Scan Again", QMessageBox.AcceptRole)
+        scan_btn  = box.addButton("🔍  Scan Again", QMessageBox.AcceptRole)
+        wizard_btn = None
 
         if already_demo:
-            continue_btn = box.addButton("Continue in Demo Mode", QMessageBox.RejectRole)
-            box.addButton("Add Manually",                         QMessageBox.ActionRole)
+            continue_btn = box.addButton(
+                "Continue in Demo Mode", QMessageBox.RejectRole)
+            if unrecognized_ports:
+                wizard_btn = box.addButton(
+                    "⚙  Setup Wizard", QMessageBox.ActionRole)
+            else:
+                box.addButton("Add Manually", QMessageBox.ActionRole)
         else:
-            demo_btn = box.addButton("Demo Mode",    QMessageBox.ActionRole)
-            box.addButton(           "Add Manually", QMessageBox.RejectRole)
+            demo_btn = box.addButton("Demo Mode", QMessageBox.ActionRole)
+            if unrecognized_ports:
+                wizard_btn = box.addButton(
+                    "⚙  Setup Wizard", QMessageBox.RejectRole)
+            else:
+                box.addButton("Add Manually", QMessageBox.RejectRole)
 
         box.setDefaultButton(scan_btn)
         box.exec_()
@@ -1472,3 +1512,6 @@ class DeviceManagerDialog(QDialog):
             self.demo_requested.emit()
         elif already_demo and clicked is continue_btn:
             self.close()          # user confirmed staying in demo mode — close DM
+        elif wizard_btn is not None and clicked is wizard_btn:
+            self.close()          # close DM, then open guided wizard
+            self.setup_wizard_requested.emit()

@@ -623,6 +623,8 @@ class MainWindow(QMainWindow):
             self._header.set_hw_btn_status)
         # Allow the Device Manager's "Demo Mode" button to activate demo mode.
         self._device_mgr_dlg.demo_requested.connect(self._activate_demo_mode)
+        # Allow the Device Manager's "Setup Wizard" button to open the wizard.
+        self._device_mgr_dlg.setup_wizard_requested.connect(self._open_hardware_setup)
 
         # Emergency stop — wire header button to hw_service
         self._header.connect_estop(

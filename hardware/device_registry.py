@@ -158,11 +158,13 @@ DEVICE_REGISTRY: dict[str, DeviceDescriptor] = {
         driver_module  = "hardware.tec.meerstetter",
         driver_version = "builtin",
         hot_loadable   = True,
-        usb_vid        = 0x0403,   # FTDI (some cables)
+        usb_vid        = 0x0403,   # FTDI
         usb_pid        = 0x6001,
-        serial_patterns= ["Meerstetter", "TEC-1089", "0403:6001",
-                          "067B:2303", "067B:23A3",   # Prolific PL2303 variants
-                          "PL2303", "Prolific"],       # NT220 uses Prolific adapters
+        serial_patterns= ["Meerstetter", "TEC-1089", "0403:6001"],
+        # Note: generic USB-serial adapters (Prolific, CH340, CP2102) are
+        # intentionally NOT matched here — the same adapter chip is used by
+        # hundreds of different devices and would cause false positives.
+        # Users with non-FTDI cables must assign the COM port manually.
         default_baud   = 57600,
         description    = "Single-channel TEC controller with USB/serial interface. "
                          "Used for precise sample temperature control and calibration.",
@@ -195,9 +197,8 @@ DEVICE_REGISTRY: dict[str, DeviceDescriptor] = {
         driver_module  = "hardware.tec.atec",
         driver_version = "builtin",
         hot_loadable   = True,
-        serial_patterns= ["ATEC", "Arroyo", "0403:6001",
-                          "067B:2303", "067B:23A3",   # Prolific PL2303 variants
-                          "PL2303", "Prolific"],       # NT220 uses Prolific adapters
+        serial_patterns= ["ATEC", "Arroyo", "0403:6001"],
+        # Note: generic adapters intentionally excluded — see Meerstetter note above.
         default_baud   = 38400,
         description    = "RS-232 TEC controller with Modbus-style protocol. "
                          "Used as secondary TEC in dual-channel configurations.",
