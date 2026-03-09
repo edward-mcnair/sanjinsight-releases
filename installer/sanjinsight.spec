@@ -80,36 +80,49 @@ hidden_imports = [
     'llama_cpp.llama_cpp',
 ]
 
-# ── Pure-Python hardware packages — always bundled (in requirements.txt) ───────
-# These are guaranteed to be installed on the build machine via requirements.txt
-# so collect_submodules() is called unconditionally.
+# ── Hardware packages — collected safely so a missing package never kills the build
+#
+# Strategy: use find_spec() as a guard for ALL packages.
+# Packages in requirements.txt will always be found after "pip install -r requirements.txt".
+# The guard is a safety net for builds run before pip install, or on CI machines
+# that only install a subset of deps.  A missing package logs a warning and is
+# skipped; it never aborts collection of numpy / Qt5 / everything else.
+
+
+def _safe_collect(pkg: str) -> list:
+    """collect_submodules() wrapped in a guard so a missing package is a warning,
+    not a build-killing exception."""
+    if importlib.util.find_spec(pkg):
+        return collect_submodules(pkg)
+    print(f"[sanjinsight.spec] WARNING: '{pkg}' not installed — skipping bundling. "
+          f"Run  pip install -r requirements.txt  on the build machine.")
+    return []
+
 
 # pyMeCom — Meerstetter MeCom serial protocol (TEC-1089, LDD-1121)
 # Import name is 'mecom'; pip name is 'pyMeCom'
-hidden_imports += collect_submodules('mecom')
+hidden_imports += _safe_collect('mecom')
 
-# pyvisa + pyvisa-py — VISA instrument control (Keithley SMU, Rigol DP832, …)
-hidden_imports += collect_submodules('pyvisa')
+# pyvisa + pyvisa-py — VISA instrument control (Keithley SMU, SCPI supplies …)
+hidden_imports += _safe_collect('pyvisa')
 
 # pydp832 — Rigol DP832 native LAN driver (no NI-VISA required)
-# The module may be named 'pydp832' or 'dp832' depending on version; try both.
+# May be named 'pydp832' or 'dp832' depending on installed version.
 for _pydp832_mod in ('pydp832', 'dp832'):
-    if importlib.util.find_spec(_pydp832_mod):
-        hidden_imports += collect_submodules(_pydp832_mod)
+    _mods = _safe_collect(_pydp832_mod)
+    if _mods:
+        hidden_imports += _mods
         break
 
-# dcps — DC Power Supply helpers (Keithley 2400, Rigol DP800, …)
-hidden_imports += collect_submodules('dcps')
+# dcps — DC Power Supply helpers (Keithley 2400, Rigol DP800 …)
+hidden_imports += _safe_collect('dcps')
 
 # thorlabs_apt_device — Thorlabs APT/Kinesis motorised stage controllers
-hidden_imports += collect_submodules('thorlabs_apt_device')
+hidden_imports += _safe_collect('thorlabs_apt_device')
 
-# ── SDK-dependent packages — bundled only when the OS SDK is also installed ───
-# pypylon works only when Basler pylon SDK is installed at the OS level.
-# Bundle the Python glue if present on the build machine; the end-user still
-# needs to install pylon SDK separately (USB3 Vision filter driver, etc.).
-if importlib.util.find_spec('pypylon'):
-    hidden_imports += collect_submodules('pypylon')
+# pypylon — Basler camera SDK Python bindings
+# SDK-dependent: also requires Basler pylon 8 installed at the OS level.
+hidden_imports += _safe_collect('pypylon')
 
 # ── Data files (non-Python assets bundled alongside the exe) ─────────────────
 datas = [
