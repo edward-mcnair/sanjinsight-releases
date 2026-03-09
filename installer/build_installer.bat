@@ -2,98 +2,150 @@
 :: installer/build_installer.bat
 :: One-command build for the SanjINSIGHT Windows installer.
 ::
-:: Usage:
-::   cd installer
+:: Usage (from anywhere — script finds the project root automatically):
 ::   build_installer.bat 1.1.2
 ::
 :: What this script does:
-::   1. Downloads vc_redist.x64.exe into installer\redist\ (skipped if already there)
-::   2. Runs PyInstaller to build the one-folder application bundle
-::   3. Runs Inno Setup to produce SanjINSIGHT-Setup-{version}.exe
+::   1. Resolves the active Python interpreter and prints it so you can verify it
+::   2. pip install -r requirements.txt  (uses the SAME Python as step 3)
+::   3. Downloads vc_redist.x64.exe      (skipped if already present)
+::   4. python -m PyInstaller            (uses the SAME Python as step 2)
+::   5. Inno Setup iscc                  (produces the .exe installer)
 ::
-:: Requirements (must be on PATH or at default install locations):
-::   - Python with all deps installed:  pip install -r ..\requirements.txt
-::   - PyInstaller:                     pip install pyinstaller
-::   - Inno Setup 6:                    https://jrsoftware.org/isinfo.php
-::   - UPX (optional, for compression): https://upx.github.io/
+:: Key design choice: everything uses "python -m pip" and "python -m PyInstaller"
+:: rather than bare "pip" / "pyinstaller" commands.  This guarantees that the
+:: same Python interpreter is used for both installing packages and building
+:: the bundle — mismatched interpreters are the #1 cause of a ~13 MB output.
+::
+:: Requirements:
+::   - Python 3.10+ on PATH                 (check: python --version)
+::   - Inno Setup 6 installed               https://jrsoftware.org/isinfo.php
+::   - UPX on PATH (optional, compresses)   https://upx.github.io/
 
 setlocal EnableDelayedExpansion
 
 :: ── Version argument ──────────────────────────────────────────────────────────
 set VERSION=%~1
 if "%VERSION%"=="" (
+    echo.
     echo Usage: build_installer.bat ^<version^>
     echo Example: build_installer.bat 1.1.2
+    echo.
     exit /b 1
 )
 
-:: ── Locate project root (one level above this script) ────────────────────────
+:: ── Locate project root (one level above installer\) ─────────────────────────
 set SCRIPT_DIR=%~dp0
-set PROJECT_DIR=%SCRIPT_DIR%..
+:: Remove trailing backslash from SCRIPT_DIR
+if "%SCRIPT_DIR:~-1%"=="\" set SCRIPT_DIR=%SCRIPT_DIR:~0,-1%
+set PROJECT_DIR=%SCRIPT_DIR%\..
 pushd "%PROJECT_DIR%"
 
 echo.
 echo ============================================================
 echo  SanjINSIGHT Installer Build  v%VERSION%
 echo ============================================================
+
+:: ── Resolve the active Python interpreter ────────────────────────────────────
+:: We use "python" from PATH.  Print it so the user can verify it is correct.
+for /f "delims=" %%i in ('python -c "import sys; print(sys.executable)"') do (
+    set PYTHON_EXE=%%i
+)
+if "%PYTHON_EXE%"=="" (
+    echo.
+    echo ERROR: 'python' not found on PATH.
+    echo        Install Python 3.10+ and add it to your PATH.
+    popd & exit /b 1
+)
+echo.
+echo Python interpreter: %PYTHON_EXE%
 echo.
 
-:: ── Step 1: Ensure pip dependencies are current ───────────────────────────────
-echo [1/4] Installing / updating Python dependencies...
-pip install -r requirements.txt --quiet
+:: ── Step 1: Install / update Python dependencies ─────────────────────────────
+echo [1/4] Installing Python dependencies with the above interpreter...
+python -m pip install -r requirements.txt --quiet
 if errorlevel 1 (
-    echo ERROR: pip install failed. Check requirements.txt and your Python environment.
+    echo.
+    echo ERROR: pip install failed.
+    echo        Check requirements.txt and try running manually:
+    echo          python -m pip install -r requirements.txt
     popd & exit /b 1
 )
 echo       Done.
 echo.
 
 :: ── Step 2: Download VC++ Redistributable if not present ─────────────────────
-set REDIST_DIR=%SCRIPT_DIR%redist
+set REDIST_DIR=%SCRIPT_DIR%\redist
 set REDIST_EXE=%REDIST_DIR%\vc_redist.x64.exe
 
 if not exist "%REDIST_EXE%" (
     echo [2/4] Downloading Visual C++ 2022 Redistributable...
     if not exist "%REDIST_DIR%" mkdir "%REDIST_DIR%"
     powershell -NoProfile -Command ^
-      "Invoke-WebRequest -Uri 'https://aka.ms/vs/17/release/vc_redist.x64.exe' -OutFile '%REDIST_EXE%'"
+      "Invoke-WebRequest -Uri 'https://aka.ms/vs/17/release/vc_redist.x64.exe' -OutFile '%REDIST_EXE%'" 2>&1
     if errorlevel 1 (
-        echo ERROR: Failed to download vc_redist.x64.exe.
-        echo        Download it manually from https://aka.ms/vs/17/release/vc_redist.x64.exe
-        echo        and place it at:  installer\redist\vc_redist.x64.exe
+        echo.
+        echo ERROR: Download failed.
+        echo        Download manually from: https://aka.ms/vs/17/release/vc_redist.x64.exe
+        echo        Save to: installer\redist\vc_redist.x64.exe
         popd & exit /b 1
     )
-    echo       Downloaded to %REDIST_EXE%
+    echo       Saved to: %REDIST_EXE%
 ) else (
     echo [2/4] vc_redist.x64.exe already present — skipping download.
 )
 echo.
 
 :: ── Step 3: Build the PyInstaller bundle ─────────────────────────────────────
-echo [3/4] Building application bundle with PyInstaller...
-pyinstaller installer\sanjinsight.spec --noconfirm
+echo [3/4] Building application bundle...
+echo       (using: %PYTHON_EXE%)
+echo.
+
+:: Use "python -m PyInstaller" — CRITICAL: ensures the SAME Python that has
+:: numpy/cv2/Qt5 installed is the one building the bundle.
+python -m PyInstaller installer\sanjinsight.spec --noconfirm
 if errorlevel 1 (
-    echo ERROR: PyInstaller build failed.
+    echo.
+    echo ERROR: PyInstaller build failed.  Check the output above.
+    echo.
+    echo Common causes:
+    echo   - The spec printed an ERROR about missing critical packages.
+    echo     Fix: the Python shown above is not the right one, or you need
+    echo          to run:  python -m pip install -r requirements.txt
     popd & exit /b 1
 )
-echo       Bundle written to dist\SanjINSIGHT\
+
+:: Sanity-check: warn if the output looks too small (indicates a broken build)
+set DIST_DIR=dist\SanjINSIGHT
+if exist "%DIST_DIR%\SanjINSIGHT.exe" (
+    for %%F in ("%DIST_DIR%\SanjINSIGHT.exe") do set EXE_SIZE=%%~zF
+    :: 5 MB threshold — a correct build launcher is typically 1-3 MB, but if
+    :: the whole folder is missing the scientific stack the .exe is ~1 MB.
+    :: We check the _dir_ size indirectly by counting files.
+    for /f %%C in ('dir /s /b "%DIST_DIR%" 2^>nul ^| find /c /v ""') do set FILE_COUNT=%%C
+    if !FILE_COUNT! LSS 100 (
+        echo.
+        echo WARNING: dist\SanjINSIGHT\ contains only !FILE_COUNT! files.
+        echo          A full build typically has 300+ files.
+        echo          The bundle may be incomplete — check PyInstaller output above.
+        echo.
+    ) else (
+        echo       Bundle OK: !FILE_COUNT! files in dist\SanjINSIGHT\
+    )
+) else (
+    echo WARNING: dist\SanjINSIGHT\SanjINSIGHT.exe not found after build.
+)
 echo.
 
 :: ── Step 4: Build the Inno Setup installer ───────────────────────────────────
 echo [4/4] Building installer with Inno Setup...
 
-:: Try common Inno Setup install locations
-set ISCC=""
-if exist "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" (
-    set ISCC="%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe"
-)
-if exist "%ProgramFiles%\Inno Setup 6\ISCC.exe" (
-    set ISCC="%ProgramFiles%\Inno Setup 6\ISCC.exe"
-)
-:: Also try PATH
+set ISCC=
+if exist "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" set ISCC="%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe"
+if exist "%ProgramFiles%\Inno Setup 6\ISCC.exe"       set ISCC="%ProgramFiles%\Inno Setup 6\ISCC.exe"
 where iscc >nul 2>&1 && set ISCC=iscc
 
-if %ISCC%=="" (
+if "%ISCC%"=="" (
     echo ERROR: Inno Setup 6 not found.
     echo        Download from https://jrsoftware.org/isinfo.php and install.
     popd & exit /b 1

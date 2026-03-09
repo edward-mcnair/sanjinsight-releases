@@ -17,6 +17,39 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules, coll
 SPEC_DIR    = os.path.dirname(os.path.abspath(SPEC))
 PROJECT_DIR = os.path.dirname(SPEC_DIR)
 
+# ── Sanity-check: abort immediately if the scientific stack is missing ─────────
+# A 13 MB output instead of ~130 MB means PyInstaller is running from the WRONG
+# Python interpreter (one that doesn't have numpy/cv2/Qt5 installed).
+# This check fails loudly here rather than silently producing a broken bundle.
+_CRITICAL_PACKAGES = {
+    'numpy':      'pip install numpy',
+    'cv2':        'pip install opencv-python',
+    'PyQt5':      'pip install PyQt5',
+    'matplotlib': 'pip install matplotlib',
+    'scipy':      'pip install scipy',
+    'h5py':       'pip install h5py',
+    'yaml':       'pip install PyYAML',
+    'cryptography': 'pip install cryptography',
+}
+_missing_critical = {pkg: hint for pkg, hint in _CRITICAL_PACKAGES.items()
+                     if importlib.util.find_spec(pkg) is None}
+if _missing_critical:
+    print("\n" + "=" * 70)
+    print("ERROR: Critical packages are missing from this Python interpreter.")
+    print(f"       Python: {sys.executable}")
+    print()
+    print("  This is usually caused by running PyInstaller from a different")
+    print("  Python than the one where you ran 'pip install -r requirements.txt'.")
+    print()
+    print("  Missing packages:")
+    for pkg, hint in _missing_critical.items():
+        print(f"    {pkg:20s}  →  {hint}")
+    print()
+    print("  Fix: use build_installer.bat which calls 'python -m PyInstaller'")
+    print("  so the same interpreter is used for pip and PyInstaller.")
+    print("=" * 70 + "\n")
+    sys.exit(1)
+
 # ── Hidden imports ────────────────────────────────────────────────────────────
 # PyInstaller cannot see modules loaded via importlib (our factory pattern)
 # and some PyQt5 internals. List them all explicitly.
@@ -90,13 +123,23 @@ hidden_imports = [
 
 
 def _safe_collect(pkg: str) -> list:
-    """collect_submodules() wrapped in a guard so a missing package is a warning,
-    not a build-killing exception."""
-    if importlib.util.find_spec(pkg):
-        return collect_submodules(pkg)
-    print(f"[sanjinsight.spec] WARNING: '{pkg}' not installed — skipping bundling. "
-          f"Run  pip install -r requirements.txt  on the build machine.")
-    return []
+    """collect_submodules() with a two-layer guard:
+    1. find_spec() — skip silently if the package is not installed at all.
+    2. try/except  — catch any exception collect_submodules() might raise
+       (e.g. a broken __init__.py or a missing C extension inside the package).
+    Either way, returns an empty list so the rest of the spec continues.
+    """
+    if importlib.util.find_spec(pkg) is None:
+        print(f"[spec] INFO : '{pkg}' not found — skipping. "
+              f"Run  pip install -r requirements.txt  if you need it bundled.")
+        return []
+    try:
+        mods = collect_submodules(pkg)
+        print(f"[spec] INFO : '{pkg}' — collected {len(mods)} submodule(s).")
+        return mods
+    except Exception as exc:
+        print(f"[spec] WARN : collect_submodules('{pkg}') failed: {exc} — skipping.")
+        return []
 
 
 # pyMeCom — Meerstetter MeCom serial protocol (TEC-1089, LDD-1121)
