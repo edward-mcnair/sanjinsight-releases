@@ -31,7 +31,7 @@ from PyQt5.QtGui  import (QImage, QPixmap, QPainter, QPen, QColor,
                            QBrush, QFont, QLinearGradient, QFontMetrics)
 
 from .live       import LiveProcessor, LiveConfig, LiveFrame
-from .processing import to_display, COLORMAP_OPTIONS, _build_cv_maps
+from .processing import to_display, COLORMAP_OPTIONS, COLORMAP_TOOLTIPS, _build_cv_maps
 import config as cfg_mod
 
 
@@ -287,7 +287,7 @@ class LiveCanvas(QWidget):
 
         self._pixmap    = None
         self._frozen    = False
-        self._cmap      = "signed"
+        self._cmap      = "Thermal Delta"
         self._data      = None
         self._probe_pos = None   # (px, py) in widget coords
 
@@ -311,6 +311,10 @@ class LiveCanvas(QWidget):
 
     def set_cmap(self, cmap: str):
         self._cmap = cmap
+        # Redraw immediately so a frozen / stopped view updates at once.
+        if self._data is not None:
+            self._rebuild(self._data)
+            self.update()
 
     def update_frame(self, frame: LiveFrame):
         if self._frozen or frame.drr is None:
@@ -324,7 +328,7 @@ class LiveCanvas(QWidget):
 
     def _rebuild(self, data: np.ndarray):
         d = data.astype(np.float32)
-        if self._cmap == "signed":
+        if self._cmap in ("Thermal Delta", "signed"):
             # Recompute the abs-99.5-percentile limit at most every 300 ms.
             # Computing np.percentile on the full frame at 15 Hz saturates a
             # CPU core on Windows; sampling ≤20 000 values is visually
@@ -671,11 +675,12 @@ class LiveTab(QWidget):
         # Colourmap selector in toolbar
         lay.addWidget(QLabel("Cmap:"))
         self._cmap_combo = QComboBox()
-        for c in COLORMAP_OPTIONS:
+        for i, c in enumerate(COLORMAP_OPTIONS):
             self._cmap_combo.addItem(c)
+            self._cmap_combo.setItemData(i, COLORMAP_TOOLTIPS.get(c, ""), Qt.ToolTipRole)
         self._cmap_combo.setFixedWidth(110)
         self._cmap_combo.setFixedHeight(28)
-        saved_cmap = cfg_mod.get_pref("display.colormap", "signed")
+        saved_cmap = cfg_mod.get_pref("display.colormap", "Thermal Delta")
         if saved_cmap in COLORMAP_OPTIONS:
             self._cmap_combo.setCurrentText(saved_cmap)
             self._canvas.set_cmap(saved_cmap)

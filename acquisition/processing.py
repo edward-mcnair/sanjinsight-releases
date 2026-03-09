@@ -81,21 +81,39 @@ def _signed_colormap(data: np.ndarray, clip_pct: float) -> np.ndarray:
 # Order determines the order shown in drop-downs.
 # Keys are passed to apply_colormap() and to the canvas _rebuild methods.
 COLORMAP_OPTIONS: list[str] = [
-    "signed",       # Diverging blue-black-red — default for ΔR/R
-    "Emberline",    # Black→purple→orange→white  (INFERNO)
-    "Polarflare",   # Grayscale: warm = white
-    "Umbra Heat",   # Grayscale: warm = black  (inverted)
-    "Prismshift",   # Full spectrum low→high    (RAINBOW)
-    "Magmafall",    # Black→red→yellow→white    (HOT)
-    "Borealis",     # Cool blue-green arctic palette (WINTER)
-    "Hearthtone",   # Warm sepia-autumn tones   (AUTUMN)
-    "Ghostscale",   # Blue-tinted grayscale      (BONE)
-    "plasma",       # Purple→magenta→orange      (perceptually uniform)
-    "viridis",      # Blue→green→yellow          (perceptually uniform)
-    "turbo",        # High-contrast rainbow
-    "jet",          # Classic rainbow            (legacy / reference)
-    "cool",         # Cyan→magenta
+    "Thermal Delta",  # Diverging blue-black-red — default for ΔR/R
+    "Emberline",      # Black→purple→orange→white  (INFERNO)
+    "Polarflare",     # Grayscale: warm = white
+    "Umbra Heat",     # Grayscale: warm = black  (inverted)
+    "Prismshift",     # Full spectrum low→high    (RAINBOW)
+    "Magmafall",      # Black→red→yellow→white    (HOT)
+    "Borealis",       # Cool blue-green arctic palette (WINTER)
+    "Hearthtone",     # Warm sepia-autumn tones   (AUTUMN)
+    "Ghostscale",     # Blue-tinted grayscale      (BONE)
+    "plasma",         # Purple→magenta→orange      (perceptually uniform)
+    "viridis",        # Blue→green→yellow          (perceptually uniform)
+    "turbo",          # High-contrast rainbow
+    "jet",            # Classic rainbow            (legacy / reference)
+    "cool",           # Cyan→magenta
 ]
+
+# Tooltip shown next to each palette name in UI combo-boxes.
+COLORMAP_TOOLTIPS: dict[str, str] = {
+    "Thermal Delta": "Diverging: blue = cooling, red = heating. Default for ΔR/R maps.",
+    "Emberline":     "Black → purple → orange → white. Ideal for locating hot spots.",
+    "Polarflare":    "Grayscale — bright = hot, dark = cold. Classic thermal imaging.",
+    "Umbra Heat":    "Inverted grayscale — dark = hot, bright = cold. High-contrast alternative.",
+    "Prismshift":    "Full visible spectrum. Good for revealing subtle temperature gradients.",
+    "Magmafall":     "Black → red → yellow → white. Emphasises intense heat sources.",
+    "Borealis":      "Cool blue-green palette. Useful when working with cold regions.",
+    "Hearthtone":    "Warm amber-sepia tones. Softer display for extended viewing sessions.",
+    "Ghostscale":    "Cool blue-tinted grayscale. Distinguishable from standard white-hot.",
+    "plasma":        "Purple → magenta → orange. Perceptually uniform, print-safe.",
+    "viridis":       "Blue → green → yellow. Perceptually uniform, accessible to colour-blind users.",
+    "turbo":         "High-contrast rainbow. Maximum discrimination across the full range.",
+    "jet":           "Classic blue-cyan-yellow-red rainbow. Legacy reference palette.",
+    "cool":          "Cyan → magenta. Useful for cold-dominant thermal scenes.",
+}
 
 
 def _build_cv_maps() -> dict:
@@ -143,6 +161,9 @@ def apply_colormap(gray: np.ndarray, cmap: str = "Emberline") -> np.ndarray:
     Special cases handled without OpenCV:
         "Polarflare" / "white hot" / "gray" — identity grayscale (warm = white)
         "Umbra Heat" / "black hot"           — inverted grayscale (warm = black)
+
+    "Thermal Delta" and "signed" are handled by to_display(mode="signed") upstream;
+    if passed here directly, falls back to grayscale.
 
     All other keys require opencv-python and map to cv2.COLORMAP_*.
     Falls back to grayscale if OpenCV is unavailable.

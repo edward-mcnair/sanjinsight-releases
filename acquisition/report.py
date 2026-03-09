@@ -55,14 +55,14 @@ MARGIN = 18 * mm
 # ------------------------------------------------------------------ #
 
 def _array_to_tmpimg(data: np.ndarray, mode: str = "percentile",
-                     cmap: str = "signed", size: tuple = (300, 220)) -> str:
+                     cmap: str = "Thermal Delta", size: tuple = (300, 220)) -> str:
     """
     Convert a numpy array to a temp PNG file and return its path.
     Renders via OpenCV if available, falls back to pure numpy.
     """
     disp = to_display(data, mode=mode)
 
-    if cmap == "signed" and data is not None:
+    if cmap in ("Thermal Delta", "signed") and data is not None:
         d      = data.astype(np.float32)
         limit  = float(np.percentile(np.abs(d), 99.5)) or 1e-9
         normed = np.clip(d / limit, -1.0, 1.0)
@@ -471,7 +471,7 @@ def generate_report(session: Session,
 
     drr = session.delta_r_over_r
     if drr is not None:
-        img_path = _array_to_tmpimg(drr, mode="percentile", cmap="signed",
+        img_path = _array_to_tmpimg(drr, mode="percentile", cmap="Thermal Delta",
                                     size=(600, 440))
         if img_path:
             tmp_files.append(img_path)
@@ -562,7 +562,7 @@ def generate_report(session: Session,
     if dt_arr is not None:
         story.append(Paragraph(
             "Calibrated Temperature Map  (ΔT, °C)", styles["h1"]))
-        dt_path = _array_to_tmpimg(dt_arr, mode="percentile", cmap="signed",
+        dt_path = _array_to_tmpimg(dt_arr, mode="percentile", cmap="Thermal Delta",
                                     size=(600, 440))
         if dt_path:
             tmp_files.append(dt_path)

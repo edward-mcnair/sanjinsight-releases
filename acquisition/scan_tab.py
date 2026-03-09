@@ -28,7 +28,7 @@ from PyQt5.QtGui  import (QImage, QPixmap, QPainter, QPen, QColor,
                            QBrush, QFont)
 
 from .scan       import ScanProgress, ScanResult
-from .processing import to_display, COLORMAP_OPTIONS, _build_cv_maps
+from .processing import to_display, COLORMAP_OPTIONS, COLORMAP_TOOLTIPS, _build_cv_maps
 import config as cfg_mod
 
 
@@ -57,7 +57,7 @@ class ScanMapView(QWidget):
         self._step_x_um = 100.0
         self._step_y_um = 100.0
         self._show_grid = True
-        self._cmap      = "signed"
+        self._cmap      = "Thermal Delta"
         self._pixmap    = None
         self._title     = ""
 
@@ -71,7 +71,7 @@ class ScanMapView(QWidget):
     def update_map(self, data: np.ndarray,
                    n_cols: int, n_rows: int,
                    step_x_um: float, step_y_um: float,
-                   cmap: str = "signed"):
+                   cmap: str = "Thermal Delta"):
         self._data      = data
         self._n_cols    = n_cols
         self._n_rows    = n_rows
@@ -94,7 +94,7 @@ class ScanMapView(QWidget):
             self._pixmap = None
             return
         disp = to_display(self._data, mode="percentile")
-        if self._cmap == "signed":
+        if self._cmap in ("Thermal Delta", "signed"):
             d      = self._data.astype(np.float32)
             limit  = float(np.percentile(np.abs(d), 99.5)) or 1e-9
             normed = np.clip(d / limit, -1.0, 1.0)
@@ -478,10 +478,11 @@ class ScanTab(QWidget):
         cmap_row = QHBoxLayout()
         cmap_row.addWidget(QLabel("Colourmap:"))
         self._cmap_combo = QComboBox()
-        for c in COLORMAP_OPTIONS:
+        for i, c in enumerate(COLORMAP_OPTIONS):
             self._cmap_combo.addItem(c)
+            self._cmap_combo.setItemData(i, COLORMAP_TOOLTIPS.get(c, ""), Qt.ToolTipRole)
         self._cmap_combo.setFixedWidth(110)
-        saved_cmap = cfg_mod.get_pref("display.colormap", "signed")
+        saved_cmap = cfg_mod.get_pref("display.colormap", "Thermal Delta")
         if saved_cmap in COLORMAP_OPTIONS:
             self._cmap_combo.setCurrentText(saved_cmap)
         self._cmap_combo.currentTextChanged.connect(self._redisplay)
@@ -598,7 +599,7 @@ class ScanTab(QWidget):
                 result.dt_map,
                 result.n_cols, result.n_rows,
                 result.step_x_um, result.step_y_um,
-                cmap="signed")
+                cmap="Thermal Delta")
 
         H, W = result.drr_map.shape[:2]
         fov_x = result.n_cols * result.step_x_um

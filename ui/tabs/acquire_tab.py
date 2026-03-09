@@ -16,13 +16,13 @@ from PyQt5.QtWidgets import (
     QWidget, QLabel, QPushButton, QSpinBox, QDoubleSpinBox,
     QProgressBar, QVBoxLayout, QHBoxLayout, QGridLayout,
     QGroupBox, QComboBox, QTextEdit, QFileDialog)
-from PyQt5.QtCore import pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal
 from ui.icons import set_btn_icon
 
 from hardware.app_state import app_state
 from acquisition        import AcquisitionProgress, AcqState
 from acquisition        import export_result
-from acquisition.processing import COLORMAP_OPTIONS
+from acquisition.processing import COLORMAP_OPTIONS, COLORMAP_TOOLTIPS
 import config as cfg_mod
 from ui.widgets.image_pane import ImagePane
 
@@ -80,14 +80,14 @@ class AcquireTab(QWidget):
 
         cl.addWidget(self._sub("ΔR/R colormap"), 2, 0)
         self._cmap = QComboBox()
-        for c in COLORMAP_OPTIONS:
+        for i, c in enumerate(COLORMAP_OPTIONS):
             self._cmap.addItem(c)
+            self._cmap.setItemData(i, COLORMAP_TOOLTIPS.get(c, ""), Qt.ToolTipRole)
         self._cmap.setFixedWidth(110)
-        saved_cmap = cfg_mod.get_pref("display.colormap", "signed")
+        saved_cmap = cfg_mod.get_pref("display.colormap", "Thermal Delta")
         if saved_cmap in COLORMAP_OPTIONS:
             self._cmap.setCurrentText(saved_cmap)
-        self._cmap.currentTextChanged.connect(
-            lambda c: cfg_mod.set_pref("display.colormap", c))
+        self._cmap.currentTextChanged.connect(self._on_cmap_changed)
         cl.addWidget(self._cmap, 2, 1)
 
         # Buttons
@@ -293,6 +293,12 @@ class AcquireTab(QWidget):
             if p.state == AcqState.COMPLETE:
                 self._progress.setValue(100)
 
+    def _on_cmap_changed(self, cmap: str):
+        cfg_mod.set_pref("display.colormap", cmap)
+        if self._result is not None and self._result.delta_r_over_r is not None:
+            mode = "signed" if cmap in ("Thermal Delta", "signed") else "percentile"
+            self._drr_pane.show_array(self._result.delta_r_over_r, mode=mode, cmap=cmap)
+
     def update_result(self, result):
         self._result = result
         cmap = self._cmap.currentText()
@@ -303,12 +309,12 @@ class AcquireTab(QWidget):
         if result.difference is not None:
             self._diff_pane.show_array(result.difference, mode="percentile")
         if result.delta_r_over_r is not None:
-            mode = "signed" if cmap == "signed" else "percentile"
+            mode = "signed" if cmap in ("Thermal Delta", "signed") else "percentile"
             self._drr_pane.show_array(result.delta_r_over_r, mode=mode, cmap=cmap)
         # Show ΔT map if calibration was applied
         dt = getattr(result, "delta_t", None)
         if dt is not None:
-            self._dt_pane.show_array(dt, mode="signed", cmap="signed")
+            self._dt_pane.show_array(dt, mode="signed", cmap="Thermal Delta")
             self._dt_pane._title.setText("ΔT  temperature change  (°C)  ✓ calibrated")
         else:
             self._dt_pane.clear()

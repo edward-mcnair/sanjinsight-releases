@@ -24,7 +24,7 @@ from PyQt5.QtGui     import (QPixmap, QImage, QFont, QColor,
 
 from .session         import Session, SessionMeta
 from .session_manager import SessionManager
-from .processing      import to_display, apply_colormap, COLORMAP_OPTIONS
+from .processing      import to_display, apply_colormap, COLORMAP_OPTIONS, COLORMAP_TOOLTIPS
 import config as cfg_mod
 from ui.icons import set_btn_icon
 
@@ -502,10 +502,11 @@ class DataTab(QWidget):
         self._pane_cmp  = DataImagePane("COMPARISON  A − B  ΔR/R")
 
         self._cmap_combo = QComboBox()
-        for c in COLORMAP_OPTIONS:
+        for i, c in enumerate(COLORMAP_OPTIONS):
             self._cmap_combo.addItem(c)
+            self._cmap_combo.setItemData(i, COLORMAP_TOOLTIPS.get(c, ""), Qt.ToolTipRole)
         self._cmap_combo.setFixedWidth(110)
-        saved_cmap = cfg_mod.get_pref("display.colormap", "signed")
+        saved_cmap = cfg_mod.get_pref("display.colormap", "Thermal Delta")
         if saved_cmap in COLORMAP_OPTIONS:
             self._cmap_combo.setCurrentText(saved_cmap)
         self._cmap_combo.currentTextChanged.connect(self._redisplay_drr)
@@ -642,7 +643,7 @@ class DataTab(QWidget):
         self._pane_hot.show_array(session.hot_avg)
         self._pane_diff.show_array(session.difference, mode="percentile")
         cmap = self._cmap_combo.currentText()
-        mode = "signed" if cmap == "signed" else "percentile"
+        mode = "signed" if cmap in ("Thermal Delta", "signed") else "percentile"
         self._pane_drr.show_array(session.delta_r_over_r, mode=mode, cmap=cmap)
         self._pane_cmp.clear()
         session.unload()   # free memory after display
@@ -903,7 +904,7 @@ class DataTab(QWidget):
                 "Sessions must have ΔR/R data of the same dimensions.")
             return
         cmap = self._cmap_combo.currentText()
-        mode = "signed" if cmap == "signed" else "percentile"
+        mode = "signed" if cmap in ("Thermal Delta", "signed") else "percentile"
         self._pane_cmp.show_array(diff, mode=mode, cmap=cmap)
 
         ma = self._mgr.get_meta(self._compare_a)

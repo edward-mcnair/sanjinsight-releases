@@ -397,7 +397,7 @@ class AcquisitionPanel(QMainWindow):
         if result.difference is not None:
             self._diff_pane.show_frame(result.difference, mode="percentile")
         if result.delta_r_over_r is not None:
-            mode = "signed" if cmap == "signed" else "percentile"
+            mode = "signed" if cmap in ("Thermal Delta", "signed") else "percentile"
             self._drr_pane.show_frame(
                 result.delta_r_over_r, mode=mode, cmap=cmap)
             if result.snr_db is not None:
