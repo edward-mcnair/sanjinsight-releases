@@ -38,21 +38,23 @@ def to_display(
         return _signed_colormap(d, clip_percentile)
 
     if mode == "percentile":
-        lo = float(np.percentile(d, 100 - clip_percentile))
-        hi = float(np.percentile(d, clip_percentile))
+        lo = float(np.nanpercentile(d, 100 - clip_percentile))
+        hi = float(np.nanpercentile(d, clip_percentile))
     elif mode == "auto":
-        lo, hi = float(d.min()), float(d.max())
+        lo, hi = float(np.nanmin(d)), float(np.nanmax(d))
     elif mode == "fixed":
         lo, hi = 0.0, 4095.0
     else:
-        lo, hi = float(d.min()), float(d.max())
+        lo, hi = float(np.nanmin(d)), float(np.nanmax(d))
 
     span = hi - lo
-    if span == 0:
+    if span == 0 or not np.isfinite(span):
         return np.zeros(d.shape, dtype=np.uint8)
 
-    scaled = np.clip((d - lo) / span * 255, 0, 255).astype(np.uint8)
-    return scaled
+    scaled = np.clip((d - lo) / span * 255, 0, 255)
+    # NaN → 0 before cast (NaN.astype(uint8) is undefined behaviour)
+    scaled = np.nan_to_num(scaled, nan=0.0)
+    return scaled.astype(np.uint8)
 
 
 def _signed_colormap(data: np.ndarray, clip_pct: float) -> np.ndarray:
@@ -63,11 +65,12 @@ def _signed_colormap(data: np.ndarray, clip_pct: float) -> np.ndarray:
         positive → red
     Returns uint8 RGB (H, W, 3).
     """
-    limit = float(np.percentile(np.abs(data), clip_pct))
+    finite = data[np.isfinite(data)]
+    limit = float(np.percentile(np.abs(finite), clip_pct)) if finite.size else 0.0
     if limit == 0:
         limit = 1e-9
 
-    normed = np.clip(data / limit, -1.0, 1.0)
+    normed = np.clip(np.nan_to_num(data, nan=0.0) / limit, -1.0, 1.0)
 
     r = np.clip( normed, 0, 1) * 255
     b = np.clip(-normed, 0, 1) * 255
