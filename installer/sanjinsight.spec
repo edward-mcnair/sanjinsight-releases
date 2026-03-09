@@ -33,6 +33,7 @@ hidden_imports = [
     'hardware.fpga.simulated',
     'hardware.bias.keithley',
     'hardware.bias.visa_generic',
+    'hardware.bias.rigol_dp832',
     'hardware.bias.simulated',
     'hardware.stage.thorlabs',
     'hardware.stage.serial_stage',
@@ -93,6 +94,25 @@ if importlib.util.find_spec('pyvisa'):
 # https://www.baslerweb.com/en-us/software/pylon/pypylon/
 if importlib.util.find_spec('pypylon'):
     hidden_imports += collect_submodules('pypylon')
+
+# pydp832 — Native Ethernet driver for Rigol DP832 power supply (no VISA needed)
+# Pure Python; pip install pydp832  |  https://github.com/tspspi/pydp832
+# pydp832 may expose its classes from top-level or sub-module; bundle both paths.
+for _pydp832_mod in ('pydp832', 'dp832'):
+    if importlib.util.find_spec(_pydp832_mod):
+        hidden_imports += collect_submodules(_pydp832_mod)
+        break
+
+# dcps — DC Power Supply control library (Keithley 2400, Rigol DP800, and more)
+# Wraps pyvisa with instrument-specific SCPI helpers.
+# pip install dcps  |  https://github.com/sgoadhouse/dcps
+if importlib.util.find_spec('dcps'):
+    hidden_imports += collect_submodules('dcps')
+
+# thorlabs_apt_device — Thorlabs APT/Kinesis stage controller Python bindings
+# pip install thorlabs-apt-device  |  https://github.com/ap--/thorlabs-apt-device
+if importlib.util.find_spec('thorlabs_apt_device'):
+    hidden_imports += collect_submodules('thorlabs_apt_device')
 
 # ── Data files (non-Python assets bundled alongside the exe) ─────────────────
 datas = [

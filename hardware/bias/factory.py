@@ -10,15 +10,26 @@ from .base import BiasDriver
 _DRIVERS = {
     "keithley":     ("hardware.bias.keithley",     "KeithleyDriver"),
     "visa_generic": ("hardware.bias.visa_generic",  "VisaGenericDriver"),
+    "rigol_dp832":  ("hardware.bias.rigol_dp832",   "RigolDP832Driver"),
     "simulated":    ("hardware.bias.simulated",     "SimulatedBias"),
 }
 
 _INSTALL_HINTS: dict = {
-    "keithley":     "pip install pyvisa pyvisa-py",
+    "keithley": (
+        "pip install pyvisa pyvisa-py\n"
+        "Or use the dcps library (wraps pyvisa with Keithley-specific commands):\n"
+        "  pip install dcps  —  https://github.com/sgoadhouse/dcps"
+    ),
     "visa_generic": (
         "pip install pyvisa pyvisa-py\n"
         "Or install NI-VISA: "
-        "https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html"
+        "https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html\n"
+        "Tip: for Rigol DP832 without NI-VISA, use driver: 'rigol_dp832' instead."
+    ),
+    "rigol_dp832": (
+        "pip install pydp832\n"
+        "GitHub: https://github.com/tspspi/pydp832\n"
+        "Or use driver: 'visa_generic' with pyvisa if NI-VISA is already installed."
     ),
 }
 

@@ -41,7 +41,17 @@ class KeithleyDriver(BiasDriver):
             import pyvisa
         except ImportError:
             raise RuntimeError(
-                "pyvisa not installed. Run: pip install pyvisa pyvisa-py")
+                "pyvisa not installed.\n\n"
+                "PyVISA provides the VISA communication layer needed to talk to "
+                "Keithley SourceMeters over GPIB, USB, or Ethernet.\n\n"
+                "Install it with:\n"
+                "    pip install pyvisa pyvisa-py\n\n"
+                "Or use NI-VISA (better GPIB support on Windows):\n"
+                "    https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html\n\n"
+                "Alternative: dcps wraps pyvisa with Keithley-specific helpers:\n"
+                "    pip install dcps  —  https://github.com/sgoadhouse/dcps\n\n"
+                "After installing, restart the application."
+            )
 
         try:
             self._rm   = pyvisa.ResourceManager()

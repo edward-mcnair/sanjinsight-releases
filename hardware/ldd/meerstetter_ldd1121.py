@@ -78,7 +78,15 @@ class MeerstetterLdd1121(LddDriver):
         except ImportError:
             self._port_lock.release()
             raise RuntimeError(
-                "pyMeCom not installed. Run: pip install pyMeCom")
+                "pyMeCom library not found.\n\n"
+                "pyMeCom provides the MeCom serial protocol used to talk to "
+                "Meerstetter TEC and LDD controllers.\n\n"
+                "Install it with:\n"
+                "    pip install pyMeCom\n\n"
+                "Or download from GitHub:\n"
+                "    https://github.com/meerstetter/pyMeCom\n\n"
+                "After installing, restart the application."
+            )
         except Exception as e:
             self._port_lock.release()
             raise RuntimeError(

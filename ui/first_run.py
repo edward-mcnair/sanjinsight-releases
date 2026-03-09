@@ -11,7 +11,10 @@ Walks the user through:
   Page 2 — TEC controllers     (Meerstetter COM port + ATEC COM port)
   Page 3 — Camera              (driver + NI camera name / Basler serial)
   Page 4 — FPGA                (bitfile path + resource string)
-  Page 5 — Done / summary
+  Page 5 — Bias source / SMU   (Keithley, Rigol DP832, VISA generic)
+  Page 6 — Motorised stage     (Thorlabs, serial stage)
+  Page 7 — AI assistant        (Ollama install + model pull)
+  Page 8 — Done / summary
 
 As soon as the dialog opens, a background DeviceScanner thread enumerates all
 connected hardware.  When it finishes, driver and port fields are
@@ -1009,13 +1012,514 @@ class _PageFPGA(_PageBase):
         }
 
 
+class _PageBias(_PageBase):
+    """
+    Wizard page 5 — Bias source / SMU setup.
+
+    Supports three driver back-ends:
+      • keithley    — Keithley 2400/2450/2600 series via pyvisa (GPIB/USB/LAN)
+      • visa_generic — any SCPI instrument via pyvisa (Rigol DP8xx, etc.)
+      • rigol_dp832  — Rigol DP832 native LAN driver (no NI-VISA required)
+      • simulated   — software-only for testing without hardware
+
+    Detects whether pyvisa / pydp832 are installed and shows a notice with
+    install links when the selected driver's dependency is missing.
+    """
+
+    _ACCENT = "#4e73df"
+    _GREEN  = "#00d4aa"
+    _AMBER  = "#f5a623"
+    _DANGER = "#ff5555"
+    _MUTED  = "#8892a4"
+
+    def __init__(self, cfg: dict, parent=None):
+        bias_cfg = cfg.get("bias", {})
+        super().__init__(
+            "Bias Source / SMU",
+            "Select the bias source or source-measure unit (SMU) connected to your "
+            "device under test.  Leave  simulated  if you don't have one yet.",
+            parent)
+
+        # ── GroupBox ──────────────────────────────────────────────────────────
+        g = QGroupBox("Bias Source Configuration")
+        g.setStyleSheet(
+            "QGroupBox { color:#8892a4; font-size:12pt; border:1px solid #2a3249; "
+            "border-radius:5px; margin-top:8px; padding:12px; }"
+            "QGroupBox::title { subcontrol-origin:margin; left:10px; padding:0 4px; }")
+        fl = QFormLayout(g)
+        fl.setSpacing(10)
+
+        # Driver selector
+        self._drv = QComboBox()
+        self._drv.addItems(["simulated", "keithley", "visa_generic", "rigol_dp832"])
+        self._drv.setCurrentText(bias_cfg.get("driver", "simulated"))
+        self._drv.setStyleSheet(_INPUT_SS)
+        self._drv.currentTextChanged.connect(self._on_driver_changed)
+        fl.addRow(_lbl("Driver:"), self._drv)
+
+        # VISA address (keithley + visa_generic)
+        self._addr = QLineEdit(bias_cfg.get("address", ""))
+        self._addr.setPlaceholderText(
+            "GPIB0::24::INSTR  or  TCPIP::192.168.1.5::INSTR  or  USB0::0x05E6::...")
+        self._addr.setStyleSheet(_INPUT_SS)
+        self._addr.setFixedHeight(34)
+        self._addr_row_lbl = _lbl("VISA address:")
+        fl.addRow(self._addr_row_lbl, self._addr)
+
+        # Keithley model dropdown
+        self._model_lbl = _lbl("Model:")
+        self._model = QComboBox()
+        self._model.addItems(["2400", "2410", "2420", "2450",
+                               "2601", "2602", "2611", "2612", "2635", "2636"])
+        self._model.setCurrentText(str(bias_cfg.get("model", "2400")))
+        self._model.setStyleSheet(_INPUT_SS)
+        fl.addRow(self._model_lbl, self._model)
+
+        # Rigol DP832 host (rigol_dp832 driver)
+        self._host_lbl = _lbl("Host / IP:")
+        self._host = QLineEdit(bias_cfg.get("host", "192.168.1.20"))
+        self._host.setPlaceholderText("192.168.1.20")
+        self._host.setStyleSheet(_INPUT_SS)
+        self._host.setFixedHeight(34)
+        fl.addRow(self._host_lbl, self._host)
+
+        # Channel (visa_generic + rigol_dp832)
+        self._ch_lbl = _lbl("Channel:")
+        self._channel = QComboBox()
+        self._channel.addItems(["1", "2", "3"])
+        ch_str = str(bias_cfg.get("channel", 1))
+        self._channel.setCurrentText(ch_str if ch_str in ("1","2","3") else "1")
+        self._channel.setStyleSheet(_INPUT_SS)
+        fl.addRow(self._ch_lbl, self._channel)
+
+        # ── Test connection ───────────────────────────────────────────────
+        test_row = QHBoxLayout()
+        self._test_btn = QPushButton("Test Connection")
+        self._test_btn.setStyleSheet(_BTN_SECONDARY)
+        self._test_btn.setFixedHeight(30)
+        self._test_btn.clicked.connect(self._test_connection)
+        test_row.addWidget(self._test_btn)
+        test_row.addStretch(1)
+        fl.addRow(test_row)
+
+        self._test_result = QLabel("")
+        self._test_result.setWordWrap(True)
+        self._test_result.setStyleSheet(_SS_BADGE_OK)
+        self._test_result.setVisible(False)
+        fl.addRow(self._test_result)
+
+        self._content.addWidget(g)
+
+        # ── pyvisa notice (shown when pyvisa is missing) ──────────────────
+        self._visa_notice = QLabel(
+            '⚠  <b>pyvisa is not installed</b> — required for Keithley and VISA Generic drivers.<br>'
+            'Install: &nbsp;<code>pip install pyvisa pyvisa-py</code><br>'
+            'Or NI-VISA: <a href="https://www.ni.com/en/support/downloads/drivers/'
+            'download.ni-visa.html" style="color:#4e73df;">ni.com/en/support/downloads ↗</a>'
+            '&nbsp;&nbsp;|&nbsp;&nbsp;'
+            'Also see: <a href="https://github.com/sgoadhouse/dcps" '
+            'style="color:#4e73df;">dcps (Keithley wrapper) ↗</a>'
+        )
+        self._visa_notice.setOpenExternalLinks(True)
+        self._visa_notice.setWordWrap(True)
+        self._visa_notice.setStyleSheet(
+            f"font-size:11pt; color:{self._AMBER}; background:#13172a; "
+            "border:1px solid #f5a62344; border-radius:4px; padding:8px;")
+        self._visa_notice.setVisible(False)
+        self._content.addWidget(self._visa_notice)
+
+        # ── pydp832 notice (shown when pydp832 is missing) ────────────────
+        self._dp832_notice = QLabel(
+            '⚠  <b>pydp832 is not installed</b> — required for the Rigol DP832 native driver.<br>'
+            'Install: &nbsp;<code>pip install pydp832</code><br>'
+            '<a href="https://github.com/tspspi/pydp832" '
+            'style="color:#4e73df;">github.com/tspspi/pydp832 ↗</a>'
+            '&nbsp;&nbsp;|&nbsp;&nbsp;'
+            'Or use <b>visa_generic</b> driver with pyvisa instead.'
+        )
+        self._dp832_notice.setOpenExternalLinks(True)
+        self._dp832_notice.setWordWrap(True)
+        self._dp832_notice.setStyleSheet(
+            f"font-size:11pt; color:{self._AMBER}; background:#13172a; "
+            "border:1px solid #f5a62344; border-radius:4px; padding:8px;")
+        self._dp832_notice.setVisible(False)
+        self._content.addWidget(self._dp832_notice)
+
+        self._content.addStretch(1)
+
+        # Apply initial visibility
+        self._on_driver_changed(self._drv.currentText())
+
+    # ── Driver change handler ──────────────────────────────────────────────────
+
+    def _on_driver_changed(self, drv: str) -> None:
+        is_keithley    = (drv == "keithley")
+        is_visa        = (drv in ("keithley", "visa_generic"))
+        is_rigol       = (drv == "rigol_dp832")
+        is_multichan   = (drv in ("visa_generic", "rigol_dp832"))
+
+        self._addr_row_lbl.setVisible(is_visa)
+        self._addr.setVisible(is_visa)
+        self._model_lbl.setVisible(is_keithley)
+        self._model.setVisible(is_keithley)
+        self._host_lbl.setVisible(is_rigol)
+        self._host.setVisible(is_rigol)
+        self._ch_lbl.setVisible(is_multichan)
+        self._channel.setVisible(is_multichan)
+
+        # Library availability notices
+        if is_visa:
+            self._visa_notice.setVisible(not self._check_pyvisa())
+        else:
+            self._visa_notice.setVisible(False)
+
+        if is_rigol:
+            self._dp832_notice.setVisible(not self._check_pydp832())
+        else:
+            self._dp832_notice.setVisible(False)
+
+        self._test_result.setVisible(False)
+
+    @staticmethod
+    def _check_pyvisa() -> bool:
+        try:
+            import pyvisa  # noqa: F401
+            return True
+        except ImportError:
+            return False
+
+    @staticmethod
+    def _check_pydp832() -> bool:
+        for mod in ("pydp832", "dp832"):
+            try:
+                __import__(mod)
+                return True
+            except ImportError:
+                pass
+        return False
+
+    # ── Test connection ────────────────────────────────────────────────────────
+
+    def _test_connection(self) -> None:
+        drv = self._drv.currentText()
+        try:
+            if drv == "simulated":
+                self._test_result.setText("✓  Simulated driver ready")
+                self._test_result.setStyleSheet(
+                    f"font-size:11pt; color:{self._GREEN};")
+                self._test_result.setVisible(True)
+                return
+
+            cfg = self._build_cfg()
+            from hardware.bias.factory import create_bias
+            bias = create_bias(cfg)
+            bias.connect()
+            st = bias.get_status()
+            bias.disconnect()
+            self._test_result.setText(
+                f"✓  Connected  — V = {st.actual_voltage:.3f} V, "
+                f"I = {st.actual_current:.4f} A")
+            self._test_result.setStyleSheet(
+                f"font-size:11pt; color:{self._GREEN};")
+        except Exception as exc:
+            self._test_result.setText(f"✗  {exc}")
+            self._test_result.setStyleSheet(
+                f"font-size:11pt; color:{self._DANGER};")
+        self._test_result.setVisible(True)
+
+    def _build_cfg(self) -> dict:
+        drv = self._drv.currentText()
+        cfg: dict = {"driver": drv}
+        if drv in ("keithley", "visa_generic"):
+            cfg["address"] = self._addr.text().strip()
+        if drv == "keithley":
+            cfg["model"] = self._model.currentText()
+        if drv == "rigol_dp832":
+            cfg["host"] = self._host.text().strip()
+        if drv in ("visa_generic", "rigol_dp832"):
+            cfg["channel"] = int(self._channel.currentText())
+        return cfg
+
+    def apply_scan(self, report) -> int:
+        """Pre-fill bias driver from scan results.  Returns 1 if found."""
+        try:
+            from hardware.device_registry import DTYPE_BIAS
+            bias_devs = [d for d in report.devices
+                         if d.is_known and d.descriptor.device_type == DTYPE_BIAS]
+        except Exception:
+            bias_devs = []
+
+        if not bias_devs:
+            return 0
+
+        dev = bias_devs[0]
+        drv = getattr(dev.descriptor, "driver_module", "").rsplit(".", 1)[-1]
+        if "keithley" in drv:
+            self._drv.setCurrentText("keithley")
+            self._addr.setText(dev.address)
+        elif "rigol" in (dev.descriptor.uid or ""):
+            self._drv.setCurrentText("rigol_dp832")
+            # For Ethernet Rigol, address is an IP
+            self._host.setText(dev.address)
+        elif "visa" in drv:
+            self._drv.setCurrentText("visa_generic")
+            self._addr.setText(dev.address)
+        return 1
+
+    def values(self) -> dict:
+        drv = self._drv.currentText()
+        out: dict = {"bias.driver": drv}
+        if drv in ("keithley", "visa_generic"):
+            out["bias.address"] = self._addr.text().strip()
+        if drv == "keithley":
+            out["bias.model"] = self._model.currentText()
+        if drv == "rigol_dp832":
+            out["bias.host"] = self._host.text().strip()
+        if drv in ("visa_generic", "rigol_dp832"):
+            out["bias.channel"] = int(self._channel.currentText())
+        return out
+
+
+class _PageStage(_PageBase):
+    """
+    Wizard page 6 — Motorised stage setup.
+
+    Supports:
+      • thorlabs    — Thorlabs BBD302 / KST101 / KDC101 / TDC001 via
+                      thorlabs-apt-device + Thorlabs Kinesis software
+      • serial_stage — generic serial-port stage controller
+      • simulated   — software-only for testing without hardware
+    """
+
+    _ACCENT = "#4e73df"
+    _GREEN  = "#00d4aa"
+    _AMBER  = "#f5a623"
+    _DANGER = "#ff5555"
+    _MUTED  = "#8892a4"
+
+    def __init__(self, cfg: dict, parent=None):
+        stage_cfg = cfg.get("stage", {})
+        super().__init__(
+            "Motorised Stage",
+            "Configure the XYZ stage used for scanning.  "
+            "Leave  simulated  if your system does not have a stage.",
+            parent)
+
+        # ── GroupBox ──────────────────────────────────────────────────────────
+        g = QGroupBox("Stage Configuration")
+        g.setStyleSheet(
+            "QGroupBox { color:#8892a4; font-size:12pt; border:1px solid #2a3249; "
+            "border-radius:5px; margin-top:8px; padding:12px; }"
+            "QGroupBox::title { subcontrol-origin:margin; left:10px; padding:0 4px; }")
+        fl = QFormLayout(g)
+        fl.setSpacing(10)
+
+        # Driver selector
+        self._drv = QComboBox()
+        self._drv.addItems(["simulated", "thorlabs", "serial_stage"])
+        self._drv.setCurrentText(stage_cfg.get("driver", "simulated"))
+        self._drv.setStyleSheet(_INPUT_SS)
+        self._drv.currentTextChanged.connect(self._on_driver_changed)
+        fl.addRow(_lbl("Driver:"), self._drv)
+
+        # Thorlabs serial numbers (X / Y / Z axes)
+        self._sn_x_lbl = _lbl("Serial X:")
+        self._sn_x = QLineEdit(stage_cfg.get("serial_x", ""))
+        self._sn_x.setPlaceholderText("e.g. 27000001")
+        self._sn_x.setStyleSheet(_INPUT_SS)
+        self._sn_x.setFixedHeight(34)
+        fl.addRow(self._sn_x_lbl, self._sn_x)
+
+        self._sn_y_lbl = _lbl("Serial Y:")
+        self._sn_y = QLineEdit(stage_cfg.get("serial_y", ""))
+        self._sn_y.setPlaceholderText("leave blank if Y axis not present")
+        self._sn_y.setStyleSheet(_INPUT_SS)
+        self._sn_y.setFixedHeight(34)
+        fl.addRow(self._sn_y_lbl, self._sn_y)
+
+        self._sn_z_lbl = _lbl("Serial Z:")
+        self._sn_z = QLineEdit(stage_cfg.get("serial_z", ""))
+        self._sn_z.setPlaceholderText("leave blank if Z axis not present")
+        self._sn_z.setStyleSheet(_INPUT_SS)
+        self._sn_z.setFixedHeight(34)
+        fl.addRow(self._sn_z_lbl, self._sn_z)
+
+        # Serial stage — port + baud
+        self._port_lbl = _lbl("Serial port:")
+        self._port = QComboBox()
+        self._port.setEditable(True)
+        for p in _list_serial_ports():
+            self._port.addItem(p)
+        self._port.setCurrentText(stage_cfg.get("port", ""))
+        self._port.setStyleSheet(_INPUT_SS)
+        fl.addRow(self._port_lbl, self._port)
+
+        self._baud_lbl = _lbl("Baud rate:")
+        self._baud = QComboBox()
+        self._baud.addItems(["9600", "19200", "38400", "57600", "115200"])
+        self._baud.setCurrentText(str(stage_cfg.get("baud", 115200)))
+        self._baud.setStyleSheet(_INPUT_SS)
+        fl.addRow(self._baud_lbl, self._baud)
+
+        # ── Test connection ───────────────────────────────────────────────
+        test_row = QHBoxLayout()
+        self._test_btn = QPushButton("Test Connection")
+        self._test_btn.setStyleSheet(_BTN_SECONDARY)
+        self._test_btn.setFixedHeight(30)
+        self._test_btn.clicked.connect(self._test_connection)
+        test_row.addWidget(self._test_btn)
+        test_row.addStretch(1)
+        fl.addRow(test_row)
+
+        self._test_result = QLabel("")
+        self._test_result.setWordWrap(True)
+        self._test_result.setStyleSheet(_SS_BADGE_OK)
+        self._test_result.setVisible(False)
+        fl.addRow(self._test_result)
+
+        self._content.addWidget(g)
+
+        # ── thorlabs_apt_device notice ────────────────────────────────────
+        self._apt_notice = QLabel(
+            '⚠  <b>thorlabs-apt-device is not installed</b> — required for Thorlabs stages.<br>'
+            'Install: &nbsp;<code>pip install thorlabs-apt-device</code><br>'
+            'Also install <b>Thorlabs Kinesis</b> software (provides USB drivers):<br>'
+            '<a href="https://www.thorlabs.com/software_pages/ViewSoftwarePage.cfm?Code=Motion_Control" '
+            'style="color:#4e73df;">thorlabs.com — Kinesis download ↗</a>'
+            '&nbsp;&nbsp;|&nbsp;&nbsp;'
+            '<a href="https://github.com/kzhao1228/pystage_apt" '
+            'style="color:#4e73df;">pystage_apt alternative ↗</a>'
+        )
+        self._apt_notice.setOpenExternalLinks(True)
+        self._apt_notice.setWordWrap(True)
+        self._apt_notice.setStyleSheet(
+            f"font-size:11pt; color:{self._AMBER}; background:#13172a; "
+            "border:1px solid #f5a62344; border-radius:4px; padding:8px;")
+        self._apt_notice.setVisible(False)
+        self._content.addWidget(self._apt_notice)
+
+        self._content.addStretch(1)
+
+        # Apply initial visibility
+        self._on_driver_changed(self._drv.currentText())
+
+    # ── Driver change handler ──────────────────────────────────────────────────
+
+    def _on_driver_changed(self, drv: str) -> None:
+        is_thorlabs = (drv == "thorlabs")
+        is_serial   = (drv == "serial_stage")
+
+        self._sn_x_lbl.setVisible(is_thorlabs)
+        self._sn_x.setVisible(is_thorlabs)
+        self._sn_y_lbl.setVisible(is_thorlabs)
+        self._sn_y.setVisible(is_thorlabs)
+        self._sn_z_lbl.setVisible(is_thorlabs)
+        self._sn_z.setVisible(is_thorlabs)
+        self._port_lbl.setVisible(is_serial)
+        self._port.setVisible(is_serial)
+        self._baud_lbl.setVisible(is_serial)
+        self._baud.setVisible(is_serial)
+
+        if is_thorlabs:
+            self._apt_notice.setVisible(not self._check_apt())
+        else:
+            self._apt_notice.setVisible(False)
+
+        self._test_result.setVisible(False)
+
+    @staticmethod
+    def _check_apt() -> bool:
+        try:
+            import thorlabs_apt_device  # noqa: F401
+            return True
+        except ImportError:
+            return False
+
+    # ── Test connection ────────────────────────────────────────────────────────
+
+    def _test_connection(self) -> None:
+        drv = self._drv.currentText()
+        try:
+            if drv == "simulated":
+                self._test_result.setText("✓  Simulated driver ready")
+                self._test_result.setStyleSheet(
+                    f"font-size:11pt; color:{self._GREEN};")
+                self._test_result.setVisible(True)
+                return
+
+            cfg = self._build_cfg()
+            from hardware.stage.factory import create_stage
+            stage = create_stage(cfg)
+            stage.connect()
+            pos = stage.get_position()
+            stage.disconnect()
+            self._test_result.setText(
+                f"✓  Connected — position X={pos.x:.3f} Y={pos.y:.3f} Z={pos.z:.3f} mm")
+            self._test_result.setStyleSheet(
+                f"font-size:11pt; color:{self._GREEN};")
+        except Exception as exc:
+            self._test_result.setText(f"✗  {exc}")
+            self._test_result.setStyleSheet(
+                f"font-size:11pt; color:{self._DANGER};")
+        self._test_result.setVisible(True)
+
+    def _build_cfg(self) -> dict:
+        drv = self._drv.currentText()
+        cfg: dict = {"driver": drv}
+        if drv == "thorlabs":
+            cfg["serial_x"] = self._sn_x.text().strip()
+            cfg["serial_y"] = self._sn_y.text().strip()
+            cfg["serial_z"] = self._sn_z.text().strip()
+        elif drv == "serial_stage":
+            cfg["port"] = self._port.currentText().strip()
+            cfg["baud"] = int(self._baud.currentText())
+        return cfg
+
+    def apply_scan(self, report) -> int:
+        """Pre-fill stage driver from scan results.  Returns 1 if found."""
+        try:
+            from hardware.device_registry import DTYPE_STAGE
+            stage_devs = [d for d in report.devices
+                          if d.is_known and d.descriptor.device_type == DTYPE_STAGE]
+        except Exception:
+            stage_devs = []
+
+        if not stage_devs:
+            return 0
+
+        dev = stage_devs[0]
+        drv = getattr(dev.descriptor, "driver_module", "").rsplit(".", 1)[-1]
+        if "thorlabs" in drv:
+            self._drv.setCurrentText("thorlabs")
+            # Serial numbers are embedded in descriptor extras when scanned
+            extras = getattr(dev.descriptor, "extras", {})
+            if extras.get("serial_x"):
+                self._sn_x.setText(str(extras["serial_x"]))
+        elif "serial" in drv:
+            self._drv.setCurrentText("serial_stage")
+            self._port.setCurrentText(dev.address)
+        return 1
+
+    def values(self) -> dict:
+        drv = self._drv.currentText()
+        out: dict = {"stage.driver": drv}
+        if drv == "thorlabs":
+            out["stage.serial_x"] = self._sn_x.text().strip()
+            out["stage.serial_y"] = self._sn_y.text().strip()
+            out["stage.serial_z"] = self._sn_z.text().strip()
+        elif drv == "serial_stage":
+            out["stage.port"] = self._port.currentText().strip()
+            out["stage.baud"] = int(self._baud.currentText())
+        return out
+
+
 class _PageAI(_PageBase):
     """
-    Wizard page 5 — AI Assistant setup.
+    Wizard page 7 — AI Assistant setup.
 
     Detects whether Ollama is installed and, if so, whether any models have
     been pulled.  Guides the user through each step with one-click buttons so
-    they don't need to open a terminal.
+    the user doesn't need to open a terminal.
 
     The page is entirely optional — clicking  Next →  skips any uncompleted
     steps without breaking anything.
@@ -1360,7 +1864,7 @@ class FirstRunWizard(QDialog):
         pb_lay = QHBoxLayout(prog_bar)
         pb_lay.setContentsMargins(30, 0, 30, 0)
         self._dots: list[QLabel] = []
-        step_labels = ["Welcome", "TEC", "Camera", "FPGA", "AI", "Done"]
+        step_labels = ["Welcome", "TEC", "Camera", "FPGA", "Bias", "Stage", "AI", "Done"]
         for i, lbl in enumerate(step_labels):
             dot = QLabel(f"● {lbl}")
             dot.setAlignment(Qt.AlignCenter)
@@ -1378,12 +1882,15 @@ class FirstRunWizard(QDialog):
         self._page_tec     = _PageTEC(self._cfg_hw)
         self._page_camera  = _PageCamera(self._cfg_hw)
         self._page_fpga    = _PageFPGA(self._cfg_hw)
+        self._page_bias    = _PageBias(self._cfg_hw)
+        self._page_stage   = _PageStage(self._cfg_hw)
         self._page_ai      = _PageAI()
         self._page_done    = _PageDone()
 
         self._stack = QStackedWidget()
         for p in [self._page_welcome, self._page_tec,
                   self._page_camera, self._page_fpga,
+                  self._page_bias, self._page_stage,
                   self._page_ai, self._page_done]:
             self._stack.addWidget(p)
         root.addWidget(self._stack, 1)
@@ -1434,6 +1941,8 @@ class FirstRunWizard(QDialog):
         self._page_tec.apply_scan(report)
         self._page_camera.apply_scan(report)
         self._page_fpga.apply_scan(report)
+        self._page_bias.apply_scan(report)
+        self._page_stage.apply_scan(report)
         # Use known_only() for the welcome-page count
         self._page_welcome.set_scan_done(len(report.known_only()))
 
