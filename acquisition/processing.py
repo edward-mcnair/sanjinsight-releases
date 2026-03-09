@@ -152,39 +152,80 @@ def _build_cv_maps() -> dict:
 # Module-level cache (populated on first use of apply_colormap)
 _CV_MAPS = None  # type: dict | None
 
+# ── Matplotlib fallback (used when opencv-python is not installed) ─────────────
+# Maps branded palette names → matplotlib colormap names.
+_MPL_NAMES: dict = {
+    "Emberline":  "inferno",
+    "Prismshift": "rainbow",
+    "Magmafall":  "hot",
+    "Borealis":   "winter",
+    "Hearthtone": "autumn",
+    "Ghostscale": "bone",
+    "plasma":     "plasma",
+    "viridis":    "viridis",
+    "turbo":      "turbo",
+    "jet":        "jet",
+    "cool":       "cool",
+    # Legacy aliases
+    "hot":        "hot",
+    "ironbow":    "inferno",
+    "rainbow":    "rainbow",
+    "lava":       "hot",
+}
+_MPL_LUTS: dict = {}  # mpl_name → (256, 3) uint8 LUT, built once per name
+
+
+def _mpl_colormap(gray: np.ndarray, cmap: str) -> np.ndarray:
+    """Apply a matplotlib colormap via a prebuilt 256-entry LUT → uint8 RGB."""
+    mpl_name = _MPL_NAMES.get(cmap, "gray")
+    lut = _MPL_LUTS.get(mpl_name)
+    if lut is None:
+        try:
+            from matplotlib import colormaps
+            lut = (colormaps[mpl_name](np.linspace(0, 1, 256)) * 255
+                   ).astype(np.uint8)[:, :3]
+        except Exception:
+            lut = np.column_stack([np.arange(256, dtype=np.uint8)] * 3)  # gray
+        _MPL_LUTS[mpl_name] = lut
+    return lut[gray]  # fancy indexing: (H, W) → (H, W, 3)
+
 
 def apply_colormap(gray: np.ndarray, cmap: str = "Emberline") -> np.ndarray:
     """
     Apply a named colormap to a uint8 grayscale image.
     Returns uint8 RGB (H, W, 3).
 
-    Special cases handled without OpenCV:
+    Special cases handled without any library:
         "Polarflare" / "white hot" / "gray" — identity grayscale (warm = white)
         "Umbra Heat" / "black hot"           — inverted grayscale (warm = black)
 
     "Thermal Delta" and "signed" are handled by to_display(mode="signed") upstream;
     if passed here directly, falls back to grayscale.
 
-    All other keys require opencv-python and map to cv2.COLORMAP_*.
-    Falls back to grayscale if OpenCV is unavailable.
+    All other keys use cv2.COLORMAP_* when opencv-python is installed, or fall
+    back to equivalent matplotlib colormaps (always available).
     """
     global _CV_MAPS
-    # Grayscale variants — no OpenCV needed
+    # Grayscale variants — no library needed
     if cmap in ("Polarflare", "white hot", "gray"):
         return np.stack([gray, gray, gray], axis=-1)
     if cmap in ("Umbra Heat", "black hot"):
         inv = 255 - gray
         return np.stack([inv, inv, inv], axis=-1)
 
-    # All other colormaps via OpenCV
+    # Prefer OpenCV (faster); fall back to matplotlib
     if _CV_MAPS is None:
         _CV_MAPS = _build_cv_maps()
-    if not _CV_MAPS or cmap not in _CV_MAPS:
-        return np.stack([gray, gray, gray], axis=-1)
+    if _CV_MAPS and cmap in _CV_MAPS:
+        import cv2
+        bgr = cv2.applyColorMap(gray, _CV_MAPS[cmap])
+        return cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
 
-    import cv2
-    bgr = cv2.applyColorMap(gray, _CV_MAPS[cmap])
-    return cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+    # matplotlib fallback — works without opencv-python
+    if cmap in _MPL_NAMES:
+        return _mpl_colormap(gray, cmap)
+
+    return np.stack([gray, gray, gray], axis=-1)
 
 
 def export_result(result, output_dir: str = ".") -> dict:
