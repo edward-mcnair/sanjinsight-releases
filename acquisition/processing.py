@@ -228,6 +228,65 @@ def apply_colormap(gray: np.ndarray, cmap: str = "Emberline") -> np.ndarray:
     return np.stack([gray, gray, gray], axis=-1)
 
 
+# ── Colormap preview colours ───────────────────────────────────────────────────
+# LUT sample indices chosen to land on the most visually distinctive / saturated
+# region of each palette so the text label gives an instant colour hint.
+_CMAP_SAMPLE_IDX: dict = {
+    "Emberline":  210,   # bright orange (inferno ~82 %)
+    "Prismshift":  88,   # vivid green   (rainbow ~35 %)
+    "Magmafall":  185,   # red-orange    (hot     ~73 %)
+    "Borealis":    60,   # cyan          (winter  ~24 %)
+    "Hearthtone": 130,   # amber-orange  (autumn  ~51 %)
+    "Ghostscale": 160,   # blue-grey     (bone    ~63 %)
+    "plasma":     175,   # pink-magenta  (plasma  ~69 %)
+    "viridis":    140,   # teal          (viridis ~55 %)
+    "turbo":      205,   # orange-red    (turbo   ~80 %)
+    "jet":        185,   # yellow        (jet     ~73 %)
+    "cool":       128,   # cyan-magenta  (cool    ~50 %)
+}
+
+
+def get_cmap_preview_color(cmap: str) -> tuple:
+    """Return (r, g, b) as a visually representative colour for *cmap*.
+
+    Used to tint combo-box item labels so users can identify each palette
+    at a glance without opening the drop-down.
+    """
+    if cmap in ("Thermal Delta", "signed"):
+        return (220, 60, 60)           # red  — the "hot" end of the diverging map
+    if cmap in ("Polarflare", "white hot", "gray"):
+        return (210, 210, 210)         # bright grey — warm = white
+    if cmap in ("Umbra Heat", "black hot"):
+        return (130, 130, 130)         # dim grey  — warm = black (inverted)
+    idx = _CMAP_SAMPLE_IDX.get(cmap, 160)
+    try:
+        rgb = _mpl_colormap(np.array([[idx]], dtype=np.uint8), cmap)
+        return int(rgb[0, 0, 0]), int(rgb[0, 0, 1]), int(rgb[0, 0, 2])
+    except Exception:
+        return (150, 150, 150)
+
+
+def setup_cmap_combo(combo, saved_cmap: str = "Thermal Delta") -> None:
+    """Populate *combo* (QComboBox) with COLORMAP_OPTIONS.
+
+    For each item this function:
+      - adds the display name
+      - sets a tooltip from COLORMAP_TOOLTIPS
+      - tints the label text with a representative preview colour
+
+    The caller is responsible for setFixedWidth() and signal connections.
+    """
+    from PyQt5.QtCore import Qt
+    from PyQt5.QtGui  import QBrush, QColor
+    for i, c in enumerate(COLORMAP_OPTIONS):
+        combo.addItem(c)
+        combo.setItemData(i, COLORMAP_TOOLTIPS.get(c, ""), Qt.ToolTipRole)
+        r, g, b = get_cmap_preview_color(c)
+        combo.model().item(i).setForeground(QBrush(QColor(r, g, b)))
+    if saved_cmap in COLORMAP_OPTIONS:
+        combo.setCurrentText(saved_cmap)
+
+
 def export_result(result, output_dir: str = ".") -> dict:
     """
     Save acquisition result to files.

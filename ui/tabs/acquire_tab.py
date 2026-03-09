@@ -22,7 +22,7 @@ from ui.icons import set_btn_icon
 from hardware.app_state import app_state
 from acquisition        import AcquisitionProgress, AcqState
 from acquisition        import export_result
-from acquisition.processing import COLORMAP_OPTIONS, COLORMAP_TOOLTIPS
+from acquisition.processing import COLORMAP_OPTIONS, COLORMAP_TOOLTIPS, setup_cmap_combo
 import config as cfg_mod
 from ui.widgets.image_pane import ImagePane
 
@@ -80,13 +80,9 @@ class AcquireTab(QWidget):
 
         cl.addWidget(self._sub("ΔR/R colormap"), 2, 0)
         self._cmap = QComboBox()
-        for i, c in enumerate(COLORMAP_OPTIONS):
-            self._cmap.addItem(c)
-            self._cmap.setItemData(i, COLORMAP_TOOLTIPS.get(c, ""), Qt.ToolTipRole)
         self._cmap.setFixedWidth(110)
         saved_cmap = cfg_mod.get_pref("display.colormap", "Thermal Delta")
-        if saved_cmap in COLORMAP_OPTIONS:
-            self._cmap.setCurrentText(saved_cmap)
+        setup_cmap_combo(self._cmap, saved_cmap)
         self._cmap.currentTextChanged.connect(self._on_cmap_changed)
         cl.addWidget(self._cmap, 2, 1)
 

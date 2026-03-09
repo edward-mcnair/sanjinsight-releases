@@ -31,7 +31,7 @@ from PyQt5.QtGui  import (QImage, QPixmap, QPainter, QPen, QColor,
                            QBrush, QFont, QLinearGradient, QFontMetrics)
 
 from .live       import LiveProcessor, LiveConfig, LiveFrame
-from .processing import to_display, apply_colormap, COLORMAP_OPTIONS, COLORMAP_TOOLTIPS
+from .processing import to_display, apply_colormap, COLORMAP_OPTIONS, COLORMAP_TOOLTIPS, setup_cmap_combo
 import config as cfg_mod
 
 
@@ -668,14 +668,10 @@ class LiveTab(QWidget):
         # Colourmap selector in toolbar
         lay.addWidget(QLabel("Cmap:"))
         self._cmap_combo = QComboBox()
-        for i, c in enumerate(COLORMAP_OPTIONS):
-            self._cmap_combo.addItem(c)
-            self._cmap_combo.setItemData(i, COLORMAP_TOOLTIPS.get(c, ""), Qt.ToolTipRole)
         self._cmap_combo.setFixedWidth(110)
         self._cmap_combo.setFixedHeight(28)
         saved_cmap = cfg_mod.get_pref("display.colormap", "Thermal Delta")
-        if saved_cmap in COLORMAP_OPTIONS:
-            self._cmap_combo.setCurrentText(saved_cmap)
+        setup_cmap_combo(self._cmap_combo, saved_cmap)
         # _canvas is created after the toolbar; connection deferred to __init__
         self._saved_cmap = saved_cmap
         self._cmap_combo.currentTextChanged.connect(

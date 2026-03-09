@@ -28,7 +28,7 @@ from PyQt5.QtGui  import (QImage, QPixmap, QPainter, QPen, QColor,
                            QBrush, QFont)
 
 from .scan       import ScanProgress, ScanResult
-from .processing import to_display, apply_colormap, COLORMAP_OPTIONS, COLORMAP_TOOLTIPS
+from .processing import to_display, apply_colormap, COLORMAP_OPTIONS, COLORMAP_TOOLTIPS, setup_cmap_combo
 import config as cfg_mod
 
 
@@ -469,13 +469,9 @@ class ScanTab(QWidget):
         cmap_row = QHBoxLayout()
         cmap_row.addWidget(QLabel("Colourmap:"))
         self._cmap_combo = QComboBox()
-        for i, c in enumerate(COLORMAP_OPTIONS):
-            self._cmap_combo.addItem(c)
-            self._cmap_combo.setItemData(i, COLORMAP_TOOLTIPS.get(c, ""), Qt.ToolTipRole)
         self._cmap_combo.setFixedWidth(110)
         saved_cmap = cfg_mod.get_pref("display.colormap", "Thermal Delta")
-        if saved_cmap in COLORMAP_OPTIONS:
-            self._cmap_combo.setCurrentText(saved_cmap)
+        setup_cmap_combo(self._cmap_combo, saved_cmap)
         self._cmap_combo.currentTextChanged.connect(self._redisplay)
         self._cmap_combo.currentTextChanged.connect(
             lambda c: cfg_mod.set_pref("display.colormap", c))
