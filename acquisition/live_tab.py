@@ -31,7 +31,7 @@ from PyQt5.QtGui  import (QImage, QPixmap, QPainter, QPen, QColor,
                            QBrush, QFont, QLinearGradient, QFontMetrics)
 
 from .live       import LiveProcessor, LiveConfig, LiveFrame
-from .processing import to_display, COLORMAP_OPTIONS, COLORMAP_TOOLTIPS, _build_cv_maps
+from .processing import to_display, apply_colormap, COLORMAP_OPTIONS, COLORMAP_TOOLTIPS
 import config as cfg_mod
 
 
@@ -348,20 +348,7 @@ class LiveCanvas(QWidget):
             rgb = np.stack([r, g, b], axis=-1)
         else:
             disp = to_display(d, mode="percentile")
-            if self._cmap in ("Polarflare", "white hot", "gray"):
-                rgb = np.stack([disp]*3, axis=-1)
-            elif self._cmap in ("Umbra Heat", "black hot"):
-                inv = 255 - disp
-                rgb = np.stack([inv]*3, axis=-1)
-            else:
-                try:
-                    import cv2
-                    cv_maps = _build_cv_maps()
-                    cv_id = cv_maps.get(self._cmap, cv2.COLORMAP_HOT)
-                    bgr = cv2.applyColorMap(disp, cv_id)
-                    rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
-                except Exception:
-                    rgb = np.stack([disp]*3, axis=-1)
+            rgb  = apply_colormap(disp, self._cmap)
 
         h, w = rgb.shape[:2]
         buf = rgb.tobytes()   # keep ref alive for QImage
