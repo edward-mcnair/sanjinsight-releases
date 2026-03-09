@@ -316,84 +316,22 @@ class NetworkScanner:
 
 class NiScanner:
     """
-    Enumerates NI hardware via nifpga system resource list.
-    Falls back to pyvisa / NI-VISA resource manager for DAQ devices.
+    Placeholder for NI/PCIe hardware enumeration.
+
+    NI-VISA (pyvisa) and NI-DAQmx (nidaqmx) DLL initialisation can conflict
+    with other processes that hold the NI driver lock (e.g. LabVIEW), causing
+    hard process crashes that bypass Python exception handling.  SanjINSIGHT
+    does not require PCIe/NI hardware, so this scanner is intentionally
+    disabled and returns an empty result set immediately.
+
+    If NI FPGA support is needed in future, re-enable this scanner and ensure
+    that no other NI application (NI MAX, LabVIEW, etc.) holds the VISA lock
+    before calling scan().
     """
 
     def scan(self) -> tuple[List[DiscoveredDevice], Optional[str]]:
-        results = []
-        error   = None
-
-        # ---- NI-FPGA / CompactRIO ----
-        try:
-            import nifpga
-            # nifpga doesn't have a native list — parse common resource names
-            for resource in self._probe_ni_resources():
-                descriptor = find_by_ni_pattern(resource)
-                results.append(DiscoveredDevice(
-                    connection_type = CONN_PCIE,
-                    address         = resource,
-                    description     = descriptor.display_name if descriptor
-                                      else f"NI Device ({resource})",
-                    descriptor      = descriptor,
-                ))
-        except ImportError:
-            error = "nifpga not installed"
-        except Exception as e:
-            error = f"NI-FPGA scan error: {e}"
-
-        # ---- NI-VISA (DAQmx, USB-based NI devices) ----
-        try:
-            import pyvisa
-            rm = pyvisa.ResourceManager()
-            for rname in rm.list_resources():
-                if any(rname.upper().startswith(p)
-                       for p in ["USB", "GPIB", "ASRL", "TCPIP"]):
-                    continue   # handled by other scanners
-                descriptor = find_by_ni_pattern(rname)
-                if descriptor:
-                    results.append(DiscoveredDevice(
-                        connection_type = CONN_PCIE,
-                        address         = rname,
-                        description     = descriptor.display_name,
-                        descriptor      = descriptor,
-                    ))
-        except ImportError:
-            log.debug("NiScanner.scan: pyvisa not installed — skipping VISA resource scan")
-        except Exception:
-            log.warning("NiScanner.scan: pyvisa list_resources() failed", exc_info=True)
-
-        return results, error
-
-    def _probe_ni_resources(self) -> List[str]:
-        """
-        List NI resource names using VISA or NI-DAQmx enumeration.
-        Returns only resources that physically exist.
-        """
-        # Prefer PyVISA resource enumeration — zero false positives
-        try:
-            import pyvisa
-            rm    = pyvisa.ResourceManager()
-            found = []
-            for rname in rm.list_resources():
-                upper = rname.upper()
-                if any(k in upper for k in ("RIO", "CRIO", "FPGA", "DEV")):
-                    found.append(rname)
-            return found
-        except Exception:
-            log.debug("NiScanner._probe_ni_resources: pyvisa enumeration failed — "
-                      "trying nidaqmx fallback", exc_info=True)
-
-        # Fallback: NI-DAQmx device list
-        try:
-            import nidaqmx
-            system = nidaqmx.system.System.local()
-            return [d.name for d in system.devices]
-        except Exception:
-            log.debug("NiScanner._probe_ni_resources: nidaqmx enumeration failed — "
-                      "returning empty NI resource list", exc_info=True)
-
-        return []
+        log.debug("NiScanner: PCIe/NI scanning is disabled — returning empty result")
+        return [], None
 
 
 # ------------------------------------------------------------------ #

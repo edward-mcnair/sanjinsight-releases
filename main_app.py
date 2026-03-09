@@ -1998,9 +1998,52 @@ if __name__ == "__main__":
     # ── Configure rotating log file before anything else ──────────────
     # This must run before config is reloaded or QApplication is created
     # so that every log message (including hardware init) is captured.
+    # Pass --debug on the command line to enable DEBUG-level logging for
+    # troubleshooting crashes and hardware initialisation issues.
     import logging_config as _lc
     import config as _cfg_boot
-    _lc.setup(level=_cfg_boot.get("logging").get("level", "INFO"))
+    _debug_mode = "--debug" in _sys.argv or "--verbose" in _sys.argv
+    _log_level  = "DEBUG" if _debug_mode else _cfg_boot.get("logging").get("level", "INFO")
+    _lc.setup(level=_log_level)
+
+    # ── Global exception hook — prevents PyQt5 abort() on slot errors ──
+    # PyQt5 ≥ 5.15 calls qFatal() → abort() when a Python exception
+    # escapes a signal/slot boundary without being caught.  Installing a
+    # custom sys.excepthook intercepts this: PyQt5 calls our hook first
+    # so we can log the full traceback to the rotating log file and
+    # show a non-fatal error dialog, rather than silently crashing.
+    import traceback as _tb
+
+    _crash_log = logging.getLogger("crash_handler")
+
+    def _qt_exception_hook(exc_type, exc_value, exc_tb):
+        msg = "".join(_tb.format_exception(exc_type, exc_value, exc_tb))
+        _crash_log.critical(
+            "Unhandled exception in PyQt5 slot (process saved from abort):\n%s",
+            msg)
+        # Flush so it reaches disk before any further crash
+        for _h in logging.getLogger().handlers:
+            try:
+                _h.flush()
+            except Exception:
+                pass
+        # Show a non-modal error dialog if QApplication already exists
+        try:
+            from PyQt5.QtWidgets import QMessageBox, QApplication as _QA
+            if _QA.instance():
+                _dlg = QMessageBox()
+                _dlg.setWindowTitle("Unexpected Error")
+                _dlg.setIcon(QMessageBox.Critical)
+                _dlg.setText(
+                    "An unexpected error occurred in the application.\n\n"
+                    "The full traceback has been written to the log file.\n"
+                    f"Log: {_lc.log_path()}")
+                _dlg.setDetailedText(msg)
+                _dlg.exec_()
+        except Exception:
+            pass
+
+    _sys.excepthook = _qt_exception_hook
 
     # ── Determine launch mode ─────────────────────────────────────────
     # Demo mode activates when:
@@ -2012,6 +2055,8 @@ if __name__ == "__main__":
     log.info(f"  {APP_VENDOR} {APP_NAME}  {version_string()}")
     log.info(f"  Build date: {__import__('version').BUILD_DATE}")
     log.info(f"  Platform: {_sys.platform}  |  Demo mode: {_FORCE_DEMO}")
+    if _debug_mode:
+        log.info("  *** DEBUG / VERBOSE MODE ACTIVE (--debug) ***")
     log.info(f"{'='*60}")
 
     # ── Connect HardwareService signals → app signals ─────────────────
