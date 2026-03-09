@@ -22,6 +22,12 @@ dist/
 *.egg-info/
 *.egg
 
+# ── Installer build artefacts ─────────────────────────────────────────────────
+installer_output/
+# Redistributable binaries downloaded by build_installer.bat — large binaries,
+# not committed to the repo.  build_installer.bat re-downloads them automatically.
+installer/redist/
+
 # ── macOS ─────────────────────────────────────────────────────────────────────
 .DS_Store
 .AppleDouble

@@ -2,13 +2,17 @@
 ; Inno Setup 6 script — wraps the PyInstaller one-folder bundle into a
 ; single Windows installer .exe.
 ;
-; ── Building locally (Windows only) ─────────────────────────────────────────
-; Prerequisites:
-;   1. Run PyInstaller first:      pyinstaller installer/sanjinsight.spec
-;   2. Generate icon (one-time):   python -c "from PIL import Image; ..."
-;                                  (or copy any .ico to installer/assets/sanjinsight.ico)
-;   3. Generate version metadata:  python installer/gen_version_info.py
-;   4. Build the installer:        iscc /DAppVersion=1.1.0 installer\setup.iss
+; ── Building ─────────────────────────────────────────────────────────────────
+; Use build_installer.bat (downloads vc_redist automatically, then calls iscc):
+;
+;   cd installer
+;   build_installer.bat 1.1.2
+;
+; Or manually:
+;   1. Place vc_redist.x64.exe in installer\redist\
+;      (download from https://aka.ms/vs/17/release/vc_redist.x64.exe)
+;   2. Run PyInstaller:  pyinstaller installer\sanjinsight.spec
+;   3. Build installer:  iscc /DAppVersion=1.1.2 installer\setup.iss
 ;
 ; Output: installer_output\SanjINSIGHT-Setup-{AppVersion}.exe
 ;
@@ -26,6 +30,13 @@
 #define AppPublisher "Microsanj, LLC"
 #define AppURL       "https://microsanj.com"
 #define AppExeName   "SanjINSIGHT.exe"
+
+; ── VC++ Redistributable prerequisite ────────────────────────────────────────
+; Place vc_redist.x64.exe in installer\redist\ before building.
+; build_installer.bat downloads it automatically.
+; The installer bundles it and runs it silently on the end-user machine if the
+; VC++ 2015-2022 runtime is not already installed.
+#define VCRedistSrc "redist\vc_redist.x64.exe"
 
 [Setup]
 ; {A1B2C3D4…} — unique GUID identifies this app for Windows Add/Remove Programs.
@@ -62,7 +73,8 @@ SolidCompression    =yes
 WizardStyle         =modern
 WizardSizePercent   =120
 
-; Require admin rights (needed to write to Program Files and register in Add/Remove Programs)
+; Require admin rights (needed to write to Program Files, register in Add/Remove Programs,
+; and run the VC++ redistributable which writes to protected registry paths)
 PrivilegesRequired  =admin
 
 ; Windows 10 minimum (build 17763 = RS5, October 2018 Update)
@@ -80,9 +92,18 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; \
   GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-; PyInstaller one-folder bundle — all files, preserving directory structure
+; ── PyInstaller one-folder bundle ─────────────────────────────────────────────
+; All files, preserving directory structure.
 Source: "..\dist\SanjINSIGHT\*"; DestDir: "{app}"; \
   Flags: ignoreversion recursesubdirs createallsubdirs
+
+; ── Microsoft Visual C++ 2015-2022 Redistributable (x64) ─────────────────────
+; Bundled so end users never need to find and install it manually.
+; Microsoft allows redistribution under the Visual Studio license terms.
+; build_installer.bat downloads this automatically from:
+;   https://aka.ms/vs/17/release/vc_redist.x64.exe
+Source: "{#VCRedistSrc}"; DestDir: "{tmp}"; \
+  Flags: deleteafterinstall; Check: NeedsVCRedist
 
 [Dirs]
 ; Ensure writable directories exist at install time so the app can write to them
@@ -105,6 +126,91 @@ Root: HKCU; Subkey: "Software\Microsanj\SanjINSIGHT"; \
   ValueType: string; ValueName: "InstallPath"; ValueData: "{app}"
 
 [Run]
+; ── Step 1: Visual C++ Runtime (silent, runs before app launches) ─────────────
+; /quiet         — no UI
+; /norestart     — suppress any reboot prompt (installer handles this if needed)
+Filename: "{tmp}\vc_redist.x64.exe"; \
+  Parameters: "/quiet /norestart"; \
+  StatusMsg: "Installing Visual C++ 2022 Runtime (required by Qt5)…"; \
+  Flags: waitprogress runhidden; \
+  Check: NeedsVCRedist
+
+; ── Step 2: Launch SanjINSIGHT (optional checkbox on Finish page) ────────────
 Filename: "{app}\{#AppExeName}"; \
   Description: "{cm:LaunchProgram,{#AppName}}"; \
   Flags: nowait postinstall skipifsilent
+
+[Code]
+{ ── VC++ Redistributable detection ──────────────────────────────────────────
+  The VC++ 2015-2022 x64 runtime registers Installed=1 under:
+    HKLM\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64
+  Returns True when the runtime needs to be installed (key absent or Installed≠1).
+}
+function NeedsVCRedist(): Boolean;
+var
+  dwInstalled: Cardinal;
+begin
+  if RegQueryDWordValue(HKLM,
+      'SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64',
+      'Installed', dwInstalled) then
+    Result := (dwInstalled <> 1)
+  else
+    Result := True;  { Registry key absent → runtime not installed }
+end;
+
+{ ── Hardware SDK prerequisite guidance ───────────────────────────────────────
+  Called after installation completes.  Checks for optional hardware SDKs that
+  SanjINSIGHT can use but that cannot be bundled (vendor licensing terms).
+  Shows a single informational dialog listing any that are missing.
+  The user can dismiss it and install them later — everything inside the app
+  still works in simulated mode until the SDKs are present.
+}
+procedure CheckHardwareSDKs();
+var
+  missing: String;
+  pylonKey, niVisaKey, niRioKey: String;
+  dummy: String;
+begin
+  missing := '';
+
+  { Basler pylon SDK — key written by the pylon installer }
+  pylonKey := 'SOFTWARE\Basler\pylon';
+  if not RegKeyExists(HKLM, pylonKey) then
+    missing := missing +
+      '• Basler pylon 8 SDK (USB3 Vision camera driver)' + #13#10 +
+      '  https://www.baslerweb.com/en-us/downloads/software-downloads/' + #13#10#13#10;
+
+  { NI-VISA — key written by the NI-VISA installer }
+  niVisaKey := 'SOFTWARE\National Instruments\NI-VISA\CurrentVersion';
+  if not RegKeyExists(HKLM, niVisaKey) and
+     not RegKeyExists(HKLM64, niVisaKey) then
+    missing := missing +
+      '• NI-VISA (Keithley/GPIB/USB instrument communication)' + #13#10 +
+      '  https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html' + #13#10#13#10;
+
+  { NI-RIO — key written by the NI-RIO / NI-DAQmx installer }
+  niRioKey := 'SOFTWARE\National Instruments\RIO';
+  if not RegKeyExists(HKLM, niRioKey) and
+     not RegKeyExists(HKLM64, niRioKey) then
+    missing := missing +
+      '• NI-RIO drivers (NI 9637 FPGA module)' + #13#10 +
+      '  https://www.ni.com/en/support/downloads/drivers/download.ni-rio.html' + #13#10#13#10;
+
+  if missing <> '' then
+    MsgBox(
+      'SanjINSIGHT is installed and ready to run.' + #13#10#13#10 +
+      'The following optional hardware SDKs were not detected on this machine. ' +
+      'SanjINSIGHT will work in simulated mode without them. ' +
+      'Install only the SDKs for hardware you own:' + #13#10#13#10 +
+      missing +
+      'You can also run  Settings → Hardware Setup  inside the app at any time ' +
+      'for step-by-step setup guidance.',
+      mbInformation, MB_OK);
+end;
+
+{ Called by Inno Setup after the main installation step completes. }
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then
+    CheckHardwareSDKs();
+end;
