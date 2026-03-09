@@ -109,6 +109,63 @@ def is_ollama_running(timeout: float = 2.0) -> bool:
         return False
 
 
+def is_ollama_installed() -> bool:
+    """
+    Return True if the Ollama binary exists on this machine.
+
+    Does NOT require the Ollama server to be running — just checks whether
+    the executable is present.  Checks the system PATH first, then
+    platform-specific default install locations.
+    """
+    import os
+    import sys
+    import shutil
+    if shutil.which("ollama"):
+        return True
+    if sys.platform == "win32":
+        local = os.environ.get("LOCALAPPDATA", "")
+        return os.path.isfile(
+            os.path.join(local, "Programs", "Ollama", "ollama.exe"))
+    if sys.platform == "darwin":
+        return os.path.exists("/Applications/Ollama.app")
+    return False
+
+
+def ollama_exe_path() -> str:
+    """
+    Return the absolute path to the Ollama executable, or ``""`` if not found.
+
+    Used by pull/run operations so they work even when Ollama's install
+    directory is not on the system PATH (common on Windows right after install).
+    """
+    import os
+    import sys
+    import shutil
+    found = shutil.which("ollama")
+    if found:
+        return found
+    if sys.platform == "win32":
+        local = os.environ.get("LOCALAPPDATA", "")
+        candidate = os.path.join(local, "Programs", "Ollama", "ollama.exe")
+        if os.path.isfile(candidate):
+            return candidate
+    if sys.platform == "darwin":
+        candidate = "/usr/local/bin/ollama"
+        if os.path.isfile(candidate):
+            return candidate
+    return ""
+
+
+def ollama_download_url() -> str:
+    """Return the direct installer/download URL for Ollama on the current OS."""
+    import sys
+    if sys.platform == "win32":
+        return "https://ollama.com/download/OllamaSetup.exe"
+    if sys.platform == "darwin":
+        return "https://ollama.com/download/Ollama-darwin.zip"
+    return "https://ollama.com/install.sh"
+
+
 def _ssl_ctx() -> ssl.SSLContext:
     ctx = ssl.create_default_context()
     return ctx

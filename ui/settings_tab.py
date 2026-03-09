@@ -17,7 +17,7 @@ This tab is added to the TOOLS section of the sidebar.
 from __future__ import annotations
 
 import logging
-from PyQt5.QtCore    import Qt, QTimer, pyqtSignal, QUrl
+from PyQt5.QtCore    import Qt, QThread, QTimer, pyqtSignal, QUrl
 from PyQt5.QtGui     import QDesktopServices
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -115,6 +115,100 @@ def _group(title: str) -> QGroupBox:
         }}
     """)
     return g
+
+
+# ── Ollama background worker threads ──────────────────────────────────────────
+
+class _OllamaInstallThread(QThread):
+    """
+    Downloads the Ollama Windows installer to the system temp directory and
+    launches it.  Emits progress(int, str) during download and
+    finished(bool, str) when done.
+
+    Only used on Windows.  On macOS/Linux the caller opens the browser directly.
+    """
+
+    progress = pyqtSignal(int, str)   # (percent 0-100, human-readable message)
+    finished = pyqtSignal(bool, str)  # (success, message)
+
+    def run(self) -> None:
+        import os
+        import tempfile
+        import subprocess
+        import urllib.request
+
+        url      = "https://ollama.com/download/OllamaSetup.exe"
+        tmp_path = os.path.join(tempfile.gettempdir(), "OllamaSetup.exe")
+
+        def _reporthook(block_num: int, block_size: int, total_size: int) -> None:
+            if total_size > 0:
+                pct    = min(int(block_num * block_size / total_size * 100), 99)
+                mb     = block_num * block_size // 1_000_000
+                total  = total_size // 1_000_000
+                self.progress.emit(pct, f"Downloading…  {pct}%  ({mb} / {total} MB)")
+
+        try:
+            self.progress.emit(0, "Connecting to ollama.com…")
+            urllib.request.urlretrieve(url, tmp_path, _reporthook)
+            self.progress.emit(100, "Launching installer…")
+            subprocess.Popen([tmp_path], shell=False)
+            self.finished.emit(
+                True,
+                "Installer launched.  Complete the setup window, "
+                "then click  ⟳ Check Again  below.",
+            )
+        except Exception as exc:
+            self.finished.emit(False, f"Download failed: {exc}")
+
+
+class _OllamaPullThread(QThread):
+    """
+    Runs  ``ollama pull <model>``  in a subprocess and streams its output.
+
+    Signals
+    -------
+    output_line(str)       one line of stdout/stderr from the pull command
+    finished(bool, str)    (success, summary message)
+    """
+
+    output_line = pyqtSignal(str)
+    finished    = pyqtSignal(bool, str)
+
+    def __init__(self, model: str, parent=None):
+        super().__init__(parent)
+        self._model = model
+
+    def run(self) -> None:
+        import subprocess
+        from ai.remote_runner import ollama_exe_path
+
+        exe = ollama_exe_path()
+        if not exe:
+            self.finished.emit(
+                False,
+                "ollama command not found — is the Ollama installation complete?",
+            )
+            return
+        try:
+            proc = subprocess.Popen(
+                [exe, "pull", self._model],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+            for raw_line in proc.stdout:
+                line = raw_line.rstrip()
+                if line:
+                    self.output_line.emit(line)
+            proc.wait()
+            if proc.returncode == 0:
+                self.finished.emit(True,  f"✓  {self._model} is ready")
+            else:
+                self.finished.emit(False, f"Pull failed (exit {proc.returncode})")
+        except Exception as exc:
+            self.finished.emit(False, str(exc))
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -779,23 +873,118 @@ class SettingsTab(QWidget):
         desc = QLabel(
             "Ollama runs AI models locally on your PC — no internet or API key needed. "
             "It supports dozens of open-source models (Llama 3, Mistral, Gemma …) "
-            "and uses your GPU automatically when available.\n\n"
-            "Install Ollama, then use  ollama pull <model>  to download a model. "
+            "and uses your GPU automatically when available.  "
             "SanjINSIGHT connects to the Ollama server running on this machine."
         )
         desc.setWordWrap(True)
         desc.setStyleSheet(f"font-size:11pt; color:{_MUTED};")
         lay.addWidget(desc)
 
-        # ── Install Ollama link ───────────────────────────────────────────
-        install_lbl = QLabel(
-            '<a href="https://ollama.com" style="color:{c};">'
-            "Download Ollama from ollama.com ↗</a>"
-            "  &nbsp;(free, Windows/macOS/Linux)".format(c=_ACCENT)
-        )
-        install_lbl.setOpenExternalLinks(True)
-        install_lbl.setStyleSheet(f"font-size:11pt; color:{_MUTED};")
-        lay.addWidget(install_lbl)
+        # ── Install Ollama box (hidden when already installed) ────────────
+        self._ollama_install_box = QFrame()
+        self._ollama_install_box.setStyleSheet(
+            f"background:{_BG2}; border:1px solid #f5a62355; border-radius:6px;")
+        ib = QVBoxLayout(self._ollama_install_box)
+        ib.setContentsMargins(14, 12, 14, 12)
+        ib.setSpacing(8)
+
+        install_notice = QLabel("⚡  Ollama is not installed on this machine.")
+        install_notice.setStyleSheet(
+            f"font-size:12pt; font-weight:600; color:{_AMBER};")
+        ib.addWidget(install_notice)
+
+        install_hint = QLabel(
+            "Ollama is a free, lightweight AI server.  "
+            "Click below and it will download and install automatically "
+            "(Windows), or open the download page on other systems.")
+        install_hint.setWordWrap(True)
+        install_hint.setStyleSheet(f"font-size:11pt; color:{_MUTED};")
+        ib.addWidget(install_hint)
+
+        btn_link_row = QHBoxLayout()
+        self._ollama_install_btn = QPushButton("⬇  Install Ollama for me")
+        self._ollama_install_btn.setStyleSheet(_BTN_PRIMARY)
+        self._ollama_install_btn.setFixedWidth(230)
+        self._ollama_install_btn.clicked.connect(self._on_install_ollama_clicked)
+        btn_link_row.addWidget(self._ollama_install_btn)
+        btn_link_row.addSpacing(16)
+
+        manual_link = QLabel(
+            f'or &nbsp;<a href="https://ollama.com/download" style="color:{_ACCENT};">'
+            "download manually ↗</a>")
+        manual_link.setOpenExternalLinks(True)
+        manual_link.setStyleSheet(f"font-size:11pt; color:{_MUTED};")
+        btn_link_row.addWidget(manual_link)
+        btn_link_row.addStretch(1)
+        ib.addLayout(btn_link_row)
+
+        self._ollama_install_prog = QProgressBar()
+        self._ollama_install_prog.setRange(0, 100)
+        self._ollama_install_prog.setTextVisible(True)
+        self._ollama_install_prog.setFixedHeight(18)
+        self._ollama_install_prog.setVisible(False)
+        ib.addWidget(self._ollama_install_prog)
+
+        self._ollama_install_msg = QLabel("")
+        self._ollama_install_msg.setStyleSheet(f"font-size:11pt; color:{_MUTED};")
+        self._ollama_install_msg.setWordWrap(True)
+        self._ollama_install_msg.setVisible(False)
+        ib.addWidget(self._ollama_install_msg)
+
+        lay.addWidget(self._ollama_install_box)
+
+        # ── Pull model box (shown when installed but no models yet) ───────
+        self._ollama_pull_box = QFrame()
+        self._ollama_pull_box.setStyleSheet(
+            f"background:{_BG2}; border:1px solid #00d4aa55; border-radius:6px;")
+        pb2 = QVBoxLayout(self._ollama_pull_box)
+        pb2.setContentsMargins(14, 12, 14, 12)
+        pb2.setSpacing(8)
+
+        pull_notice = QLabel("✓  Ollama installed.  Download a model to get started:")
+        pull_notice.setStyleSheet(f"font-size:12pt; font-weight:600; color:{_GREEN};")
+        pb2.addWidget(pull_notice)
+
+        pull_hint = QLabel(
+            "Phi-3 Mini is recommended (2.3 GB, works well on 4 GB GPU)."
+            "  Mistral / Llama 3 are larger but more capable.")
+        pull_hint.setWordWrap(True)
+        pull_hint.setStyleSheet(f"font-size:11pt; color:{_MUTED};")
+        pb2.addWidget(pull_hint)
+
+        pull_row = QHBoxLayout()
+        pull_lbl = QLabel("Model:")
+        pull_lbl.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
+        pull_lbl.setFixedWidth(55)
+        pull_row.addWidget(pull_lbl)
+
+        self._ollama_pull_combo = QComboBox()
+        self._ollama_pull_combo.setStyleSheet(_COMBO)
+        for m in ["phi3", "phi3:mini", "mistral", "llama3:8b", "gemma2:2b"]:
+            self._ollama_pull_combo.addItem(m)
+        self._ollama_pull_combo.setCurrentText("phi3")
+        pull_row.addWidget(self._ollama_pull_combo, 1)
+
+        self._ollama_pull_btn = QPushButton("⬇  Pull Model")
+        self._ollama_pull_btn.setStyleSheet(_BTN_PRIMARY)
+        self._ollama_pull_btn.setFixedWidth(140)
+        self._ollama_pull_btn.clicked.connect(self._on_pull_model_clicked)
+        pull_row.addWidget(self._ollama_pull_btn)
+        pb2.addLayout(pull_row)
+
+        self._ollama_pull_prog = QProgressBar()
+        self._ollama_pull_prog.setRange(0, 0)          # indeterminate spinner
+        self._ollama_pull_prog.setFixedHeight(18)
+        self._ollama_pull_prog.setVisible(False)
+        pb2.addWidget(self._ollama_pull_prog)
+
+        self._ollama_pull_msg = QLabel("")
+        self._ollama_pull_msg.setStyleSheet(f"font-size:11pt; color:{_MUTED};")
+        self._ollama_pull_msg.setWordWrap(True)
+        self._ollama_pull_msg.setVisible(False)
+        pb2.addWidget(self._ollama_pull_msg)
+
+        lay.addWidget(self._ollama_pull_box)
 
         lay.addWidget(_sep())
 
@@ -812,10 +1001,11 @@ class SettingsTab(QWidget):
         self._ollama_model_combo.setPlaceholderText("(refresh to load installed models)")
         model_row.addWidget(self._ollama_model_combo, 1)
 
-        self._ollama_refresh_btn = QPushButton("⟳ Refresh")
+        self._ollama_refresh_btn = QPushButton("⟳ Check Again")
         self._ollama_refresh_btn.setStyleSheet(_BTN_SECONDARY)
-        self._ollama_refresh_btn.setFixedWidth(90)
-        self._ollama_refresh_btn.setToolTip("Query Ollama for installed models")
+        self._ollama_refresh_btn.setFixedWidth(120)
+        self._ollama_refresh_btn.setToolTip(
+            "Re-detect Ollama and refresh the model list")
         self._ollama_refresh_btn.clicked.connect(self._ollama_refresh_models)
         model_row.addWidget(self._ollama_refresh_btn)
         lay.addLayout(model_row)
@@ -838,47 +1028,87 @@ class SettingsTab(QWidget):
         return g
 
     def _ollama_refresh_models(self, silent: bool = False) -> None:
-        """Query the running Ollama server for installed models and populate the combo."""
-        from ai.remote_runner import get_ollama_models, is_ollama_running
+        """
+        Detect Ollama state and update the UI accordingly.
+
+        State machine
+        -------------
+        NOT INSTALLED → show install box, hide pull box, set status "not installed"
+        INSTALLED, NOT RUNNING → hide both boxes, report "not running"
+        RUNNING, NO MODELS → hide install box, show pull box, report "pull needed"
+        RUNNING, MODELS OK → hide both boxes, populate combo, report "ready"
+        """
+        from ai.remote_runner import (
+            get_ollama_models, is_ollama_running, is_ollama_installed,
+        )
         if not hasattr(self, "_ollama_model_combo"):
             return
 
+        # ── 1. Is Ollama installed? ────────────────────────────────────────
+        installed = is_ollama_installed()
+        if hasattr(self, "_ollama_install_box"):
+            self._ollama_install_box.setVisible(not installed)
+
+        if not installed:
+            if hasattr(self, "_ollama_pull_box"):
+                self._ollama_pull_box.setVisible(False)
+            self._ollama_status_lbl.setText(
+                "⊗  Ollama is not installed — use the Install button above")
+            self._ollama_status_lbl.setStyleSheet(
+                f"font-size:12pt; color:{_AMBER};")
+            return
+
+        # ── 2. Is the Ollama server running? ──────────────────────────────
         running = is_ollama_running(timeout=1.5)
         if not running:
+            if hasattr(self, "_ollama_pull_box"):
+                self._ollama_pull_box.setVisible(False)
             if not silent:
                 self._ollama_status_lbl.setText(
-                    "⊗  Ollama not running — start Ollama and try again")
+                    "⊗  Ollama installed but not running — "
+                    "launch the Ollama app, then click  ⟳ Check Again")
                 self._ollama_status_lbl.setStyleSheet(
                     f"font-size:12pt; color:{_DANGER};")
             return
 
+        # ── 3. Any models pulled? ──────────────────────────────────────────
         models = get_ollama_models()
         self._ollama_model_combo.blockSignals(True)
         self._ollama_model_combo.clear()
-        if models:
-            self._ollama_model_ids = [m["id"] for m in models]
-            for m in models:
-                self._ollama_model_combo.addItem(m["name"])
-            saved = cfg_mod.get_pref("ai.ollama.model", "")
-            try:
-                self._ollama_model_combo.setCurrentIndex(
-                    self._ollama_model_ids.index(saved))
-            except ValueError:
-                self._ollama_model_combo.setCurrentIndex(0)
-            # Always show status when models are found — even on silent refresh —
-            # so users know Ollama is ready without having to click Refresh first.
-            self._ollama_status_lbl.setText(
-                f"✓  Ollama ready — {len(models)} model(s) — click Connect")
-            self._ollama_status_lbl.setStyleSheet(
-                f"font-size:12pt; color:{_GREEN};")
-        else:
+
+        if not models:
+            # Running but empty — show the pull section
+            if hasattr(self, "_ollama_pull_box"):
+                self._ollama_pull_box.setVisible(True)
             self._ollama_model_ids = []
-            if not silent:
-                self._ollama_status_lbl.setText(
-                    "⚠  Ollama running but no models installed. "
-                    "Run:  ollama pull phi3")
-                self._ollama_status_lbl.setStyleSheet(
-                    f"font-size:12pt; color:{_AMBER};")
+            self._ollama_status_lbl.setText(
+                "⚠  No models pulled yet — use the Pull Model section above")
+            self._ollama_status_lbl.setStyleSheet(
+                f"font-size:12pt; color:{_AMBER};")
+            self._ollama_model_combo.blockSignals(False)
+            return
+
+        # ── 4. All good — populate combo and report ready ─────────────────
+        if hasattr(self, "_ollama_pull_box"):
+            self._ollama_pull_box.setVisible(False)
+
+        self._ollama_model_ids = [m["id"] for m in models]
+        for m in models:
+            self._ollama_model_combo.addItem(m["name"])
+        saved = cfg_mod.get_pref("ai.ollama.model", "")
+        try:
+            self._ollama_model_combo.setCurrentIndex(
+                self._ollama_model_ids.index(saved))
+        except ValueError:
+            self._ollama_model_combo.setCurrentIndex(0)
+
+        # Always show the "ready" status even on silent refresh so the user
+        # immediately knows Ollama is available on opening the Settings tab.
+        self._ollama_status_lbl.setText(
+            f"✓  Ollama ready — {len(models)} model(s) — click Connect")
+        self._ollama_status_lbl.setStyleSheet(
+            f"font-size:12pt; color:{_GREEN};")
+
         self._ollama_model_combo.blockSignals(False)
 
     def _on_ollama_connect_clicked(self) -> None:
@@ -928,6 +1158,110 @@ class SettingsTab(QWidget):
             self._ollama_status_lbl.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
             self._ollama_connect_btn.setText("Connect")
             self._ollama_connect_btn.setEnabled(True)
+
+    # ── Ollama install / pull handlers ────────────────────────────────
+
+    def _on_install_ollama_clicked(self) -> None:
+        """
+        Triggered by the  ⬇ Install Ollama for me  button.
+
+        • Windows — downloads OllamaSetup.exe to the system temp folder via a
+          background thread, then launches it; a progress bar shows download
+          progress.
+        • macOS / Linux — opens https://ollama.com/download in the browser
+          (the native packages are not trivially installable by the app).
+
+        After the installer is launched, the user completes installation
+        normally and then clicks  ⟳ Check Again  to re-detect Ollama.
+        """
+        import sys
+        if not hasattr(self, "_ollama_install_btn"):
+            return
+
+        if sys.platform == "win32":
+            # Download + launch via background thread
+            self._ollama_install_btn.setEnabled(False)
+            self._ollama_install_prog.setValue(0)
+            self._ollama_install_prog.setVisible(True)
+            self._ollama_install_msg.setText("Connecting to ollama.com…")
+            self._ollama_install_msg.setStyleSheet(
+                f"font-size:11pt; color:{_MUTED};")
+            self._ollama_install_msg.setVisible(True)
+
+            self._install_thread = _OllamaInstallThread(self)
+            self._install_thread.progress.connect(self._on_install_progress)
+            self._install_thread.finished.connect(self._on_install_finished)
+            self._install_thread.start()
+        else:
+            # macOS / Linux — open the download page
+            QDesktopServices.openUrl(QUrl("https://ollama.com/download"))
+            if hasattr(self, "_ollama_install_msg"):
+                self._ollama_install_msg.setText(
+                    "Opened  ollama.com/download  in your browser.  "
+                    "Install Ollama, then click  ⟳ Check Again.")
+                self._ollama_install_msg.setStyleSheet(
+                    f"font-size:11pt; color:{_MUTED};")
+                self._ollama_install_msg.setVisible(True)
+
+    def _on_install_progress(self, pct: int, msg: str) -> None:
+        if hasattr(self, "_ollama_install_prog"):
+            self._ollama_install_prog.setValue(pct)
+        if hasattr(self, "_ollama_install_msg"):
+            self._ollama_install_msg.setText(msg)
+
+    def _on_install_finished(self, ok: bool, msg: str) -> None:
+        if hasattr(self, "_ollama_install_prog"):
+            self._ollama_install_prog.setVisible(False)
+        if hasattr(self, "_ollama_install_msg"):
+            self._ollama_install_msg.setText(msg)
+            self._ollama_install_msg.setStyleSheet(
+                f"font-size:11pt; color:{_GREEN if ok else _DANGER};")
+        if hasattr(self, "_ollama_install_btn"):
+            self._ollama_install_btn.setEnabled(True)
+            if ok:
+                self._ollama_install_btn.setText("⟳ Check Again")
+        # After a successful launch wait a moment, then re-detect
+        if ok:
+            QTimer.singleShot(4000, lambda: self._ollama_refresh_models(silent=False))
+
+    def _on_pull_model_clicked(self) -> None:
+        """Triggered by the  ⬇ Pull Model  button; runs  ollama pull <model>."""
+        if not hasattr(self, "_ollama_pull_combo"):
+            return
+        model = self._ollama_pull_combo.currentText().strip()
+        if not model:
+            return
+
+        self._ollama_pull_btn.setEnabled(False)
+        self._ollama_pull_prog.setVisible(True)
+        self._ollama_pull_msg.setText(
+            f"Downloading  {model} …  (this may take a few minutes)")
+        self._ollama_pull_msg.setStyleSheet(f"font-size:11pt; color:{_MUTED};")
+        self._ollama_pull_msg.setVisible(True)
+
+        self._pull_thread = _OllamaPullThread(model, self)
+        self._pull_thread.output_line.connect(self._on_pull_output)
+        self._pull_thread.finished.connect(self._on_pull_finished)
+        self._pull_thread.start()
+
+    def _on_pull_output(self, line: str) -> None:
+        """Update the pull status label with the latest line from ollama pull."""
+        if hasattr(self, "_ollama_pull_msg") and line.strip():
+            # Trim to 80 chars so it fits on one line
+            self._ollama_pull_msg.setText(line[:80])
+
+    def _on_pull_finished(self, ok: bool, msg: str) -> None:
+        if hasattr(self, "_ollama_pull_prog"):
+            self._ollama_pull_prog.setVisible(False)
+        if hasattr(self, "_ollama_pull_btn"):
+            self._ollama_pull_btn.setEnabled(True)
+        if hasattr(self, "_ollama_pull_msg"):
+            self._ollama_pull_msg.setText(msg)
+            self._ollama_pull_msg.setStyleSheet(
+                f"font-size:11pt; color:{_GREEN if ok else _DANGER};")
+        if ok:
+            # Re-detect — pull box will hide and model combo will populate
+            QTimer.singleShot(500, lambda: self._ollama_refresh_models(silent=False))
 
     # ── Cloud AI helpers ──────────────────────────────────────────────
 

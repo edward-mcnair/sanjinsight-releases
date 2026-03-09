@@ -48,7 +48,7 @@ from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QComboBox, QStackedWidget, QWidget, QFrame,
     QFileDialog, QGroupBox, QFormLayout,
-    QSizePolicy, QMessageBox,
+    QSizePolicy, QMessageBox, QProgressBar,
 )
 
 from ui.theme import (
@@ -154,6 +154,85 @@ class _ScanWorker(QThread):
         except Exception as e:
             log.warning("_ScanWorker: scan raised: %s", e)
             self.completed.emit(None)
+
+
+# ── Ollama background workers (wizard copies — no import from settings_tab) ───
+
+class _WizOllamaInstallThread(QThread):
+    """Downloads the Ollama Windows installer and launches it (wizard variant)."""
+
+    progress = pyqtSignal(int, str)
+    finished = pyqtSignal(bool, str)
+
+    def run(self) -> None:
+        import os
+        import tempfile
+        import subprocess
+        import urllib.request
+
+        url      = "https://ollama.com/download/OllamaSetup.exe"
+        tmp_path = os.path.join(tempfile.gettempdir(), "OllamaSetup.exe")
+
+        def _hook(block_num: int, block_size: int, total_size: int) -> None:
+            if total_size > 0:
+                pct   = min(int(block_num * block_size / total_size * 100), 99)
+                mb    = block_num * block_size // 1_000_000
+                total = total_size // 1_000_000
+                self.progress.emit(pct, f"Downloading…  {pct}%  ({mb} / {total} MB)")
+
+        try:
+            self.progress.emit(0, "Connecting to ollama.com…")
+            urllib.request.urlretrieve(url, tmp_path, _hook)
+            self.progress.emit(100, "Launching installer…")
+            subprocess.Popen([tmp_path], shell=False)
+            self.finished.emit(
+                True,
+                "Installer launched.  Complete the setup window,\n"
+                "then click  ⟳ Check status  to continue.")
+        except Exception as exc:
+            self.finished.emit(False, f"Download failed: {exc}")
+
+
+class _WizOllamaPullThread(QThread):
+    """Runs  ollama pull <model>  in a subprocess (wizard variant)."""
+
+    output_line = pyqtSignal(str)
+    finished    = pyqtSignal(bool, str)
+
+    def __init__(self, model: str, parent=None):
+        super().__init__(parent)
+        self._model = model
+
+    def run(self) -> None:
+        import subprocess
+        from ai.remote_runner import ollama_exe_path
+
+        exe = ollama_exe_path()
+        if not exe:
+            self.finished.emit(
+                False,
+                "ollama command not found — is the installation complete?")
+            return
+        try:
+            proc = subprocess.Popen(
+                [exe, "pull", self._model],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+            for raw_line in proc.stdout:
+                line = raw_line.rstrip()
+                if line:
+                    self.output_line.emit(line)
+            proc.wait()
+            if proc.returncode == 0:
+                self.finished.emit(True,  f"✓  {self._model} downloaded and ready")
+            else:
+                self.finished.emit(False, f"Pull failed (exit {proc.returncode})")
+        except Exception as exc:
+            self.finished.emit(False, str(exc))
 
 
 # ── Shared style helpers (sourced from ui.theme) ──────────────────────────────
@@ -767,6 +846,272 @@ class _PageFPGA(_PageBase):
         }
 
 
+class _PageAI(_PageBase):
+    """
+    Wizard page 5 — AI Assistant setup.
+
+    Detects whether Ollama is installed and, if so, whether any models have
+    been pulled.  Guides the user through each step with one-click buttons so
+    they don't need to open a terminal.
+
+    The page is entirely optional — clicking  Next →  skips any uncompleted
+    steps without breaking anything.
+    """
+
+    _ACCENT = "#4e73df"
+    _GREEN  = "#00d4aa"
+    _AMBER  = "#f5a623"
+    _DANGER = "#ff5555"
+    _MUTED  = "#8892a4"
+
+    def __init__(self, parent=None):
+        super().__init__(
+            "AI Assistant (optional)",
+            "SanjINSIGHT includes a built-in AI assistant that can help you interpret "
+            "measurements, explain errors, and draft reports — all running locally on "
+            "your PC.  This step sets up Ollama, the free local AI server it uses.",
+            parent)
+
+        # ── Status badge ──────────────────────────────────────────────────
+        self._status_lbl = QLabel("")
+        self._status_lbl.setWordWrap(True)
+        self._status_lbl.setStyleSheet("font-size:12pt;")
+        self._content.addWidget(self._status_lbl)
+
+        # ── Install section ───────────────────────────────────────────────
+        self._install_frame = QFrame()
+        self._install_frame.setStyleSheet(
+            "background:#13172a; border:1px solid #f5a62344; border-radius:6px;")
+        if_lay = QVBoxLayout(self._install_frame)
+        if_lay.setContentsMargins(14, 12, 14, 12)
+        if_lay.setSpacing(8)
+
+        if_lay.addWidget(QLabel(
+            "Step 1 — Install Ollama (free, takes about 1 minute):"))
+        if_lay.widget(0).setStyleSheet(
+            f"font-size:12pt; font-weight:600; color:#fff;")
+
+        btn_row = QHBoxLayout()
+        self._install_btn = QPushButton("⬇  Install Ollama for me")
+        self._install_btn.setStyleSheet(_BTN_PRIMARY)
+        self._install_btn.setFixedWidth(230)
+        self._install_btn.clicked.connect(self._on_install_clicked)
+        btn_row.addWidget(self._install_btn)
+        btn_row.addSpacing(12)
+
+        manual = QLabel(
+            f'or &nbsp;<a href="https://ollama.com/download" '
+            f'style="color:{self._ACCENT};">download manually ↗</a>')
+        manual.setOpenExternalLinks(True)
+        manual.setStyleSheet(f"font-size:11pt; color:{self._MUTED};")
+        btn_row.addWidget(manual)
+        btn_row.addStretch(1)
+        if_lay.addLayout(btn_row)
+
+        self._install_prog = QProgressBar()
+        self._install_prog.setRange(0, 100)
+        self._install_prog.setFixedHeight(16)
+        self._install_prog.setVisible(False)
+        if_lay.addWidget(self._install_prog)
+
+        self._install_msg = QLabel("")
+        self._install_msg.setStyleSheet(f"font-size:11pt; color:{self._MUTED};")
+        self._install_msg.setWordWrap(True)
+        self._install_msg.setVisible(False)
+        if_lay.addWidget(self._install_msg)
+
+        self._content.addWidget(self._install_frame)
+
+        # ── Pull section ──────────────────────────────────────────────────
+        self._pull_frame = QFrame()
+        self._pull_frame.setStyleSheet(
+            "background:#13172a; border:1px solid #00d4aa44; border-radius:6px;")
+        pf_lay = QVBoxLayout(self._pull_frame)
+        pf_lay.setContentsMargins(14, 12, 14, 12)
+        pf_lay.setSpacing(8)
+
+        step2_hdr = QLabel("Step 2 — Download a model (2 – 4 GB):")
+        step2_hdr.setStyleSheet("font-size:12pt; font-weight:600; color:#fff;")
+        pf_lay.addWidget(step2_hdr)
+
+        pull_hint = QLabel(
+            "Phi-3 Mini is recommended for first-time users "
+            "(2.3 GB, good on 4 GB GPU, fast responses).")
+        pull_hint.setWordWrap(True)
+        pull_hint.setStyleSheet(f"font-size:11pt; color:{self._MUTED};")
+        pf_lay.addWidget(pull_hint)
+
+        pull_row = QHBoxLayout()
+        pull_lbl = QLabel("Model:")
+        pull_lbl.setStyleSheet(f"font-size:12pt; color:{self._MUTED};")
+        pull_lbl.setFixedWidth(55)
+        pull_row.addWidget(pull_lbl)
+
+        self._pull_combo = QComboBox()
+        for m in ["phi3", "phi3:mini", "mistral", "llama3:8b", "gemma2:2b"]:
+            self._pull_combo.addItem(m)
+        self._pull_combo.setCurrentText("phi3")
+        pull_row.addWidget(self._pull_combo, 1)
+
+        self._pull_btn = QPushButton("⬇  Pull Model")
+        self._pull_btn.setStyleSheet(_BTN_PRIMARY)
+        self._pull_btn.setFixedWidth(140)
+        self._pull_btn.clicked.connect(self._on_pull_clicked)
+        pull_row.addWidget(self._pull_btn)
+        pf_lay.addLayout(pull_row)
+
+        self._pull_prog = QProgressBar()
+        self._pull_prog.setRange(0, 0)          # indeterminate
+        self._pull_prog.setFixedHeight(16)
+        self._pull_prog.setVisible(False)
+        pf_lay.addWidget(self._pull_prog)
+
+        self._pull_msg = QLabel("")
+        self._pull_msg.setStyleSheet(f"font-size:11pt; color:{self._MUTED};")
+        self._pull_msg.setWordWrap(True)
+        self._pull_msg.setVisible(False)
+        pf_lay.addWidget(self._pull_msg)
+
+        self._content.addWidget(self._pull_frame)
+
+        self._check_btn = QPushButton("⟳  Check status")
+        self._check_btn.setStyleSheet(_BTN_SECONDARY)
+        self._check_btn.setFixedWidth(150)
+        self._check_btn.clicked.connect(self._detect)
+        self._content.addWidget(self._check_btn)
+
+        self._content.addStretch(1)
+
+        # ── Initial detection ─────────────────────────────────────────────
+        self._detect()
+
+    # ── Detection ─────────────────────────────────────────────────────────────
+
+    def _detect(self) -> None:
+        """Check Ollama state and show appropriate sections."""
+        from ai.remote_runner import is_ollama_installed, is_ollama_running, get_ollama_models
+
+        installed = is_ollama_installed()
+        self._install_frame.setVisible(not installed)
+
+        if not installed:
+            self._pull_frame.setVisible(False)
+            self._status_lbl.setText(
+                "⚠  Ollama is not installed yet.  "
+                "Use  Step 1  below, or skip this page for now.")
+            self._status_lbl.setStyleSheet(
+                f"font-size:12pt; color:{self._AMBER};")
+            return
+
+        running = is_ollama_running(timeout=1.5)
+        if not running:
+            self._pull_frame.setVisible(False)
+            self._status_lbl.setText(
+                "✓  Ollama installed.  "
+                "Launch the Ollama app, then click  ⟳ Check status.")
+            self._status_lbl.setStyleSheet(
+                f"font-size:12pt; color:{self._AMBER};")
+            return
+
+        models = get_ollama_models()
+        if not models:
+            self._pull_frame.setVisible(True)
+            self._status_lbl.setText(
+                "✓  Ollama is running.  "
+                "No models downloaded yet — use Step 2 below.")
+            self._status_lbl.setStyleSheet(
+                f"font-size:12pt; color:{self._AMBER};")
+            return
+
+        # All good
+        self._pull_frame.setVisible(False)
+        names = ", ".join(m["id"] for m in models[:3])
+        self._status_lbl.setText(
+            f"✓  Ollama ready with {len(models)} model(s): {names}\n"
+            "You can connect to it from  Settings → Ollama.")
+        self._status_lbl.setStyleSheet(
+            f"font-size:12pt; color:{self._GREEN};")
+
+    # ── Install handlers ───────────────────────────────────────────────────────
+
+    def _on_install_clicked(self) -> None:
+        import sys
+        if sys.platform == "win32":
+            self._install_btn.setEnabled(False)
+            self._install_prog.setValue(0)
+            self._install_prog.setVisible(True)
+            self._install_msg.setText("Connecting to ollama.com…")
+            self._install_msg.setStyleSheet(
+                f"font-size:11pt; color:{self._MUTED};")
+            self._install_msg.setVisible(True)
+
+            self._install_thread = _WizOllamaInstallThread(self)
+            self._install_thread.progress.connect(self._on_install_progress)
+            self._install_thread.finished.connect(self._on_install_finished)
+            self._install_thread.start()
+        else:
+            from PyQt5.QtCore import QUrl
+            from PyQt5.QtGui import QDesktopServices
+            QDesktopServices.openUrl(QUrl("https://ollama.com/download"))
+            self._install_msg.setText(
+                "Opened  ollama.com/download  in your browser.\n"
+                "Install Ollama, then click  ⟳ Check status.")
+            self._install_msg.setStyleSheet(
+                f"font-size:11pt; color:{self._MUTED};")
+            self._install_msg.setVisible(True)
+
+    def _on_install_progress(self, pct: int, msg: str) -> None:
+        self._install_prog.setValue(pct)
+        self._install_msg.setText(msg)
+
+    def _on_install_finished(self, ok: bool, msg: str) -> None:
+        self._install_prog.setVisible(False)
+        self._install_msg.setText(msg)
+        self._install_msg.setStyleSheet(
+            f"font-size:11pt; color:{self._GREEN if ok else self._DANGER};")
+        self._install_btn.setEnabled(True)
+        if ok:
+            self._install_btn.setText("⟳  Re-check")
+            # Give the installer a moment to register, then re-detect
+            from PyQt5.QtCore import QTimer
+            QTimer.singleShot(5000, self._detect)
+
+    # ── Pull handlers ──────────────────────────────────────────────────────────
+
+    def _on_pull_clicked(self) -> None:
+        model = self._pull_combo.currentText().strip()
+        if not model:
+            return
+        self._pull_btn.setEnabled(False)
+        self._pull_prog.setVisible(True)
+        self._pull_msg.setText(f"Downloading  {model} …  (may take several minutes)")
+        self._pull_msg.setStyleSheet(f"font-size:11pt; color:{self._MUTED};")
+        self._pull_msg.setVisible(True)
+
+        self._pull_thread = _WizOllamaPullThread(model, self)
+        self._pull_thread.output_line.connect(self._on_pull_output)
+        self._pull_thread.finished.connect(self._on_pull_finished)
+        self._pull_thread.start()
+
+    def _on_pull_output(self, line: str) -> None:
+        if line.strip():
+            self._pull_msg.setText(line[:80])
+
+    def _on_pull_finished(self, ok: bool, msg: str) -> None:
+        self._pull_prog.setVisible(False)
+        self._pull_btn.setEnabled(True)
+        self._pull_msg.setText(msg)
+        self._pull_msg.setStyleSheet(
+            f"font-size:11pt; color:{self._GREEN if ok else self._DANGER};")
+        if ok:
+            from PyQt5.QtCore import QTimer
+            QTimer.singleShot(500, self._detect)
+
+    def values(self) -> dict:
+        """AI page writes no config keys — Ollama is auto-detected at runtime."""
+        return {}
+
+
 class _PageDone(_PageBase):
     def __init__(self, parent=None):
         super().__init__(
@@ -852,7 +1197,7 @@ class FirstRunWizard(QDialog):
         pb_lay = QHBoxLayout(prog_bar)
         pb_lay.setContentsMargins(30, 0, 30, 0)
         self._dots: list[QLabel] = []
-        step_labels = ["Welcome", "TEC", "Camera", "FPGA", "Done"]
+        step_labels = ["Welcome", "TEC", "Camera", "FPGA", "AI", "Done"]
         for i, lbl in enumerate(step_labels):
             dot = QLabel(f"● {lbl}")
             dot.setAlignment(Qt.AlignCenter)
@@ -870,11 +1215,13 @@ class FirstRunWizard(QDialog):
         self._page_tec     = _PageTEC(self._cfg_hw)
         self._page_camera  = _PageCamera(self._cfg_hw)
         self._page_fpga    = _PageFPGA(self._cfg_hw)
+        self._page_ai      = _PageAI()
         self._page_done    = _PageDone()
 
         self._stack = QStackedWidget()
         for p in [self._page_welcome, self._page_tec,
-                  self._page_camera, self._page_fpga, self._page_done]:
+                  self._page_camera, self._page_fpga,
+                  self._page_ai, self._page_done]:
             self._stack.addWidget(p)
         root.addWidget(self._stack, 1)
 
