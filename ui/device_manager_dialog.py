@@ -687,11 +687,14 @@ class _DeviceProfilePanel(QWidget):
 
         self._param_widgets: dict = {}
 
-        # Cameras (pypylon/USB Vision) connect by enumeration, not by a COM
-        # port string.  Only show the port selector for genuinely serial/USB-
-        # serial devices (TECs, stages, bias sources, probers, etc.).
+        # Only show the COM port selector for genuinely serial/USB-serial
+        # devices (TECs, stages, bias sources, probers, etc.).
+        # Cameras connect via USB3 Vision / pypylon (no COM port).
+        # FPGA/NI devices connect via PCIe or NI-DAQmx (no COM port either,
+        # even when connection_type is CONN_USB — NI USB-6001 uses Dev1/Dev2
+        # resource names assigned by NI MAX, not a COM port string).
         _needs_port = (ct in (CONN_SERIAL, CONN_USB)
-                       and desc.device_type != DTYPE_CAMERA)
+                       and desc.device_type not in (DTYPE_CAMERA, DTYPE_FPGA))
 
         r = 0
         if _needs_port:
@@ -776,11 +779,25 @@ class _DeviceProfilePanel(QWidget):
                     pass
 
             def _registry_scan() -> dict:
-                """Return {device: device} from Windows registry (instant)."""
+                """Return {port: label} from the Windows registry (synchronous, no pyserial).
+
+                Three sources, all pure winreg — never touches NI/DAQmx drivers:
+                  1. HARDWARE\\DEVICEMAP\\SERIALCOMM — every COM port the OS tracks.
+                  2. SYSTEM\\CurrentControlSet\\Enum\\USB — USB devices with VID/PID.
+                     Each has a FriendlyName or Device Parameters\\PortName giving the
+                     COM assignment.  VID/PID is cross-referenced with DEVICE_REGISTRY
+                     to produce instrument-level labels (e.g. "COM7  —  Meerstetter TEC-1089").
+
+                On non-Windows returns an empty dict; pyserial handles it.
+                """
                 pmap: dict[str, str] = {}
-                if sys.platform.startswith("win"):
+                if not sys.platform.startswith("win"):
+                    return pmap
+                try:
+                    import winreg
+
+                    # ── 1. Bare COM port names ────────────────────────────────────
                     try:
-                        import winreg
                         _rk = winreg.OpenKey(
                             winreg.HKEY_LOCAL_MACHINE,
                             r"HARDWARE\DEVICEMAP\SERIALCOMM")
@@ -794,6 +811,76 @@ class _DeviceProfilePanel(QWidget):
                                 break
                     except Exception:
                         pass
+
+                    # ── 2. VID/PID → [display_name] lookup from DEVICE_REGISTRY ──
+                    _vid_pid_names: dict[tuple, list] = {}
+                    for _d in DEVICE_REGISTRY.values():
+                        if (_d.device_type == DTYPE_CAMERA
+                                or _d.connection_type not in (CONN_SERIAL, CONN_USB)):
+                            continue
+                        if _d.usb_vid and _d.usb_pid:
+                            _vp = (_d.usb_vid, _d.usb_pid)
+                            _vid_pid_names.setdefault(_vp, []).append(_d.display_name)
+
+                    # ── 3. Walk SYSTEM\CurrentControlSet\Enum\USB ─────────────────
+                    def _subkeys(parent):
+                        _si = 0
+                        while True:
+                            try:
+                                yield winreg.EnumKey(parent, _si)
+                                _si += 1
+                            except OSError:
+                                break
+
+                    _usb_root = winreg.OpenKey(
+                        winreg.HKEY_LOCAL_MACHINE,
+                        r"SYSTEM\CurrentControlSet\Enum\USB")
+                    for _vp_str in _subkeys(_usb_root):
+                        _mm = re.match(
+                            r"VID_([0-9A-Fa-f]{4})&PID_([0-9A-Fa-f]{4})",
+                            _vp_str, re.IGNORECASE)
+                        if not _mm:
+                            continue
+                        _vid = int(_mm.group(1), 16)
+                        _pid = int(_mm.group(2), 16)
+                        _names = _vid_pid_names.get((_vid, _pid))
+                        if not _names:
+                            continue
+
+                        _instr = "  or  ".join(dict.fromkeys(_names))
+                        _vp_key = winreg.OpenKey(_usb_root, _vp_str)
+                        for _inst in _subkeys(_vp_key):
+                            try:
+                                _ik = winreg.OpenKey(_vp_key, _inst)
+                                _port_str = None
+
+                                # Method A: Device Parameters\PortName
+                                try:
+                                    _dp = winreg.OpenKey(_ik, "Device Parameters")
+                                    _pn, _ = winreg.QueryValueEx(_dp, "PortName")
+                                    if str(_pn).startswith("COM"):
+                                        _port_str = str(_pn)
+                                except (FileNotFoundError, OSError):
+                                    pass
+
+                                # Method B: FriendlyName "(COMx)"
+                                if not _port_str:
+                                    try:
+                                        _fn, _ = winreg.QueryValueEx(
+                                            _ik, "FriendlyName")
+                                        _mm2 = re.search(
+                                            r"\(COM(\d+)\)", str(_fn))
+                                        if _mm2:
+                                            _port_str = f"COM{_mm2.group(1)}"
+                                    except (FileNotFoundError, OSError):
+                                        pass
+
+                                if _port_str:
+                                    pmap[_port_str] = f"{_port_str}  —  {_instr}"
+                            except OSError:
+                                pass
+                except Exception:
+                    pass
                 return pmap
 
             # ── Stage 1: registry scan — instant, runs on main thread ─────────
@@ -829,6 +916,7 @@ class _DeviceProfilePanel(QWidget):
                         return
 
                     enriched = dict(base_map)
+                    _on_windows = sys.platform.startswith("win")
                     for pi in port_info:
                         port_desc = (getattr(pi, 'description',  '') or '').strip()
                         hwid      = (getattr(pi, 'hwid',         '') or '').strip()
@@ -836,35 +924,44 @@ class _DeviceProfilePanel(QWidget):
                         vid       = getattr(pi, 'vid', None)
                         pid       = getattr(pi, 'pid', None)
 
-                        # ── 1. Exact VID+PID match against device registry ──
-                        matched = []
-                        if vid and pid:
-                            matched = [
-                                d for d in DEVICE_REGISTRY.values()
-                                if d.usb_vid == vid and d.usb_pid == pid
-                                and d.device_type != DTYPE_CAMERA
-                                and d.connection_type in (CONN_SERIAL, CONN_USB)
-                            ]
+                        # If Stage 1 (_registry_scan) already produced an enriched
+                        # label for this port via VID/PID matching, don't overwrite
+                        # it — just append the serial number if pyserial found one.
+                        _current = enriched.get(pi.device, pi.device)
+                        if _current != pi.device:
+                            if serial_no and f"s/n {serial_no}" not in _current:
+                                enriched[pi.device] = f"{_current}  s/n {serial_no}"
+                            continue
 
-                        # ── 2. serial_patterns text match (description/hwid) ─
-                        if not matched and (port_desc or hwid):
-                            search = (port_desc + " " + hwid).lower()
-                            matched = [
-                                d for d in DEVICE_REGISTRY.values()
-                                if d.device_type != DTYPE_CAMERA
-                                and d.connection_type in (CONN_SERIAL, CONN_USB)
-                                and any(p.lower() in search
-                                        for p in d.serial_patterns if p)
-                            ]
+                        # On Windows, Stage 1 already did VID/PID matching via the
+                        # registry (without touching NI drivers). Skip repeat here;
+                        # only fall through to generic description for unknowns.
+                        matched = []
+                        if not _on_windows:
+                            # ── 1. Exact VID+PID match against device registry ──
+                            if vid and pid:
+                                matched = [
+                                    d for d in DEVICE_REGISTRY.values()
+                                    if d.usb_vid == vid and d.usb_pid == pid
+                                    and d.device_type != DTYPE_CAMERA
+                                    and d.connection_type in (CONN_SERIAL, CONN_USB)
+                                ]
+                            # ── 2. serial_patterns text match (description/hwid) ─
+                            if not matched and (port_desc or hwid):
+                                search = (port_desc + " " + hwid).lower()
+                                matched = [
+                                    d for d in DEVICE_REGISTRY.values()
+                                    if d.device_type != DTYPE_CAMERA
+                                    and d.connection_type in (CONN_SERIAL, CONN_USB)
+                                    and any(p.lower() in search
+                                            for p in d.serial_patterns if p)
+                                ]
 
                         # ── 3. Build the dropdown label ──────────────────────
                         if matched:
-                            # Deduplicate display names (TEC-1089 & LDD-1121
-                            # share the same FTDI VID:PID 0403:6001)
                             unique_names = list(dict.fromkeys(
                                 d.display_name for d in matched))
                             instr = "  or  ".join(unique_names)
-                            # Append Windows device-manager name if it adds info
                             adapter = (f"  ({port_desc})"
                                        if port_desc and
                                        not any(n.lower() in port_desc.lower()
@@ -875,7 +972,9 @@ class _DeviceProfilePanel(QWidget):
                                 f"{pi.device}  —  {instr}{adapter}{sn}")
                         elif port_desc and port_desc.lower() not in (
                                 "", "n/a", pi.device.lower()):
-                            enriched[pi.device] = f"{pi.device}  —  {port_desc}"
+                            sn = f"  s/n {serial_no}" if serial_no else ""
+                            enriched[pi.device] = (
+                                f"{pi.device}  —  {port_desc}{sn}")
                         else:
                             enriched.setdefault(pi.device, pi.device)
 
@@ -923,6 +1022,29 @@ class _DeviceProfilePanel(QWidget):
             pg.addWidget(ip_edit, r, 1)
             self._param_widgets["ip"] = ip_edit
             r += 1
+
+        # ── Connection-method note (non-serial, non-Ethernet devices) ──────────
+        # Explain to the user why there is no address field to configure.
+        if not _needs_port and ct != CONN_ETHERNET:
+            if ct == CONN_PCIE:
+                _conn_note = ("Connects via PCIe — no COM port required.\n"
+                              "Resource name (e.g. RIO0) is assigned in NI MAX.")
+            elif desc.device_type == DTYPE_FPGA:
+                _conn_note = ("Connects via NI-DAQmx — no COM port required.\n"
+                              "Device name (e.g. Dev1) is assigned in NI MAX.")
+            elif desc.device_type == DTYPE_CAMERA:
+                _conn_note = ("Connects via USB3 Vision / camera SDK.\n"
+                              "Camera is enumerated automatically — no COM port needed.")
+            else:
+                _conn_note = None
+            if _conn_note:
+                _note_lbl = QLabel(_conn_note)
+                _note_lbl.setWordWrap(True)
+                _note_lbl.setStyleSheet(
+                    _pt("font-size:8pt; color:#888; font-style:italic; "
+                        "padding:4px 6px; border-left:2px solid #333;"))
+                pg.addWidget(_note_lbl, r, 0, 1, 2)
+                r += 1
 
         # Timeout
         pg.addWidget(self._sublabel("Timeout (s)"), r, 0)
