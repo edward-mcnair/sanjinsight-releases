@@ -382,8 +382,34 @@ class CameraScanner:
         """
         Run the pypylon enumeration script in a child process.
         Returns (list_of_camera_dicts, error_string_or_None).
+
+        IMPORTANT — PyInstaller frozen builds
+        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        In a frozen (.exe) build ``sys.executable`` is the packaged application
+        executable, not the Python interpreter.  Spawning it with ``-c script``
+        does NOT execute the script — it launches a new instance of the full
+        application (with its own Qt GUI window).  This is what causes multiple
+        "Microsanj SanjINSIGHT" windows to appear in the taskbar during a scan.
+
+        When frozen we therefore fall back to in-process enumeration, accepting
+        the loss of crash isolation.  The risk is low: pypylon crashes during
+        enumeration are rare, and the fallback is wrapped in a broad try/except.
         """
         import subprocess, json
+
+        # ── PyInstaller / frozen build: run inline, no subprocess ────────────
+        if getattr(sys, 'frozen', False):
+            log.debug("CameraScanner: frozen build detected — "
+                      "using in-process enumeration (no subprocess)")
+            return self._enumerate_inline()
+
+        # ── Normal Python interpreter: subprocess with crash isolation ────────
+        # On Windows, omitting CREATE_NO_WINDOW causes a console (or GUI) window
+        # to flash briefly even with capture_output=True when the parent is a
+        # windowless (GUI subsystem) process.
+        _popen_kw: dict = {}
+        if sys.platform == 'win32':
+            _popen_kw['creationflags'] = subprocess.CREATE_NO_WINDOW
 
         try:
             result = subprocess.run(
@@ -391,6 +417,7 @@ class CameraScanner:
                 capture_output=True,
                 text=True,
                 timeout=12,          # pylon SDK init can be slow on first run
+                **_popen_kw,
             )
         except subprocess.TimeoutExpired:
             log.warning("CameraScanner: pypylon subprocess timed out after 12 s")
@@ -425,6 +452,47 @@ class CameraScanner:
             return [], "Unexpected data from camera scan subprocess"
 
         return data, None
+
+    def _enumerate_inline(self) -> tuple[list, Optional[str]]:
+        """Enumerate Basler cameras in-process (used in frozen/PyInstaller builds).
+
+        Identical logic to _ENUM_SCRIPT but executed in the current process.
+        Wrapped in a broad try/except so a pypylon crash or access-violation
+        produces a logged warning rather than taking down the whole app.
+        """
+        try:
+            from pypylon import pylon
+            devs = pylon.TlFactory.GetInstance().EnumerateDevices()
+            out = []
+            for d in devs:
+                entry: dict = {
+                    'model':        '',
+                    'serial':       '',
+                    'device_class': '',
+                    'ip':           '',
+                    'full_name':    '',
+                }
+                try: entry['model']        = d.GetModelName()
+                except Exception: pass
+                try: entry['serial']       = d.GetSerialNumber()
+                except Exception: pass
+                try: entry['device_class'] = d.GetDeviceClass()
+                except Exception: pass
+                try: entry['full_name']    = d.GetFullName()
+                except Exception: pass
+                try:
+                    if 'GigE' in entry['device_class']:
+                        entry['ip'] = d.GetIpAddress()
+                except Exception: pass
+                out.append(entry)
+            log.debug("CameraScanner._enumerate_inline: found %d camera(s)", len(out))
+            return out, None
+        except ImportError:
+            log.debug("CameraScanner._enumerate_inline: pypylon not installed")
+            return [], "pypylon not installed"
+        except Exception as exc:
+            log.warning("CameraScanner._enumerate_inline: %s", exc)
+            return [], str(exc)
 
 
 # ------------------------------------------------------------------ #
