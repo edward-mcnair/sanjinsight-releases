@@ -688,97 +688,121 @@ class _DeviceProfilePanel(QWidget):
 
         r = 0
         if ct in (CONN_SERIAL, CONN_USB):
-            # Port selector — populate asynchronously so comports() never
-            # blocks the GUI thread (on Windows with no connected devices
-            # it can stall for several seconds, freezing the window).
             pg.addWidget(self._sublabel("Port"), r, 0)
             port_combo = QComboBox()
-            port_combo.addItem("Scanning…")
-            port_combo.setEnabled(False)
+            port_combo.setEditable(True)         # user can type any port directly
+            port_combo.setInsertPolicy(QComboBox.InsertAtTop)
             pg.addWidget(port_combo, r, 1)
             self._param_widgets["port"] = port_combo
             r += 1
 
-            def _scan_ports(combo=port_combo, addr=entry.address):
-                # ── Step 1: Windows registry — instant, never hangs ───────────
-                # serial.tools.list_ports.comports() queries each COM port driver
-                # and can hang for 30+ seconds on machines with NI hardware
-                # (NI USB-TC01, NI-DAQmx virtual ports, etc.).  Reading the
-                # registry key is instant and avoids the driver stack entirely.
-                port_map: dict[str, str] = {}   # {device: display_label}
+            def _port_sort_key(dev: str):
+                m = re.match(r"([A-Za-z]+)(\d+)", dev)
+                return (m.group(1), int(m.group(2))) if m else (dev, 0)
 
-                if sys.platform.startswith("win"):
-                    try:
-                        import winreg
-                        key = winreg.OpenKey(
-                            winreg.HKEY_LOCAL_MACHINE,
-                            r"HARDWARE\DEVICEMAP\SERIALCOMM")
-                        i = 0
-                        while True:
-                            try:
-                                _, value, _ = winreg.EnumValue(key, i)
-                                port_map[str(value)] = str(value)
-                                i += 1
-                            except OSError:
+            def _populate_port_combo(combo, pmap, saved_addr, placeholder=""):
+                """Rebuild combo items from pmap dict; always runs on main thread."""
+                try:
+                    # Preserve whatever the user currently has selected/typed
+                    current = (combo.currentData()
+                               or combo.currentText().split("  —  ")[0].strip())
+                    combo.clear()
+                    items = sorted(pmap.items(),
+                                   key=lambda kv: _port_sort_key(kv[0]))
+                    for device, label in items:
+                        # userData = plain "COM7"; text = "COM7  —  FTDI USB …"
+                        combo.addItem(label, device)
+                    # Ensure the previously-saved port is always present
+                    if saved_addr:
+                        existing = [combo.itemData(j) or combo.itemText(j)
+                                    for j in range(combo.count())]
+                        if saved_addr not in existing:
+                            combo.insertItem(0, saved_addr, saved_addr)
+                    # Re-select: prefer the current selection, then saved_addr
+                    for sel in (current, saved_addr):
+                        if not sel:
+                            continue
+                        for j in range(combo.count()):
+                            stored = (combo.itemData(j)
+                                      or combo.itemText(j).split("  —  ")[0].strip())
+                            if stored == sel:
+                                combo.setCurrentIndex(j)
                                 break
-                    except Exception:
-                        pass
+                        else:
+                            continue
+                        break
+                    if not pmap and not saved_addr:
+                        combo.addItem("No COM ports found")
+                    if placeholder and combo.lineEdit():
+                        combo.lineEdit().setPlaceholderText(placeholder)
+                    combo.setEnabled(True)
+                except RuntimeError:
+                    pass  # widget was deleted; silently discard
 
-                # ── Step 2: pyserial — adds descriptions, 4 s timeout ─────────
-                # Run comports() in a sub-thread via concurrent.futures so it
-                # can be abandoned if it stalls (NI drivers can cause this).
+            # ── Stage 1: Windows registry scan (synchronous, instant) ─────────
+            # Reading HARDWARE\DEVICEMAP\SERIALCOMM never touches a driver and
+            # returns in milliseconds even on machines with NI hardware.
+            # serial.tools.list_ports.comports() queries each port's driver and
+            # can block for 30+ seconds on NI-hardware-equipped machines.
+            port_map_initial: dict[str, str] = {}
+            if sys.platform.startswith("win"):
+                try:
+                    import winreg
+                    _reg_key = winreg.OpenKey(
+                        winreg.HKEY_LOCAL_MACHINE,
+                        r"HARDWARE\DEVICEMAP\SERIALCOMM")
+                    _ri = 0
+                    while True:
+                        try:
+                            _, _val, _ = winreg.EnumValue(_reg_key, _ri)
+                            port_map_initial[str(_val)] = str(_val)
+                            _ri += 1
+                        except OSError:
+                            break
+                except Exception:
+                    pass
+
+            # Populate the combo immediately — user can interact right away.
+            _populate_port_combo(port_combo, port_map_initial, entry.address,
+                                 placeholder="type a port or wait for scan…")
+
+            # ── Stage 2: Enrich with pyserial descriptions (background) ───────
+            # comports() adds friendly names ("COM6  —  FTDI USB Serial Device")
+            # but can stall on NI hardware.  Run it in a worker thread capped
+            # at 4 s; use shutdown(wait=False) so a stalled thread never blocks
+            # this thread from finishing and calling _populate_port_combo.
+            def _enrich_port_descriptions(
+                    combo=port_combo,
+                    base_map=dict(port_map_initial),
+                    saved=entry.address):
                 try:
                     import concurrent.futures
                     import serial.tools.list_ports as lp
-                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-                        future = ex.submit(lp.comports)
-                        port_info = future.result(timeout=4.0)
+                    _ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+                    _fut = _ex.submit(lp.comports)
+                    try:
+                        port_info = _fut.result(timeout=4.0)
+                    except concurrent.futures.TimeoutError:
+                        port_info = []
+                    finally:
+                        _ex.shutdown(wait=False)   # abandon any stalled thread
+
+                    enriched = dict(base_map)
                     for pi in port_info:
                         desc = (pi.description or "").strip()
-                        if desc and desc.lower() not in ("", "n/a", pi.device.lower()):
-                            port_map[pi.device] = f"{pi.device}  —  {desc}"
+                        if desc and desc.lower() not in ("", "n/a",
+                                                          pi.device.lower()):
+                            enriched[pi.device] = f"{pi.device}  —  {desc}"
                         else:
-                            port_map.setdefault(pi.device, pi.device)
+                            enriched.setdefault(pi.device, pi.device)
+
+                    QTimer.singleShot(
+                        0, lambda: _populate_port_combo(combo, enriched, saved))
                 except Exception:
-                    pass   # Use registry-only results (no descriptions)
+                    pass   # keep registry-only results; no crash
 
-                # ── Sort numerically (COM1, COM2, … COM10, COM11) ─────────────
-                def _sort_key(dev: str):
-                    m = re.match(r"([A-Za-z]+)(\d+)", dev)
-                    return (m.group(1), int(m.group(2))) if m else (dev, 0)
-
-                items = sorted(port_map.items(), key=lambda kv: _sort_key(kv[0]))
-
-                def _apply():
-                    # Guard: the combo (and its parent panel) may have been
-                    # deleted via deleteLater() if the user clicked a different
-                    # device or the dialog was closed before the scan finished.
-                    try:
-                        combo.clear()
-                        for device, label in items:
-                            # userData = plain device name (e.g. "COM7")
-                            # text     = display label (e.g. "COM7  —  FTDI USB")
-                            combo.addItem(label, device)
-                        # Ensure any previously-saved address is always present
-                        if addr:
-                            existing = [combo.itemData(i) or combo.itemText(i)
-                                        for i in range(combo.count())]
-                            if addr not in existing:
-                                combo.insertItem(0, addr, addr)
-                        # Select the saved address
-                        for i in range(combo.count()):
-                            if (combo.itemData(i) or combo.itemText(i)) == addr:
-                                combo.setCurrentIndex(i)
-                                break
-                        if not items:
-                            combo.addItem("No COM ports found")
-                        combo.setEnabled(True)
-                    except RuntimeError:
-                        pass  # widget was deleted; silently discard
-
-                QTimer.singleShot(0, _apply)
-
-            threading.Thread(target=_scan_ports, daemon=True).start()
+            threading.Thread(target=_enrich_port_descriptions,
+                             daemon=True).start()
 
             # Baud rate
             if ct == CONN_SERIAL:
@@ -1178,6 +1202,8 @@ class DeviceManagerDialog(QDialog):
                          Qt.Window | Qt.WindowCloseButtonHint)
         self._mgr = device_manager
         self._suppress_auto_scan = False   # set True by suppress_next_scan()
+        self._user_closed        = False   # True after user explicitly closes DM
+        self._deferred_scan_timer: Optional[QTimer] = None  # cancellable startup timer
         # Optional zero-argument callable that returns True while demo mode is
         # active.  When set, showEvent suppresses the automatic scan so the UI
         # never probes for hardware just because the user opened the dialog —
@@ -1435,8 +1461,25 @@ class DeviceManagerDialog(QDialog):
         variant instead of the normal demo-mode offer.
         """
         super().showEvent(event)
+        self._user_closed = False   # user opened the DM again; re-arm offers
         if not self._list_panel._scanning:
             QTimer.singleShot(200, self._initial_scan)
+
+    def closeEvent(self, event):
+        """Mark the dialog as explicitly closed and cancel any pending scan.
+
+        When the user closes the Device Manager the deferred startup scan
+        timer (if still counting down) is cancelled so it never fires after
+        the dialog is gone.  The ``_user_closed`` flag prevents
+        ``_offer_demo_dialog`` from forcing the dialog back open to host a
+        QMessageBox — if the user chose to close the DM they do not want it
+        reopened automatically.
+        """
+        self._user_closed = True
+        if self._deferred_scan_timer is not None:
+            self._deferred_scan_timer.stop()
+            self._deferred_scan_timer = None
+        super().closeEvent(event)
 
     def _initial_scan(self):
         """Kick off the on-open quick scan via the list panel's unified path.
@@ -1457,12 +1500,15 @@ class DeviceManagerDialog(QDialog):
         """
         if self._suppress_auto_scan:
             self._suppress_auto_scan = False   # one-shot
-            # Defer rather than skip — the demo-mode dialog must still appear.
-            # We do NOT guard on isVisible() here: if the user closes the
-            # startup DM before the 3 s timer fires (it looks idle because
-            # no scan is running yet), _offer_demo_dialog will re-show the DM
-            # so the QMessageBox always has a visible parent widget.
-            QTimer.singleShot(3_000, self._list_panel.start_scan)
+            # Defer the scan rather than skip it entirely — the demo-mode
+            # offer must still appear even if the user closes the DM right
+            # after launch (before 3 s elapses).  Store the timer so that
+            # closeEvent() can cancel it if the user deliberately closes the DM.
+            self._deferred_scan_timer = QTimer(self)
+            self._deferred_scan_timer.setSingleShot(True)
+            self._deferred_scan_timer.timeout.connect(
+                self._list_panel.start_scan)
+            self._deferred_scan_timer.start(3_000)
             return
         self._list_panel.start_scan()
 
@@ -1485,11 +1531,12 @@ class DeviceManagerDialog(QDialog):
         """
         already_demo = bool(self._demo_mode_getter and self._demo_mode_getter())
 
-        # If the scan completed while the DM was hidden (e.g. the user closed
-        # the startup DM before the 3-second deferred scan fired), re-show it
-        # so the QMessageBox has a visible parent and renders correctly.
-        if not self.isVisible():
-            self.show()
+        # If the user deliberately closed the Device Manager (closeEvent set
+        # _user_closed=True), do not force it back open.  The deferred scan
+        # may still complete after the DM was closed; silently discard the
+        # offer rather than re-opening a window the user just dismissed.
+        if self._user_closed:
+            return
 
         box = QMessageBox(self)
         box.setWindowTitle("No Devices Found")
