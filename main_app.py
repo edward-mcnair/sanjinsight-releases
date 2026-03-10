@@ -929,6 +929,20 @@ class MainWindow(QMainWindow):
             "QMenu { background:#1a1a1a; color:#ccc; border:1px solid #333; }"
             "QMenu::item:selected { background:#222; }")
 
+        # ── File menu ────────────────────────────────────────────
+        # "Quit" on macOS (Cmd+Q, auto-merged into the application menu by Qt);
+        # "Exit" on Windows / Linux (Ctrl+Q, plus the standard Alt+F4 still works).
+        # Both routes call self.close() so the full closeEvent() shutdown
+        # sequence runs in every case.
+        file_menu = mb.addMenu("File")
+
+        _is_mac   = sys.platform == "darwin"
+        _quit_lbl = f"Quit {APP_NAME}" if _is_mac else "Exit"
+        act_quit  = file_menu.addAction(_quit_lbl)
+        act_quit.setShortcut(QKeySequence.Quit)          # Cmd+Q / Ctrl+Q
+        act_quit.setMenuRole(QAction.QuitRole)           # macOS: move to app menu
+        act_quit.triggered.connect(self.close)
+
         # ── Acquisition menu ─────────────────────────────────────
         acq_menu = mb.addMenu("Acquisition")
 
