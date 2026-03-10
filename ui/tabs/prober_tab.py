@@ -25,7 +25,7 @@ log = logging.getLogger(__name__)
 from PyQt5.QtWidgets import (
     QWidget, QLabel, QPushButton, QDoubleSpinBox, QSpinBox,
     QVBoxLayout, QHBoxLayout, QGridLayout, QGroupBox,
-    QSizePolicy, QMessageBox)
+    QProgressBar, QSizePolicy, QMessageBox)
 from PyQt5.QtCore import Qt, QTimer, QRect, QPoint
 from PyQt5.QtGui  import (QPainter, QColor, QPen, QFont,
                            QBrush, QFontMetrics)
@@ -188,6 +188,17 @@ class ProberTab(QWidget):
         self._conn_lbl.setAlignment(Qt.AlignCenter)
         root.addWidget(self._conn_lbl)
 
+        # ── Motion busy indicator (shown only while a command is running) ─
+        self._prog = QProgressBar()
+        self._prog.setRange(0, 0)          # indeterminate / animated
+        self._prog.setFixedHeight(3)
+        self._prog.setTextVisible(False)
+        self._prog.setVisible(False)
+        self._prog.setStyleSheet(
+            "QProgressBar { background:#1a1a1a; border:none; margin:0; }"
+            "QProgressBar::chunk { background:#00d4aa; }")
+        root.addWidget(self._prog)
+
         # ── Position readouts ─────────────────────────────────────────
         pos_box = QGroupBox("Chuck Position")
         pl = QHBoxLayout(pos_box)
@@ -230,17 +241,17 @@ class ProberTab(QWidget):
         self._row_spin.setFixedWidth(80)
         self._row_spin.setToolTip("Wafer map row (0-based)")
 
-        step_btn = QPushButton("Step →")
-        step_btn.setObjectName("primary")
-        step_btn.setFixedWidth(80)
-        step_btn.setFixedHeight(30)
-        step_btn.clicked.connect(self._step_to_die)
+        self._step_btn = QPushButton("Step →")
+        self._step_btn.setObjectName("primary")
+        self._step_btn.setFixedWidth(80)
+        self._step_btn.setFixedHeight(30)
+        self._step_btn.clicked.connect(self._step_to_die)
 
-        dl.addWidget(QLabel("Col:"),   0, 0)
-        dl.addWidget(self._col_spin,   0, 1)
-        dl.addWidget(QLabel("Row:"),   0, 2)
-        dl.addWidget(self._row_spin,   0, 3)
-        dl.addWidget(step_btn,         0, 4)
+        dl.addWidget(QLabel("Col:"),       0, 0)
+        dl.addWidget(self._col_spin,       0, 1)
+        dl.addWidget(QLabel("Row:"),       0, 2)
+        dl.addWidget(self._row_spin,       0, 3)
+        dl.addWidget(self._step_btn,       0, 4)
         left.addWidget(die_box)
 
         # Contact / Lift
@@ -343,7 +354,7 @@ class ProberTab(QWidget):
         # Enable/disable interactive controls
         for w in [self._ax, self._ay, self._az,
                   self._col_spin, self._row_spin,
-                  self._contact_btn, self._lift_btn,
+                  self._step_btn, self._contact_btn, self._lift_btn,
                   self._home_btn, self._stop_btn]:
             w.setEnabled(connected)
 
@@ -437,15 +448,39 @@ class ProberTab(QWidget):
                 log.warning("Prober stop error: %s", exc)
 
     # ---------------------------------------------------------------- #
+    #  Busy state                                                      #
+    # ---------------------------------------------------------------- #
+
+    def _set_busy(self, busy: bool) -> None:
+        """Disable all motion controls while a command is executing.
+
+        The Stop button is kept enabled at all times so the user can always
+        issue an emergency stop regardless of what is running.
+        """
+        self._prog.setVisible(busy)
+        for w in [self._step_btn, self._contact_btn, self._lift_btn,
+                  self._home_btn, self._ax, self._ay, self._az,
+                  self._col_spin, self._row_spin, self._die_grid]:
+            w.setEnabled(not busy)
+        # Stop button is always accessible when connected
+        if self._prober is not None:
+            self._stop_btn.setEnabled(True)
+
+    # ---------------------------------------------------------------- #
     #  Async execution helper                                          #
     # ---------------------------------------------------------------- #
 
     def _execute_async(self, fn, on_done=None):
-        """
-        Run *fn* in a daemon thread so the GUI stays responsive.
-        Optionally calls *on_done* (on the GUI thread via QTimer) after fn.
+        """Run *fn* in a daemon thread so the GUI stays responsive.
+
+        Shows the thin progress bar and locks all motion controls for the
+        duration.  The Stop button stays enabled so the user can always
+        issue a hardware stop.  *on_done* is called on the GUI thread after
+        *fn* completes (whether it succeeded or raised).
         """
         import threading
+
+        self._set_busy(True)
 
         def _worker():
             try:
@@ -454,9 +489,9 @@ class ProberTab(QWidget):
                 log.warning("Prober action error: %s", exc)
             finally:
                 if on_done is not None:
-                    # Schedule on_done for the GUI thread
                     QTimer.singleShot(0, on_done)
                 QTimer.singleShot(0, self._refresh_position)
+                QTimer.singleShot(0, lambda: self._set_busy(False))
 
         t = threading.Thread(target=_worker, daemon=True)
         t.start()

@@ -16,7 +16,7 @@ from PyQt5.QtWidgets import (
     QWidget, QLabel, QPushButton, QSpinBox, QDoubleSpinBox,
     QProgressBar, QVBoxLayout, QHBoxLayout, QGridLayout,
     QGroupBox, QComboBox, QTextEdit, QFileDialog)
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from ui.icons import set_btn_icon
 
 from hardware.app_state import app_state
@@ -333,12 +333,18 @@ class AcquireTab(QWidget):
 
     def _cap_cold(self):
         self._set_busy(True)
+        self._progress.setRange(0, 0)   # indeterminate spinner while capturing
         self.log("Capturing cold frames...")
+
+        def _done():
+            self._progress.setRange(0, 100)
+            self._set_busy(False)
+
         def _run():
             pl = app_state.pipeline
             if pl is None:
                 self.log("No acquisition pipeline — is hardware connected?")
-                self._set_busy(False)
+                QTimer.singleShot(0, _done)
                 return
             r = pl.capture_reference(self._frames.value())
             if r is not None:
@@ -348,17 +354,24 @@ class AcquireTab(QWidget):
                 self._result.cold_avg = r
                 self._cold_pane.show_array(r)
                 self.log(f"Cold: mean={r.mean():.1f}")
-            self._set_busy(False)
+            QTimer.singleShot(0, _done)
+
         threading.Thread(target=_run, daemon=True).start()
 
     def _cap_hot(self):
         self._set_busy(True)
+        self._progress.setRange(0, 0)   # indeterminate spinner while capturing
         self.log("Capturing hot frames...")
+
+        def _done():
+            self._progress.setRange(0, 100)
+            self._set_busy(False)
+
         def _run():
             pl = app_state.pipeline
             if pl is None:
                 self.log("No acquisition pipeline — is hardware connected?")
-                self._set_busy(False)
+                QTimer.singleShot(0, _done)
                 return
             r = pl.capture_reference(self._frames.value())
             if r is not None:
@@ -372,7 +385,8 @@ class AcquireTab(QWidget):
                     from acquisition.pipeline import AcquisitionPipeline
                     AcquisitionPipeline._compute(self._result)
                     self.update_result(self._result)
-            self._set_busy(False)
+            QTimer.singleShot(0, _done)
+
         threading.Thread(target=_run, daemon=True).start()
 
     def _run(self):

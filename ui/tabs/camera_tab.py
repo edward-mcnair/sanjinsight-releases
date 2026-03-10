@@ -29,7 +29,7 @@ from PyQt5.QtWidgets import (
     QWidget, QLabel, QPushButton, QSlider, QVBoxLayout, QHBoxLayout,
     QGridLayout, QGroupBox, QButtonGroup, QRadioButton, QFrame, QComboBox,
     QFileDialog)
-from PyQt5.QtCore    import Qt
+from PyQt5.QtCore    import Qt, QTimer
 
 from hardware.app_state    import app_state
 from ui.widgets.image_pane import ImagePane
@@ -497,12 +497,24 @@ class CameraTab(QWidget):
 
         import threading
 
+        # Disable the combo so the user can't queue another move while this
+        # one is in progress, and replace the FOV label with a live status.
+        self._obj_combo.setEnabled(False)
+        self._obj_fov_lbl.setText("Moving turret…")
+        self._obj_fov_lbl.setStyleSheet(
+            f"font-size:{FONT['caption']}pt; "
+            f"color:{PALETTE['warning']}; padding-left:2px;")
+
         def _move():
             try:
                 turret.move_to(obj.position)
                 app_state.active_objective = obj
             except Exception as exc:
                 log.warning("Turret move error: %s", exc)
+            finally:
+                # Re-enable the combo and restore the FOV readout.
+                QTimer.singleShot(0, lambda: self._obj_combo.setEnabled(True))
+                QTimer.singleShot(0, lambda: self._update_fov_label(obj))
 
         threading.Thread(target=_move, daemon=True).start()
 

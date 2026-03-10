@@ -126,6 +126,12 @@ class _OllamaInstallThread(QThread):
     finished(bool, str) when done.
 
     Only used on Windows.  On macOS/Linux the caller opens the browser directly.
+
+    Supports mid-download cancellation via QThread.requestInterruption():
+    the reporthook checks isInterruptionRequested() on every block and raises
+    InterruptedError to abort urlretrieve cleanly.  The finished signal is
+    then emitted with (False, "cancelled") so the UI can distinguish a
+    cancellation from a real download error.
     """
 
     progress = pyqtSignal(int, str)   # (percent 0-100, human-readable message)
@@ -141,6 +147,8 @@ class _OllamaInstallThread(QThread):
         tmp_path = os.path.join(tempfile.gettempdir(), "OllamaSetup.exe")
 
         def _reporthook(block_num: int, block_size: int, total_size: int) -> None:
+            if self.isInterruptionRequested():
+                raise InterruptedError("download cancelled")
             if total_size > 0:
                 pct    = min(int(block_num * block_size / total_size * 100), 99)
                 mb     = block_num * block_size // 1_000_000
@@ -157,6 +165,8 @@ class _OllamaInstallThread(QThread):
                 "Installer launched.  Complete the setup window, "
                 "then click  ⟳ Check Again  below.",
             )
+        except InterruptedError:
+            self.finished.emit(False, "cancelled")
         except Exception as exc:
             self.finished.emit(False, f"Download failed: {exc}")
 
@@ -169,6 +179,9 @@ class _OllamaPullThread(QThread):
     -------
     output_line(str)       one line of stdout/stderr from the pull command
     finished(bool, str)    (success, summary message)
+
+    Call cancel() to terminate the subprocess mid-pull.  The finished signal
+    is then emitted with (False, "cancelled").
     """
 
     output_line = pyqtSignal(str)
@@ -177,6 +190,15 @@ class _OllamaPullThread(QThread):
     def __init__(self, model: str, parent=None):
         super().__init__(parent)
         self._model = model
+        self._proc  = None   # set once the subprocess is running
+
+    def cancel(self) -> None:
+        """Terminate the ollama pull subprocess immediately."""
+        if self._proc is not None:
+            try:
+                self._proc.terminate()
+            except Exception:
+                pass
 
     def run(self) -> None:
         import subprocess
@@ -190,7 +212,7 @@ class _OllamaPullThread(QThread):
             )
             return
         try:
-            proc = subprocess.Popen(
+            self._proc = subprocess.Popen(
                 [exe, "pull", self._model],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
@@ -198,17 +220,24 @@ class _OllamaPullThread(QThread):
                 encoding="utf-8",
                 errors="replace",
             )
-            for raw_line in proc.stdout:
+            for raw_line in self._proc.stdout:
                 line = raw_line.rstrip()
                 if line:
                     self.output_line.emit(line)
-            proc.wait()
-            if proc.returncode == 0:
+            self._proc.wait()
+            if self._proc.returncode == 0:
                 self.finished.emit(True,  f"✓  {self._model} is ready")
+            elif self._proc.returncode in (-15, -9, 1) and \
+                    self.isInterruptionRequested():
+                # SIGTERM / SIGKILL / Windows terminate → treat as user cancel
+                self.finished.emit(False, "cancelled")
             else:
-                self.finished.emit(False, f"Pull failed (exit {proc.returncode})")
+                self.finished.emit(
+                    False, f"Pull failed (exit {self._proc.returncode})")
         except Exception as exc:
             self.finished.emit(False, str(exc))
+        finally:
+            self._proc = None
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -925,6 +954,15 @@ class SettingsTab(QWidget):
         self._ollama_install_prog.setVisible(False)
         ib.addWidget(self._ollama_install_prog)
 
+        # Cancel button — visible only while the download is in progress.
+        self._ollama_install_cancel_btn = QPushButton("✕  Cancel Download")
+        self._ollama_install_cancel_btn.setStyleSheet(_BTN_SECONDARY)
+        self._ollama_install_cancel_btn.setFixedWidth(180)
+        self._ollama_install_cancel_btn.setVisible(False)
+        self._ollama_install_cancel_btn.clicked.connect(
+            self._on_install_cancel_clicked)
+        ib.addWidget(self._ollama_install_cancel_btn)
+
         self._ollama_install_msg = QLabel("")
         self._ollama_install_msg.setStyleSheet(f"font-size:11pt; color:{_MUTED};")
         self._ollama_install_msg.setWordWrap(True)
@@ -970,6 +1008,14 @@ class SettingsTab(QWidget):
         self._ollama_pull_btn.setFixedWidth(140)
         self._ollama_pull_btn.clicked.connect(self._on_pull_model_clicked)
         pull_row.addWidget(self._ollama_pull_btn)
+
+        # Cancel button shown next to Pull Model while pulling.
+        self._ollama_pull_cancel_btn = QPushButton("✕  Cancel")
+        self._ollama_pull_cancel_btn.setStyleSheet(_BTN_SECONDARY)
+        self._ollama_pull_cancel_btn.setFixedWidth(100)
+        self._ollama_pull_cancel_btn.setVisible(False)
+        self._ollama_pull_cancel_btn.clicked.connect(self._on_pull_cancel_clicked)
+        pull_row.addWidget(self._ollama_pull_cancel_btn)
         pb2.addLayout(pull_row)
 
         self._ollama_pull_prog = QProgressBar()
@@ -1183,6 +1229,7 @@ class SettingsTab(QWidget):
             self._ollama_install_btn.setEnabled(False)
             self._ollama_install_prog.setValue(0)
             self._ollama_install_prog.setVisible(True)
+            self._ollama_install_cancel_btn.setVisible(True)
             self._ollama_install_msg.setText("Connecting to ollama.com…")
             self._ollama_install_msg.setStyleSheet(
                 f"font-size:11pt; color:{_MUTED};")
@@ -1209,13 +1256,27 @@ class SettingsTab(QWidget):
         if hasattr(self, "_ollama_install_msg"):
             self._ollama_install_msg.setText(msg)
 
+    def _on_install_cancel_clicked(self) -> None:
+        """User hit ✕ Cancel Download — interrupt the download thread."""
+        if hasattr(self, "_install_thread") and self._install_thread.isRunning():
+            self._install_thread.requestInterruption()
+        if hasattr(self, "_ollama_install_cancel_btn"):
+            self._ollama_install_cancel_btn.setEnabled(False)
+            self._ollama_install_cancel_btn.setText("Cancelling…")
+
     def _on_install_finished(self, ok: bool, msg: str) -> None:
         if hasattr(self, "_ollama_install_prog"):
             self._ollama_install_prog.setVisible(False)
+        if hasattr(self, "_ollama_install_cancel_btn"):
+            self._ollama_install_cancel_btn.setVisible(False)
+            self._ollama_install_cancel_btn.setEnabled(True)
+            self._ollama_install_cancel_btn.setText("✕  Cancel Download")
+        _cancelled = (msg == "cancelled")
         if hasattr(self, "_ollama_install_msg"):
-            self._ollama_install_msg.setText(msg)
+            self._ollama_install_msg.setText(
+                "Download cancelled." if _cancelled else msg)
             self._ollama_install_msg.setStyleSheet(
-                f"font-size:11pt; color:{_GREEN if ok else _DANGER};")
+                f"font-size:11pt; color:{_MUTED if _cancelled else (_GREEN if ok else _DANGER)};")
         if hasattr(self, "_ollama_install_btn"):
             self._ollama_install_btn.setEnabled(True)
             if ok:
@@ -1233,6 +1294,8 @@ class SettingsTab(QWidget):
             return
 
         self._ollama_pull_btn.setEnabled(False)
+        self._ollama_pull_cancel_btn.setVisible(True)
+        self._ollama_pull_cancel_btn.setEnabled(True)
         self._ollama_pull_prog.setVisible(True)
         self._ollama_pull_msg.setText(
             f"Downloading  {model} …  (this may take a few minutes)")
@@ -1250,15 +1313,30 @@ class SettingsTab(QWidget):
             # Trim to 80 chars so it fits on one line
             self._ollama_pull_msg.setText(line[:80])
 
+    def _on_pull_cancel_clicked(self) -> None:
+        """User hit ✕ Cancel — terminate the ollama pull subprocess."""
+        if hasattr(self, "_pull_thread") and self._pull_thread.isRunning():
+            self._pull_thread.requestInterruption()
+            self._pull_thread.cancel()
+        if hasattr(self, "_ollama_pull_cancel_btn"):
+            self._ollama_pull_cancel_btn.setEnabled(False)
+            self._ollama_pull_cancel_btn.setText("Cancelling…")
+
     def _on_pull_finished(self, ok: bool, msg: str) -> None:
         if hasattr(self, "_ollama_pull_prog"):
             self._ollama_pull_prog.setVisible(False)
+        if hasattr(self, "_ollama_pull_cancel_btn"):
+            self._ollama_pull_cancel_btn.setVisible(False)
+            self._ollama_pull_cancel_btn.setEnabled(True)
+            self._ollama_pull_cancel_btn.setText("✕  Cancel")
         if hasattr(self, "_ollama_pull_btn"):
             self._ollama_pull_btn.setEnabled(True)
+        _cancelled = (msg == "cancelled")
         if hasattr(self, "_ollama_pull_msg"):
-            self._ollama_pull_msg.setText(msg)
+            self._ollama_pull_msg.setText(
+                "Pull cancelled." if _cancelled else msg)
             self._ollama_pull_msg.setStyleSheet(
-                f"font-size:11pt; color:{_GREEN if ok else _DANGER};")
+                f"font-size:11pt; color:{_MUTED if _cancelled else (_GREEN if ok else _DANGER)};")
         if ok:
             # Re-detect — pull box will hide and model combo will populate
             QTimer.singleShot(500, lambda: self._ollama_refresh_models(silent=False))
