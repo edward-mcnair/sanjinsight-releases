@@ -114,6 +114,23 @@ DEVICE_REGISTRY: dict[str, DeviceDescriptor] = {
         datasheet_url  = "https://www.baslerweb.com/en/products/cameras/area-scan-cameras/ace/aca1920-155um/",
     ),
 
+    "basler_aca2040_90umnir": DeviceDescriptor(
+        uid            = "basler_aca2040_90umnir",
+        display_name   = "Basler acA2040-90umNIR",
+        manufacturer   = "Basler AG",
+        device_type    = DTYPE_CAMERA,
+        connection_type= CONN_USB,
+        driver_module  = "hardware.cameras.pypylon_driver",
+        driver_version = "builtin",
+        hot_loadable   = False,
+        usb_vid        = 0x2676,    # Basler USB3 Vision VID (all models)
+        usb_pid        = 0xBA02,    # USB3 Vision standard PID
+        serial_patterns= ["Basler", "acA2040", "acA2040-90umNIR"],
+        description    = "USB3 Vision near-infrared (NIR) camera, 2048×1536 @ 90 fps. "
+                         "NIR-optimised sensor for thermoreflectance at 850–1000 nm.",
+        datasheet_url  = "https://www.baslerweb.com/en/products/cameras/area-scan-cameras/ace/aca2040-90umnir/",
+    ),
+
     "basler_aca640_750um": DeviceDescriptor(
         uid            = "basler_aca640_750um",
         display_name   = "Basler acA640-750um",

@@ -295,27 +295,136 @@ class NiScanner:
 
 class CameraScanner:
     """
-    Placeholder for camera SDK enumeration (Basler pypylon / NI IMAQdx).
+    Enumerates Basler cameras using pypylon.TlFactory.EnumerateDevices().
 
-    Both SDKs load native C++ DLLs at import time:
-    - pypylon   → GeniCam + Basler pylon runtime (Win32/64 DLLs)
-    - niimaqdx  → NI Vision Acquisition Software DLL stack
+    Safety approach — subprocess isolation
+    ----------------------------------------
+    pypylon loads native Basler pylon C++ DLLs.  On Windows machines that also
+    run NI hardware (NI USB-TC01, NI-DAQmx, NI-RIO) those DLLs can occasionally
+    trigger access-violations during initialisation that bypass Python exception
+    handling and kill the process.
 
-    On Windows systems that also have NI hardware (USB-TC01, NI-DAQmx, etc.)
-    these DLLs can trigger access-violations during initialisation that
-    bypass Python exception handling and terminate the process.  Cameras
-    supported by SanjINSIGHT (Basler acA series) are added manually via the
-    Device Manager dialog, so auto-discovery is not required for normal
-    operation.
+    To prevent a camera scan crash from taking down the SanjINSIGHT UI, the
+    enumeration runs in a *separate child process* (sys.executable -c ...).
+    The child can crash or be killed without affecting the parent.  Results are
+    passed back via stdout as a JSON array.
 
-    If camera auto-discovery is needed in future, re-enable this scanner
-    only after confirming that the pypylon / IMAQdx DLL stack does not
-    conflict with the NI driver stack present on the target machine.
+    The scan never opens a camera — it only calls EnumerateDevices() which
+    queries the transport layer for attached devices.  This is safe even if a
+    camera is in use by another application.
     """
 
+    # Embedded script run in the child process.
+    # Written as a single string so no temp file is needed.
+    _ENUM_SCRIPT = (
+        "import json, sys\n"
+        "try:\n"
+        "    from pypylon import pylon\n"
+        "    devs = pylon.TlFactory.GetInstance().EnumerateDevices()\n"
+        "    out = []\n"
+        "    for d in devs:\n"
+        "        entry = {\n"
+        "            'model':        d.GetModelName(),\n"
+        "            'serial':       '',\n"
+        "            'device_class': d.GetDeviceClass(),\n"
+        "            'ip':           '',\n"
+        "            'full_name':    '',\n"
+        "        }\n"
+        "        try:  entry['serial']    = d.GetSerialNumber()\n"
+        "        except Exception: pass\n"
+        "        try:  entry['full_name'] = d.GetFullName()\n"
+        "        except Exception: pass\n"
+        "        try:\n"
+        "            if 'GigE' in entry['device_class']:\n"
+        "                entry['ip'] = d.GetIpAddress()\n"
+        "        except Exception: pass\n"
+        "        out.append(entry)\n"
+        "    print(json.dumps(out))\n"
+        "except ImportError:\n"
+        "    sys.stderr.write('pypylon_not_installed')\n"
+        "    sys.exit(2)\n"
+        "except Exception as exc:\n"
+        "    sys.stderr.write(str(exc))\n"
+        "    sys.exit(1)\n"
+    )
+
     def scan(self) -> tuple[List[DiscoveredDevice], Optional[str]]:
-        log.debug("CameraScanner: camera SDK scanning is disabled — returning empty result")
-        return [], None
+        raw, err = self._enumerate_subprocess()
+        if err:
+            return [], err
+
+        results = []
+        for cam in raw:
+            model  = cam.get("model", "")
+            serial = cam.get("serial", "")
+            ip     = cam.get("ip", "")
+            # address: prefer serial number (unique per camera), then IP, then model
+            address = serial or ip or model
+
+            # Match against device registry by model name pattern
+            descriptor = find_by_serial_pattern(model, f"Basler {model}")
+
+            results.append(DiscoveredDevice(
+                connection_type = CONN_CAMERA,
+                address         = address,
+                description     = model,
+                manufacturer    = "Basler AG",
+                serial_number   = serial,
+                descriptor      = descriptor,
+            ))
+            log.debug("CameraScanner: found %s  serial=%s  class=%s",
+                      model, serial, cam.get("device_class"))
+
+        return results, None
+
+    # ------------------------------------------------------------------
+    def _enumerate_subprocess(self) -> tuple[list, Optional[str]]:
+        """
+        Run the pypylon enumeration script in a child process.
+        Returns (list_of_camera_dicts, error_string_or_None).
+        """
+        import subprocess, json
+
+        try:
+            result = subprocess.run(
+                [sys.executable, "-c", self._ENUM_SCRIPT],
+                capture_output=True,
+                text=True,
+                timeout=12,          # pylon SDK init can be slow on first run
+            )
+        except subprocess.TimeoutExpired:
+            log.warning("CameraScanner: pypylon subprocess timed out after 12 s")
+            return [], "Camera scan timed out — pylon SDK may be busy"
+        except Exception as exc:
+            log.warning("CameraScanner: failed to launch subprocess: %s", exc)
+            return [], f"Camera scan subprocess error: {exc}"
+
+        if result.returncode == 2:
+            # pypylon not installed — expected on non-Basler systems
+            log.debug("CameraScanner: pypylon not installed in this environment")
+            return [], "pypylon not installed — install Basler pylon SDK then: pip install pypylon"
+
+        if result.returncode != 0:
+            err = result.stderr.strip() or "pypylon subprocess exited with non-zero code"
+            log.warning("CameraScanner: subprocess returned %d: %s",
+                        result.returncode, err[:200])
+            return [], err[:200]
+
+        stdout = result.stdout.strip()
+        if not stdout:
+            log.debug("CameraScanner: subprocess returned empty output — no cameras found")
+            return [], None
+
+        try:
+            data = json.loads(stdout)
+        except json.JSONDecodeError as exc:
+            log.warning("CameraScanner: JSON parse error: %s  raw=%r", exc, stdout[:200])
+            return [], f"Camera scan parse error: {exc}"
+
+        if not isinstance(data, list):
+            return [], "Unexpected data from camera scan subprocess"
+
+        return data, None
 
 
 # ------------------------------------------------------------------ #

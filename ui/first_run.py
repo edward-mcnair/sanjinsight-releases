@@ -870,11 +870,15 @@ class _PageCamera(_PageBase):
 
         if not cam_devs:
             self._detection_label.setText(
-                "⚠  No camera detected — check USB/GigE connection and SDK installation")
+                "⚠  No camera detected — check USB/GigE connection and pylon SDK installation.\n"
+                "    Install Basler pylon 8 from baslerweb.com, then: pip install pypylon")
             self._detection_label.setStyleSheet(_SS_BADGE_WARN)
             self._detection_label.setVisible(True)
             return 0
 
+        # Use first detected camera to pre-fill the form.
+        # If more than one camera is found, list all of them in the badge
+        # so the user knows which serial number to enter for which slot.
         cam    = cam_devs[0]
         module = cam.descriptor.driver_module if cam.descriptor else ""
 
@@ -885,6 +889,8 @@ class _PageCamera(_PageBase):
                 self._serial.setText(cam.serial_number)
             label = (cam.descriptor.display_name
                      if cam.descriptor else cam.description)
+            if cam.serial_number:
+                label += f"  (s/n {cam.serial_number})"
 
         elif "ni_imaqdx" in module or "imaqdx" in cam.description.lower():
             self._drv.setCurrentText("ni_imaqdx")
@@ -896,11 +902,21 @@ class _PageCamera(_PageBase):
         else:
             label = cam.description or cam.address
 
+        # If multiple cameras found, append a summary of the others
+        if len(cam_devs) > 1:
+            others = []
+            for extra in cam_devs[1:]:
+                extra_label = extra.description
+                if extra.serial_number:
+                    extra_label += f" (s/n {extra.serial_number})"
+                others.append(extra_label)
+            label += f"\n    Also found: {', '.join(others)}"
+
         self._detection_label.setText(f"✓  Detected: {label}")
         self._detection_label.setStyleSheet(_SS_BADGE_OK)
         self._detection_label.setVisible(True)
         self._update_hints(self._drv.currentText())
-        return 1
+        return len(cam_devs)
 
     def values(self) -> dict:
         return {
