@@ -66,6 +66,7 @@ from PyQt5.QtCore    import Qt, QTimer, pyqtSignal, QSize, QModelIndex
 from PyQt5.QtGui     import QColor, QFont, QIcon, QBrush
 
 from hardware.device_registry import (
+    DEVICE_REGISTRY,
     DTYPE_CAMERA, DTYPE_TEC, DTYPE_FPGA, DTYPE_STAGE, DTYPE_BIAS,
     DTYPE_UNKNOWN, CONN_SERIAL, CONN_ETHERNET, CONN_USB, CONN_PCIE)
 from hardware.device_manager  import DeviceManager, DeviceState, DeviceEntry
@@ -829,10 +830,52 @@ class _DeviceProfilePanel(QWidget):
 
                     enriched = dict(base_map)
                     for pi in port_info:
-                        desc = (pi.description or "").strip()
-                        if desc and desc.lower() not in ("", "n/a",
-                                                          pi.device.lower()):
-                            enriched[pi.device] = f"{pi.device}  —  {desc}"
+                        port_desc = (getattr(pi, 'description',  '') or '').strip()
+                        hwid      = (getattr(pi, 'hwid',         '') or '').strip()
+                        serial_no = (getattr(pi, 'serial_number','') or '').strip()
+                        vid       = getattr(pi, 'vid', None)
+                        pid       = getattr(pi, 'pid', None)
+
+                        # ── 1. Exact VID+PID match against device registry ──
+                        matched = []
+                        if vid and pid:
+                            matched = [
+                                d for d in DEVICE_REGISTRY.values()
+                                if d.usb_vid == vid and d.usb_pid == pid
+                                and d.device_type != DTYPE_CAMERA
+                                and d.connection_type in (CONN_SERIAL, CONN_USB)
+                            ]
+
+                        # ── 2. serial_patterns text match (description/hwid) ─
+                        if not matched and (port_desc or hwid):
+                            search = (port_desc + " " + hwid).lower()
+                            matched = [
+                                d for d in DEVICE_REGISTRY.values()
+                                if d.device_type != DTYPE_CAMERA
+                                and d.connection_type in (CONN_SERIAL, CONN_USB)
+                                and any(p.lower() in search
+                                        for p in d.serial_patterns if p)
+                            ]
+
+                        # ── 3. Build the dropdown label ──────────────────────
+                        if matched:
+                            # Deduplicate display names (TEC-1089 & LDD-1121
+                            # share the same FTDI VID:PID 0403:6001)
+                            unique_names = list(dict.fromkeys(
+                                d.display_name for d in matched))
+                            instr = "  or  ".join(unique_names)
+                            # Append Windows device-manager name if it adds info
+                            adapter = (f"  ({port_desc})"
+                                       if port_desc and
+                                       not any(n.lower() in port_desc.lower()
+                                               for n in unique_names)
+                                       else "")
+                            sn = f"  s/n {serial_no}" if serial_no else ""
+                            enriched[pi.device] = (
+                                f"{pi.device}  —  {instr}{adapter}{sn}")
+                        elif port_desc and port_desc.lower() not in (
+                                "", "n/a", pi.device.lower()):
+                            enriched[pi.device] = f"{pi.device}  —  {port_desc}"
                         else:
                             enriched.setdefault(pi.device, pi.device)
 
