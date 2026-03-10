@@ -688,13 +688,35 @@ class _DeviceProfilePanel(QWidget):
 
         r = 0
         if ct in (CONN_SERIAL, CONN_USB):
+            # ── Port row: editable combo + ⟳/✕ refresh-or-cancel button ──────
             pg.addWidget(self._sublabel("Port"), r, 0)
+            port_row_w = QWidget()
+            port_row_lay = QHBoxLayout(port_row_w)
+            port_row_lay.setContentsMargins(0, 0, 0, 0)
+            port_row_lay.setSpacing(4)
+
             port_combo = QComboBox()
             port_combo.setEditable(True)         # user can type any port directly
             port_combo.setInsertPolicy(QComboBox.InsertAtTop)
-            pg.addWidget(port_combo, r, 1)
+            port_combo.setMinimumWidth(140)
+            port_row_lay.addWidget(port_combo, 1)
+
+            refresh_btn = QPushButton("⟳")
+            refresh_btn.setFixedSize(26, 26)
+            refresh_btn.setToolTip("Refresh port list")
+            refresh_btn.setStyleSheet(
+                "QPushButton{background:#1e1e1e; color:#888;"
+                " border:1px solid #333; border-radius:4px; font-size:11pt;}"
+                "QPushButton:hover{color:#bbb; border-color:#555;}"
+                "QPushButton:disabled{color:#444;}")
+            port_row_lay.addWidget(refresh_btn)
+
+            pg.addWidget(port_row_w, r, 1)
             self._param_widgets["port"] = port_combo
             r += 1
+
+            # Shared cancel event; set to abort an in-progress description scan
+            _scan_cancel = threading.Event()
 
             def _port_sort_key(dev: str):
                 m = re.match(r"([A-Za-z]+)(\d+)", dev)
@@ -703,22 +725,18 @@ class _DeviceProfilePanel(QWidget):
             def _populate_port_combo(combo, pmap, saved_addr, placeholder=""):
                 """Rebuild combo items from pmap dict; always runs on main thread."""
                 try:
-                    # Preserve whatever the user currently has selected/typed
                     current = (combo.currentData()
                                or combo.currentText().split("  —  ")[0].strip())
                     combo.clear()
                     items = sorted(pmap.items(),
                                    key=lambda kv: _port_sort_key(kv[0]))
                     for device, label in items:
-                        # userData = plain "COM7"; text = "COM7  —  FTDI USB …"
                         combo.addItem(label, device)
-                    # Ensure the previously-saved port is always present
                     if saved_addr:
                         existing = [combo.itemData(j) or combo.itemText(j)
                                     for j in range(combo.count())]
                         if saved_addr not in existing:
                             combo.insertItem(0, saved_addr, saved_addr)
-                    # Re-select: prefer the current selection, then saved_addr
                     for sel in (current, saved_addr):
                         if not sel:
                             continue
@@ -737,44 +755,56 @@ class _DeviceProfilePanel(QWidget):
                         combo.lineEdit().setPlaceholderText(placeholder)
                     combo.setEnabled(True)
                 except RuntimeError:
-                    pass  # widget was deleted; silently discard
-
-            # ── Stage 1: Windows registry scan (synchronous, instant) ─────────
-            # Reading HARDWARE\DEVICEMAP\SERIALCOMM never touches a driver and
-            # returns in milliseconds even on machines with NI hardware.
-            # serial.tools.list_ports.comports() queries each port's driver and
-            # can block for 30+ seconds on NI-hardware-equipped machines.
-            port_map_initial: dict[str, str] = {}
-            if sys.platform.startswith("win"):
-                try:
-                    import winreg
-                    _reg_key = winreg.OpenKey(
-                        winreg.HKEY_LOCAL_MACHINE,
-                        r"HARDWARE\DEVICEMAP\SERIALCOMM")
-                    _ri = 0
-                    while True:
-                        try:
-                            _, _val, _ = winreg.EnumValue(_reg_key, _ri)
-                            port_map_initial[str(_val)] = str(_val)
-                            _ri += 1
-                        except OSError:
-                            break
-                except Exception:
                     pass
 
-            # Populate the combo immediately — user can interact right away.
+            def _set_refresh_btn(scanning: bool):
+                try:
+                    if scanning:
+                        refresh_btn.setText("✕")
+                        refresh_btn.setToolTip("Stop scanning")
+                    else:
+                        refresh_btn.setText("⟳")
+                        refresh_btn.setToolTip("Refresh port list")
+                except RuntimeError:
+                    pass
+
+            def _registry_scan() -> dict:
+                """Return {device: device} from Windows registry (instant)."""
+                pmap: dict[str, str] = {}
+                if sys.platform.startswith("win"):
+                    try:
+                        import winreg
+                        _rk = winreg.OpenKey(
+                            winreg.HKEY_LOCAL_MACHINE,
+                            r"HARDWARE\DEVICEMAP\SERIALCOMM")
+                        _ri = 0
+                        while True:
+                            try:
+                                _, _v, _ = winreg.EnumValue(_rk, _ri)
+                                pmap[str(_v)] = str(_v)
+                                _ri += 1
+                            except OSError:
+                                break
+                    except Exception:
+                        pass
+                return pmap
+
+            # ── Stage 1: registry scan — instant, runs on main thread ─────────
+            port_map_initial = _registry_scan()
             _populate_port_combo(port_combo, port_map_initial, entry.address,
                                  placeholder="type a port or wait for scan…")
 
-            # ── Stage 2: Enrich with pyserial descriptions (background) ───────
-            # comports() adds friendly names ("COM6  —  FTDI USB Serial Device")
-            # but can stall on NI hardware.  Run it in a worker thread capped
-            # at 4 s; use shutdown(wait=False) so a stalled thread never blocks
-            # this thread from finishing and calling _populate_port_combo.
+            # ── Stage 2: pyserial descriptions — background, cancellable ──────
+            # comports() can stall 30+ seconds on NI-hardware systems.
+            # shutdown(wait=False) ensures the enrichment thread is never blocked
+            # by a hung lp.comports() worker.
             def _enrich_port_descriptions(
                     combo=port_combo,
                     base_map=dict(port_map_initial),
-                    saved=entry.address):
+                    saved=entry.address,
+                    cancel=_scan_cancel):
+                cancel.clear()
+                QTimer.singleShot(0, lambda: _set_refresh_btn(True))
                 try:
                     import concurrent.futures
                     import serial.tools.list_ports as lp
@@ -785,7 +815,11 @@ class _DeviceProfilePanel(QWidget):
                     except concurrent.futures.TimeoutError:
                         port_info = []
                     finally:
-                        _ex.shutdown(wait=False)   # abandon any stalled thread
+                        _ex.shutdown(wait=False)
+
+                    if cancel.is_set():
+                        QTimer.singleShot(0, lambda: _set_refresh_btn(False))
+                        return
 
                     enriched = dict(base_map)
                     for pi in port_info:
@@ -796,11 +830,26 @@ class _DeviceProfilePanel(QWidget):
                         else:
                             enriched.setdefault(pi.device, pi.device)
 
-                    QTimer.singleShot(
-                        0, lambda: _populate_port_combo(combo, enriched, saved))
+                    def _finish():
+                        _populate_port_combo(combo, enriched, saved)
+                        _set_refresh_btn(False)
+                    QTimer.singleShot(0, _finish)
                 except Exception:
-                    pass   # keep registry-only results; no crash
+                    QTimer.singleShot(0, lambda: _set_refresh_btn(False))
 
+            def _on_refresh_clicked():
+                if refresh_btn.text() == "✕":
+                    # Cancel in-progress scan
+                    _scan_cancel.set()
+                else:
+                    # Re-read registry immediately then launch new description scan
+                    new_map = _registry_scan()
+                    _populate_port_combo(port_combo, new_map, entry.address)
+                    threading.Thread(target=_enrich_port_descriptions,
+                                     kwargs={"base_map": new_map},
+                                     daemon=True).start()
+
+            refresh_btn.clicked.connect(_on_refresh_clicked)
             threading.Thread(target=_enrich_port_descriptions,
                              daemon=True).start()
 
@@ -836,11 +885,40 @@ class _DeviceProfilePanel(QWidget):
         pg.addWidget(timeout_spin, r, 1)
         self._param_widgets["timeout"] = timeout_spin
 
-        # Save params button
-        save_btn = QPushButton("Apply Parameters")
-        save_btn.setFixedHeight(28)
-        save_btn.clicked.connect(lambda: self._save_params(entry))
-        pg.addWidget(save_btn, r + 1, 0, 1, 2)
+        # ── Button row: Apply + Test Port (serial/USB only) ──────────────
+        btn_w = QWidget()
+        btn_lay = QHBoxLayout(btn_w)
+        btn_lay.setContentsMargins(0, 0, 0, 0)
+        btn_lay.setSpacing(6)
+
+        apply_btn = QPushButton("Apply Parameters")
+        apply_btn.setFixedHeight(28)
+        apply_btn.clicked.connect(lambda: self._save_params(entry))
+        btn_lay.addWidget(apply_btn)
+
+        if ct in (CONN_SERIAL, CONN_USB):
+            test_btn = QPushButton("🔌  Test Port")
+            test_btn.setFixedHeight(28)
+            test_btn.setToolTip(
+                "Open the selected COM port to verify it is accessible\n"
+                "and check whether the device is sending data.")
+            # _port_status_lbl is assigned just below; the lambda captures
+            # the variable by reference so it sees the QLabel when called.
+            test_btn.clicked.connect(
+                lambda: self._test_port_connection(
+                    entry, self._param_widgets, _port_status_lbl))
+            btn_lay.addWidget(test_btn)
+
+        btn_lay.addStretch()
+        pg.addWidget(btn_w, r + 1, 0, 1, 2)
+
+        # ── Inline port-test result label (hidden until Test Port is clicked) ─
+        if ct in (CONN_SERIAL, CONN_USB):
+            _port_status_lbl = QLabel()
+            _port_status_lbl.setWordWrap(True)
+            _port_status_lbl.setVisible(False)
+            _port_status_lbl.setStyleSheet("font-size:8.5pt; padding:3px 0;")
+            pg.addWidget(_port_status_lbl, r + 2, 0, 1, 2)
 
         self._body_layout.addWidget(params_box)
 
@@ -872,6 +950,113 @@ class _DeviceProfilePanel(QWidget):
 
         # Refresh display
         self.show_device(entry.uid)
+
+    # ---------------------------------------------------------------- #
+    #  Port test                                                        #
+    # ---------------------------------------------------------------- #
+
+    def _test_port_connection(self, entry: DeviceEntry,
+                               pw: dict, status_lbl: "QLabel"):
+        """Open the selected COM port and report the result inline.
+
+        Three outcomes the user can act on:
+          ✓ green  — port opened (and optional device data arrived)
+          ⚠ amber  — port opened but something looks off (no data yet)
+          ✗ red    — port could not be opened (busy / missing / wrong params)
+
+        The test runs in a background thread so the UI stays responsive.
+        """
+        port = (pw["port"].currentData()
+                or pw["port"].currentText().split("  —  ")[0].strip()
+                if "port" in pw else "")
+        port = (port or "").strip()
+
+        if not port:
+            self._set_port_status(
+                status_lbl, "⚠",
+                "No port selected — choose one from the list or type it above.",
+                "#cc8800")
+            return
+
+        baud_w = pw.get("baud")
+        baud   = int(baud_w.currentText()) if baud_w else (
+                     entry.baud_rate
+                     or entry.descriptor.default_baud
+                     or 115200)
+
+        # Show "testing…" immediately so the user gets instant feedback
+        self._set_port_status(
+            status_lbl, "⏳",
+            f"Testing {port} at {baud} baud…",
+            "#888")
+
+        def _run():
+            try:
+                import serial
+                ser = serial.Serial(port, baudrate=baud, timeout=0.5)
+                # Brief read: check if the device sends an unsolicited greeting
+                data = ser.read(4)
+                ser.close()
+                if data:
+                    self._set_port_status(
+                        status_lbl, "✓",
+                        f"{port} opened — device is already sending data. "
+                        "Click <b>Connect</b> to proceed.",
+                        "#00d4aa")
+                else:
+                    self._set_port_status(
+                        status_lbl, "✓",
+                        f"{port} opened successfully at {baud} baud. "
+                        "No unsolicited data (normal for most instruments). "
+                        "Click <b>Connect</b> to proceed.",
+                        "#00d4aa")
+            except Exception as exc:
+                msg = str(exc)
+                low = msg.lower()
+                if "access is denied" in low or "permission denied" in low:
+                    self._set_port_status(
+                        status_lbl, "✗",
+                        f"<b>{port} is in use by another application.</b>  "
+                        "Close any open terminal programs, firmware updaters, "
+                        "or instrument software that may have the port open, "
+                        "then click ⟳ and test again.",
+                        "#ff5555")
+                elif any(k in low for k in (
+                        "could not open", "no such file",
+                        "filenotfound", "no such port", "the system cannot")):
+                    self._set_port_status(
+                        status_lbl, "✗",
+                        f"<b>{port} was not found.</b>  "
+                        "Check the USB or serial cable is plugged in, "
+                        "then click ⟳ to refresh the port list.",
+                        "#ff5555")
+                elif "baud" in low or "speed" in low:
+                    self._set_port_status(
+                        status_lbl, "✗",
+                        f"<b>Baud rate {baud} is not supported by {port}.</b>  "
+                        "Try a different baud rate in the field above.",
+                        "#ff5555")
+                else:
+                    # Unknown error — show the raw message so it's diagnosable
+                    self._set_port_status(
+                        status_lbl, "⚠",
+                        f"<b>Could not open {port}:</b>  {exc}",
+                        "#cc8800")
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    @staticmethod
+    def _set_port_status(lbl: "QLabel", icon: str, text: str, color: str):
+        """Update the inline port-test status label on the Qt main thread."""
+        def _apply():
+            try:
+                lbl.setText(
+                    f"<span style='color:{color}; font-size:10pt'>{icon}</span>"
+                    f"&nbsp;&nbsp;<span style='color:#ccc'>{text}</span>")
+                lbl.setVisible(True)
+            except RuntimeError:
+                pass   # widget was deleted before the timer fired
+        QTimer.singleShot(0, _apply)
 
     def _build_actions(self, entry: DeviceEntry):
         row = QHBoxLayout()
