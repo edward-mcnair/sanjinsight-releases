@@ -700,11 +700,54 @@ class _DeviceProfilePanel(QWidget):
             r += 1
 
             def _scan_ports(combo=port_combo, addr=entry.address):
+                # ── Step 1: Windows registry — instant, never hangs ───────────
+                # serial.tools.list_ports.comports() queries each COM port driver
+                # and can hang for 30+ seconds on machines with NI hardware
+                # (NI USB-TC01, NI-DAQmx virtual ports, etc.).  Reading the
+                # registry key is instant and avoids the driver stack entirely.
+                port_map: dict[str, str] = {}   # {device: display_label}
+
+                if sys.platform.startswith("win"):
+                    try:
+                        import winreg
+                        key = winreg.OpenKey(
+                            winreg.HKEY_LOCAL_MACHINE,
+                            r"HARDWARE\DEVICEMAP\SERIALCOMM")
+                        i = 0
+                        while True:
+                            try:
+                                _, value, _ = winreg.EnumValue(key, i)
+                                port_map[str(value)] = str(value)
+                                i += 1
+                            except OSError:
+                                break
+                    except Exception:
+                        pass
+
+                # ── Step 2: pyserial — adds descriptions, 4 s timeout ─────────
+                # Run comports() in a sub-thread via concurrent.futures so it
+                # can be abandoned if it stalls (NI drivers can cause this).
                 try:
+                    import concurrent.futures
                     import serial.tools.list_ports as lp
-                    ports = [p.device for p in lp.comports()]
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+                        future = ex.submit(lp.comports)
+                        port_info = future.result(timeout=4.0)
+                    for pi in port_info:
+                        desc = (pi.description or "").strip()
+                        if desc and desc.lower() not in ("", "n/a", pi.device.lower()):
+                            port_map[pi.device] = f"{pi.device}  —  {desc}"
+                        else:
+                            port_map.setdefault(pi.device, pi.device)
                 except Exception:
-                    ports = []
+                    pass   # Use registry-only results (no descriptions)
+
+                # ── Sort numerically (COM1, COM2, … COM10, COM11) ─────────────
+                def _sort_key(dev: str):
+                    m = re.match(r"([A-Za-z]+)(\d+)", dev)
+                    return (m.group(1), int(m.group(2))) if m else (dev, 0)
+
+                items = sorted(port_map.items(), key=lambda kv: _sort_key(kv[0]))
 
                 def _apply():
                     # Guard: the combo (and its parent panel) may have been
@@ -712,13 +755,23 @@ class _DeviceProfilePanel(QWidget):
                     # device or the dialog was closed before the scan finished.
                     try:
                         combo.clear()
-                        for p in ports:
-                            combo.addItem(p)
-                        if addr and addr not in ports:
-                            combo.insertItem(0, addr)
-                        idx = combo.findText(addr or "")
-                        if idx >= 0:
-                            combo.setCurrentIndex(idx)
+                        for device, label in items:
+                            # userData = plain device name (e.g. "COM7")
+                            # text     = display label (e.g. "COM7  —  FTDI USB")
+                            combo.addItem(label, device)
+                        # Ensure any previously-saved address is always present
+                        if addr:
+                            existing = [combo.itemData(i) or combo.itemText(i)
+                                        for i in range(combo.count())]
+                            if addr not in existing:
+                                combo.insertItem(0, addr, addr)
+                        # Select the saved address
+                        for i in range(combo.count()):
+                            if (combo.itemData(i) or combo.itemText(i)) == addr:
+                                combo.setCurrentIndex(i)
+                                break
+                        if not items:
+                            combo.addItem("No COM ports found")
                         combo.setEnabled(True)
                     except RuntimeError:
                         pass  # widget was deleted; silently discard
@@ -769,7 +822,12 @@ class _DeviceProfilePanel(QWidget):
 
     def _save_params(self, entry: DeviceEntry):
         pw = self._param_widgets
-        if "port"    in pw: entry.address    = pw["port"].currentText()
+        if "port"    in pw:
+            # itemData stores the plain device name ("COM7"); currentText()
+            # has the display label ("COM7  —  FTDI USB Serial Device").
+            # Prefer userData so we always save the bare COM port name.
+            entry.address = (pw["port"].currentData()
+                             or pw["port"].currentText().split("  —  ")[0].strip())
         if "baud"    in pw: entry.baud_rate  = int(pw["baud"].currentText())
         if "ip"      in pw: entry.ip_address = pw["ip"].text().strip()
         if "timeout" in pw: entry.timeout_s  = pw["timeout"].value()
