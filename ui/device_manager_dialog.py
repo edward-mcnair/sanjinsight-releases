@@ -686,8 +686,14 @@ class _DeviceProfilePanel(QWidget):
 
         self._param_widgets: dict = {}
 
+        # Cameras (pypylon/USB Vision) connect by enumeration, not by a COM
+        # port string.  Only show the port selector for genuinely serial/USB-
+        # serial devices (TECs, stages, bias sources, probers, etc.).
+        _needs_port = (ct in (CONN_SERIAL, CONN_USB)
+                       and desc.device_type != DTYPE_CAMERA)
+
         r = 0
-        if ct in (CONN_SERIAL, CONN_USB):
+        if _needs_port:
             # ── Port row: editable combo + ⟳/✕ refresh-or-cancel button ──────
             pg.addWidget(self._sublabel("Port"), r, 0)
             port_row_w = QWidget()
@@ -896,24 +902,54 @@ class _DeviceProfilePanel(QWidget):
         apply_btn.clicked.connect(lambda: self._save_params(entry))
         btn_lay.addWidget(apply_btn)
 
-        if ct in (CONN_SERIAL, CONN_USB):
+        if _needs_port:
+            # ── "🔌 Test Port" / "✕ Cancel" toggle button ────────────────────
+            # While the test is running the button becomes "✕ Cancel"; clicking
+            # it sets _test_cancel so the background thread exits at its next
+            # checkpoint.  The on_done callback restores the button to its
+            # idle state regardless of how the test ends.
+            _test_cancel = threading.Event()
+            _TEST_TIP    = ("Open the selected COM port to verify it is "
+                            "accessible\nand check whether the device is "
+                            "sending data.")
+
             test_btn = QPushButton("🔌  Test Port")
             test_btn.setFixedHeight(28)
-            test_btn.setToolTip(
-                "Open the selected COM port to verify it is accessible\n"
-                "and check whether the device is sending data.")
-            # _port_status_lbl is assigned just below; the lambda captures
-            # the variable by reference so it sees the QLabel when called.
-            test_btn.clicked.connect(
-                lambda: self._test_port_connection(
-                    entry, self._param_widgets, _port_status_lbl))
+            test_btn.setToolTip(_TEST_TIP)
+
+            # _port_status_lbl is assigned a few lines below; the nested
+            # functions capture the variable by reference, so they see the
+            # live QLabel once _build_params() has finished executing.
+            def _restore_test_btn():
+                try:
+                    test_btn.setText("🔌  Test Port")
+                    test_btn.setToolTip(_TEST_TIP)
+                    test_btn.clicked.disconnect()
+                    test_btn.clicked.connect(_start_test)
+                except RuntimeError:
+                    pass   # widget already deleted
+
+            def _start_test():
+                _test_cancel.clear()
+                try:
+                    test_btn.setText("✕  Cancel")
+                    test_btn.setToolTip("Stop the port test")
+                    test_btn.clicked.disconnect()
+                    test_btn.clicked.connect(_test_cancel.set)
+                except RuntimeError:
+                    return
+                self._test_port_connection(
+                    entry, self._param_widgets, _port_status_lbl,
+                    cancel_event=_test_cancel, on_done=_restore_test_btn)
+
+            test_btn.clicked.connect(_start_test)
             btn_lay.addWidget(test_btn)
 
         btn_lay.addStretch()
         pg.addWidget(btn_w, r + 1, 0, 1, 2)
 
         # ── Inline port-test result label (hidden until Test Port is clicked) ─
-        if ct in (CONN_SERIAL, CONN_USB):
+        if _needs_port:
             _port_status_lbl = QLabel()
             _port_status_lbl.setWordWrap(True)
             _port_status_lbl.setVisible(False)
@@ -956,26 +992,42 @@ class _DeviceProfilePanel(QWidget):
     # ---------------------------------------------------------------- #
 
     def _test_port_connection(self, entry: DeviceEntry,
-                               pw: dict, status_lbl: "QLabel"):
+                               pw: dict, status_lbl: "QLabel",
+                               cancel_event=None, on_done=None):
         """Open the selected COM port and report the result inline.
 
-        Three outcomes the user can act on:
-          ✓ green  — port opened (and optional device data arrived)
-          ⚠ amber  — port opened but something looks off (no data yet)
+        Outcomes:
+          ✓ green  — port opened (device may or may not have sent greeting data)
+          ⊘ grey   — user cancelled before the test finished
           ✗ red    — port could not be opened (busy / missing / wrong params)
+          ⚠ amber  — unexpected error with raw message for diagnostics
 
-        The test runs in a background thread so the UI stays responsive.
+        cancel_event : threading.Event
+            Set this from the UI thread to abort the test at its next checkpoint.
+        on_done : callable
+            Called on the Qt main thread when the test ends (any outcome).
+            Used to restore the "✕ Cancel" button back to "🔌 Test Port".
+
+        Both the serial.Serial() constructor and the brief read() are subject
+        to a 3-second hard timeout via concurrent.futures so the user is never
+        left waiting more than ~3 seconds even if the OS is slow to report
+        a missing or occupied port.
         """
         port = (pw["port"].currentData()
                 or pw["port"].currentText().split("  —  ")[0].strip()
                 if "port" in pw else "")
         port = (port or "").strip()
 
+        def _done(icon, text, color):
+            """Report result and fire on_done on the Qt thread."""
+            self._set_port_status(status_lbl, icon, text, color)
+            if on_done:
+                QTimer.singleShot(0, on_done)
+
         if not port:
-            self._set_port_status(
-                status_lbl, "⚠",
-                "No port selected — choose one from the list or type it above.",
-                "#cc8800")
+            _done("⚠",
+                  "No port selected — choose one from the list or type it above.",
+                  "#cc8800")
             return
 
         baud_w = pw.get("baud")
@@ -984,64 +1036,100 @@ class _DeviceProfilePanel(QWidget):
                      or entry.descriptor.default_baud
                      or 115200)
 
-        # Show "testing…" immediately so the user gets instant feedback
+        # Show "testing…" immediately — user sees feedback before thread starts
         self._set_port_status(
             status_lbl, "⏳",
-            f"Testing {port} at {baud} baud…",
+            f"Testing {port} at {baud} baud…  "
+            "<span style='color:#555'>(click ✕ to cancel)</span>",
             "#888")
 
+        def _cancelled():
+            _done("⊘", "Test cancelled.", "#666")
+
         def _run():
+            import concurrent.futures as _cf
+            import serial
+
+            # ── Step 1: open the port (hard 3-second timeout) ─────────────
+            if cancel_event and cancel_event.is_set():
+                _cancelled(); return
+
+            _ex = _cf.ThreadPoolExecutor(max_workers=1)
+            _f  = _ex.submit(lambda: serial.Serial(
+                                 port, baudrate=baud, timeout=0.3))
             try:
-                import serial
-                ser = serial.Serial(port, baudrate=baud, timeout=0.5)
-                # Brief read: check if the device sends an unsolicited greeting
-                data = ser.read(4)
-                ser.close()
-                if data:
-                    self._set_port_status(
-                        status_lbl, "✓",
-                        f"{port} opened — device is already sending data. "
-                        "Click <b>Connect</b> to proceed.",
-                        "#00d4aa")
+                ser = _f.result(timeout=3.0)
+            except _cf.TimeoutError:
+                _ex.shutdown(wait=False)
+                if cancel_event and cancel_event.is_set():
+                    _cancelled()
                 else:
-                    self._set_port_status(
-                        status_lbl, "✓",
-                        f"{port} opened successfully at {baud} baud. "
-                        "No unsolicited data (normal for most instruments). "
-                        "Click <b>Connect</b> to proceed.",
-                        "#00d4aa")
+                    _done("✗",
+                          f"<b>{port} took too long to open.</b>  "
+                          "The port may be held by another process or the "
+                          "OS driver is not responding.",
+                          "#ff5555")
+                return
             except Exception as exc:
-                msg = str(exc)
-                low = msg.lower()
+                _ex.shutdown(wait=False)
+                if cancel_event and cancel_event.is_set():
+                    _cancelled(); return
+                low = str(exc).lower()
                 if "access is denied" in low or "permission denied" in low:
-                    self._set_port_status(
-                        status_lbl, "✗",
-                        f"<b>{port} is in use by another application.</b>  "
-                        "Close any open terminal programs, firmware updaters, "
-                        "or instrument software that may have the port open, "
-                        "then click ⟳ and test again.",
-                        "#ff5555")
+                    _done("✗",
+                          f"<b>{port} is in use by another application.</b>  "
+                          "Close any terminal programs, firmware updaters, or "
+                          "instrument software that may have the port open, "
+                          "then try again.",
+                          "#ff5555")
                 elif any(k in low for k in (
                         "could not open", "no such file",
                         "filenotfound", "no such port", "the system cannot")):
-                    self._set_port_status(
-                        status_lbl, "✗",
-                        f"<b>{port} was not found.</b>  "
-                        "Check the USB or serial cable is plugged in, "
-                        "then click ⟳ to refresh the port list.",
-                        "#ff5555")
+                    _done("✗",
+                          f"<b>{port} was not found.</b>  "
+                          "Check the USB or serial cable is plugged in, "
+                          "then click ⟳ to refresh the list.",
+                          "#ff5555")
                 elif "baud" in low or "speed" in low:
-                    self._set_port_status(
-                        status_lbl, "✗",
-                        f"<b>Baud rate {baud} is not supported by {port}.</b>  "
-                        "Try a different baud rate in the field above.",
-                        "#ff5555")
+                    _done("✗",
+                          f"<b>Baud rate {baud} is not supported by {port}.</b>  "
+                          "Try a different baud rate above.",
+                          "#ff5555")
                 else:
-                    # Unknown error — show the raw message so it's diagnosable
-                    self._set_port_status(
-                        status_lbl, "⚠",
-                        f"<b>Could not open {port}:</b>  {exc}",
-                        "#cc8800")
+                    _done("⚠", f"<b>Could not open {port}:</b>  {exc}",
+                          "#cc8800")
+                return
+            finally:
+                _ex.shutdown(wait=False)
+
+            # ── Step 2: brief read for unsolicited device data ─────────────
+            if cancel_event and cancel_event.is_set():
+                try: ser.close()
+                except Exception: pass
+                _cancelled(); return
+
+            try:
+                data = ser.read(4)   # timeout=0.3 s already set on ser
+            except Exception:
+                data = b""
+            finally:
+                try: ser.close()
+                except Exception: pass
+
+            if cancel_event and cancel_event.is_set():
+                _cancelled(); return
+
+            if data:
+                _done("✓",
+                      f"{port} opened — device is sending data. "
+                      "Click <b>Connect</b> to proceed.",
+                      "#00d4aa")
+            else:
+                _done("✓",
+                      f"{port} opened at {baud} baud. "
+                      "No unsolicited data (normal for most instruments). "
+                      "Click <b>Connect</b> to proceed.",
+                      "#00d4aa")
 
         threading.Thread(target=_run, daemon=True).start()
 
