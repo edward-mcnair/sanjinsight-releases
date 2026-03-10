@@ -103,7 +103,8 @@ class DriverStore:
     # ---------------------------------------------------------------- #
 
     def fetch_index(self,
-                    progress_cb: Optional[Callable[[str], None]] = None
+                    progress_cb: Optional[Callable[[str], None]] = None,
+                    cancel_event: Optional[threading.Event] = None,
                     ) -> List[RemoteDriverEntry]:
         if progress_cb:
             progress_cb("Connecting to Microsanj driver repository…")
@@ -118,6 +119,10 @@ class DriverStore:
                 f"Cannot reach driver server:\n{e}\n\n"
                 f"Check your internet connection or contact "
                 f"software-support@microsanj.com") from e
+
+        # Honour a cancel that arrived while the network was busy.
+        if cancel_event and cancel_event.is_set():
+            raise InterruptedError("fetch cancelled")
 
         data = json.loads(raw)
         entries = []
@@ -160,8 +165,14 @@ class DriverStore:
 
     def install(self,
                 entry: RemoteDriverEntry,
-                progress_cb: Optional[Callable[[str], None]] = None
+                progress_cb: Optional[Callable[[str], None]] = None,
+                cancel_event: Optional[threading.Event] = None,
                 ) -> InstallResult:
+
+        # Pre-download cancel check — if the user hit Cancel before we even
+        # start the network request, bail out immediately.
+        if cancel_event and cancel_event.is_set():
+            return InstallResult(uid=entry.uid, success=False, error="cancelled")
 
         if progress_cb:
             progress_cb(f"Downloading {entry.display_name}…")
@@ -176,6 +187,11 @@ class DriverStore:
         except Exception as e:
             return InstallResult(uid=entry.uid, success=False,
                                   error=f"Download failed: {e}")
+
+        # Post-download cancel check — honour a cancel that arrived while the
+        # network was busy; discard the downloaded bytes and abort cleanly.
+        if cancel_event and cancel_event.is_set():
+            return InstallResult(uid=entry.uid, success=False, error="cancelled")
 
         # Require checksum — reject unsigned packages
         if not entry.checksum_sha256:
@@ -243,13 +259,16 @@ class DriverStore:
 
     def install_many(self,
                      entries: List[RemoteDriverEntry],
-                     progress_cb: Optional[Callable[[str], None]] = None
+                     progress_cb: Optional[Callable[[str], None]] = None,
+                     cancel_event: Optional[threading.Event] = None,
                      ) -> List[InstallResult]:
         results = []
         for i, e in enumerate(entries):
+            if cancel_event and cancel_event.is_set():
+                break
             if progress_cb:
                 progress_cb(f"[{i+1}/{len(entries)}]  {e.display_name}…")
-            results.append(self.install(e, progress_cb))
+            results.append(self.install(e, progress_cb, cancel_event))
         return results
 
     # ---------------------------------------------------------------- #

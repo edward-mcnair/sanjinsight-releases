@@ -1378,7 +1378,8 @@ class _DeviceProfilePanel(QWidget):
 # ------------------------------------------------------------------ #
 
 class _DriverCard(QFrame):
-    install_requested = pyqtSignal(object)   # RemoteDriverEntry
+    install_requested        = pyqtSignal(object)   # RemoteDriverEntry
+    install_cancel_requested = pyqtSignal()          # user hit Cancel while installing
 
     def __init__(self, entry: RemoteDriverEntry, parent=None):
         super().__init__(parent)
@@ -1456,8 +1457,43 @@ class _DriverCard(QFrame):
         lay.addLayout(bot)
 
     def set_installing(self):
-        self._btn.setEnabled(False)
-        self._btn.setText("Installing…")
+        """Replace the Install button with a live ✕ Cancel button."""
+        self._btn.setEnabled(True)
+        self._btn.setText("✕  Cancel")
+        self._btn.setStyleSheet("""
+            QPushButton {
+                background:#2a0a0a; color:#ff7777;
+                border:1px solid #ff444433; border-radius:3px;
+                font-size:8.5pt; padding:2px 10px;
+            }
+            QPushButton:hover { background:#3a1010; }
+        """)
+        try:
+            self._btn.clicked.disconnect()
+        except RuntimeError:
+            pass
+        self._btn.clicked.connect(self.install_cancel_requested.emit)
+
+    def set_install_idle(self):
+        """Restore the Install button after a user-cancelled install."""
+        self._btn.setEnabled(True)
+        self._btn.setText("⬇  Install")
+        self._btn.setStyleSheet("""
+            QPushButton {
+                background:#0d2a1a; color:#00d4aa;
+                border:1px solid #00d4aa44; border-radius:3px;
+                font-size:8.5pt; padding:2px 10px;
+            }
+            QPushButton:hover { background:#0d3a22; }
+            QPushButton:disabled { color:#333; border-color:#1e1e1e;
+                                   background:#111; }
+        """)
+        try:
+            self._btn.clicked.disconnect()
+        except RuntimeError:
+            pass
+        self._btn.clicked.connect(
+            lambda: self.install_requested.emit(self._entry))
 
     def set_done(self, hot_loaded: bool):
         self._btn.setText("✓  Installed" +
@@ -1470,6 +1506,30 @@ class _DriverStorePanel(QWidget):
         self._mgr    = device_manager
         self._store  = DriverStore(device_manager)
         self._cards: Dict[str, _DriverCard] = {}
+
+        # ── Fetch-state flags ─────────────────────────────────────────── #
+        self._fetching       = False          # True while index HTTP fetch is running
+        self._fetch_cancel   = threading.Event()
+
+        # ── Button stylesheets ─────────────────────────────────────────── #
+        self._ss_check = _pt("""
+            QPushButton {
+                background:#1a1a2a; color:#6688cc;
+                border:1px solid #33448866; border-radius:3px;
+                font-size:8.5pt; padding:0 8px;
+            }
+            QPushButton:hover { background:#1e1e3a; }
+            QPushButton:disabled { color:#333; border-color:#222; }
+        """)
+        self._ss_cancel = _pt("""
+            QPushButton {
+                background:#2a0a0a; color:#ff7777;
+                border:1px solid #ff444433; border-radius:3px;
+                font-size:8.5pt; padding:0 8px;
+            }
+            QPushButton:hover { background:#3a1010; }
+            QPushButton:disabled { color:#333; border-color:#222; }
+        """)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -1485,15 +1545,7 @@ class _DriverStorePanel(QWidget):
         t.setStyleSheet("font-size:9.5pt; letter-spacing:2px; color:#888;")
         self._refresh_btn = QPushButton("🌐  Check")
         self._refresh_btn.setFixedHeight(24)
-        self._refresh_btn.setStyleSheet("""
-            QPushButton {
-                background:#1a1a2a; color:#6688cc;
-                border:1px solid #33448866; border-radius:3px;
-                font-size:8.5pt; padding:0 8px;
-            }
-            QPushButton:hover { background:#1e1e3a; }
-            QPushButton:disabled { color:#333; border-color:#222; }
-        """)
+        self._refresh_btn.setStyleSheet(self._ss_check)
         hl.addWidget(t, 1)
         hl.addWidget(self._refresh_btn)
         root.addWidget(hdr)
@@ -1511,6 +1563,9 @@ class _DriverStorePanel(QWidget):
         self._prog.setFixedHeight(3)
         self._prog.setTextVisible(False)
         self._prog.setVisible(False)
+        self._prog.setStyleSheet(
+            "QProgressBar { background:#111; border:none; margin:0; }"
+            "QProgressBar::chunk { background:#00d4aa; }")
         root.addWidget(self._prog)
 
         # Card scroll
@@ -1529,15 +1584,35 @@ class _DriverStorePanel(QWidget):
         self._refresh_btn.clicked.connect(self._fetch_index)
 
     def _fetch_index(self):
-        self._refresh_btn.setEnabled(False)
+        """Toggle between starting a fetch and cancelling one in progress."""
+        if self._fetching:
+            # ── Cancel ────────────────────────────────────────────────── #
+            self._fetch_cancel.set()
+            self._refresh_btn.setEnabled(False)
+            self._refresh_btn.setText("Cancelling…")
+            self._status.setText("Cancelling check…")
+            return
+
+        # ── Start ──────────────────────────────────────────────────────── #
+        self._fetching = True
+        self._fetch_cancel.clear()
+        self._refresh_btn.setText("✕  Cancel")
+        self._refresh_btn.setStyleSheet(self._ss_cancel)
         self._prog.setVisible(True)
+        self._status.setText("Connecting to Microsanj driver repository…")
 
         def _run():
             try:
                 entries = self._store.fetch_index(
                     progress_cb=lambda m: QTimer.singleShot(
-                        0, lambda msg=m: self._status.setText(msg)))
-                QTimer.singleShot(0, lambda: self._populate(entries))
+                        0, lambda msg=m: self._status.setText(msg)),
+                    cancel_event=self._fetch_cancel)
+                if self._fetch_cancel.is_set():
+                    QTimer.singleShot(0, self._on_fetch_cancelled)
+                else:
+                    QTimer.singleShot(0, lambda: self._populate(entries))
+            except InterruptedError:
+                QTimer.singleShot(0, self._on_fetch_cancelled)
             except Exception as e:
                 QTimer.singleShot(
                     0, lambda err=str(e): self._on_fetch_error(err))
@@ -1569,12 +1644,27 @@ class _DriverStorePanel(QWidget):
                 self._card_layout.count() - 1, card)
             self._cards[e.uid] = card
 
+        self._fetching = False
         self._prog.setVisible(False)
         self._refresh_btn.setEnabled(True)
+        self._refresh_btn.setText("🌐  Check")
+        self._refresh_btn.setStyleSheet(self._ss_check)
+
+    def _on_fetch_cancelled(self):
+        """Called on the Qt thread when the user cancels a fetch."""
+        self._fetching = False
+        self._prog.setVisible(False)
+        self._refresh_btn.setEnabled(True)
+        self._refresh_btn.setText("🌐  Check")
+        self._refresh_btn.setStyleSheet(self._ss_check)
+        self._status.setText("Check cancelled.")
 
     def _on_fetch_error(self, err: str):
+        self._fetching = False
         self._prog.setVisible(False)
         self._refresh_btn.setEnabled(True)
+        self._refresh_btn.setText("🌐  Check")
+        self._refresh_btn.setStyleSheet(self._ss_check)
         self._status.setText(f"⚠  {err}")
         self._status.setStyleSheet(
             "font-size:8.5pt; color:#ff8800; padding:6px 12px; "
@@ -1585,20 +1675,43 @@ class _DriverStorePanel(QWidget):
         if card:
             card.set_installing()
 
+        # Disable the Check button while an install is running so we don't
+        # start a concurrent fetch that shares the progress bar.
+        self._refresh_btn.setEnabled(False)
         self._prog.setVisible(True)
+
+        install_cancel = threading.Event()
+        if card:
+            # Wire the card's "✕ Cancel" button to our local cancel event.
+            card.install_cancel_requested.connect(install_cancel.set)
 
         def _run():
             result = self._store.install(
                 entry,
                 progress_cb=lambda m: QTimer.singleShot(
-                    0, lambda msg=m: self._status.setText(msg)))
-            QTimer.singleShot(0, lambda: self._on_install_done(result, card))
+                    0, lambda msg=m: self._status.setText(msg)),
+                cancel_event=install_cancel)
+            _was_cancelled = install_cancel.is_set() or result.error == "cancelled"
+            def _cb():
+                self._on_install_done(result, card, _was_cancelled)
+            QTimer.singleShot(0, _cb)
 
         threading.Thread(target=_run, daemon=True).start()
 
-    def _on_install_done(self, result, card):
+    def _on_install_done(self, result, card, was_cancelled: bool = False):
         self._prog.setVisible(False)
-        if result.success:
+        # Re-enable the Check button now that the install has finished.
+        if not self._fetching:
+            self._refresh_btn.setEnabled(True)
+
+        if was_cancelled:
+            if card:
+                try:
+                    card.set_install_idle()
+                except RuntimeError:
+                    pass
+            self._status.setText("Install cancelled.")
+        elif result.success:
             if card:
                 card.set_done(result.hot_loaded)
             if result.needs_restart:
@@ -1606,7 +1719,7 @@ class _DriverStorePanel(QWidget):
                     "✓  Driver installed. Restart the application to apply.")
             else:
                 self._status.setText(
-                    f"✓  Driver hot-loaded — active immediately.")
+                    "✓  Driver hot-loaded — active immediately.")
         else:
             self._status.setText(f"✗  Install failed: {result.error}")
 
