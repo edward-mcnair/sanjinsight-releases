@@ -85,7 +85,7 @@ STYLE = """
 QMainWindow, QWidget {
     background-color: #1a1a1a;
     color: #d0d0d0;
-    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    font-family: 'Helvetica Neue', Arial;
     font-size:13pt;
 }
 QTabWidget::pane {
@@ -1181,7 +1181,7 @@ class MainWindow(QMainWindow):
 
         # ── Command palette (quick navigation) ────────────────────
         palette_sc = QShortcut(QKeySequence("Ctrl+K"), self)
-        palette_sc.activated.connect(self._cmd_palette.show_palette)
+        palette_sc.activated.connect(lambda: self._cmd_palette.show_palette())
 
     # ── Keyboard shortcut helpers ──────────────────────────────────
 

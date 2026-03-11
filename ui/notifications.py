@@ -314,7 +314,7 @@ class StartupProgressDialog(QDialog):
 
         title = QLabel("Starting SanjINSIGHT")
         title.setStyleSheet(
-            "color:#ccc; font-size:16pt; font-family:'Helvetica Neue',Arial,sans-serif;")
+            "color:#ccc; font-size:16pt; font-family:'Helvetica Neue',Arial;")
         sub = QLabel("Initializing hardware…")
         sub.setStyleSheet("color:#555; font-size:12pt;")
         h_col = QVBoxLayout()

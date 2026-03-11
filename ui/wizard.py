@@ -1129,7 +1129,7 @@ class StandardWizard(QWidget):
         app_lbl = QLabel("SanjINSIGHT")
         app_lbl.setStyleSheet(
             "color:#ffffff; font-size:17pt; font-weight:700; "
-            "font-family:'Segoe UI',Arial,sans-serif; background:transparent; border:none;")
+            "font-family:'Helvetica Neue',Arial; background:transparent; border:none;")
         hdr_lay.addWidget(app_lbl)
         side_lay.addWidget(hdr)
 

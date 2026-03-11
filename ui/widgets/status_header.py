@@ -50,8 +50,11 @@ class _ModeToggle(QWidget):
         # use a slightly smaller point value to keep the buttons compact.
         _fp = 8 if sys.platform == 'win32' else 10
 
+        # Note: the CSS `font:` shorthand cannot take a comma-separated
+        # font-family list in Qt QSS, so we use separate properties instead.
         _base = (
-            f"font: bold {_fp}pt 'Helvetica Neue', Arial; "
+            f"font-family:'Helvetica Neue',Arial;"
+            f"font-size:{_fp}pt; font-weight:bold; "
             "letter-spacing:1px; border:1px solid #333; padding:0 10px;")
 
         self._std_btn.setStyleSheet(
@@ -110,7 +113,8 @@ class _ModeToggle(QWidget):
 
         _fp = 8 if sys.platform == 'win32' else 10
         _base = (
-            f"font: bold {_fp}pt 'Helvetica Neue', Arial; "
+            f"font-family:'Helvetica Neue',Arial;"
+            f"font-size:{_fp}pt; font-weight:bold; "
             "letter-spacing:1px; border:1px solid #333; padding:0 10px;")
 
         self._std_btn.setStyleSheet(
