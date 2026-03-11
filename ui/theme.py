@@ -207,6 +207,16 @@ def groupbox_qss() -> str:
     """
 
 
+def progress_bar_qss() -> str:
+    """Teal QProgressBar with dark background (used across all tabs)."""
+    s3, bdr, acc = PALETTE["surface3"], PALETTE["border"], PALETTE["accent"]
+    return (
+        f"QProgressBar {{ background:{s3}; border:1px solid {bdr}; "
+        f"border-radius:4px; }}"
+        f"QProgressBar::chunk {{ background:{acc}; border-radius:3px; }}"
+    )
+
+
 # ── Microcopy helpers ──────────────────────────────────────────────────────────
 
 def dual_label(primary: str, secondary: str) -> "QLabel":

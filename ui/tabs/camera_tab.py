@@ -171,8 +171,9 @@ class CameraTab(QWidget):
         dr.addStretch()
         adv_grid.addLayout(dr, 0, 1)
 
-        save_btn = QPushButton("Save Frame (16-bit PNG)")
+        save_btn = QPushButton("Save Frame…")
         set_btn_icon(save_btn, "fa5s.save")
+        save_btn.setToolTip("Save the current frame as a 16-bit PNG file")
         save_btn.clicked.connect(self._save)
         adv_grid.addWidget(save_btn, 1, 1)
 

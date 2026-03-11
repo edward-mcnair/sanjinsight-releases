@@ -245,6 +245,7 @@ class ProberTab(QWidget):
         self._step_btn.setObjectName("primary")
         self._step_btn.setFixedWidth(80)
         self._step_btn.setFixedHeight(30)
+        self._step_btn.setToolTip("Move stage to the selected wafer die (row/column)")
         self._step_btn.clicked.connect(self._step_to_die)
 
         dl.addWidget(QLabel("Col:"),       0, 0)
@@ -300,6 +301,7 @@ class ProberTab(QWidget):
         move_btn = QPushButton("Move To")
         move_btn.setObjectName("primary")
         move_btn.setFixedHeight(30)
+        move_btn.setToolTip("Move stage to the specified absolute X/Y/Z coordinates")
         move_btn.clicked.connect(self._move_to)
         al.addWidget(move_btn, 3, 0, 1, 2)
         right.addWidget(abs_box)

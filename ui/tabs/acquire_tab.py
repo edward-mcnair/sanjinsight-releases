@@ -18,6 +18,7 @@ from PyQt5.QtWidgets import (
     QGroupBox, QComboBox, QTextEdit, QFileDialog)
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from ui.icons import set_btn_icon
+from ui.theme import progress_bar_qss
 
 from hardware.app_state import app_state
 from acquisition        import AcquisitionProgress, AcqState
@@ -124,6 +125,7 @@ class AcquireTab(QWidget):
 
         self._progress = QProgressBar()
         self._progress.setRange(0, 100)
+        self._progress.setStyleSheet(progress_bar_qss())
         cl.addWidget(self._progress, 4, 0, 1, 2)
 
         # Recipe quick-access row
@@ -224,6 +226,7 @@ class AcquireTab(QWidget):
             "font-family:Menlo,monospace; font-size:15pt; color:#555;")
         self._export_btn = QPushButton("Export")
         set_btn_icon(self._export_btn, "fa5s.file-export")
+        self._export_btn.setToolTip("Export acquisition results to a folder")
         self._export_btn.setEnabled(False)
         bot.addWidget(self._snr_lbl)
         bot.addStretch()

@@ -22,7 +22,7 @@ from PyQt5.QtGui     import QPainter, QColor, QPen, QFont, QBrush
 
 from hardware.app_state  import app_state
 from hardware.autofocus  import create_autofocus, AfState
-from ui.theme      import FONT, PALETTE
+from ui.theme      import FONT, PALETTE, progress_bar_qss
 from ui.font_utils import mono_font
 from ui.icons import set_btn_icon
 
@@ -139,6 +139,7 @@ class AutofocusTab(QWidget):
         self._prog = QProgressBar()
         self._prog.setRange(0, 100)
         self._prog.setFixedWidth(300)
+        self._prog.setStyleSheet(progress_bar_qss())
         ctrl.addWidget(self._prog)
         root.addLayout(ctrl)
 
