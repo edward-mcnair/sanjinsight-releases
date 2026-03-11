@@ -48,7 +48,66 @@ PALETTE: dict = {
     "errorBorder":  "#ff6666",
     "unknownBg":    "#181818",
     "unknownBorder":"#333333",
+    # Sidebar active-item highlight (teal-tinted, theme-aware)
+    "activeItem":   "#0d2520",
 }
+
+# ── Light palette ───────────────────────────────────────────────────────────────
+
+PALETTE_DARK: dict = {k: v for k, v in PALETTE.items()}   # canonical dark snapshot
+
+PALETTE_LIGHT: dict = {
+    # Backgrounds
+    "bg":       "#f5f5f7",
+    "surface":  "#ffffff",
+    "surface2": "#f2f2f7",
+    "surface3": "#e5e5ea",
+    # Borders
+    "border":   "#d1d1d6",
+    "border2":  "#c7c7cc",
+    # Text
+    "text":     "#1d1d1f",
+    "textDim":  "#636366",
+    "textSub":  "#aeaeb2",
+    # Accents
+    "accent":   "#00b899",
+    "accentDim":"#00b89922",
+    # Semantic
+    "success":  "#00b899",
+    "warning":  "#e08000",
+    "danger":   "#cc1111",
+    "info":     "#0066cc",
+    # Readiness widget
+    "readyBg":      "#e5f9f5",
+    "readyBorder":  "#00b899",
+    "warnBg":       "#fff3df",
+    "warnBorder":   "#e08000",
+    "errorBg":      "#ffecec",
+    "errorBorder":  "#cc1111",
+    "unknownBg":    "#f2f2f7",
+    "unknownBorder":"#c7c7cc",
+    # Sidebar active-item highlight (light teal-tinted)
+    "activeItem":   "#d8f5f0",
+}
+
+_THEME_MODE: str = "dark"
+
+
+def set_theme(mode: str) -> None:
+    """Swap PALETTE in-place to 'dark' or 'light'.
+
+    All QSS helpers (btn_primary_qss, groupbox_qss, etc.) read PALETTE at
+    call time, so re-calling them after ``set_theme()`` produces the correct
+    colours for the new theme automatically.
+    """
+    global _THEME_MODE
+    _THEME_MODE = mode
+    PALETTE.update(PALETTE_DARK if mode == "dark" else PALETTE_LIGHT)
+
+
+def active_theme() -> str:
+    """Return the currently active theme name ('dark' or 'light')."""
+    return _THEME_MODE
 
 
 # ── Font scale (pt sizes) ──────────────────────────────────────────────────────
@@ -199,20 +258,21 @@ def btn_secondary_qss() -> str:
         background:{s}; color:{t}; border:1px solid {d}; border-radius:4px;
         padding:5px 16px; font-size:{b}pt;
     }}
-    QPushButton:hover    {{ background:#252525; color:{PALETTE["text"]}; }}
-    QPushButton:pressed  {{ background:#111; }}
+    QPushButton:hover    {{ background:{PALETTE["surface2"]}; color:{PALETTE["text"]}; }}
+    QPushButton:pressed  {{ background:{PALETTE["surface3"]}; }}
     """
 
 
 def btn_wizard_secondary_qss() -> str:
     b = FONT["body"]
+    s2, bdr = PALETTE["surface2"], PALETTE["border"]
     return f"""
     QPushButton {{
-        background:#1e2337; color:#aaa; border:1px solid #333;
+        background:{s2}; color:{PALETTE['textDim']}; border:1px solid {bdr};
         border-radius:6px; padding:8px 22px; font-size:{b}pt;
     }}
-    QPushButton:hover    {{ background:#2a3249; color:#ccc; }}
-    QPushButton:pressed  {{ background:#1a1f33; }}
+    QPushButton:hover    {{ background:{PALETTE['surface']}; color:{PALETTE['text']}; }}
+    QPushButton:pressed  {{ background:{PALETTE['surface3']}; }}
     """
 
 
@@ -249,18 +309,19 @@ def input_qss() -> str:
 
 
 def wizard_input_qss() -> str:
-    """Input style for the first-run wizard (blue focus accent)."""
+    """Input style for the first-run wizard (blue focus accent, PALETTE-aware background)."""
     b = FONT["body"]
+    s2, bdr = PALETTE["surface2"], PALETTE["border"]
     return f"""
     QLineEdit, QComboBox {{
-        background:#13172a; color:#ddd; border:1px solid #2a3249;
+        background:{s2}; color:{PALETTE['text']}; border:1px solid {bdr};
         border-radius:4px; padding:5px 10px; font-size:{b}pt;
         selection-background-color:#4e73df;
     }}
     QLineEdit:focus, QComboBox:focus {{ border-color:#4e73df; }}
     QComboBox::drop-down {{ border:none; }}
     QComboBox QAbstractItemView {{
-        background:#13172a; color:#ddd; border:1px solid #2a3249;
+        background:{s2}; color:{PALETTE['text']}; border:1px solid {bdr};
     }}
     """
 

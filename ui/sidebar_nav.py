@@ -34,16 +34,6 @@ _pix_cache: dict = {}
 from ui.theme      import PALETTE, FONT as _FONT
 from ui.font_utils import sans_font as _sans_font
 
-_BG         = PALETTE["surface"]
-_BG_HOVER   = "#222222"
-_BG_ACTIVE  = "#0d2520"
-_ACCENT     = PALETTE["accent"]
-_TEXT_DIM   = PALETTE["textDim"]
-_TEXT_NORM  = PALETTE["text"]
-_TEXT_WHITE = "#ffffff"
-_DIVIDER    = PALETTE["border"]
-_HDR_BG     = PALETTE["surface3"]
-
 # ── Sizes ──────────────────────────────────────────────────────────
 _ITEM_H    = 30    # menu row height
 _SECTION_H = 24    # section label height
@@ -110,16 +100,16 @@ class _MenuItem(QWidget):
         w, h = self.width(), self.height()
 
         if self._active:
-            p.fillRect(0, 0, w, h, QColor(_BG_ACTIVE))
-            p.fillRect(0, 0, 3, h, QColor(_ACCENT))
+            p.fillRect(0, 0, w, h, QColor(PALETTE["activeItem"]))
+            p.fillRect(0, 0, 3, h, QColor(PALETTE["accent"]))
         elif self._hover:
-            p.fillRect(0, 0, w, h, QColor(_BG_HOVER))
+            p.fillRect(0, 0, w, h, QColor(PALETTE["surface2"]))
         else:
-            p.fillRect(0, 0, w, h, QColor(_BG))
+            p.fillRect(0, 0, w, h, QColor(PALETTE["surface"]))
 
         x = 18 + self._indent
-        icon_col = QColor(_ACCENT if self._active else
-                         (_TEXT_NORM if self._hover else _TEXT_DIM))
+        icon_col = QColor(PALETTE["accent"] if self._active else
+                         (PALETTE["text"] if self._hover else PALETTE["textDim"]))
 
         icon_name = self._item.icon
         if _QTA_AVAILABLE and "." in icon_name:
@@ -138,7 +128,7 @@ class _MenuItem(QWidget):
         if self._active:
             lf.setWeight(QFont.DemiBold)
         p.setFont(lf)
-        p.setPen(QColor(_TEXT_WHITE if (self._active or self._hover) else _TEXT_NORM))
+        p.setPen(QColor(PALETTE["text"]))
         p.drawText(x + 30, 0, w - x - 38, h,
                    Qt.AlignVCenter | Qt.AlignLeft, self._item.label)
 
@@ -152,8 +142,8 @@ class _MenuItem(QWidget):
             by = (h - bh) // 2
             path = QPainterPath()
             path.addRoundedRect(bx, by, bw, bh, 8, 8)
-            p.fillPath(path, QColor(_ACCENT))
-            p.setPen(QColor("#fff"))
+            p.fillPath(path, QColor(PALETTE["accent"]))
+            p.setPen(QColor(PALETTE["text"]))
             p.drawText(bx, by, bw, bh, Qt.AlignCenter, self._item.badge)
 
         p.end()
@@ -171,16 +161,16 @@ class _SectionLabel(QWidget):
 
     def paintEvent(self, event):
         p = QPainter(self)
-        p.fillRect(0, 0, self.width(), self.height(), QColor(_BG))
+        p.fillRect(0, 0, self.width(), self.height(), QColor(PALETTE["surface"]))
         # Thin top rule
-        p.setPen(QPen(QColor(_DIVIDER), 1))
+        p.setPen(QPen(QColor(PALETTE["border"]), 1))
         p.drawLine(16, 8, self.width() - 16, 8)
         # Label — bold, spaced caps, slightly larger than items
         f = _sans_font(_FONT["sublabel"])
         f.setWeight(QFont.Black)          # heaviest weight for visual dominance
         f.setLetterSpacing(QFont.AbsoluteSpacing, 1.6)
         p.setFont(f)
-        p.setPen(QColor(_TEXT_NORM))      # brighter than _TEXT_DIM
+        p.setPen(QColor(PALETTE["text"]))      # brighter than textDim
         p.drawText(18, 8, self.width() - 22, _SECTION_H - 8,
                    Qt.AlignVCenter | Qt.AlignLeft, self._title.upper())
         p.end()
@@ -217,8 +207,8 @@ class _CollapseHeader(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         w, h = self.width(), self.height()
-        p.fillRect(0, 0, w, h, QColor(_BG_HOVER if self._hover else _BG))
-        col = QColor(_TEXT_NORM if self._hover else _TEXT_DIM)
+        p.fillRect(0, 0, w, h, QColor(PALETTE["surface2"] if self._hover else PALETTE["surface"]))
+        col = QColor(PALETTE["text"] if self._hover else PALETTE["textDim"])
 
         if _QTA_AVAILABLE and "." in self._icon:
             cache_key = (self._icon, col.name())
@@ -239,7 +229,7 @@ class _CollapseHeader(QWidget):
         p.drawText(48, 0, w - 70, h, Qt.AlignVCenter | Qt.AlignLeft, self._title)
 
         p.setFont(_sans_font(_FONT["body"]))
-        p.setPen(QColor(_TEXT_NORM))
+        p.setPen(QColor(PALETTE["text"]))
         p.drawText(w - 26, 0, 20, h, Qt.AlignVCenter | Qt.AlignLeft,
                    "▾" if not self._collapsed else "▸")
         p.end()
@@ -258,7 +248,7 @@ class _LogoHeader(QWidget):
         self._app_name   = app_name
         self._arrow_hover = False
         self.setFixedHeight(_LOGO_H)
-        self.setStyleSheet(f"background:{_HDR_BG};")
+        self.setStyleSheet(f"background:{PALETTE['surface3']};")
         self.setMouseTracking(True)
 
     def _arrow_rect(self):
@@ -289,21 +279,21 @@ class _LogoHeader(QWidget):
         p.setRenderHint(QPainter.Antialiasing)
         w, h = self.width(), self.height()
 
-        p.fillRect(0, 0, w, h, QColor(_HDR_BG))
+        p.fillRect(0, 0, w, h, QColor(PALETTE["surface3"]))
 
         # Bottom border
-        p.setPen(QPen(QColor(_DIVIDER), 1))
+        p.setPen(QPen(QColor(PALETTE["border"]), 1))
         p.drawLine(0, h - 1, w, h - 1)
 
         # App name
         p.setFont(_sans_font(_FONT["title"], bold=True))
-        p.setPen(QColor(_TEXT_WHITE))
+        p.setPen(QColor(PALETTE["text"]))
         p.drawText(18, 0, w - self._ARROW_W - 20, h,
                    Qt.AlignVCenter | Qt.AlignLeft, self._app_name)
 
         # Collapse arrow ◀  (right edge, subtle unless hovered)
         p.setFont(_sans_font(_FONT["body"]))
-        arrow_col = QColor(_TEXT_WHITE) if self._arrow_hover else QColor(_TEXT_DIM)
+        arrow_col = QColor(PALETTE["text"]) if self._arrow_hover else QColor(PALETTE["textDim"])
         p.setPen(arrow_col)
         ax, ay, aw, ah = self._arrow_rect()
         p.drawText(ax, ay, aw - 4, ah, Qt.AlignVCenter | Qt.AlignLeft, "◀")
@@ -338,13 +328,13 @@ class _CollapseBar(QWidget):
         p.setRenderHint(QPainter.Antialiasing)
         w, h = self.width(), self.height()
 
-        # Blue accent bar fill
-        bar_color = QColor(_ACCENT).lighter(115) if self._hover else QColor(_ACCENT)
+        # Accent bar fill
+        bar_color = QColor(PALETTE["accent"]).lighter(115) if self._hover else QColor(PALETTE["accent"])
         p.fillRect(0, 0, w, h, bar_color)
 
         # Centred ▶ arrow, vertically centred
         p.setFont(_sans_font(_FONT["caption"], bold=True))
-        p.setPen(QColor("#ffffff"))
+        p.setPen(QColor(PALETTE["surface"]))
         p.drawText(0, h // 2 - 40, w, 80, Qt.AlignCenter, "▶")
 
         p.end()
@@ -367,7 +357,7 @@ class _Sidebar(QWidget):
         self._active:      Optional[_MenuItem]   = None
 
         self.setFixedWidth(_W_FULL)
-        self.setStyleSheet(f"background:{_BG};")
+        self.setStyleSheet(f"background:{PALETTE['surface']};")
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -385,13 +375,13 @@ class _Sidebar(QWidget):
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setStyleSheet(f"""
-            QScrollArea {{ background:{_BG}; border:none; }}
-            QScrollBar:vertical {{ background:{_BG}; width:5px; margin:0; }}
-            QScrollBar::handle:vertical {{ background:#3a3a3a; border-radius:2px; min-height:20px; }}
+            QScrollArea {{ background:{PALETTE['surface']}; border:none; }}
+            QScrollBar:vertical {{ background:{PALETTE['surface']}; width:5px; margin:0; }}
+            QScrollBar::handle:vertical {{ background:{PALETTE['border']}; border-radius:2px; min-height:20px; }}
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height:0; }}
         """)
         self._menu_w = QWidget()
-        self._menu_w.setStyleSheet(f"background:{_BG};")
+        self._menu_w.setStyleSheet(f"background:{PALETTE['surface']};")
         self._lay = QVBoxLayout(self._menu_w)
         self._lay.setContentsMargins(0, 4, 0, 4)
         self._lay.setSpacing(0)
@@ -417,7 +407,7 @@ class _Sidebar(QWidget):
         self._coll_states.append(collapsed)
 
         c = QWidget()
-        c.setStyleSheet(f"background:{_BG};")
+        c.setStyleSheet(f"background:{PALETTE['surface']};")
         cl = QVBoxLayout(c)
         cl.setContentsMargins(0, 0, 0, 0)
         cl.setSpacing(0)
@@ -434,14 +424,14 @@ class _Sidebar(QWidget):
         if not hasattr(self, "_show_all_rows"):
             self._show_all_rows = {}
         show_all_w = QWidget()
-        show_all_w.setStyleSheet(f"background:{_BG};")
+        show_all_w.setStyleSheet(f"background:{PALETTE['surface']};")
         show_all_w.setFixedHeight(22)
         show_all_w.setVisible(False)   # hidden until set_item_visible() hides something
         sa_lay = QHBoxLayout(show_all_w)
         sa_lay.setContentsMargins(32, 0, 8, 0)
         sa_lbl = QLabel("Show all…")
         sa_lbl.setStyleSheet(
-            f"font-size:{_FONT['caption']}pt; color:{_TEXT_DIM}; "
+            f"font-size:{_FONT['caption']}pt; color:{PALETTE['textDim']}; "
             "text-decoration:underline;")
         sa_lbl.setCursor(Qt.PointingHandCursor)
         sa_lay.addWidget(sa_lbl)
@@ -535,11 +525,11 @@ class SidebarNav(QWidget):
         self._sidebar = _Sidebar(app_name)
         self._bar     = _CollapseBar()
         self._stack   = QStackedWidget()
-        self._stack.setStyleSheet("background:#1a1a1a;")
+        self._stack.setStyleSheet(f"background:{PALETTE['surface']};")
 
         self._sep = QFrame()
         self._sep.setFrameShape(QFrame.VLine)
-        self._sep.setStyleSheet(f"color:{_DIVIDER}; max-width:1px;")
+        self._sep.setStyleSheet(f"color:{PALETTE['border']}; max-width:1px;")
 
         self._lay = QHBoxLayout(self)
         self._lay.setContentsMargins(0, 0, 0, 0)

@@ -81,7 +81,7 @@ from utils import safe_call
 #  App-wide style                                                     #
 # ------------------------------------------------------------------ #
 
-STYLE = """
+STYLE_DARK = """
 QMainWindow, QWidget {
     background-color: #1a1a1a;
     color: #d0d0d0;
@@ -256,13 +256,203 @@ QToolTip {
 }
 """
 
+STYLE_LIGHT = """
+QMainWindow, QWidget {
+    background-color: #f5f5f7;
+    color: #1d1d1f;
+    font-family: 'Helvetica Neue', Arial;
+    font-size:13pt;
+}
+QTabWidget::pane {
+    border: 1px solid #d1d1d6;
+    background: #ffffff;
+}
+QTabBar::tab {
+    background: #ebebeb;
+    color: #636366;
+    padding: 8px 20px;
+    border: 1px solid #d1d1d6;
+    border-bottom: none;
+    font-size:13pt;
+    letter-spacing: 1px;
+}
+QTabBar::tab:selected {
+    background: #ffffff;
+    color: #00b899;
+    border-top: 2px solid #00b899;
+}
+QTabBar::tab:hover { color: #1d1d1f; }
+QGroupBox {
+    border: 1px solid #d1d1d6;
+    border-radius: 3px;
+    margin-top: 10px;
+    padding: 8px 6px 6px 6px;
+    font-size:13pt;
+    color: #636366;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    padding: 0 6px;
+    left: 8px;
+}
+QPushButton {
+    background: #e5e5ea;
+    color: #1d1d1f;
+    border: 1px solid #c7c7cc;
+    border-radius: 2px;
+    padding: 5px 12px;
+    font-size:13pt;
+}
+QPushButton:hover   { background: #d4d4d9; color: #000; border-color: #aaaaaf; }
+QPushButton:pressed { background: #c4c4c9; border-color: #888; padding-top: 6px; padding-bottom: 4px; }
+QPushButton:focus   { border-color: #00b89988; outline: none; }
+QPushButton:disabled { color: #aaaaaf; border-color: #d1d1d6; background: #ebebeb; }
+
+QPushButton#primary {
+    background: #d8f5f0;
+    color: #008870;
+    border-color: #00b899;
+    font-weight: bold;
+}
+QPushButton#primary:hover   { background: #b3ede5; border-color: #009980; color: #007060; }
+QPushButton#primary:pressed { background: #ccebe6; border-color: #008870; padding-top: 6px; padding-bottom: 4px; }
+QPushButton#primary:focus   { border-color: #00b899; outline: none; }
+QPushButton#primary:disabled { background: #f5f5f7; color: #99ccc6; border-color: #c0ddd9; }
+
+QPushButton#danger {
+    background: #ffecec;
+    color: #cc1111;
+    border-color: #cc2222;
+}
+QPushButton#danger:hover   { background: #ffd9d9; border-color: #bb1111; color: #aa0000; }
+QPushButton#danger:pressed { background: #ffe5e5; border-color: #991111; padding-top: 6px; padding-bottom: 4px; }
+QPushButton#danger:focus   { border-color: #cc2222; outline: none; }
+QPushButton#danger:disabled { background: #f5f5f7; color: #ddaaaa; border-color: #e8d4d4; }
+
+QPushButton#cold_btn {
+    background: #ddeeff;
+    color: #0055aa;
+    border-color: #4488cc;
+    font-weight: bold;
+}
+QPushButton#cold_btn:hover   { background: #cce0ff; border-color: #3377bb; color: #003388; }
+QPushButton#cold_btn:pressed { background: #bbdaff; border-color: #2266aa; padding-top: 6px; padding-bottom: 4px; }
+
+QPushButton#hot_btn {
+    background: #fff0dd;
+    color: #994400;
+    border-color: #cc7700;
+    font-weight: bold;
+}
+QPushButton#hot_btn:hover   { background: #ffe8cc; border-color: #bb6600; color: #772200; }
+QPushButton#hot_btn:pressed { background: #ffdcbb; border-color: #aa5500; padding-top: 6px; padding-bottom: 4px; }
+
+QPushButton[running="true"] {
+    background: #fff3dd;
+    color: #994400;
+    border: 2px solid #cc880088;
+    font-weight: bold;
+    padding: 4px 11px;
+}
+QPushButton[running="true"]#primary {
+    background: #d8f5f0;
+    color: #008870;
+    border: 2px solid #00b89988;
+    padding: 4px 11px;
+}
+QSlider::groove:horizontal {
+    height: 3px;
+    background: #c7c7cc;
+    border-radius: 2px;
+}
+QSlider::handle:horizontal {
+    background: #00b899;
+    width: 12px; height: 12px;
+    margin: -5px 0;
+    border-radius: 6px;
+}
+QSlider::sub-page:horizontal { background: #00b899; border-radius: 2px; }
+QProgressBar {
+    border: 1px solid #d1d1d6;
+    border-radius: 2px;
+    background: #e5e5ea;
+    height: 6px;
+    text-align: center;
+    font-size:12pt;
+    color: #636366;
+}
+QProgressBar::chunk { background: #00b899; border-radius: 2px; }
+QSpinBox, QDoubleSpinBox, QComboBox {
+    background: #ffffff;
+    color: #1d1d1f;
+    border: 1px solid #c7c7cc;
+    border-radius: 2px;
+    padding: 3px 6px;
+}
+QComboBox::drop-down { border: none; }
+QTextEdit {
+    background: #fafafa;
+    color: #3a3a3c;
+    border: 1px solid #d1d1d6;
+    font-family: 'Menlo', 'Courier New', monospace;
+    font-size:12pt;
+}
+QLabel#readout {
+    font-family: 'Menlo', 'Courier New', monospace;
+    font-size:26pt;
+    color: #00b899;
+}
+QLabel#readout_warn { color: #e08000; }
+QLabel#readout_error { color: #cc1111; }
+QLabel#sublabel {
+    font-size:12pt;
+    color: #636366;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+QStatusBar { background: #ececec; color: #636366; font-size:12pt; }
+QMenuBar { background: #ececec; color: #636366; border-bottom: 1px solid #d1d1d6; font-size:13pt; }
+QMenuBar::item:selected { background: #dddde2; color: #1d1d1f; }
+QMenu { background: #f5f5f7; color: #1d1d1f; border: 1px solid #d1d1d6; font-size:13pt; }
+QMenu::item:selected { background: #e5e5ea; color: #000; }
+QMenu::separator { height: 1px; background: #d1d1d6; margin: 4px 0; }
+QToolTip {
+    background-color: #ffffff;
+    color: #1d1d1f;
+    border: 1px solid #c7c7cc;
+    padding: 4px 8px;
+    border-radius: 3px;
+    font-size: 11pt;
+    opacity: 230;
+}
+"""
+
 # ── Font-size scaling note ────────────────────────────────────────────────────
-# The STYLE constant above is NOT scaled at module load time — scaling depends
+# STYLE_DARK / STYLE_LIGHT are NOT scaled at module load time — scaling depends
 # on the real screen DPI which is only available after QApplication is created.
-# The scaling is applied inside main() immediately after app = QApplication()
-# using a regex that catches all "font-size: Npt" patterns regardless of
-# spacing, then stored in a local `_scaled_style` that is passed to
-# app.setStyleSheet().  See the DPI-aware block in main() below.
+# build_style() applies the DPI regex before returning the final stylesheet.
+# See the DPI-aware block in main() below.
+
+
+def build_style(mode: str = "dark") -> str:
+    """Return the DPI-scaled QSS stylesheet for the requested theme.
+
+    Applies the same ``font-size: Npt`` regex scaling as the old inline
+    ``re.sub()`` block in ``main()``.  On macOS (scale=1.0) the string is
+    returned unchanged.
+    """
+    from ui.theme import _DPI_SCALE
+    raw = STYLE_DARK if mode == "dark" else STYLE_LIGHT
+    if _DPI_SCALE == 1.0:
+        return raw
+    return re.sub(
+        r'font-size:\s*(\d+)pt',
+        lambda m: f"font-size:{max(8, int(round(int(m.group(1)) * _DPI_SCALE)))}pt",
+        raw,
+    )
 
 
 def _style_pt(macos_pt: int) -> str:
@@ -474,6 +664,7 @@ class MainWindow(QMainWindow):
         self._data_tab     = DataTab(session_mgr)
         self._log_tab      = LogTab()
         self._settings_tab = SettingsTab()
+        self._settings_tab.theme_changed.connect(self.apply_theme)
 
         # ── Metrics service + readiness banner ───────────────────
         self._metrics = MetricsService(hw_service, parent=self)
@@ -2084,6 +2275,32 @@ class MainWindow(QMainWindow):
         """Mark the startup window as complete; enable hotplug toasts."""
         self._startup_done = True
 
+    def apply_theme(self, mode: str) -> None:
+        """Switch the entire app between 'dark' and 'light' themes at runtime.
+
+        Updates PALETTE, re-applies the global QSS stylesheet, and calls
+        ``_apply_styles()`` on every widget that opted in (sidebar, toasts, etc.)
+        to refresh their per-widget overrides.  Wrapped in setUpdatesEnabled to
+        avoid flicker.
+        """
+        from ui.theme import set_theme, build_qt_palette
+        app = QApplication.instance()
+
+        app.setUpdatesEnabled(False)
+        try:
+            set_theme(mode)
+            config.set_pref("ui.theme", mode)
+            app.setStyleSheet(build_style(mode))
+            app.setPalette(build_qt_palette())
+
+            # Let each opted-in widget re-apply its per-widget stylesheet
+            for w in app.allWidgets():
+                if hasattr(w, "_apply_styles"):
+                    w._apply_styles()
+                w.update()
+        finally:
+            app.setUpdatesEnabled(True)
+
     def _restore_layout(self):
         """Restore persisted window geometry and tab splitter sizes."""
         import config as _cfg
@@ -2278,24 +2495,21 @@ if __name__ == "__main__":
     _dpi_scale  = max(0.5, min(1.0, 72.0 / _screen_dpi))
     log.debug("Screen logical DPI=%.1f  →  font scale=%.3f", _screen_dpi, _dpi_scale)
 
-    from ui.theme      import apply_dpi_scale as _apply_dpi_scale, FONT as _FONT_LIVE
+    from ui.theme      import apply_dpi_scale as _apply_dpi_scale, FONT as _FONT_LIVE, \
+                               set_theme as _set_theme
     from ui.font_utils import sans_font as _sans_font
     _apply_dpi_scale(_dpi_scale)
 
-    # Regex-scale ALL pt values in STYLE — catches every "font-size: Npt"
-    # pattern regardless of spacing, and correctly handles 11pt (tooltip)
-    # and any future additions, unlike the old 3-value string-replace hack.
-    _scaled_style = re.sub(
-        r'font-size:\s*(\d+)pt',
-        lambda m: f"font-size:{max(8, int(round(int(m.group(1)) * _dpi_scale)))}pt",
-        STYLE,
-    )
+    # Apply the saved theme (also swaps PALETTE to the correct variant so any
+    # widget constructed after this call gets the right PALETTE-based colours).
+    _initial_theme = config.get_pref("ui.theme", "dark")
+    _set_theme(_initial_theme)
 
     # Set base application font so all Qt widgets that don't have an explicit
     # QSS font rule inherit the platform-appropriate family (Segoe UI on
     # Windows, Helvetica Neue on macOS) at the correctly-scaled body size.
     app.setFont(_sans_font(_FONT_LIVE["body"]))
-    app.setStyleSheet(_scaled_style)
+    app.setStyleSheet(build_style(_initial_theme))
 
     # ── Windows: set stable AppUserModelID before any window is created ──
     # Without this, Windows assigns a generic AUMID based on the exe path,

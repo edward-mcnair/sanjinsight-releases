@@ -55,7 +55,7 @@ class _ModeToggle(QWidget):
         _base = (
             f"font-family:'Helvetica Neue',Arial;"
             f"font-size:{_fp}pt; font-weight:bold; "
-            "letter-spacing:1px; border:1px solid #333; padding:0 10px;")
+            f"letter-spacing:1px; border:1px solid {PALETTE['border']}; padding:0 10px;")
 
         self._std_btn.setStyleSheet(
             f"QPushButton {{ {_base} border-top-left-radius:6px; "
@@ -97,6 +97,9 @@ class _ModeToggle(QWidget):
         if emit:
             self.toggled.emit(advanced)
 
+    def _apply_styles(self) -> None:
+        self._refresh_style()
+
     # ---------------------------------------------------------------- #
     #  Internal                                                         #
     # ---------------------------------------------------------------- #
@@ -106,16 +109,16 @@ class _ModeToggle(QWidget):
         std_active = not self._advanced
         adv_active = self._advanced
 
-        std_bg  = self._COL_STD if std_active else "#1e1e1e"
+        std_bg  = self._COL_STD if std_active else PALETTE["surface"]
         std_col = "white"       if std_active else "rgba(255,255,255,100)"
-        adv_bg  = self._COL_ADV if adv_active else "#1e1e1e"
+        adv_bg  = self._COL_ADV if adv_active else PALETTE["surface"]
         adv_col = "white"       if adv_active else "rgba(255,255,255,100)"
 
         _fp = 8 if sys.platform == 'win32' else 10
         _base = (
             f"font-family:'Helvetica Neue',Arial;"
             f"font-size:{_fp}pt; font-weight:bold; "
-            "letter-spacing:1px; border:1px solid #333; padding:0 10px;")
+            f"letter-spacing:1px; border:1px solid {PALETTE['border']}; padding:0 10px;")
 
         self._std_btn.setStyleSheet(
             f"QPushButton {{ {_base} background:{std_bg}; color:{std_col}; "
@@ -133,7 +136,6 @@ class StatusHeader(QWidget):
         super().__init__()
         self.setMaximumHeight(64)
         self.setMinimumHeight(44)
-        self.setStyleSheet("background:#111; border-bottom:1px solid #252525;")
         lay = QHBoxLayout(self)
         lay.setContentsMargins(16, 0, 16, 0)
         lay.setSpacing(14)
@@ -160,22 +162,18 @@ class StatusHeader(QWidget):
                 log.debug("Logo SVG load failed — using text fallback: %s", _e)
 
         if not logo_loaded:
-            fallback = QLabel("MICROSANJ")
-            fallback.setStyleSheet(
-                f"font-family:Menlo,monospace; font-size:{FONT['body']}pt; "
-                "color:#fff; letter-spacing:3px; background:transparent;")
-            logo_col_lay.addWidget(fallback)
-
-
+            self._logo_fallback = QLabel("MICROSANJ")
+            logo_col_lay.addWidget(self._logo_fallback)
+        else:
+            self._logo_fallback = None
 
         lay.addWidget(logo_col)
 
         # ---- Divider ----
-        div = QFrame()
-        div.setFrameShape(QFrame.VLine)
-        div.setStyleSheet("color:#2a2a2a;")
-        div.setFixedHeight(28)
-        lay.addWidget(div)
+        self._div = QFrame()
+        self._div.setFrameShape(QFrame.VLine)
+        self._div.setFixedHeight(28)
+        lay.addWidget(self._div)
 
         # ---- Title removed ----
 
@@ -196,21 +194,17 @@ class StatusHeader(QWidget):
         pp_lay.setContentsMargins(8, 0, 8, 0)
         pp_lay.setSpacing(5)
         pp_icon = QLabel("●")
-        pp_icon.setStyleSheet(f"color:#555; font-size:{FONT['label']}pt;")
         self._profile_name_lbl = QLabel("No profile")
-        self._profile_name_lbl.setStyleSheet(
-            f"font-size:{FONT['label']}pt; color:#888; letter-spacing:1px;")
         pp_lay.addWidget(pp_icon)
         pp_lay.addWidget(self._profile_name_lbl)
         self._profile_pill_icon = pp_icon
         lay.addWidget(self._profile_pill)
 
         # ---- Divider ----
-        div2 = QFrame()
-        div2.setFrameShape(QFrame.VLine)
-        div2.setStyleSheet("color:#2a2a2a;")
-        div2.setFixedHeight(28)
-        lay.addWidget(div2)
+        self._div2 = QFrame()
+        self._div2.setFrameShape(QFrame.VLine)
+        self._div2.setFixedHeight(28)
+        lay.addWidget(self._div2)
 
         # ---- Status dots ----
         self._cam_dot   = self._dot("Camera")
@@ -226,33 +220,20 @@ class StatusHeader(QWidget):
         # ---- Demo mode banner (hidden until activated) ----
         self._demo_banner = QWidget()
         self._demo_banner.setVisible(False)
-        self._demo_banner.setStyleSheet(
-            "background:#ff990022; border:1px solid #ff990066; border-radius:4px;")
         db_lay = QHBoxLayout(self._demo_banner)
         db_lay.setContentsMargins(10, 0, 6, 0)
         db_lay.setSpacing(6)
-        db_icon = QLabel("▶")
-        db_icon.setStyleSheet(f"color:#ff9900; font-size:{FONT['body']}pt;")
-        db_text = QLabel("DEMO MODE")
-        db_text.setStyleSheet(
-            f"color:#ff9900; font-size:{FONT['label']}pt; font-family:Menlo,monospace; "
-            "letter-spacing:2px; font-weight:bold;")
-        db_exit = QPushButton("✕ Exit")
-        db_exit.setToolTip("Exit demo mode and scan for real hardware")
-        db_exit.setStyleSheet(scaled_qss("""
-            QPushButton {
-                background: #ff990033; color: #ff9900;
-                border: 1px solid #ff990066; border-radius: 3px;
-                font-size: 11pt; font-weight: 600; padding: 2px 8px;
-            }
-            QPushButton:hover   { background: #ff990066; }
-            QPushButton:pressed { background: #ff990099; }
-        """))
-        db_exit.clicked.connect(self.exit_demo_requested)
-        db_lay.addWidget(db_icon)
-        db_lay.addWidget(db_text)
+        self._db_icon = QLabel("▶")
+        self._db_text = QLabel("DEMO MODE")
+        self._db_text.setStyleSheet(
+            f"font-family:Menlo,monospace; letter-spacing:2px; font-weight:bold;")
+        self._db_exit = QPushButton("✕ Exit")
+        self._db_exit.setToolTip("Exit demo mode and scan for real hardware")
+        self._db_exit.clicked.connect(self.exit_demo_requested)
+        db_lay.addWidget(self._db_icon)
+        db_lay.addWidget(self._db_text)
         db_lay.addSpacing(4)
-        db_lay.addWidget(db_exit)
+        db_lay.addWidget(self._db_exit)
         self._demo_banner.setToolTip(
             "Running with simulated hardware — no instrument connected.\n"
             "All measurements use synthetic data.")
@@ -267,39 +248,120 @@ class StatusHeader(QWidget):
             "Emergency Stop — immediately disables bias output, "
             "all TECs, stage motion, and aborts any active acquisition.\n"
             "Hardware stays connected. Click 'Clear' to re-arm.")
-        self._estop_btn.setStyleSheet(scaled_qss("""
-            QPushButton {
-                background: #5a0000;
-                color: #ff4444;
-                border: 2px solid #aa0000;
-                border-radius: 5px;
-                font-size: 13pt;
-                font-weight: bold;
-                letter-spacing: 1px;
-                padding: 0 12px;
-            }
-            QPushButton:hover {
-                background: #7a0000;
-                color: #ff6666;
-                border-color: #cc2222;
-            }
-            QPushButton:pressed {
-                background: #3a0000;
-            }
-            QPushButton[armed="false"] {
-                background: #1a1a1a;
-                color: #555;
-                border: 1px solid #2a2a2a;
-            }
-            QPushButton[armed="false"]:hover {
-                background: #222;
-                color: #888;
-                border-color: #444;
-            }
-        """))
         self._estop_btn.setProperty("armed", "true")
         self._estop_armed = True
         lay.addWidget(self._estop_btn)
+
+        self._apply_styles()
+
+    # ---------------------------------------------------------------- #
+    #  Theme support                                                    #
+    # ---------------------------------------------------------------- #
+
+    def _apply_styles(self) -> None:
+        """Re-apply all per-widget stylesheets using the current PALETTE."""
+        warn = PALETTE["warning"]
+        surf = PALETTE["surface"]
+        surf3 = PALETTE["surface3"]
+        bdr = PALETTE["border"]
+        text = PALETTE["text"]
+        dim = PALETTE["textDim"]
+
+        # Header bar itself
+        self.setStyleSheet(
+            f"background:{surf3}; border-bottom:1px solid {bdr};")
+
+        # Logo text fallback
+        if self._logo_fallback is not None:
+            self._logo_fallback.setStyleSheet(
+                f"font-family:Menlo,monospace; font-size:{FONT['body']}pt; "
+                f"color:{text}; letter-spacing:3px; background:transparent;")
+
+        # Dividers
+        self._div.setStyleSheet(f"color:{bdr};")
+        self._div2.setStyleSheet(f"color:{bdr};")
+
+        # Profile pill
+        self._profile_pill_icon.setStyleSheet(
+            f"color:{dim}; font-size:{FONT['label']}pt;")
+        self._profile_name_lbl.setStyleSheet(
+            f"font-size:{FONT['label']}pt; color:{dim}; letter-spacing:1px;")
+
+        # Demo banner
+        self._demo_banner.setStyleSheet(
+            f"background:{warn}22; border:1px solid {warn}66; border-radius:4px;")
+        self._db_icon.setStyleSheet(
+            f"color:{warn}; font-size:{FONT['body']}pt;")
+        self._db_text.setStyleSheet(
+            f"color:{warn}; font-size:{FONT['label']}pt; "
+            f"font-family:Menlo,monospace; letter-spacing:2px; font-weight:bold;")
+        self._db_exit.setStyleSheet(scaled_qss(
+            f"QPushButton {{"
+            f"    background:{warn}33; color:{warn};"
+            f"    border:1px solid {warn}66; border-radius:3px;"
+            f"    font-size:11pt; font-weight:600; padding:2px 8px;"
+            f"}}"
+            f"QPushButton:hover   {{ background:{warn}66; }}"
+            f"QPushButton:pressed {{ background:{warn}99; }}"
+        ))
+
+        # E-Stop button — safety-critical reds stay hardcoded; only the
+        # disarmed/idle state uses PALETTE refs for theme correctness.
+        self._estop_btn.setStyleSheet(scaled_qss(
+            f"QPushButton {{"
+            "    background: #5a0000;"
+            "    color: #ff4444;"
+            "    border: 2px solid #aa0000;"
+            "    border-radius: 5px;"
+            "    font-size: 13pt;"
+            "    font-weight: bold;"
+            "    letter-spacing: 1px;"
+            "    padding: 0 12px;"
+            "}"
+            "QPushButton:hover {"
+            "    background: #7a0000;"
+            "    color: #ff6666;"
+            "    border-color: #cc2222;"
+            "}"
+            "QPushButton:pressed {"
+            "    background: #3a0000;"
+            "}"
+            f"QPushButton[armed=\"false\"] {{"
+            f"    background:{surf3}; color:{dim}; border:1px solid {bdr};"
+            f"}}"
+            f"QPushButton[armed=\"false\"]:hover {{"
+            f"    background:{surf}; color:{text}; border-color:{bdr};"
+            f"}}"
+        ))
+
+        # Mode toggle
+        self._mode_toggle._apply_styles()
+
+        # Device manager button (if added)
+        if hasattr(self, "_hw_btn"):
+            self._hw_btn.setStyleSheet(
+                f"QPushButton {{"
+                f"    background:{surf3}; border:1px solid {bdr}; border-radius:4px;"
+                f"}}"
+                f"QPushButton:hover {{ background:{surf}; }}"
+            )
+
+        # AI button (if added) — re-apply with current status colour preserved
+        if hasattr(self, "_ai_btn"):
+            self.set_ai_status(getattr(self, "_ai_status", "off"))
+
+        # Default dot styles (connected state overrides these at runtime)
+        for dot_widget in [self._cam_dot, self._tec1_dot, self._tec2_dot,
+                           self._fpga_dot, self._bias_dot, self._stage_dot]:
+            lbl = dot_widget.layout().itemAt(1).widget()
+            lbl.setStyleSheet(
+                f"font-size:{FONT['label']}pt; color:{dim}; letter-spacing:1px;")
+
+        # Readiness dot (if added)
+        if hasattr(self, "_readiness_dot"):
+            rd_lbl = self._readiness_dot.layout().itemAt(1).widget()
+            rd_lbl.setStyleSheet(
+                f"font-size:{FONT['label']}pt; color:{dim}; letter-spacing:1px;")
 
     def _dot(self, label):
         w = QWidget()
@@ -307,9 +369,10 @@ class StatusHeader(QWidget):
         h.setContentsMargins(8, 0, 8, 0)
         h.setSpacing(5)
         dot = QLabel("●")
-        dot.setStyleSheet(f"color:#555; font-size:{FONT['label']}pt;")
+        dot.setStyleSheet(f"color:{PALETTE['textDim']}; font-size:{FONT['label']}pt;")
         lbl = QLabel(label)
-        lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:#888; letter-spacing:1px;")
+        lbl.setStyleSheet(
+            f"font-size:{FONT['label']}pt; color:{PALETTE['textDim']}; letter-spacing:1px;")
         h.addWidget(dot)
         h.addWidget(lbl)
         w._dot = dot
@@ -321,12 +384,12 @@ class StatusHeader(QWidget):
         if profile is None:
             self._profile_name_lbl.setText("No profile")
             self._profile_name_lbl.setStyleSheet(
-                f"font-size:{FONT['label']}pt; color:#888; letter-spacing:1px;")
+                f"font-size:{FONT['label']}pt; color:{PALETTE['textDim']}; letter-spacing:1px;")
             self._profile_pill_icon.setStyleSheet(
-                f"color:#555; font-size:{FONT['label']}pt;")
+                f"color:{PALETTE['textDim']}; font-size:{FONT['label']}pt;")
             self._profile_pill.setToolTip("")
         else:
-            accent = CATEGORY_ACCENTS.get(profile.category, "#00d4aa")
+            accent = CATEGORY_ACCENTS.get(profile.category, PALETTE["success"])
             # Truncate long names
             name = profile.name if len(profile.name) <= 28 else profile.name[:26] + "…"
             self._profile_name_lbl.setText(name)
@@ -392,13 +455,13 @@ class StatusHeader(QWidget):
             "Device Manager — manage hardware connections and drivers\n"
             "● Red: no hardware connected\n"
             "● Green: hardware connected")
-        btn.setStyleSheet("""
-            QPushButton {
-                background:#1a1a1a;
-                border:1px solid #2a2a2a; border-radius:4px;
-            }
-            QPushButton:hover { background:#222; }
-        """)
+        btn.setStyleSheet(
+            f"QPushButton {{"
+            f"    background:{PALETTE['surface3']};"
+            f"    border:1px solid {PALETTE['border']}; border-radius:4px;"
+            f"}}"
+            f"QPushButton:hover {{ background:{PALETTE['surface']}; }}"
+        )
 
         # Start red — updated to green by set_hw_btn_status() once a device
         # is detected.  Uses qtawesome so the icon renders on all platforms
@@ -419,7 +482,7 @@ class StatusHeader(QWidget):
         if not hasattr(self, "_hw_btn"):
             return
         from ui.icons import set_btn_icon
-        color = "#00d4aa" if connected else "#cc3333"
+        color = PALETTE["success"] if connected else "#cc3333"
         set_btn_icon(self._hw_btn, "fa5s.server", color=color, size=18)
         tip_state = "connected" if connected else "no hardware connected"
         self._hw_btn.setToolTip(
@@ -442,58 +505,50 @@ class StatusHeader(QWidget):
             "AI Assistant — toggle the on-device AI assistant panel.\n"
             "Explains tabs, diagnoses instrument state, answers questions.\n"
             "Requires a GGUF model file (configured in Settings → AI Assistant).")
-        btn.setStyleSheet(scaled_qss("""
-            QPushButton {
-                background:#1a1a1a; color:#444;
-                border:1px solid #2a2a2a; border-radius:4px;
-                font-size:12pt; font-weight:600; letter-spacing:1px;
-            }
-            QPushButton:hover   { color:#888; background:#222; }
-            QPushButton:checked {
-                background:#1e2a28; color:#00d4aa;
-                border:1px solid #00d4aa66;
-            }
-            QPushButton:checked:hover { background:#254d42; }
-        """))
         btn.clicked.connect(callback)
         self.layout().addWidget(btn)
         self._ai_btn = btn
+        self._ai_status = "off"
+        self.set_ai_status("off")
         return btn
 
     def set_ai_status(self, status: str) -> None:
         """Update the AI button appearance to reflect the current AI status."""
         if not hasattr(self, "_ai_btn"):
             return
+        self._ai_status = status
         _colors = {
-            "off":      "#444",
-            "loading":  "#ffaa44",
-            "ready":    "#00d4aa",
-            "thinking": "#8888ff",
-            "error":    "#ff5555",
+            "off":      PALETTE["textDim"],
+            "loading":  PALETTE["warning"],
+            "ready":    PALETTE["success"],
+            "thinking": PALETTE["info"],
+            "error":    PALETTE["danger"],
         }
-        color = _colors.get(status, "#444")
-        checked = self._ai_btn.isChecked()
+        color = _colors.get(status, PALETTE["textDim"])
+        surf3 = PALETTE["surface3"]
+        surf = PALETTE["surface"]
+        bdr = PALETTE["border"]
+        dim = PALETTE["textDim"]
         self._ai_btn.setToolTip(
             f"AI Assistant ({status}) — click to toggle panel.\n"
             "Explains tabs, diagnoses instrument state, answers questions."
         )
-        # Re-apply style with status colour
-        self._ai_btn.setStyleSheet(f"""
-            QPushButton {{
-                background:#1a1a1a; color:#444;
-                border:1px solid #2a2a2a; border-radius:4px;
-                font-size:{FONT['label']}pt; font-weight:600; letter-spacing:1px;
-            }}
-            QPushButton:hover   {{ color:#888; background:#222; }}
-            QPushButton:checked {{
-                background:#1e2a28; color:{color};
-                border:1px solid {color}66;
-            }}
-            QPushButton:checked:hover {{ background:#254d42; }}
-        """)
+        self._ai_btn.setStyleSheet(scaled_qss(
+            f"QPushButton {{"
+            f"    background:{surf3}; color:{dim};"
+            f"    border:1px solid {bdr}; border-radius:4px;"
+            f"    font-size:12pt; font-weight:600; letter-spacing:1px;"
+            f"}}"
+            f"QPushButton:hover   {{ color:{PALETTE['text']}; background:{surf}; }}"
+            f"QPushButton:checked {{"
+            f"    background:{surf3}; color:{color};"
+            f"    border:1px solid {color}66;"
+            f"}}"
+            f"QPushButton:checked:hover {{ background:{surf}; }}"
+        ))
 
     def set_connected(self, which: str, ok: bool, tooltip: str = ""):
-        color  = "#00d4aa" if ok else "#ff4444"
+        color  = PALETTE["success"] if ok else PALETTE["danger"]
         target = {"camera": self._cam_dot,
                   "tec0":   self._tec1_dot,
                   "tec1":   self._tec2_dot,
@@ -517,7 +572,8 @@ class StatusHeader(QWidget):
                   "bias":   self._bias_dot,
                   "stage":  self._stage_dot}.get(which)
         if target:
-            target._dot.setStyleSheet(f"color:#ff9900; font-size:{FONT['label']}pt;")
+            target._dot.setStyleSheet(
+                f"color:{PALETTE['warning']}; font-size:{FONT['label']}pt;")
             target.setToolTip("Connecting…")
 
     def add_readiness_dot(self):
@@ -537,9 +593,10 @@ class StatusHeader(QWidget):
         h.setContentsMargins(8, 0, 8, 0)
         h.setSpacing(5)
         dot = QLabel("●")
-        dot.setStyleSheet(f"color:#555; font-size:{FONT['label']}pt;")
+        dot.setStyleSheet(f"color:{PALETTE['textDim']}; font-size:{FONT['label']}pt;")
         lbl = QLabel("System")
-        lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:#888; letter-spacing:1px;")
+        lbl.setStyleSheet(
+            f"font-size:{FONT['label']}pt; color:{PALETTE['textDim']}; letter-spacing:1px;")
         h.addWidget(dot)
         h.addWidget(lbl)
         w._dot = dot
@@ -569,12 +626,12 @@ class StatusHeader(QWidget):
             return
 
         _colors = {
-            "A": "#00d4aa",   # green  — all clear
-            "B": "#4499ff",   # blue   — minor issues
-            "C": "#ffaa44",   # amber  — warnings present
-            "D": "#ff4444",   # red    — critical failures
+            "A": PALETTE["success"],  # green  — all clear
+            "B": PALETTE["info"],     # blue   — minor issues
+            "C": PALETTE["warning"],  # amber  — warnings present
+            "D": PALETTE["danger"],   # red    — critical failures
         }
-        color = _colors.get(grade, "#555")
+        color = _colors.get(grade, PALETTE["textDim"])
         self._readiness_dot._dot.setStyleSheet(
             f"color:{color}; font-size:{FONT['label']}pt;")
 
