@@ -689,6 +689,10 @@ class MainWindow(QMainWindow):
 
         # Toast notification manager — bottom-right corner of the window
         self._toasts = ToastManager(self)
+        # Guard: suppress device-connection toasts during the startup window.
+        # Set to True by _on_startup_done() (fired ~10 s after first show) so
+        # post-startup hotplug reconnections still surface as toasts.
+        self._startup_done = False
 
         # ── Command Palette ───────────────────────────────────────────
         self._cmd_palette = CommandPalette(self)
@@ -971,6 +975,18 @@ class MainWindow(QMainWindow):
 
         # Re-evaluate required-device readiness after every hotplug event
         self._update_safe_mode()
+
+        # Only show a toast for hotplug events that happen AFTER startup.
+        # During startup every device fires device_connected in quick succession
+        # and the startup dialog already communicates that status clearly.
+        if getattr(self, '_startup_done', False):
+            label = key.upper()
+            if ok:
+                self._toasts.show_success(f"{label} reconnected",
+                                          auto_dismiss_ms=4000)
+            else:
+                self._toasts.show_warning(f"{label} disconnected",
+                                          auto_dismiss_ms=0)
 
     def _update_safe_mode(self) -> None:
         """
@@ -1688,9 +1704,12 @@ class MainWindow(QMainWindow):
     def _on_log(self, msg: str):
         self._log_tab.append(msg)
         self._status.showMessage(msg, 4000)
-        # Surface success confirmations as green toasts
-        if any(k in msg.lower() for k in ("saved", "calibration complete",
-                                           "connected", "loaded")):
+        # Surface success confirmations as green toasts.
+        # "connected" is intentionally excluded: device-connection messages
+        # fire for every device during startup and are already shown in the
+        # startup dialog, header status dots, and log tab.  Post-startup
+        # hotplug reconnections are toasted by _on_device_hotplug instead.
+        if any(k in msg.lower() for k in ("saved", "calibration complete", "loaded")):
             self._toasts.show_success(msg, auto_dismiss_ms=4000)
 
     def _on_error(self, msg: str):
@@ -2056,6 +2075,14 @@ class MainWindow(QMainWindow):
             # Evaluate device readiness at startup so the safe-mode banner
             # appears immediately if hardware is not connected.
             self._update_safe_mode()
+            # Allow enough time for the hardware init sequence to finish before
+            # surfacing device-connection toasts.  10 s covers the slowest real
+            # hardware (FPGA firmware load) on both macOS demo and Windows.
+            QTimer.singleShot(10_000, self._on_startup_done)
+
+    def _on_startup_done(self):
+        """Mark the startup window as complete; enable hotplug toasts."""
+        self._startup_done = True
 
     def _restore_layout(self):
         """Restore persisted window geometry and tab splitter sizes."""
