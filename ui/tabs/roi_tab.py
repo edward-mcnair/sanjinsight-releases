@@ -19,6 +19,7 @@ from hardware.app_state      import app_state
 from acquisition.roi         import Roi
 from acquisition.roi_widget  import RoiSelector
 from ui.icons import set_btn_icon
+from ui.theme import FONT, scaled_qss
 
 
 class RoiTab(QWidget):
@@ -62,7 +63,7 @@ class RoiTab(QWidget):
             il.addWidget(self._sub(label), r, 0)
             lbl = QLabel("--")
             lbl.setStyleSheet(
-                "font-family:Menlo,monospace; font-size:15pt; color:#00d4aa;")
+                scaled_qss("font-family:Menlo,monospace; font-size:15pt; color:#00d4aa;"))
             il.addWidget(lbl, r, 1)
             self._roi_labels[key] = lbl
 
@@ -117,7 +118,7 @@ class RoiTab(QWidget):
         self._clear_acq_btn.clicked.connect(self._clear_acq)
         self._acq_status = QLabel("No ROI active")
         self._acq_status.setStyleSheet(
-            "font-family:Menlo,monospace; font-size:14pt; color:#555;")
+            f"font-family:Menlo,monospace; font-size:{FONT['heading']}pt; color:#555;")
         ctl.addWidget(self._apply_acq_btn)
         ctl.addWidget(self._clear_acq_btn)
         ctl.addWidget(self._acq_status)
@@ -150,7 +151,7 @@ class RoiTab(QWidget):
                 l.setText("--")
             self._roi_labels["status"].setText("Full frame")
             self._roi_labels["status"].setStyleSheet(
-                "font-family:Menlo,monospace; font-size:15pt; color:#555;")
+                scaled_qss("font-family:Menlo,monospace; font-size:15pt; color:#555;"))
         else:
             self._roi_labels["x"].setText(str(roi.x))
             self._roi_labels["y"].setText(str(roi.y))
@@ -159,7 +160,7 @@ class RoiTab(QWidget):
             self._roi_labels["area"].setText(f"{roi.area:,} px")
             self._roi_labels["status"].setText("ROI defined")
             self._roi_labels["status"].setStyleSheet(
-                "font-family:Menlo,monospace; font-size:15pt; color:#ffaa44;")
+                scaled_qss("font-family:Menlo,monospace; font-size:15pt; color:#ffaa44;"))
 
     def _apply_preset(self, rx, ry, rw, rh):
         fh, fw = self._frame_hw
@@ -185,7 +186,7 @@ class RoiTab(QWidget):
         msg = str(roi) if not roi.is_empty else "Full frame (no ROI)"
         self._acq_status.setText(f"Active: {msg}")
         self._acq_status.setStyleSheet(
-            "font-family:Menlo,monospace; font-size:14pt; color:#00d4aa;")
+            f"font-family:Menlo,monospace; font-size:{FONT['heading']}pt; color:#00d4aa;")
         from ui.app_signals import signals
         signals.log_message.emit(f"ROI applied to acquisition: {msg}")
 
@@ -196,6 +197,6 @@ class RoiTab(QWidget):
             pl.roi = None
         self._acq_status.setText("No ROI active (full frame)")
         self._acq_status.setStyleSheet(
-            "font-family:Menlo,monospace; font-size:14pt; color:#555;")
+            f"font-family:Menlo,monospace; font-size:{FONT['heading']}pt; color:#555;")
         from ui.app_signals import signals
         signals.log_message.emit("ROI cleared — acquisition using full frame")

@@ -17,7 +17,7 @@ from PyQt5.QtWidgets import (
     QWidget, QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QFrame)
 from PyQt5.QtCore    import Qt, QTimer, pyqtSignal
 
-from ui.theme import FONT, PALETTE
+from ui.theme import FONT, PALETTE, scaled_qss
 
 
 class _ModeToggle(QWidget):
@@ -232,14 +232,14 @@ class StatusHeader(QWidget):
         db_lay.setContentsMargins(10, 0, 6, 0)
         db_lay.setSpacing(6)
         db_icon = QLabel("▶")
-        db_icon.setStyleSheet("color:#ff9900; font-size:13pt;")
+        db_icon.setStyleSheet(f"color:#ff9900; font-size:{FONT['body']}pt;")
         db_text = QLabel("DEMO MODE")
         db_text.setStyleSheet(
-            "color:#ff9900; font-size:12pt; font-family:Menlo,monospace; "
+            f"color:#ff9900; font-size:{FONT['label']}pt; font-family:Menlo,monospace; "
             "letter-spacing:2px; font-weight:bold;")
         db_exit = QPushButton("✕ Exit")
         db_exit.setToolTip("Exit demo mode and scan for real hardware")
-        db_exit.setStyleSheet("""
+        db_exit.setStyleSheet(scaled_qss("""
             QPushButton {
                 background: #ff990033; color: #ff9900;
                 border: 1px solid #ff990066; border-radius: 3px;
@@ -247,7 +247,7 @@ class StatusHeader(QWidget):
             }
             QPushButton:hover   { background: #ff990066; }
             QPushButton:pressed { background: #ff990099; }
-        """)
+        """))
         db_exit.clicked.connect(self.exit_demo_requested)
         db_lay.addWidget(db_icon)
         db_lay.addWidget(db_text)
@@ -267,7 +267,7 @@ class StatusHeader(QWidget):
             "Emergency Stop — immediately disables bias output, "
             "all TECs, stage motion, and aborts any active acquisition.\n"
             "Hardware stays connected. Click 'Clear' to re-arm.")
-        self._estop_btn.setStyleSheet("""
+        self._estop_btn.setStyleSheet(scaled_qss("""
             QPushButton {
                 background: #5a0000;
                 color: #ff4444;
@@ -296,7 +296,7 @@ class StatusHeader(QWidget):
                 color: #888;
                 border-color: #444;
             }
-        """)
+        """))
         self._estop_btn.setProperty("armed", "true")
         self._estop_armed = True
         lay.addWidget(self._estop_btn)
@@ -442,7 +442,7 @@ class StatusHeader(QWidget):
             "AI Assistant — toggle the on-device AI assistant panel.\n"
             "Explains tabs, diagnoses instrument state, answers questions.\n"
             "Requires a GGUF model file (configured in Settings → AI Assistant).")
-        btn.setStyleSheet("""
+        btn.setStyleSheet(scaled_qss("""
             QPushButton {
                 background:#1a1a1a; color:#444;
                 border:1px solid #2a2a2a; border-radius:4px;
@@ -454,7 +454,7 @@ class StatusHeader(QWidget):
                 border:1px solid #00d4aa66;
             }
             QPushButton:checked:hover { background:#254d42; }
-        """)
+        """))
         btn.clicked.connect(callback)
         self.layout().addWidget(btn)
         self._ai_btn = btn
@@ -482,7 +482,7 @@ class StatusHeader(QWidget):
             QPushButton {{
                 background:#1a1a1a; color:#444;
                 border:1px solid #2a2a2a; border-radius:4px;
-                font-size:12pt; font-weight:600; letter-spacing:1px;
+                font-size:{FONT['label']}pt; font-weight:600; letter-spacing:1px;
             }}
             QPushButton:hover   {{ color:#888; background:#222; }}
             QPushButton:checked {{

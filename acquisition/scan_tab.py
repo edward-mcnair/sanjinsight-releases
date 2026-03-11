@@ -16,6 +16,7 @@ import numpy as np
 
 from ui.button_utils import RunningButton, apply_hand_cursor
 from ui.font_utils   import sans_font
+from ui.theme import FONT, scaled_qss
 
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -335,7 +336,7 @@ class ScanTab(QWidget):
         # ---- Tile size summary ----
         self._summary_lbl = QLabel("")
         self._summary_lbl.setStyleSheet(
-            "font-family:Menlo,monospace; font-size:12pt; color:#666;")
+            f"font-family:Menlo,monospace; font-size:{FONT['label']}pt; color:#666;")
         self._summary_lbl.setWordWrap(True)
         lay.addWidget(self._summary_lbl)
         self._update_summary()
@@ -353,7 +354,7 @@ class ScanTab(QWidget):
         self._run_btn.setObjectName("primary")
         self._run_btn.setFixedHeight(42)   # was 34 — taller so spinner text is
         self._run_btn.setStyleSheet(       # clearly readable while scanning
-            "font-size:15pt; font-weight:600;")
+            scaled_qss("font-size:15pt; font-weight:600;"))
 
         self._abort_btn = QPushButton("Abort")
         set_btn_icon(self._abort_btn, "fa5s.stop", "#ff6666")
@@ -370,7 +371,7 @@ class ScanTab(QWidget):
 
         self._tile_lbl = QLabel("Ready")
         self._tile_lbl.setStyleSheet(
-            "font-family:Menlo,monospace; font-size:14pt; color:#555;")
+            f"font-family:Menlo,monospace; font-size:{FONT['heading']}pt; color:#555;")
         self._tile_lbl.setWordWrap(True)
 
         rl.addWidget(self._run_btn)
@@ -386,8 +387,8 @@ class ScanTab(QWidget):
         self._log.setReadOnly(True)
         self._log.setFixedHeight(120)
         self._log.setStyleSheet(
-            "background:#111; color:#555; "
-            "font-family:Menlo,monospace; font-size:11pt;")
+            f"background:#111; color:#555; "
+            f"font-family:Menlo,monospace; font-size:{FONT['sublabel']}pt;")
         ll.addWidget(self._log)
         lay.addWidget(log_box)
         lay.addStretch()
@@ -424,7 +425,7 @@ class ScanTab(QWidget):
             val = QLabel("—")
             val.setAlignment(Qt.AlignCenter)
             val.setStyleSheet(
-                "font-family:Menlo,monospace; font-size:15pt; color:#aaa;")
+                scaled_qss("font-family:Menlo,monospace; font-size:15pt; color:#aaa;"))
             v.addWidget(sub)
             v.addWidget(val)
             w2._val = val
@@ -437,13 +438,13 @@ class ScanTab(QWidget):
         # documentMode(True) strips the frame that visually connects the tab
         # bar to the content area; without it, the inactive tab looks like it
         # is floating in the wrong position.  Use explicit styling instead.
-        result_tabs.setStyleSheet("""
-            QTabWidget::pane {
+        result_tabs.setStyleSheet(f"""
+            QTabWidget::pane {{
                 border: 1px solid #2a2a2a;
                 border-top: none;
                 background: #111;
-            }
-            QTabBar::tab {
+            }}
+            QTabBar::tab {{
                 background: #1a1a1a;
                 color: #555;
                 border: 1px solid #2a2a2a;
@@ -451,14 +452,14 @@ class ScanTab(QWidget):
                 border-radius: 3px 3px 0 0;
                 padding: 4px 20px;
                 min-width: 110px;
-                font-size: 12pt;
-            }
-            QTabBar::tab:selected {
+                font-size: {FONT['label']}pt;
+            }}
+            QTabBar::tab:selected {{
                 background: #111;
                 color: #00d4aa;
                 border-bottom-color: #111;
-            }
-            QTabBar::tab:hover:!selected { color: #888; background: #222; }
+            }}
+            QTabBar::tab:hover:!selected {{ color: #888; background: #222; }}
         """)
 
         # Live / final ΔR/R
@@ -547,7 +548,7 @@ class ScanTab(QWidget):
         color = ("#00d4aa" if prog.state == "complete" else
                  "#ff6666" if prog.state in ("error", "aborted") else "#ffaa44")
         self._stat_fields["state"]._val.setStyleSheet(
-            f"font-family:Menlo,monospace; font-size:15pt; color:{color};")
+            scaled_qss(f"font-family:Menlo,monospace; font-size:15pt; color:{color};"))
 
         self._log.append(
             f"<span style='color:#444'>"

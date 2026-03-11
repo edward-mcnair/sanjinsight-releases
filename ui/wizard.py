@@ -31,6 +31,7 @@ from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QSize
 from PyQt5.QtGui  import (QColor, QPainter, QPen, QFont,
                            QImage, QPixmap, QLinearGradient)
 from ui.font_utils import sans_font
+from ui.theme import FONT, scaled_qss
 
 
 # ------------------------------------------------------------------ #
@@ -141,7 +142,7 @@ class _ProfileCard(QFrame):
         stripe.setStyleSheet(f"background:{accent}; border-radius:1px;")
         top.addWidget(stripe, 0, Qt.AlignTop)
         name_lbl = QLabel(profile.name)
-        name_lbl.setStyleSheet("font-size:14pt; font-weight:bold; color:#ddd;")
+        name_lbl.setStyleSheet(f"font-size:{FONT['heading']}pt; font-weight:bold; color:#ddd;")
         name_lbl.setWordWrap(True)
         top.addWidget(name_lbl, 1)
         root.addLayout(top)
@@ -150,7 +151,7 @@ class _ProfileCard(QFrame):
         desc = (profile.description[:90] + "…"
                 if len(profile.description) > 90 else profile.description)
         desc_lbl = QLabel(desc)
-        desc_lbl.setStyleSheet("font-size:12pt; color:#585858;")
+        desc_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:#585858;")
         desc_lbl.setWordWrap(True)
         root.addWidget(desc_lbl)
 
@@ -161,12 +162,12 @@ class _ProfileCard(QFrame):
         bot.setSpacing(8)
         cat_lbl = QLabel(profile.category)
         cat_lbl.setStyleSheet(
-            f"font-size:10pt; font-weight:bold; color:{accent}99;")
+            f"font-size:{FONT['caption']}pt; font-weight:bold; color:{accent}99;")
         wl_lbl = QLabel(f"{profile.wavelength_nm} nm")
-        wl_lbl.setStyleSheet("font-size:10pt; color:#404040;")
+        wl_lbl.setStyleSheet(f"font-size:{FONT['caption']}pt; color:#404040;")
         ct_lbl = QLabel(f"C_T  {profile.ct_value:.2e}")
         ct_lbl.setStyleSheet(
-            f"font-family:Menlo,monospace; font-size:11pt; color:{accent};")
+            f"font-family:Menlo,monospace; font-size:{FONT['sublabel']}pt; color:{accent};")
         bot.addWidget(cat_lbl)
         bot.addWidget(wl_lbl)
         bot.addStretch(1)
@@ -222,29 +223,29 @@ class _ProfileRow(QFrame):
         lay.addWidget(stripe)
 
         name_lbl = QLabel(profile.name)
-        name_lbl.setStyleSheet("font-size:14pt; font-weight:bold; color:#ddd;")
+        name_lbl.setStyleSheet(f"font-size:{FONT['heading']}pt; font-weight:bold; color:#ddd;")
         name_lbl.setMinimumWidth(160)
         lay.addWidget(name_lbl)
 
         cat_lbl = QLabel(profile.category)
-        cat_lbl.setStyleSheet(f"font-size:12pt; color:{accent}88;")
+        cat_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{accent}88;")
         cat_lbl.setFixedWidth(160)
         lay.addWidget(cat_lbl)
 
         wl_lbl = QLabel(f"{profile.wavelength_nm} nm")
-        wl_lbl.setStyleSheet("font-size:12pt; color:#505050;")
+        wl_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:#505050;")
         wl_lbl.setFixedWidth(60)
         lay.addWidget(wl_lbl)
 
         desc = (profile.description[:70] + "…"
                 if len(profile.description) > 70 else profile.description)
         desc_lbl = QLabel(desc)
-        desc_lbl.setStyleSheet("font-size:12pt; color:#484848;")
+        desc_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:#484848;")
         lay.addWidget(desc_lbl, 1)
 
         ct_lbl = QLabel(f"C_T  {profile.ct_value:.2e}")
         ct_lbl.setStyleSheet(
-            f"font-family:Menlo,monospace; font-size:12pt; color:{accent};")
+            f"font-family:Menlo,monospace; font-size:{FONT['label']}pt; color:{accent};")
         ct_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         lay.addWidget(ct_lbl)
 
@@ -295,17 +296,17 @@ class Step1Profile(QWidget):
         title_row = QHBoxLayout()
         title_row.setSpacing(10)
         title = QLabel("Select a Material Profile")
-        title.setStyleSheet("font-size:22pt; font-weight:bold; color:#ccc;")
+        title.setStyleSheet(f"font-size:{FONT['readout']}pt; font-weight:bold; color:#ccc;")
         title_row.addWidget(title, 1)
 
-        _btn_ss = """
-            QPushButton {
+        _btn_ss = f"""
+            QPushButton {{
                 background:#1a1a1a; color:#555;
                 border:1px solid #2a2a2a; border-radius:5px;
-                font-size:16pt; padding:0 8px;
-            }
-            QPushButton:checked { background:#162030; color:#4e73df; border-color:#4e73df66; }
-            QPushButton:hover   { border-color:#444; color:#888; }
+                font-size:{FONT['readoutSm']}pt; padding:0 8px;
+            }}
+            QPushButton:checked {{ background:#162030; color:#4e73df; border-color:#4e73df66; }}
+            QPushButton:hover   {{ border-color:#444; color:#888; }}
         """
         self._card_btn = QPushButton("⊞")
         self._list_btn = QPushButton("≡")
@@ -323,7 +324,7 @@ class Step1Profile(QWidget):
         lay.addLayout(title_row)
 
         sub = QLabel("Choose the profile that matches the material on your sample.")
-        sub.setStyleSheet("font-size:13pt; color:#555;")
+        sub.setStyleSheet(f"font-size:{FONT['body']}pt; color:#555;")
         sub.setWordWrap(True)
         lay.addWidget(sub)
 
@@ -336,14 +337,14 @@ class Step1Profile(QWidget):
             b.setCheckable(True)
             b.setChecked(f == "All")
             b.setFixedHeight(28)
-            b.setStyleSheet("""
-                QPushButton {
+            b.setStyleSheet(f"""
+                QPushButton {{
                     background:#1a1a1a; color:#555;
                     border:1px solid #2a2a2a; border-radius:4px;
-                    padding:0 12px; font-size:12pt;
-                }
-                QPushButton:checked { background:#0d2a1a; color:#00d4aa; border-color:#00d4aa44; }
-                QPushButton:hover   { border-color:#333; color:#888; }
+                    padding:0 12px; font-size:{FONT['label']}pt;
+                }}
+                QPushButton:checked {{ background:#0d2a1a; color:#00d4aa; border-color:#00d4aa44; }}
+                QPushButton:hover   {{ border-color:#333; color:#888; }}
             """)
             b.clicked.connect(lambda _, fv=f: self._filter(fv))
             chip_row.addWidget(b)
@@ -491,12 +492,12 @@ class Step2Focus(QWidget):
         lay.setSpacing(14)
 
         title = QLabel("Focus on Your Sample")
-        title.setStyleSheet("font-size:24pt; font-weight:bold; color:#ccc;")
+        title.setStyleSheet(scaled_qss("font-size:24pt; font-weight:bold; color:#ccc;"))
         sub = QLabel(
             "Use the camera preview to position and focus on your device. "
             "Auto-Focus works best on samples with visible surface features. "
             "Use the manual controls for uniform or low-contrast surfaces.")
-        sub.setStyleSheet("font-size:14pt; color:#555;")
+        sub.setStyleSheet(f"font-size:{FONT['heading']}pt; color:#555;")
         sub.setWordWrap(True)
         lay.addWidget(title)
         lay.addWidget(sub)
@@ -511,8 +512,8 @@ class Step2Focus(QWidget):
         self._feed.setAlignment(Qt.AlignCenter)
         self._feed.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self._feed.setStyleSheet(
-            "background:#0d0d0d; border:1px solid #222; border-radius:4px;"
-            "color:#333; font-size:18pt;")
+            scaled_qss("background:#0d0d0d; border:1px solid #222; border-radius:4px;"
+                       "color:#333; font-size:18pt;"))
         self._feed.setText("Camera initialising…")
         content.addWidget(self._feed, 1)
 
@@ -532,14 +533,14 @@ class Step2Focus(QWidget):
         afl.setSpacing(6)
         af_title = QLabel("AUTO-FOCUS")
         af_title.setStyleSheet(
-            "font-size:12pt; letter-spacing:1.5px; color:#444;")
+            f"font-size:{FONT['label']}pt; letter-spacing:1.5px; color:#444;")
         self._af_btn = QPushButton("⚡  Auto-Focus")
         self._af_btn.setObjectName("primary")
         self._af_btn.setFixedHeight(34)
         self._af_btn.clicked.connect(self._run_autofocus)
         self._focus_metric = QLabel("Score: —")
         self._focus_metric.setStyleSheet(
-            "font-family:Menlo,monospace; font-size:12pt; color:#555;"
+            f"font-family:Menlo,monospace; font-size:{FONT['label']}pt; color:#555;"
             " padding-left:2px;")
         afl.addWidget(af_title)
         afl.addWidget(self._af_btn)
@@ -562,13 +563,13 @@ class Step2Focus(QWidget):
 
         man_title = QLabel("MANUAL FOCUS")
         man_title.setStyleSheet(
-            "font-size:12pt; letter-spacing:1.5px; color:#444;")
+            f"font-size:{FONT['label']}pt; letter-spacing:1.5px; color:#444;")
         manl.addWidget(man_title)
 
         # Step size selector
         step_row = QHBoxLayout()
         step_lbl = QLabel("Step")
-        step_lbl.setStyleSheet("font-size:14pt; color:#555;")
+        step_lbl.setStyleSheet(f"font-size:{FONT['heading']}pt; color:#555;")
         self._step_combo = QComboBox()
         for label in ["0.5 µm", "1 µm", "2 µm", "5 µm",
                       "10 µm", "25 µm", "50 µm", "100 µm"]:
@@ -600,13 +601,13 @@ class Step2Focus(QWidget):
         for b, sign in [(self._z_up_fine, +1), (self._z_down_fine, -1)]:
             b.setFixedSize(30, 24)
             b.setStyleSheet(
-                "QPushButton{background:#1a1a1a; color:#555; border:1px solid #2a2a2a;"
-                " border-radius:3px; font-size:14pt;}"
+                f"QPushButton{{background:#1a1a1a; color:#555; border:1px solid #2a2a2a;"
+                f" border-radius:3px; font-size:{FONT['heading']}pt;}}"
                 "QPushButton:hover{color:#aaa; border-color:#444;}")
             _sign = sign
             b.clicked.connect(lambda _, s=_sign: self._move_z(s, fine=True))
         nudge_lbl = QLabel("0.1 µm nudge")
-        nudge_lbl.setStyleSheet("font-size:14pt; color:#333;")
+        nudge_lbl.setStyleSheet(f"font-size:{FONT['heading']}pt; color:#333;")
         nudge_row.addWidget(self._z_up_fine)
         nudge_row.addWidget(nudge_lbl, 1)
         nudge_row.addWidget(self._z_down_fine)
@@ -615,7 +616,7 @@ class Step2Focus(QWidget):
         # Current Z readout
         self._z_pos_lbl = QLabel("Z: —")
         self._z_pos_lbl.setStyleSheet(
-            "font-family:Menlo,monospace; font-size:12pt; color:#555;"
+            f"font-family:Menlo,monospace; font-size:{FONT['label']}pt; color:#555;"
             " padding-left:2px;")
         manl.addWidget(self._z_pos_lbl)
 
@@ -697,7 +698,7 @@ class Step2Focus(QWidget):
             ok    = getattr(result, "converged", True)
             self._focus_metric.setText(f"Score: {score:.1f}")
             self._focus_metric.setStyleSheet(
-                f"font-family:Menlo,monospace; font-size:12pt;"
+                f"font-family:Menlo,monospace; font-size:{FONT['label']}pt;"
                 f" color:{'#00d4aa' if ok else '#ff8800'};"
                 f" padding-left:2px;")
         self._update_z_readout()
@@ -757,11 +758,11 @@ class Step3Acquire(QWidget):
         lay.setSpacing(16)
 
         title = QLabel("Acquire Measurement")
-        title.setStyleSheet("font-size:24pt; font-weight:bold; color:#ccc;")
+        title.setStyleSheet(scaled_qss("font-size:24pt; font-weight:bold; color:#ccc;"))
         sub = QLabel(
             "Everything is configured. Press Acquire to capture the "
             "thermoreflectance measurement. This will take a few seconds.")
-        sub.setStyleSheet("font-size:14pt; color:#555;")
+        sub.setStyleSheet(f"font-size:{FONT['heading']}pt; color:#555;")
         sub.setWordWrap(True)
         lay.addWidget(title)
         lay.addWidget(sub)
@@ -771,7 +772,7 @@ class Step3Acquire(QWidget):
         # Big acquire button
         self._acq_btn = QPushButton("▶  Acquire")
         self._acq_btn.setFixedHeight(64)
-        self._acq_btn.setStyleSheet("""
+        self._acq_btn.setStyleSheet(scaled_qss("""
             QPushButton {
                 background:#0d2a1a; color:#00d4aa;
                 border:2px solid #00d4aa44;
@@ -785,7 +786,7 @@ class Step3Acquire(QWidget):
             QPushButton:disabled {
                 background:#111; color:#333; border-color:#222;
             }
-        """)
+        """))
         lay.addWidget(self._acq_btn)
 
         # Progress
@@ -800,14 +801,14 @@ class Step3Acquire(QWidget):
         self._status = QLabel("")
         self._status.setAlignment(Qt.AlignCenter)
         self._status.setStyleSheet(
-            "font-family:Menlo,monospace; font-size:14pt; color:#555;")
+            f"font-family:Menlo,monospace; font-size:{FONT['heading']}pt; color:#555;")
         lay.addWidget(self._status)
 
         # Profile info summary
         self._profile_info = QLabel("")
         self._profile_info.setAlignment(Qt.AlignCenter)
         self._profile_info.setStyleSheet(
-            "font-size:14pt; color:#444; font-style:italic;")
+            f"font-size:{FONT['heading']}pt; color:#444; font-style:italic;")
         self._profile_info.setWordWrap(True)
         lay.addWidget(self._profile_info)
 
@@ -853,7 +854,7 @@ class Step3Acquire(QWidget):
         self._progress.setVisible(False)
         self._status.setText(f"Error: {msg}")
         self._status.setStyleSheet(
-            "font-family:Menlo,monospace; font-size:14pt; color:#ff4444;")
+            f"font-family:Menlo,monospace; font-size:{FONT['heading']}pt; color:#ff4444;")
 
 
 # ------------------------------------------------------------------ #
@@ -881,9 +882,9 @@ class _VerdictBig(QWidget):
         ol.setAlignment(Qt.AlignVCenter)
         self._verdict_lbl = QLabel("—")
         self._verdict_lbl.setStyleSheet(
-            "font-size:50pt; font-weight:bold; font-family:Menlo,monospace;")
+            scaled_qss("font-size:50pt; font-weight:bold; font-family:Menlo,monospace;"))
         self._sub_lbl = QLabel("")
-        self._sub_lbl.setStyleSheet("font-size:15pt;")
+        self._sub_lbl.setStyleSheet(scaled_qss("font-size:15pt;"))
         ol.addWidget(self._verdict_lbl)
         ol.addWidget(self._sub_lbl)
         lay.addWidget(self._outer)
@@ -894,15 +895,15 @@ class _VerdictBig(QWidget):
             f"background:{bg}; border-radius:6px;")
         self._verdict_lbl.setText(verdict)
         self._verdict_lbl.setStyleSheet(
-            f"font-size:50pt; font-weight:bold; "
-            f"font-family:Menlo,monospace; color:{fg};")
+            scaled_qss(f"font-size:50pt; font-weight:bold; "
+                       f"font-family:Menlo,monospace; color:{fg};"))
         if verdict in ("WARNING", "FAIL") and hotspots > 0:
             hs = "hotspot" if hotspots == 1 else "hotspots"
             sub = f"{hotspots} {hs} detected  ·  peak {peak:.1f} °C"
         else:
             sub = default_sub
         self._sub_lbl.setText(sub)
-        self._sub_lbl.setStyleSheet(f"font-size:15pt; color:{fg}99;")
+        self._sub_lbl.setStyleSheet(scaled_qss(f"font-size:15pt; color:{fg}99;"))
 
 
 class Step4Results(QWidget):
@@ -921,7 +922,7 @@ class Step4Results(QWidget):
 
         title = QLabel("Measurement Results")
         title.setStyleSheet(
-            "font-size:24pt; font-weight:bold; color:#ccc;")
+            scaled_qss("font-size:24pt; font-weight:bold; color:#ccc;"))
         lay.addWidget(title)
 
         # Verdict
@@ -963,7 +964,7 @@ class Step4Results(QWidget):
             v = QLabel("—")
             v.setAlignment(Qt.AlignRight)
             v.setStyleSheet(
-                "font-family:Menlo,monospace; font-size:14pt; color:#aaa;")
+                f"font-family:Menlo,monospace; font-size:{FONT['heading']}pt; color:#aaa;")
             sg.addWidget(v, r, 1)
             self._stat_v[key] = v
         sl.addWidget(stats_box)
@@ -1018,7 +1019,7 @@ class Step4Results(QWidget):
         c = colors.get(r.verdict, "#aaa")
         for k in ["hotspots", "peak", "area"]:
             self._stat_v[k].setStyleSheet(
-                f"font-family:Menlo,monospace; font-size:14pt; color:{c};")
+                f"font-family:Menlo,monospace; font-size:{FONT['heading']}pt; color:{c};")
 
     def resizeEvent(self, e):
         super().resizeEvent(e)
@@ -1128,7 +1129,7 @@ class StandardWizard(QWidget):
         hdr_lay.setSpacing(2)
         app_lbl = QLabel("SanjINSIGHT")
         app_lbl.setStyleSheet(
-            "color:#ffffff; font-size:17pt; font-weight:700; "
+            f"color:#ffffff; font-size:{FONT['title']}pt; font-weight:700; "
             "font-family:'Helvetica Neue',Arial; background:transparent; border:none;")
         hdr_lay.addWidget(app_lbl)
         side_lay.addWidget(hdr)
@@ -1164,10 +1165,10 @@ class StandardWizard(QWidget):
             inner.setSpacing(1)
             name_l = QLabel(f"{icon}  {label}")
             name_l.setStyleSheet(
-                f"font-size:13pt; font-weight:600; color:{_TXT_DIM}; background:transparent;")
+                f"font-size:{FONT['body']}pt; font-weight:600; color:{_TXT_DIM}; background:transparent;")
             hint_l = QLabel(hint)
             hint_l.setStyleSheet(
-                f"font-size:10pt; color:#4a5568; background:transparent;")
+                f"font-size:{FONT['caption']}pt; color:#4a5568; background:transparent;")
             inner.addWidget(name_l)
             inner.addWidget(hint_l)
             bl.addLayout(inner)
@@ -1230,7 +1231,7 @@ class StandardWizard(QWidget):
 
         self._step_hint = QLabel("")
         self._step_hint.setStyleSheet(
-            "font-size:14pt; color:#444; font-style:italic;")
+            f"font-size:{FONT['heading']}pt; color:#444; font-style:italic;")
 
         nl.addWidget(self._back_btn)
         nl.addWidget(self._step_hint, 1)
@@ -1267,19 +1268,19 @@ class StandardWizard(QWidget):
                 f"background:{'#2a3551' if is_active else 'transparent'};")
             if is_active:
                 btn._name.setStyleSheet(
-                    "font-size:13pt; font-weight:700; color:#ffffff; background:transparent;")
+                    f"font-size:{FONT['body']}pt; font-weight:700; color:#ffffff; background:transparent;")
                 btn._hint.setStyleSheet(
-                    "font-size:10pt; color:#8892a4; background:transparent;")
+                    f"font-size:{FONT['caption']}pt; color:#8892a4; background:transparent;")
             elif is_done:
                 btn._name.setStyleSheet(
-                    "font-size:13pt; font-weight:600; color:#00d4aa; background:transparent;")
+                    f"font-size:{FONT['body']}pt; font-weight:600; color:#00d4aa; background:transparent;")
                 btn._hint.setStyleSheet(
-                    "font-size:10pt; color:#4a5568; background:transparent;")
+                    f"font-size:{FONT['caption']}pt; color:#4a5568; background:transparent;")
             else:
                 btn._name.setStyleSheet(
-                    "font-size:13pt; font-weight:600; color:#8892a4; background:transparent;")
+                    f"font-size:{FONT['body']}pt; font-weight:600; color:#8892a4; background:transparent;")
                 btn._hint.setStyleSheet(
-                    "font-size:10pt; color:#4a5568; background:transparent;")
+                    f"font-size:{FONT['caption']}pt; color:#4a5568; background:transparent;")
 
     def _go_to(self, step: int):
         # Stop focus preview if leaving step 2

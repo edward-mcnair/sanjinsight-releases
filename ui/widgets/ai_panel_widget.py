@@ -37,6 +37,7 @@ from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QCursor, QTextCharFormat, QColor, QFont
 from ui.icons      import set_btn_icon
 from ui.font_utils import mono_font
+from ui.theme      import FONT, scaled_qss
 
 log = logging.getLogger(__name__)
 
@@ -67,22 +68,25 @@ _STATUS_ICONS = {
     "error":    "⊗",
 }
 
-_BTN = f"""
+def _BTN() -> str:
+    return f"""
     QPushButton {{
         background:#1a1a1a; color:#888;
         border:1px solid #252525; border-radius:4px;
-        font-size:12pt; padding:5px 10px;
+        font-size:{FONT["label"]}pt; padding:5px 10px;
     }}
     QPushButton:hover   {{ background:#222; color:#bbb; border-color:#333; }}
     QPushButton:pressed {{ background:#181818; }}
     QPushButton:disabled{{ color:#333; border-color:#1a1a1a; }}
 """
 
-_BTN_PRIMARY = f"""
+
+def _BTN_PRIMARY() -> str:
+    return f"""
     QPushButton {{
         background:#1e2a28; color:{_GREEN};
         border:1px solid {_GREEN}44; border-radius:4px;
-        font-size:12pt; padding:5px 14px;
+        font-size:{FONT["label"]}pt; padding:5px 14px;
     }}
     QPushButton:hover   {{ background:#254d42; border-color:{_GREEN}88; }}
     QPushButton:pressed {{ background:#1a3530; }}
@@ -125,16 +129,16 @@ class AIPanelWidget(QWidget):
         # ── Header row ──
         hdr = QHBoxLayout()
         self._status_dot = QLabel("○")
-        self._status_dot.setStyleSheet(f"color:{_MUTED}; font-size:16pt;")
+        self._status_dot.setStyleSheet(f"color:{_MUTED}; font-size:{FONT['readoutSm']}pt;")
         self._title_lbl = QLabel("AI Assistant")
-        self._title_lbl.setStyleSheet("font-size:13pt; font-weight:700; color:#ccc;")
+        self._title_lbl.setStyleSheet(f"font-size:{FONT['body']}pt; font-weight:700; color:#ccc;")
         self._status_state = QLabel("off")
-        self._status_state.setStyleSheet(f"font-size:11pt; color:{_MUTED};")
+        self._status_state.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_MUTED};")
         close_btn = QPushButton("✕")
         close_btn.setFixedSize(22, 22)
         close_btn.setStyleSheet(
-            "QPushButton { background:transparent; color:#444; border:none; font-size:13pt; }"
-            "QPushButton:hover { color:#888; }"
+            f"QPushButton {{ background:transparent; color:#444; border:none; font-size:{FONT['body']}pt; }}"
+            f"QPushButton:hover {{ color:#888; }}"
         )
         close_btn.clicked.connect(self.close_requested)
         hdr.addWidget(self._status_dot)
@@ -164,13 +168,13 @@ class AIPanelWidget(QWidget):
         grade_row = QHBoxLayout()
         self._grade_lbl = QLabel("—")
         self._grade_lbl.setStyleSheet(
-            f"font-size:16pt; font-weight:700; color:{_MUTED}; "
+            f"font-size:{FONT['readoutSm']}pt; font-weight:700; color:{_MUTED}; "
             f"background:#1a1a1a; border-radius:3px; padding:1px 7px;"
         )
         self._grade_lbl.setFixedWidth(36)
         self._grade_lbl.setAlignment(Qt.AlignCenter)
         self._grade_summary_lbl = QLabel("No model loaded")
-        self._grade_summary_lbl.setStyleSheet(f"font-size:11pt; color:{_MUTED};")
+        self._grade_summary_lbl.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_MUTED};")
         grade_row.addWidget(self._grade_lbl)
         grade_row.addSpacing(8)
         grade_row.addWidget(self._grade_summary_lbl)
@@ -184,7 +188,7 @@ class AIPanelWidget(QWidget):
             btn = QPushButton("")
             btn.setStyleSheet(
                 f"QPushButton {{ background:transparent; color:{_MUTED}; "
-                f"border:none; text-align:left; padding:1px 4px; font-size:10pt; }}"
+                f"border:none; text-align:left; padding:1px 4px; font-size:{FONT['caption']}pt; }}"
                 f"QPushButton:hover {{ background:#1c1c1c; border-radius:3px; }}"
             )
             btn.setVisible(False)
@@ -198,7 +202,7 @@ class AIPanelWidget(QWidget):
         action_row = QHBoxLayout()
         self._explain_btn = QPushButton("Explain this tab")
         set_btn_icon(self._explain_btn, "fa5s.info-circle")
-        self._explain_btn.setStyleSheet(_BTN)
+        self._explain_btn.setStyleSheet(_BTN())
         self._explain_btn.setEnabled(False)
         self._explain_btn.setToolTip(
             "Ask the AI to explain what the current tab does\n"
@@ -207,7 +211,7 @@ class AIPanelWidget(QWidget):
 
         self._diagnose_btn = QPushButton("Diagnose")
         set_btn_icon(self._diagnose_btn, "fa5s.stethoscope")
-        self._diagnose_btn.setStyleSheet(_BTN)
+        self._diagnose_btn.setStyleSheet(_BTN())
         self._diagnose_btn.setEnabled(False)
         self._diagnose_btn.setToolTip(
             "Ask the AI to review the current instrument state\n"
@@ -225,7 +229,7 @@ class AIPanelWidget(QWidget):
         self._support_btn.setStyleSheet(
             f"QPushButton {{ background:#1a1a1a; color:#88aacc; "
             f"border:1px solid #252525; border-radius:4px; "
-            f"font-size:11pt; padding:4px 10px; }}"
+            f"font-size:{FONT['sublabel']}pt; padding:4px 10px; }}"
             f"QPushButton:hover   {{ background:#222; color:#aaccee; border-color:#333; }}"
             f"QPushButton:pressed {{ background:#181818; }}"
         )
@@ -244,7 +248,7 @@ class AIPanelWidget(QWidget):
         self._display.setStyleSheet(
             f"QTextEdit {{ background:{_BG2}; color:{_TEXT}; "
             f"border:1px solid {_BORDER}; border-radius:4px; "
-            f"font-size:12pt; font-family:Menlo,monospace; padding:6px; }}"
+            f"font-size:{FONT['label']}pt; font-family:Menlo,monospace; padding:6px; }}"
         )
         self._display.setPlaceholderText(
             "AI not connected yet.\n\n"
@@ -266,13 +270,13 @@ class AIPanelWidget(QWidget):
         self._input.setStyleSheet(
             f"QLineEdit {{ background:{_BG2}; color:{_TEXT}; "
             f"border:1px solid {_BORDER}; border-radius:4px; "
-            f"font-size:12pt; padding:5px 8px; }}"
+            f"font-size:{FONT['label']}pt; padding:5px 8px; }}"
         )
         self._input.returnPressed.connect(self._on_ask)
 
         self._ask_btn = QPushButton("Ask")
         set_btn_icon(self._ask_btn, "fa5s.paper-plane", "#00d4aa")
-        self._ask_btn.setStyleSheet(_BTN_PRIMARY)
+        self._ask_btn.setStyleSheet(_BTN_PRIMARY())
         self._ask_btn.setFixedWidth(60)
         self._ask_btn.setEnabled(False)
         self._ask_btn.clicked.connect(self._on_ask)
@@ -284,7 +288,7 @@ class AIPanelWidget(QWidget):
             QPushButton {{
                 background:#2a1010; color:{_RED};
                 border:1px solid {_RED}44; border-radius:4px;
-                font-size:12pt; padding:5px 10px;
+                font-size:{FONT["label"]}pt; padding:5px 10px;
             }}
             QPushButton:hover   {{ background:#3a1818; border-color:{_RED}88; }}
             QPushButton:pressed {{ background:#1a0a0a; }}
@@ -305,7 +309,7 @@ class AIPanelWidget(QWidget):
         set_btn_icon(self._clear_btn, "fa5s.trash")
         self._clear_btn.setStyleSheet(
             f"QPushButton {{ background:transparent; color:{_MUTED}; "
-            f"border:none; font-size:10pt; padding:0px 4px; }}"
+            f"border:none; font-size:{FONT['caption']}pt; padding:0px 4px; }}"
             f"QPushButton:hover {{ color:#888; }}"
         )
         self._clear_btn.setToolTip("Clear conversation history")
@@ -315,7 +319,7 @@ class AIPanelWidget(QWidget):
         set_btn_icon(self._export_btn, "fa5s.file-export")
         self._export_btn.setStyleSheet(
             f"QPushButton {{ background:transparent; color:{_MUTED}; "
-            f"border:none; font-size:10pt; padding:0px 4px; }}"
+            f"border:none; font-size:{FONT['caption']}pt; padding:0px 4px; }}"
             f"QPushButton:hover {{ color:#888; }}"
         )
         self._export_btn.setToolTip("Save conversation to a text file")
@@ -323,7 +327,7 @@ class AIPanelWidget(QWidget):
         self._export_btn.clicked.connect(self._on_export)
 
         self._rate_lbl = QLabel("")
-        self._rate_lbl.setStyleSheet(f"font-size:10pt; color:{_MUTED};")
+        self._rate_lbl.setStyleSheet(f"font-size:{FONT['caption']}pt; color:{_MUTED};")
         self._rate_lbl.setAlignment(Qt.AlignRight)
         rate_row.addWidget(self._clear_btn)
         rate_row.addSpacing(4)
@@ -384,9 +388,9 @@ class AIPanelWidget(QWidget):
         color = _STATUS_COLORS.get(status, _MUTED)
         icon  = _STATUS_ICONS.get(status, "○")
         self._status_dot.setText(icon)
-        self._status_dot.setStyleSheet(f"color:{color}; font-size:16pt;")
+        self._status_dot.setStyleSheet(f"color:{color}; font-size:{FONT['readoutSm']}pt;")
         self._status_state.setText(status)
-        self._status_state.setStyleSheet(f"font-size:11pt; color:{color};")
+        self._status_state.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{color};")
 
         can_act    = (status == "ready")
         thinking   = (status == "thinking")
@@ -489,7 +493,7 @@ class AIPanelWidget(QWidget):
 
         self._grade_lbl.setText(grade)
         self._grade_lbl.setStyleSheet(
-            f"font-size:16pt; font-weight:700; color:{color}; "
+            f"font-size:{FONT['readoutSm']}pt; font-weight:700; color:{color}; "
             f"background:#1a1a1a; border-radius:3px; padding:1px 7px;"
         )
         _grade_tips = {
@@ -508,7 +512,7 @@ class AIPanelWidget(QWidget):
         summary = "Instrument ready" if not parts else "  ·  ".join(parts)
         self._grade_summary_lbl.setText(summary)
         self._grade_summary_lbl.setStyleSheet(
-            f"font-size:11pt; color:{color if parts else _GREEN};"
+            f"font-size:{FONT['sublabel']}pt; color:{color if parts else _GREEN};"
         )
 
         # ── Issue rows (fail first, then warn) ──
@@ -522,7 +526,7 @@ class AIPanelWidget(QWidget):
                     btn.setText(f"  …and {len(active) - 4} more issues")
                     btn.setStyleSheet(
                         f"QPushButton {{ background:transparent; color:{_MUTED}; "
-                        f"border:none; text-align:left; padding:1px 4px; font-size:10pt; }}"
+                        f"border:none; text-align:left; padding:1px 4px; font-size:{FONT['caption']}pt; }}"
                     )
                     btn.setToolTip("")
                     btn.setCursor(Qt.ArrowCursor)
@@ -533,7 +537,7 @@ class AIPanelWidget(QWidget):
                     btn.setText(f"{icon}  {r.display_name}  ·  {r.observed}")
                     btn.setStyleSheet(
                         f"QPushButton {{ background:transparent; color:{clr}; "
-                        f"border:none; text-align:left; padding:1px 4px; font-size:10pt; }}"
+                        f"border:none; text-align:left; padding:1px 4px; font-size:{FONT['caption']}pt; }}"
                         f"QPushButton:hover {{ background:#1c1c1c; border-radius:3px; }}"
                     )
                     btn.setToolTip(f"{r.hint}\n\nClick to ask AI for guidance.")

@@ -30,6 +30,7 @@ from version import (
     __version__, BUILD_DATE, APP_NAME, APP_VENDOR,
     RELEASES_PAGE_URL, SUPPORT_EMAIL, version_string,
 )
+from ui.theme import FONT, scaled_qss
 
 log = logging.getLogger(__name__)
 
@@ -47,7 +48,7 @@ _DANGER  = "#ff5555"
 _BTN_PRIMARY = f"""
     QPushButton {{
         background:{_ACCENT}; color:#fff; border:none;
-        border-radius:5px; padding:7px 18px; font-size:12pt; font-weight:600;
+        border-radius:5px; padding:7px 18px; font-size:{FONT["label"]}pt; font-weight:600;
     }}
     QPushButton:hover   {{ background:#3a5fc8; }}
     QPushButton:pressed {{ background:#2e4fa8; }}
@@ -56,7 +57,7 @@ _BTN_PRIMARY = f"""
 _BTN_SECONDARY = f"""
     QPushButton {{
         background:{_BG2}; color:{_MUTED}; border:1px solid {_BORDER};
-        border-radius:5px; padding:7px 18px; font-size:12pt;
+        border-radius:5px; padding:7px 18px; font-size:{FONT["label"]}pt;
     }}
     QPushButton:hover   {{ background:#1e2540; color:{_TEXT}; }}
     QPushButton:pressed {{ background:#1a1f33; }}
@@ -64,13 +65,13 @@ _BTN_SECONDARY = f"""
 _COMBO = f"""
     QComboBox {{
         background:{_BG2}; color:{_TEXT}; border:1px solid {_BORDER};
-        border-radius:4px; padding:5px 10px; font-size:12pt;
+        border-radius:4px; padding:5px 10px; font-size:{FONT["label"]}pt;
     }}
     QComboBox::drop-down {{ border:none; }}
     QComboBox QAbstractItemView {{ background:{_BG2}; color:{_TEXT}; border:1px solid {_BORDER}; }}
 """
 _CHECK = f"""
-    QCheckBox {{ color:{_TEXT}; font-size:12pt; spacing:8px; }}
+    QCheckBox {{ color:{_TEXT}; font-size:{FONT["label"]}pt; spacing:8px; }}
     QCheckBox::indicator {{
         width:18px; height:18px; border-radius:3px;
         border:1px solid {_BORDER}; background:{_BG2};
@@ -83,13 +84,13 @@ _CHECK = f"""
 
 def _h2(text: str) -> QLabel:
     l = QLabel(text)
-    l.setStyleSheet(f"font-size:13pt; font-weight:700; color:#fff;")
+    l.setStyleSheet(f"font-size:{FONT['body']}pt; font-weight:700; color:#fff;")
     return l
 
 
 def _body(text: str) -> QLabel:
     l = QLabel(text)
-    l.setStyleSheet(f"font-size:11pt; color:{_MUTED};")
+    l.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_MUTED};")
     l.setWordWrap(True)
     return l
 
@@ -105,7 +106,7 @@ def _group(title: str) -> QGroupBox:
     g = QGroupBox(title)
     g.setStyleSheet(f"""
         QGroupBox {{
-            color:{_MUTED}; font-size:11pt; font-weight:600;
+            color:{_MUTED}; font-size:{FONT["sublabel"]}pt; font-weight:600;
             border:1px solid {_BORDER}; border-radius:5px;
             margin-top:10px; padding:14px 14px 14px 14px;
         }}
@@ -284,25 +285,25 @@ class SettingsTab(QWidget):
 
         self._settings_search = QLineEdit()
         self._settings_search.setPlaceholderText("Filter settings\u2026")
-        self._settings_search.setStyleSheet("""
-            QLineEdit {
+        self._settings_search.setStyleSheet(f"""
+            QLineEdit {{
                 background: #1a1a1a;
                 border: 1px solid #333;
                 border-radius: 4px;
                 color: #ccc;
                 padding: 4px 8px;
-                font-size: 12pt;
-            }
-            QLineEdit:focus {
+                font-size: {FONT["label"]}pt;
+            }}
+            QLineEdit:focus {{
                 border-color: #00d4aa;
-            }
+            }}
         """)
         self._settings_search.setFixedHeight(32)
         self._settings_search.textChanged.connect(self._filter_settings)
         search_bar_lay.addWidget(self._settings_search)
 
         self._settings_filter_status = QLabel("")
-        self._settings_filter_status.setStyleSheet("font-size: 10pt; color: #555;")
+        self._settings_filter_status.setStyleSheet(f"font-size: {FONT['caption']}pt; color: #555;")
         search_bar_lay.addWidget(self._settings_filter_status)
 
         outer.addWidget(search_bar_widget)
@@ -325,7 +326,7 @@ class SettingsTab(QWidget):
 
         # ── Page title ────────────────────────────────────────────────
         pg_title = QLabel("Settings")
-        pg_title.setStyleSheet("font-size:20pt; font-weight:700; color:#fff;")
+        pg_title.setStyleSheet(scaled_qss("font-size:20pt; font-weight:700; color:#fff;"))
         lay.addWidget(pg_title)
 
         lay.addWidget(_sep())
@@ -374,17 +375,17 @@ class SettingsTab(QWidget):
 
         col = QVBoxLayout()
         name_lbl = QLabel(f"{APP_VENDOR}  {APP_NAME}")
-        name_lbl.setStyleSheet("font-size:15pt; font-weight:700; color:#fff;")
+        name_lbl.setStyleSheet(scaled_qss("font-size:15pt; font-weight:700; color:#fff;"))
         col.addWidget(name_lbl)
 
         ver_lbl = QLabel(f"Version {version_string()}  ·  Built {BUILD_DATE}")
-        ver_lbl.setStyleSheet(f"font-size:11pt; color:{_GREEN};")
+        ver_lbl.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_GREEN};")
         col.addWidget(ver_lbl)
 
         lay.addLayout(col, 1)
 
         self._update_status_lbl = QLabel("")
-        self._update_status_lbl.setStyleSheet(f"font-size:11pt; color:{_MUTED};")
+        self._update_status_lbl.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_MUTED};")
         self._update_status_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         lay.addWidget(self._update_status_lbl)
 
@@ -406,7 +407,7 @@ class SettingsTab(QWidget):
         freq_row = QHBoxLayout()
         freq_row.setSpacing(10)
         freq_lbl = QLabel("Check frequency:")
-        freq_lbl.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
+        freq_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_MUTED};")
         freq_row.addWidget(freq_lbl)
 
         self._freq_combo = QComboBox()
@@ -425,7 +426,7 @@ class SettingsTab(QWidget):
         ch_row = QHBoxLayout()
         ch_row.setSpacing(10)
         ch_lbl = QLabel("Release channel:")
-        ch_lbl.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
+        ch_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_MUTED};")
         ch_row.addWidget(ch_lbl)
 
         self._channel_combo = QComboBox()
@@ -450,7 +451,7 @@ class SettingsTab(QWidget):
         check_row.addWidget(self._check_btn)
 
         self._check_result = QLabel("")
-        self._check_result.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
+        self._check_result.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_MUTED};")
         check_row.addWidget(self._check_result, 1)
         lay.addLayout(check_row)
 
@@ -510,7 +511,7 @@ class SettingsTab(QWidget):
                 pass
         if not _bug_loaded:
             lock_lbl = QLabel("🔒")
-            lock_lbl.setStyleSheet("font-size:16pt; border:none;")
+            lock_lbl.setStyleSheet(f"font-size:{FONT['readoutSm']}pt; border:none;")
             lock_lbl.setFixedWidth(28)
             pf_lay.addWidget(lock_lbl)
 
@@ -520,7 +521,7 @@ class SettingsTab(QWidget):
             "services, or the internet under any circumstances."
         )
         privacy_text.setWordWrap(True)
-        privacy_text.setStyleSheet(f"font-size:11pt; color:{_GREEN}; border:none;")
+        privacy_text.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_GREEN}; border:none;")
         pf_lay.addWidget(privacy_text, 1)
         lay.addWidget(privacy_frame)
 
@@ -553,11 +554,11 @@ class SettingsTab(QWidget):
         hw_lay = QHBoxLayout(hw_frame)
         hw_lay.setContentsMargins(10, 6, 10, 6)
         hw_icon = QLabel("💻")
-        hw_icon.setStyleSheet("font-size:14pt; border:none;")
+        hw_icon.setStyleSheet(f"font-size:{FONT['heading']}pt; border:none;")
         hw_icon.setFixedWidth(24)
         hw_lay.addWidget(hw_icon)
         hw_lbl = QLabel(_hw.hw_summary or "Hardware details unavailable")
-        hw_lbl.setStyleSheet(f"font-size:11pt; color:{_TEXT}; border:none;")
+        hw_lbl.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_TEXT}; border:none;")
         hw_lbl.setWordWrap(True)
         hw_lay.addWidget(hw_lbl, 1)
         dl_lay.addWidget(hw_frame)
@@ -565,7 +566,7 @@ class SettingsTab(QWidget):
         # Model selector combo
         combo_row = QHBoxLayout()
         combo_lbl = QLabel("Select model:")
-        combo_lbl.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
+        combo_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_MUTED};")
         combo_row.addWidget(combo_lbl)
 
         self._ai_model_ids = list(MODEL_ORDER)
@@ -592,7 +593,7 @@ class SettingsTab(QWidget):
         dl_lay.addWidget(self._ai_model_desc_lbl)
 
         self._ai_rec_reason_lbl = _body(_hw.rec_reason)
-        self._ai_rec_reason_lbl.setStyleSheet(f"font-size:10pt; color:{_GREEN};")
+        self._ai_rec_reason_lbl.setStyleSheet(f"font-size:{FONT['caption']}pt; color:{_GREEN};")
         dl_lay.addWidget(self._ai_rec_reason_lbl)
 
         # Auto-fill GPU layers with hardware recommendation
@@ -623,13 +624,13 @@ class SettingsTab(QWidget):
         self._ai_progress_bar.setFixedHeight(16)
         self._ai_progress_bar.setStyleSheet(
             f"QProgressBar {{ background:{_BG2}; border:1px solid {_BORDER}; "
-            f"border-radius:4px; font-size:10pt; color:{_TEXT}; }}"
+            f"border-radius:4px; font-size:{FONT['caption']}pt; color:{_TEXT}; }}"
             f"QProgressBar::chunk {{ background:{_GREEN}; border-radius:3px; }}"
         )
         dl_lay.addWidget(self._ai_progress_bar)
 
         self._ai_dl_status_lbl = QLabel("")
-        self._ai_dl_status_lbl.setStyleSheet(f"font-size:11pt; color:{_MUTED};")
+        self._ai_dl_status_lbl.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_MUTED};")
         self._ai_dl_status_lbl.setVisible(False)
         dl_lay.addWidget(self._ai_dl_status_lbl)
 
@@ -638,7 +639,7 @@ class SettingsTab(QWidget):
         # ── Model path row ────────────────────────────────────────────────
         path_row = QHBoxLayout()
         path_lbl = QLabel("Model file (.gguf):")
-        path_lbl.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
+        path_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_MUTED};")
         path_row.addWidget(path_lbl)
 
         self._ai_path_edit = QLineEdit()
@@ -647,7 +648,7 @@ class SettingsTab(QWidget):
         self._ai_path_edit.setStyleSheet(
             f"QLineEdit {{ background:{_BG2}; color:{_TEXT}; "
             f"border:1px solid {_BORDER}; border-radius:4px; "
-            f"font-size:12pt; padding:5px 8px; }}"
+            f"font-size:{FONT['label']}pt; padding:5px 8px; }}"
         )
         self._ai_path_edit.textChanged.connect(
             lambda t: cfg_mod.set_pref("ai.model_path", t))
@@ -662,7 +663,7 @@ class SettingsTab(QWidget):
 
         # ── GPU acceleration slider ───────────────────────────────────────
         gpu_section_lbl = QLabel("GPU acceleration")
-        gpu_section_lbl.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
+        gpu_section_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_MUTED};")
         lay.addWidget(gpu_section_lbl)
 
         _init_n_layers = MODEL_CATALOG[self._ai_model_ids[rec_idx]].get("n_layers", 32)
@@ -689,19 +690,19 @@ class SettingsTab(QWidget):
 
         slider_row = QHBoxLayout()
         cpu_end = QLabel("CPU")
-        cpu_end.setStyleSheet(f"font-size:10pt; color:{_MUTED};")
+        cpu_end.setStyleSheet(f"font-size:{FONT['caption']}pt; color:{_MUTED};")
         cpu_end.setFixedWidth(36)
         slider_row.addWidget(cpu_end)
         slider_row.addWidget(self._ai_gpu_slider, 1)
         gpu_end = QLabel("Full GPU")
-        gpu_end.setStyleSheet(f"font-size:10pt; color:{_MUTED};")
+        gpu_end.setStyleSheet(f"font-size:{FONT['caption']}pt; color:{_MUTED};")
         gpu_end.setFixedWidth(60)
         gpu_end.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         slider_row.addWidget(gpu_end)
         lay.addLayout(slider_row)
 
         self._ai_gpu_label = QLabel("")
-        self._ai_gpu_label.setStyleSheet(f"font-size:11pt; color:{_MUTED};")
+        self._ai_gpu_label.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_MUTED};")
         lay.addWidget(self._ai_gpu_label)
 
         # Initial slider value: saved preference, or hardware probe recommendation
@@ -726,7 +727,7 @@ class SettingsTab(QWidget):
         apply_row.addWidget(self._ai_apply_btn)
 
         self._ai_status_lbl = QLabel("")
-        self._ai_status_lbl.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
+        self._ai_status_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_MUTED};")
         apply_row.addWidget(self._ai_status_lbl, 1)
         lay.addLayout(apply_row)
 
@@ -734,7 +735,7 @@ class SettingsTab(QWidget):
         from ai.personas import PERSONAS, PERSONA_ORDER, DEFAULT_PERSONA_ID
 
         mode_lbl = QLabel("AI Mode")
-        mode_lbl.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
+        mode_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_MUTED};")
         lay.addWidget(mode_lbl)
 
         mode_row = QHBoxLayout()
@@ -750,7 +751,7 @@ class SettingsTab(QWidget):
                 QPushButton {{
                     background:{_BG2}; color:{_MUTED};
                     border:1px solid {_BORDER}; border-radius:5px;
-                    padding:6px 14px; font-size:11pt;
+                    padding:6px 14px; font-size:{FONT["sublabel"]}pt;
                 }}
                 QPushButton:checked {{
                     background:{_ACCENT}22; color:{_TEXT};
@@ -771,7 +772,7 @@ class SettingsTab(QWidget):
 
         # ── Knowledge scope ────────────────────────────────────────────────
         scope_lbl = QLabel("AI knowledge scope")
-        scope_lbl.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
+        scope_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_MUTED};")
         lay.addWidget(scope_lbl)
 
         from version import DOCS_URL
@@ -779,7 +780,7 @@ class SettingsTab(QWidget):
 
         qs_always_lbl = QLabel(
             "✓  Quickstart Guide — always included in every AI response.")
-        qs_always_lbl.setStyleSheet(f"font-size:11pt; color:{_GREEN};")
+        qs_always_lbl.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_GREEN};")
         lay.addWidget(qs_always_lbl)
 
         n_manual_sections = len(_load_sections())
@@ -791,14 +792,14 @@ class SettingsTab(QWidget):
             rag_lbl = QLabel(
                 "⚠  User Manual not found — docs/ directory missing or not bundled.")
         rag_lbl.setStyleSheet(
-            f"font-size:11pt; color:{_GREEN if n_manual_sections else _AMBER};")
+            f"font-size:{FONT['sublabel']}pt; color:{_GREEN if n_manual_sections else _AMBER};")
         lay.addWidget(rag_lbl)
 
         qs_note_lbl = QLabel(
             "Out-of-scope questions receive a link to the full User Manual at "
             + DOCS_URL)
         qs_note_lbl.setWordWrap(True)
-        qs_note_lbl.setStyleSheet(f"font-size:10pt; color:{_MUTED};")
+        qs_note_lbl.setStyleSheet(f"font-size:{FONT['caption']}pt; color:{_MUTED};")
         lay.addWidget(qs_note_lbl)
 
         # Auto-detect existing model from ~/.microsanj/models/
@@ -807,7 +808,7 @@ class SettingsTab(QWidget):
             self._ai_path_edit.setText(existing)
             cfg_mod.set_pref("ai.model_path", existing)
             self._ai_status_lbl.setText("Model found — click Load Model to enable")
-            self._ai_status_lbl.setStyleSheet(f"font-size:12pt; color:{_GREEN};")
+            self._ai_status_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_GREEN};")
 
         self._update_ai_controls()
         return g
@@ -829,7 +830,7 @@ class SettingsTab(QWidget):
         wf_lay.setContentsMargins(10, 8, 10, 8)
         wf_lay.setSpacing(10)
         warn_icon = QLabel("⚠")
-        warn_icon.setStyleSheet(f"font-size:14pt; color:{_AMBER}; border:none;")
+        warn_icon.setStyleSheet(f"font-size:{FONT['heading']}pt; color:{_AMBER}; border:none;")
         warn_icon.setFixedWidth(22)
         wf_lay.addWidget(warn_icon)
         warn_text = QLabel(
@@ -837,14 +838,14 @@ class SettingsTab(QWidget):
             "Do not use Cloud AI if your work is confidential or export-controlled."
         )
         warn_text.setWordWrap(True)
-        warn_text.setStyleSheet(f"font-size:11pt; color:{_AMBER}; border:none;")
+        warn_text.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_AMBER}; border:none;")
         wf_lay.addWidget(warn_text, 1)
         lay.addWidget(warn_frame)
 
         # ── Provider selector ─────────────────────────────────────────────
         provider_row = QHBoxLayout()
         provider_lbl = QLabel("Provider:")
-        provider_lbl.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
+        provider_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_MUTED};")
         provider_row.addWidget(provider_lbl)
 
         self._cloud_provider_combo = QComboBox()
@@ -867,7 +868,7 @@ class SettingsTab(QWidget):
         # ── Model selector ────────────────────────────────────────────────
         model_row = QHBoxLayout()
         model_lbl = QLabel("Model:")
-        model_lbl.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
+        model_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_MUTED};")
         model_row.addWidget(model_lbl)
 
         self._cloud_model_combo = QComboBox()
@@ -884,7 +885,7 @@ class SettingsTab(QWidget):
         # ── API key input ─────────────────────────────────────────────────
         key_row = QHBoxLayout()
         key_lbl = QLabel("API Key:")
-        key_lbl.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
+        key_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_MUTED};")
         key_row.addWidget(key_lbl)
 
         self._cloud_key_edit = QLineEdit()
@@ -893,7 +894,7 @@ class SettingsTab(QWidget):
         self._cloud_key_edit.setStyleSheet(
             f"QLineEdit {{ background:{_BG2}; color:{_TEXT}; "
             f"border:1px solid {_BORDER}; border-radius:4px; "
-            f"font-size:12pt; padding:5px 8px; }}"
+            f"font-size:{FONT['label']}pt; padding:5px 8px; }}"
         )
         saved_key = cfg_mod.get_pref("ai.cloud.api_key", "")
         self._cloud_key_edit.setText(saved_key)
@@ -912,7 +913,7 @@ class SettingsTab(QWidget):
         # Get key link
         self._cloud_key_link_lbl = QLabel("")
         self._cloud_key_link_lbl.setStyleSheet(
-            f"font-size:10pt; color:{_ACCENT};")
+            f"font-size:{FONT['caption']}pt; color:{_ACCENT};")
         self._cloud_key_link_lbl.setOpenExternalLinks(True)
         lay.addWidget(self._cloud_key_link_lbl)
         self._update_cloud_key_link()
@@ -928,7 +929,7 @@ class SettingsTab(QWidget):
         action_row.addWidget(self._cloud_connect_btn)
 
         self._cloud_status_lbl = QLabel("○  Not connected")
-        self._cloud_status_lbl.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
+        self._cloud_status_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_MUTED};")
         action_row.addWidget(self._cloud_status_lbl, 1)
         lay.addLayout(action_row)
 
@@ -949,7 +950,7 @@ class SettingsTab(QWidget):
             "SanjINSIGHT connects to the Ollama server running on this machine."
         )
         desc.setWordWrap(True)
-        desc.setStyleSheet(f"font-size:11pt; color:{_MUTED};")
+        desc.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_MUTED};")
         lay.addWidget(desc)
 
         # ── Install Ollama box (hidden when already installed) ────────────
@@ -962,7 +963,7 @@ class SettingsTab(QWidget):
 
         install_notice = QLabel("⚡  Ollama is not installed on this machine.")
         install_notice.setStyleSheet(
-            f"font-size:12pt; font-weight:600; color:{_AMBER};")
+            f"font-size:{FONT['label']}pt; font-weight:600; color:{_AMBER};")
         ib.addWidget(install_notice)
 
         install_hint = QLabel(
@@ -970,7 +971,7 @@ class SettingsTab(QWidget):
             "Click below and it will download and install automatically "
             "(Windows), or open the download page on other systems.")
         install_hint.setWordWrap(True)
-        install_hint.setStyleSheet(f"font-size:11pt; color:{_MUTED};")
+        install_hint.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_MUTED};")
         ib.addWidget(install_hint)
 
         btn_link_row = QHBoxLayout()
@@ -985,7 +986,7 @@ class SettingsTab(QWidget):
             f'or &nbsp;<a href="https://ollama.com/download" style="color:{_ACCENT};">'
             "download manually ↗</a>")
         manual_link.setOpenExternalLinks(True)
-        manual_link.setStyleSheet(f"font-size:11pt; color:{_MUTED};")
+        manual_link.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_MUTED};")
         btn_link_row.addWidget(manual_link)
         btn_link_row.addStretch(1)
         ib.addLayout(btn_link_row)
@@ -1007,7 +1008,7 @@ class SettingsTab(QWidget):
         ib.addWidget(self._ollama_install_cancel_btn)
 
         self._ollama_install_msg = QLabel("")
-        self._ollama_install_msg.setStyleSheet(f"font-size:11pt; color:{_MUTED};")
+        self._ollama_install_msg.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_MUTED};")
         self._ollama_install_msg.setWordWrap(True)
         self._ollama_install_msg.setVisible(False)
         ib.addWidget(self._ollama_install_msg)
@@ -1023,19 +1024,19 @@ class SettingsTab(QWidget):
         pb2.setSpacing(8)
 
         pull_notice = QLabel("✓  Ollama installed.  Download a model to get started:")
-        pull_notice.setStyleSheet(f"font-size:12pt; font-weight:600; color:{_GREEN};")
+        pull_notice.setStyleSheet(f"font-size:{FONT['label']}pt; font-weight:600; color:{_GREEN};")
         pb2.addWidget(pull_notice)
 
         pull_hint = QLabel(
             "Phi-3 Mini is recommended (2.3 GB, works well on 4 GB GPU)."
             "  Mistral / Llama 3 are larger but more capable.")
         pull_hint.setWordWrap(True)
-        pull_hint.setStyleSheet(f"font-size:11pt; color:{_MUTED};")
+        pull_hint.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_MUTED};")
         pb2.addWidget(pull_hint)
 
         pull_row = QHBoxLayout()
         pull_lbl = QLabel("Model:")
-        pull_lbl.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
+        pull_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_MUTED};")
         pull_lbl.setFixedWidth(55)
         pull_row.addWidget(pull_lbl)
 
@@ -1068,7 +1069,7 @@ class SettingsTab(QWidget):
         pb2.addWidget(self._ollama_pull_prog)
 
         self._ollama_pull_msg = QLabel("")
-        self._ollama_pull_msg.setStyleSheet(f"font-size:11pt; color:{_MUTED};")
+        self._ollama_pull_msg.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_MUTED};")
         self._ollama_pull_msg.setWordWrap(True)
         self._ollama_pull_msg.setVisible(False)
         pb2.addWidget(self._ollama_pull_msg)
@@ -1080,7 +1081,7 @@ class SettingsTab(QWidget):
         # ── Model selector + Refresh ──────────────────────────────────────
         model_row = QHBoxLayout()
         model_lbl = QLabel("Model:")
-        model_lbl.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
+        model_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_MUTED};")
         model_lbl.setFixedWidth(70)
         model_row.addWidget(model_lbl)
 
@@ -1108,7 +1109,7 @@ class SettingsTab(QWidget):
         action_row.addWidget(self._ollama_connect_btn)
 
         self._ollama_status_lbl = QLabel("○  Not connected")
-        self._ollama_status_lbl.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
+        self._ollama_status_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_MUTED};")
         action_row.addWidget(self._ollama_status_lbl, 1)
         lay.addLayout(action_row)
 
@@ -1144,7 +1145,7 @@ class SettingsTab(QWidget):
             self._ollama_status_lbl.setText(
                 "⊗  Ollama is not installed — use the Install button above")
             self._ollama_status_lbl.setStyleSheet(
-                f"font-size:12pt; color:{_AMBER};")
+                f"font-size:{FONT['label']}pt; color:{_AMBER};")
             return
 
         # ── 2. Is the Ollama server running? ──────────────────────────────
@@ -1157,7 +1158,7 @@ class SettingsTab(QWidget):
                     "⊗  Ollama installed but not running — "
                     "launch the Ollama app, then click  ⟳ Check Again")
                 self._ollama_status_lbl.setStyleSheet(
-                    f"font-size:12pt; color:{_DANGER};")
+                    f"font-size:{FONT['label']}pt; color:{_DANGER};")
             return
 
         # ── 3. Any models pulled? ──────────────────────────────────────────
@@ -1173,7 +1174,7 @@ class SettingsTab(QWidget):
             self._ollama_status_lbl.setText(
                 "⚠  No models pulled yet — use the Pull Model section above")
             self._ollama_status_lbl.setStyleSheet(
-                f"font-size:12pt; color:{_AMBER};")
+                f"font-size:{FONT['label']}pt; color:{_AMBER};")
             self._ollama_model_combo.blockSignals(False)
             return
 
@@ -1196,7 +1197,7 @@ class SettingsTab(QWidget):
         self._ollama_status_lbl.setText(
             f"✓  Ollama ready — {len(models)} model(s) — click Connect")
         self._ollama_status_lbl.setStyleSheet(
-            f"font-size:12pt; color:{_GREEN};")
+            f"font-size:{FONT['label']}pt; color:{_GREEN};")
 
         self._ollama_model_combo.blockSignals(False)
 
@@ -1230,21 +1231,21 @@ class SettingsTab(QWidget):
             return
         if status == "loading":
             self._ollama_status_lbl.setText(message or "◌  Connecting…")
-            self._ollama_status_lbl.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
+            self._ollama_status_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_MUTED};")
             self._ollama_connect_btn.setEnabled(False)
         elif status == "ready":
             self._ollama_status_lbl.setText("●  Connected")
-            self._ollama_status_lbl.setStyleSheet(f"font-size:12pt; color:{_GREEN};")
+            self._ollama_status_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_GREEN};")
             self._ollama_connect_btn.setText("Disconnect")
             self._ollama_connect_btn.setEnabled(True)
         elif status == "error":
             self._ollama_status_lbl.setText(f"⊗  {message}" if message else "⊗  Error")
-            self._ollama_status_lbl.setStyleSheet(f"font-size:12pt; color:{_DANGER};")
+            self._ollama_status_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_DANGER};")
             self._ollama_connect_btn.setText("Connect")
             self._ollama_connect_btn.setEnabled(True)
         else:   # "off"
             self._ollama_status_lbl.setText("○  Not connected")
-            self._ollama_status_lbl.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
+            self._ollama_status_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_MUTED};")
             self._ollama_connect_btn.setText("Connect")
             self._ollama_connect_btn.setEnabled(True)
 
@@ -1275,7 +1276,7 @@ class SettingsTab(QWidget):
             self._ollama_install_cancel_btn.setVisible(True)
             self._ollama_install_msg.setText("Connecting to ollama.com…")
             self._ollama_install_msg.setStyleSheet(
-                f"font-size:11pt; color:{_MUTED};")
+                f"font-size:{FONT['sublabel']}pt; color:{_MUTED};")
             self._ollama_install_msg.setVisible(True)
 
             self._install_thread = _OllamaInstallThread(self)
@@ -1290,7 +1291,7 @@ class SettingsTab(QWidget):
                     "Opened  ollama.com/download  in your browser.  "
                     "Install Ollama, then click  ⟳ Check Again.")
                 self._ollama_install_msg.setStyleSheet(
-                    f"font-size:11pt; color:{_MUTED};")
+                    f"font-size:{FONT['sublabel']}pt; color:{_MUTED};")
                 self._ollama_install_msg.setVisible(True)
 
     def _on_install_progress(self, pct: int, msg: str) -> None:
@@ -1319,7 +1320,7 @@ class SettingsTab(QWidget):
             self._ollama_install_msg.setText(
                 "Download cancelled." if _cancelled else msg)
             self._ollama_install_msg.setStyleSheet(
-                f"font-size:11pt; color:{_MUTED if _cancelled else (_GREEN if ok else _DANGER)};")
+                f"font-size:{FONT['sublabel']}pt; color:{_MUTED if _cancelled else (_GREEN if ok else _DANGER)};")
         if hasattr(self, "_ollama_install_btn"):
             self._ollama_install_btn.setEnabled(True)
             if ok:
@@ -1342,7 +1343,7 @@ class SettingsTab(QWidget):
         self._ollama_pull_prog.setVisible(True)
         self._ollama_pull_msg.setText(
             f"Downloading  {model} …  (this may take a few minutes)")
-        self._ollama_pull_msg.setStyleSheet(f"font-size:11pt; color:{_MUTED};")
+        self._ollama_pull_msg.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_MUTED};")
         self._ollama_pull_msg.setVisible(True)
 
         self._pull_thread = _OllamaPullThread(model, self)
@@ -1379,7 +1380,7 @@ class SettingsTab(QWidget):
             self._ollama_pull_msg.setText(
                 "Pull cancelled." if _cancelled else msg)
             self._ollama_pull_msg.setStyleSheet(
-                f"font-size:11pt; color:{_MUTED if _cancelled else (_GREEN if ok else _DANGER)};")
+                f"font-size:{FONT['sublabel']}pt; color:{_MUTED if _cancelled else (_GREEN if ok else _DANGER)};")
         if ok:
             # Re-detect — pull box will hide and model combo will populate
             QTimer.singleShot(500, lambda: self._ollama_refresh_models(silent=False))
@@ -1490,7 +1491,7 @@ class SettingsTab(QWidget):
             }
             message = _msgs.get(status, status)
         self._cloud_status_lbl.setText(message)
-        self._cloud_status_lbl.setStyleSheet(f"font-size:12pt; color:{color};")
+        self._cloud_status_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{color};")
 
         if hasattr(self, "_cloud_connect_btn"):
             if status == "ready":
@@ -1516,9 +1517,9 @@ class SettingsTab(QWidget):
         sr_lay.setSpacing(10)
 
         self._lic_status_icon  = QLabel("○")
-        self._lic_status_icon.setStyleSheet(f"font-size:14pt; color:{_AMBER};")
+        self._lic_status_icon.setStyleSheet(f"font-size:{FONT['heading']}pt; color:{_AMBER};")
         self._lic_status_label = QLabel("Loading…")
-        self._lic_status_label.setStyleSheet(f"font-size:12pt; color:{_TEXT};")
+        self._lic_status_label.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_TEXT};")
 
         sr_lay.addWidget(self._lic_status_icon)
         sr_lay.addWidget(self._lic_status_label, 1)
@@ -1534,7 +1535,7 @@ class SettingsTab(QWidget):
 
         # Detail line (customer name / expiry)
         self._lic_detail_label = QLabel("")
-        self._lic_detail_label.setStyleSheet(f"font-size:11pt; color:{_MUTED};")
+        self._lic_detail_label.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_MUTED};")
         self._lic_detail_label.setWordWrap(True)
         lay.addWidget(self._lic_detail_label)
 
@@ -1552,9 +1553,9 @@ class SettingsTab(QWidget):
 
         if info is None or info.tier == LicenseTier.UNLICENSED:
             self._lic_status_icon.setText("○")
-            self._lic_status_icon.setStyleSheet(f"font-size:14pt; color:{_AMBER};")
+            self._lic_status_icon.setStyleSheet(f"font-size:{FONT['heading']}pt; color:{_AMBER};")
             self._lic_status_label.setText("Unlicensed — demo mode only")
-            self._lic_status_label.setStyleSheet(f"font-size:12pt; color:{_AMBER};")
+            self._lic_status_label.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_AMBER};")
             self._lic_detail_label.setText(
                 "Activate a license key to enable full hardware access.")
         else:
@@ -1567,9 +1568,9 @@ class SettingsTab(QWidget):
                 status_text = "Active"
 
             self._lic_status_icon.setText("●")
-            self._lic_status_icon.setStyleSheet(f"font-size:14pt; color:{icon_color};")
+            self._lic_status_icon.setStyleSheet(f"font-size:{FONT['heading']}pt; color:{icon_color};")
             self._lic_status_label.setText(status_text)
-            self._lic_status_label.setStyleSheet(f"font-size:12pt; color:{icon_color};")
+            self._lic_status_label.setStyleSheet(f"font-size:{FONT['label']}pt; color:{icon_color};")
 
             detail_parts = [f"{info.tier_display}  ·  {info.customer}"]
             if info.email:
@@ -1604,7 +1605,7 @@ class SettingsTab(QWidget):
 
         contact_row = QHBoxLayout()
         contact_lbl = QLabel(f"Support email:  {SUPPORT_EMAIL}")
-        contact_lbl.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
+        contact_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_MUTED};")
         contact_row.addWidget(contact_lbl)
         contact_row.addStretch(1)
         lay.addLayout(contact_row)
@@ -1632,14 +1633,14 @@ class SettingsTab(QWidget):
     def _on_check_now(self):
         self._check_btn.setEnabled(False)
         self._check_result.setText("Checking…")
-        self._check_result.setStyleSheet(f"font-size:12pt; color:{_MUTED};")
+        self._check_result.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_MUTED};")
         self.check_for_updates_requested.emit()
 
     def set_check_result(self, message: str, color: str = None):
         """Called by MainWindow after a manual check completes."""
         self._check_result.setText(message)
         self._check_result.setStyleSheet(
-            f"font-size:12pt; color:{color or _MUTED};")
+            f"font-size:{FONT['label']}pt; color:{color or _MUTED};")
         self._check_btn.setEnabled(True)
 
     def set_update_status(self, message: str, color: str = None):
@@ -1647,7 +1648,7 @@ class SettingsTab(QWidget):
         self._update_status_lbl.setText(message)
         if color:
             self._update_status_lbl.setStyleSheet(
-                f"font-size:11pt; color:{color};")
+                f"font-size:{FONT['sublabel']}pt; color:{color};")
 
     def _on_ai_enable_changed(self, checked: bool):
         cfg_mod.set_pref("ai.enabled", checked)
@@ -1667,12 +1668,12 @@ class SettingsTab(QWidget):
         path = self._ai_path_edit.text().strip()
         if not path:
             self._ai_status_lbl.setText("No model file selected")
-            self._ai_status_lbl.setStyleSheet(f"font-size:12pt; color:#ff5555;")
+            self._ai_status_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:#ff5555;")
             return
         n_gpu = self._ai_gpu_slider.value()
         self._ai_apply_btn.setEnabled(False)
         self._ai_status_lbl.setText("Loading…")
-        self._ai_status_lbl.setStyleSheet(f"font-size:12pt; color:#ffaa44;")
+        self._ai_status_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:#ffaa44;")
         self.ai_enable_requested.emit(path, n_gpu)
 
     def set_ai_status(self, status: str) -> None:
@@ -1689,7 +1690,7 @@ class SettingsTab(QWidget):
         }
         msg, color = _msgs.get(status, (status, _MUTED))
         self._ai_status_lbl.setText(msg)
-        self._ai_status_lbl.setStyleSheet(f"font-size:11pt; color:{color};")
+        self._ai_status_lbl.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{color};")
         if hasattr(self, "_ai_apply_btn"):
             self._ai_apply_btn.setEnabled(status not in ("loading", "thinking"))
 
@@ -1746,7 +1747,7 @@ class SettingsTab(QWidget):
             color = _AMBER
 
         self._ai_gpu_label.setText(text)
-        self._ai_gpu_label.setStyleSheet(f"font-size:11pt; color:{color};")
+        self._ai_gpu_label.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{color};")
         cfg_mod.set_pref("ai.n_gpu_layers", val)
 
     def _on_download_clicked(self) -> None:
@@ -1765,7 +1766,7 @@ class SettingsTab(QWidget):
         self._ai_progress_bar.setVisible(True)
         self._ai_dl_status_lbl.setVisible(True)
         self._ai_dl_status_lbl.setText(f"Starting download of {m['name']}…")
-        self._ai_dl_status_lbl.setStyleSheet(f"font-size:11pt; color:{_MUTED};")
+        self._ai_dl_status_lbl.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_MUTED};")
         self.download_model_requested.emit(m["url"], dest)
 
     def set_download_progress(self, done: int, total: int, speed_mbps: float) -> None:
@@ -1797,10 +1798,10 @@ class SettingsTab(QWidget):
         self._ai_download_btn.setEnabled(True)
         self._ai_download_btn.setText("Re-download Model")
         self._ai_dl_status_lbl.setText("Download complete — model is ready")
-        self._ai_dl_status_lbl.setStyleSheet(f"font-size:11pt; color:{_GREEN};")
+        self._ai_dl_status_lbl.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_GREEN};")
         self._ai_path_edit.setText(path)
         self._ai_status_lbl.setText("Model ready — click Load Model")
-        self._ai_status_lbl.setStyleSheet(f"font-size:12pt; color:{_GREEN};")
+        self._ai_status_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_GREEN};")
 
     def set_download_failed(self, msg: str) -> None:
         """Called by MainWindow when model download fails or is cancelled."""
@@ -1812,10 +1813,10 @@ class SettingsTab(QWidget):
         self._ai_dl_status_lbl.setVisible(True)
         if msg == "Cancelled":
             self._ai_dl_status_lbl.setText("Download cancelled")
-            self._ai_dl_status_lbl.setStyleSheet(f"font-size:11pt; color:{_MUTED};")
+            self._ai_dl_status_lbl.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_MUTED};")
         else:
             self._ai_dl_status_lbl.setText(f"Download failed: {msg}")
-            self._ai_dl_status_lbl.setStyleSheet(f"font-size:11pt; color:#ff5555;")
+            self._ai_dl_status_lbl.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:#ff5555;")
 
     def _update_ai_controls(self):
         enabled = self._ai_enable_chk.isChecked()

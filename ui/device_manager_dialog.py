@@ -71,6 +71,7 @@ from hardware.device_registry import (
     DTYPE_UNKNOWN, CONN_SERIAL, CONN_ETHERNET, CONN_USB, CONN_PCIE)
 from hardware.device_manager  import DeviceManager, DeviceState, DeviceEntry
 from ui.font_utils import mono_font
+from ui.theme import FONT, scaled_qss
 from hardware.device_scanner  import DeviceScanner
 from hardware.driver_store    import DriverStore, RemoteDriverEntry
 
@@ -593,7 +594,7 @@ class _DeviceProfilePanel(QWidget):
         top = QHBoxLayout()
         name_lbl = QLabel(desc.display_name)
         name_lbl.setStyleSheet(
-            "font-size:11pt; font-weight:bold; color:#ccc;")
+            f"font-size:{FONT['sublabel']}pt; font-weight:bold; color:#ccc;")
         name_lbl.setWordWrap(True)
         badge = QLabel(entry.status_label)
         badge.setFixedHeight(22)
@@ -715,10 +716,10 @@ class _DeviceProfilePanel(QWidget):
             refresh_btn.setFixedSize(26, 26)
             refresh_btn.setToolTip("Refresh port list")
             refresh_btn.setStyleSheet(
-                "QPushButton{background:#1e1e1e; color:#888;"
-                " border:1px solid #333; border-radius:4px; font-size:11pt;}"
-                "QPushButton:hover{color:#bbb; border-color:#555;}"
-                "QPushButton:disabled{color:#444;}")
+                f"QPushButton{{background:#1e1e1e; color:#888;"
+                f" border:1px solid #333; border-radius:4px; font-size:{FONT['sublabel']}pt;}}"
+                f"QPushButton:hover{{color:#bbb; border-color:#555;}}"
+                f"QPushButton:disabled{{color:#444;}}")
             port_row_lay.addWidget(refresh_btn)
 
             pg.addWidget(port_row_w, r, 1)
@@ -1118,7 +1119,7 @@ class _DeviceProfilePanel(QWidget):
             _port_status_lbl = QLabel()
             _port_status_lbl.setWordWrap(True)
             _port_status_lbl.setVisible(False)
-            _port_status_lbl.setStyleSheet("font-size:8.5pt; padding:3px 0;")
+            _port_status_lbl.setStyleSheet(scaled_qss("font-size:8.5pt; padding:3px 0;"))
             pg.addWidget(_port_status_lbl, r + 2, 0, 1, 2)
 
         self._body_layout.addWidget(params_box)
@@ -1329,11 +1330,11 @@ class _DeviceProfilePanel(QWidget):
         disc_btn = QPushButton("■  Disconnect")
         disc_btn.setFixedHeight(32)
         disc_btn.setEnabled(can_disconnect)
-        disc_btn.setStyleSheet(
+        disc_btn.setStyleSheet(scaled_qss(
             "QPushButton{background:#2a0a0a; color:#ff5555; "
             "border:1px solid #ff444422; border-radius:4px; font-size:8.5pt;}"
             "QPushButton:hover{background:#3a0a0a;}"
-            "QPushButton:disabled{color:#333; border-color:#1e1e1e; background:#111;}")
+            "QPushButton:disabled{color:#333; border-color:#1e1e1e; background:#111;}"))
         disc_btn.clicked.connect(lambda: self._do_disconnect(entry.uid))
 
         row.addWidget(conn_btn)
@@ -1816,7 +1817,7 @@ class DeviceManagerDialog(QDialog):
         tl.setContentsMargins(16, 0, 16, 0)
         title_lbl = QLabel("⚙  Device Manager")
         title_lbl.setStyleSheet(
-            "font-size:11pt; font-weight:bold; color:#888;")
+            f"font-size:{FONT['sublabel']}pt; font-weight:bold; color:#888;")
         tl.addWidget(title_lbl, 1)
 
         # Log toggle button — explicit stylesheet so the dialog-level rule
@@ -1825,10 +1826,10 @@ class DeviceManagerDialog(QDialog):
         self._log_btn = QPushButton("📋  Log")
         self._log_btn.setFixedSize(72, 28)
         self._log_btn.setCheckable(True)
-        self._log_btn.setStyleSheet(
+        self._log_btn.setStyleSheet(scaled_qss(
             "QPushButton { font-size:8.5pt; padding:0 6px; }"
             "QPushButton:checked { background:#0d2a1a; color:#00d4aa; "
-            "border-color:#00d4aa44; }")
+            "border-color:#00d4aa44; }"))
         self._log_btn.clicked.connect(self._toggle_log)
         tl.addWidget(self._log_btn)
 
@@ -1884,9 +1885,9 @@ class DeviceManagerDialog(QDialog):
         self._log_edit.setReadOnly(True)
         self._log_edit.setMinimumHeight(120)
         self._log_edit.setMaximumHeight(220)
-        self._log_edit.setStyleSheet(
+        self._log_edit.setStyleSheet(scaled_qss(
             "background:#0a0a0a; color:#555; font-family:Menlo,Consolas,monospace; "
-            "font-size:8pt; border:none;")
+            "font-size:8pt; border:none;"))
         ll.addWidget(self._log_edit)
         root.addWidget(self._log_widget)
 

@@ -20,6 +20,7 @@ import numpy as np
 
 from ui.icons      import set_btn_icon
 from ui.font_utils import sans_font
+from ui.theme      import FONT, scaled_qss
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QDoubleSpinBox, QSpinBox, QGroupBox, QGridLayout, QSplitter,
@@ -61,12 +62,12 @@ class VerdictBanner(QWidget):
         ol.setSpacing(2)
 
         self._icon  = QLabel("—")
-        self._icon.setStyleSheet(
-            "font-size:36pt; font-weight:bold; font-family:Menlo,monospace;")
+        self._icon.setStyleSheet(scaled_qss(
+            "font-size:36pt; font-weight:bold; font-family:Menlo,monospace;"))
         self._icon.setAlignment(Qt.AlignCenter)
 
         self._sub = QLabel("Run analysis to see verdict")
-        self._sub.setStyleSheet("font-size:11pt; color:#555;")
+        self._sub.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:#555;")
         self._sub.setAlignment(Qt.AlignCenter)
         self._sub.setWordWrap(True)
 
@@ -80,11 +81,11 @@ class VerdictBanner(QWidget):
         self._outer.setStyleSheet(
             f"background:{bg}; border:1px solid {border}; border-radius:4px;")
         self._icon.setText(verdict if verdict != "NONE" else "—")
-        self._icon.setStyleSheet(
+        self._icon.setStyleSheet(scaled_qss(
             f"font-size:36pt; font-weight:bold; "
-            f"font-family:Menlo,monospace; color:{fg};")
+            f"font-family:Menlo,monospace; color:{fg};"))
         self._sub.setText(subtitle)
-        self._sub.setStyleSheet(f"font-size:11pt; color:{fg}88;")
+        self._sub.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{fg}88;")
 
     def update_verdict(self, result: AnalysisResult):
         n  = result.n_hotspots
@@ -189,18 +190,18 @@ class HotspotTable(QTableWidget):
         self.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.setAlternatingRowColors(True)
-        self.setStyleSheet("""
-            QTableWidget {
+        self.setStyleSheet(f"""
+            QTableWidget {{
                 background:#141414; alternate-background-color:#181818;
                 gridline-color:#222; border:none;
-                font-family:Menlo,monospace; font-size:12pt;
-            }
-            QHeaderView::section {
+                font-family:Menlo,monospace; font-size:{FONT['label']}pt;
+            }}
+            QHeaderView::section {{
                 background:#1a1a1a; color:#555;
                 padding:3px 6px; border:none;
                 border-bottom:1px solid #2a2a2a;
-                font-size:13pt; letter-spacing:1px;
-            }
+                font-size:{FONT['body']}pt; letter-spacing:1px;
+            }}
         """)
         hh = self.horizontalHeader()
         hh.setSectionResizeMode(QHeaderView.ResizeToContents)
@@ -301,16 +302,16 @@ class AnalysisTab(QWidget):
 
         icon_lbl = QLabel(icon)
         icon_lbl.setAlignment(Qt.AlignCenter)
-        icon_lbl.setStyleSheet("font-size: 52pt; color: #2a2a2a;")
+        icon_lbl.setStyleSheet(scaled_qss("font-size: 52pt; color: #2a2a2a;"))
 
         title_lbl = QLabel(title)
         title_lbl.setAlignment(Qt.AlignCenter)
-        title_lbl.setStyleSheet("font-size: 16pt; font-weight: bold; color: #555;")
+        title_lbl.setStyleSheet(f"font-size: {FONT['readoutSm']}pt; font-weight: bold; color: #555;")
 
         desc_lbl = QLabel(desc)
         desc_lbl.setAlignment(Qt.AlignCenter)
         desc_lbl.setWordWrap(True)
-        desc_lbl.setStyleSheet("font-size: 12pt; color: #444;")
+        desc_lbl.setStyleSheet(f"font-size: {FONT['label']}pt; color: #444;")
         desc_lbl.setMaximumWidth(450)
 
         lay.addStretch()
@@ -322,13 +323,13 @@ class AnalysisTab(QWidget):
             btn = QPushButton(btn_text)
             btn.setFixedWidth(200)
             btn.setFixedHeight(36)
-            btn.setStyleSheet("""
-                QPushButton {
+            btn.setStyleSheet(f"""
+                QPushButton {{
                     background: #1a2a20; color: #00d4aa;
                     border: 1px solid #00d4aa55; border-radius: 5px;
-                    font-size: 12pt; font-weight: 600;
-                }
-                QPushButton:hover { background: #1e3028; }
+                    font-size: {FONT['label']}pt; font-weight: 600;
+                }}
+                QPushButton:hover {{ background: #1e3028; }}
             """)
             btn.clicked.connect(btn_callback)
             lay.addSpacing(4)
@@ -363,7 +364,7 @@ class AnalysisTab(QWidget):
 
         self._auto_cb    = QCheckBox("Auto-run after acquisition")
         self._auto_cb.setChecked(True)
-        self._auto_cb.setStyleSheet("font-size:14pt; color:#555;")
+        self._auto_cb.setStyleSheet(f"font-size:{FONT['heading']}pt; color:#555;")
 
         lay.addWidget(self._run_btn)
         lay.addWidget(self._clear_btn)
@@ -381,7 +382,7 @@ class AnalysisTab(QWidget):
         l.setFixedHeight(24)
         l.setStyleSheet(
             f"background:{bg}; color:{fg}; padding:0 10px; "
-            f"border-radius:3px; font-family:Menlo,monospace; font-size:12pt;")
+            f"border-radius:3px; font-family:Menlo,monospace; font-size:{FONT['label']}pt;")
         return l
 
     # ---------------------------------------------------------------- #
@@ -471,7 +472,7 @@ class AnalysisTab(QWidget):
             ("Min area (px)",     self._min_area_px),
         ]):
             l = QLabel(lbl)
-            l.setStyleSheet("font-size:12pt; color:#555;")
+            l.setStyleSheet(f"font-size:{FONT['label']}pt; color:#555;")
             ml.addWidget(l, row, 0)
             ml.addWidget(widget, row, 1)
 
@@ -549,7 +550,7 @@ class AnalysisTab(QWidget):
             v = QLabel("—")
             v.setAlignment(Qt.AlignRight)
             v.setStyleSheet(
-                "font-family:Menlo,monospace; font-size:13pt; color:#aaa;")
+                f"font-family:Menlo,monospace; font-size:{FONT['body']}pt; color:#aaa;")
             sg.addWidget(v, r, 1)
             self._stat_vals[key] = v
         lay.addWidget(stats_box)
@@ -606,8 +607,8 @@ class AnalysisTab(QWidget):
         self._base_img = base_image
         self._source_lbl.setText(source_label)
         self._source_lbl.setStyleSheet(
-            "background:#1a2a1a; color:#00d4aa; padding:0 10px; "
-            "border-radius:3px; font-family:Menlo,monospace; font-size:12pt;")
+            f"background:#1a2a1a; color:#00d4aa; padding:0 10px; "
+            f"border-radius:3px; font-family:Menlo,monospace; font-size:{FONT['label']}pt;")
         if dt_map is not None or drr_map is not None:
             self._data_stack.setCurrentIndex(1)
         if self._auto_cb.isChecked():
@@ -684,8 +685,8 @@ class AnalysisTab(QWidget):
             b.setEnabled(False)
         self._source_lbl.setText("No data")
         self._source_lbl.setStyleSheet(
-            "background:#1a1a1a; color:#333; padding:0 10px; "
-            "border-radius:3px; font-family:Menlo,monospace; font-size:12pt;")
+            f"background:#1a1a1a; color:#333; padding:0 10px; "
+            f"border-radius:3px; font-family:Menlo,monospace; font-size:{FONT['label']}pt;")
 
     # ---------------------------------------------------------------- #
     #  Stats update                                                     #
@@ -708,7 +709,7 @@ class AnalysisTab(QWidget):
         c = colors.get(r.verdict, "#aaa")
         for key in ["hotspots", "peak", "area_frac"]:
             self._stat_vals[key].setStyleSheet(
-                f"font-family:Menlo,monospace; font-size:13pt; color:{c};")
+                f"font-family:Menlo,monospace; font-size:{FONT['body']}pt; color:{c};")
 
     # ---------------------------------------------------------------- #
     #  Presets                                                          #

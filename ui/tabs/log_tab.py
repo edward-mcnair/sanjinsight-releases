@@ -14,6 +14,7 @@ log = logging.getLogger(__name__)
 from PyQt5.QtWidgets import (
     QWidget, QPushButton, QVBoxLayout, QTextEdit)
 from ui.icons import set_btn_icon
+from ui.theme import FONT, scaled_qss
 
 
 class LogTab(QWidget):
@@ -24,9 +25,9 @@ class LogTab(QWidget):
         self._log = QTextEdit()
         self._log.setReadOnly(True)
         self._log.setStyleSheet(
-            "background:#0d0d0d; color:#666; "
-            "font-family:Menlo,monospace; font-size:14pt; "
-            "border:none;")
+            f"background:#0d0d0d; color:#666; "
+            f"font-family:Menlo,monospace; font-size:{FONT['heading']}pt; "
+            f"border:none;")
         root.addWidget(self._log)
         clr = QPushButton("Clear")
         clr.setFixedWidth(80)

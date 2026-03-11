@@ -20,6 +20,7 @@ import numpy as np
 from ui.button_utils import RunningButton, apply_hand_cursor
 from ui.font_utils   import mono_font, sans_font
 from ui.icons import set_btn_icon
+from ui.theme import FONT, scaled_qss
 
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -691,7 +692,7 @@ class LiveTab(QWidget):
         l.setFixedHeight(24)
         l.setStyleSheet(
             f"background:{color}; color:#888; padding:0 8px; "
-            f"border-radius:3px; font-family:Menlo,monospace; font-size:12pt;")
+            f"border-radius:3px; font-family:Menlo,monospace; font-size:{FONT['label']}pt;")
         return l
 
     # ---------------------------------------------------------------- #
@@ -769,7 +770,7 @@ class LiveTab(QWidget):
         self._accum.valueChanged.connect(self._accum_slider.setValue)
         self._accum_lbl = QLabel("16 frames")
         self._accum_lbl.setStyleSheet(
-            "font-family:Menlo,monospace; font-size:14pt; color:#555;")
+            f"font-family:Menlo,monospace; font-size:{FONT['heading']}pt; color:#555;")
         self._accum.valueChanged.connect(
             lambda v: self._accum_lbl.setText(f"{v} frames"))
         dl.addWidget(self._accum_slider)
@@ -853,7 +854,7 @@ class LiveTab(QWidget):
             sl.addWidget(self._sub(lbl), r, 0)
             v = QLabel("—")
             v.setStyleSheet(
-                "font-family:Menlo,monospace; font-size:11pt; color:#aaa;")
+                f"font-family:Menlo,monospace; font-size:{FONT['sublabel']}pt; color:#aaa;")
             v.setAlignment(Qt.AlignRight)
             sl.addWidget(v, r, 1)
             self._stat_vals[key] = v
@@ -868,7 +869,7 @@ class LiveTab(QWidget):
         self._probe_dt  = QLabel("—")
         for l in [self._probe_xy, self._probe_drr, self._probe_dt]:
             l.setStyleSheet(
-                "font-family:Menlo,monospace; font-size:11pt; color:#aaa;")
+                f"font-family:Menlo,monospace; font-size:{FONT['sublabel']}pt; color:#aaa;")
         pl.addWidget(self._sub("Position"), 0, 0)
         pl.addWidget(self._probe_xy,         0, 1)
         pl.addWidget(self._sub("ΔR/R"),     1, 0)
@@ -1054,11 +1055,11 @@ class LiveTab(QWidget):
             # call it the first time a run goes "live" (not every 333 ms).
             if not self._badges_active:
                 self._fps_lbl.setStyleSheet(
-                    "background:#1a2a1a; color:#00d4aa; padding:0 8px; "
-                    "border-radius:3px; font-family:Menlo,monospace; font-size:12pt;")
+                    f"background:#1a2a1a; color:#00d4aa; padding:0 8px; "
+                    f"border-radius:3px; font-family:Menlo,monospace; font-size:{FONT['label']}pt;")
                 self._cycle_lbl.setStyleSheet(
-                    "background:#1a1a2a; color:#6688cc; padding:0 8px; "
-                    "border-radius:3px; font-family:Menlo,monospace; font-size:12pt;")
+                    f"background:#1a1a2a; color:#6688cc; padding:0 8px; "
+                    f"border-radius:3px; font-family:Menlo,monospace; font-size:{FONT['label']}pt;")
                 self._badges_active = True
 
             # Only setText when the string actually changes (avoids redundant
@@ -1100,7 +1101,7 @@ class LiveTab(QWidget):
         self._state_lbl.setText(text)
         self._state_lbl.setStyleSheet(
             f"background:#111; color:{color}; padding:0 8px; "
-            f"border-radius:3px; font-family:Menlo,monospace; font-size:12pt; "
+            f"border-radius:3px; font-family:Menlo,monospace; font-size:{FONT['label']}pt; "
             f"border:1px solid {color};")
 
     def _sub(self, text: str) -> QLabel:

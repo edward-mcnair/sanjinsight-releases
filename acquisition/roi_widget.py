@@ -29,6 +29,7 @@ from PyQt5.QtGui     import (QImage, QPixmap, QPainter, QPen, QColor,
 from .roi import Roi
 from ui.icons        import set_btn_icon
 from ui.font_utils   import mono_font
+from ui.theme import FONT, scaled_qss
 
 
 class RoiCanvas(QWidget):
@@ -272,7 +273,7 @@ class RoiSelector(QWidget):
         bar = QHBoxLayout()
         self._info = QLabel("No ROI — full frame")
         self._info.setStyleSheet(
-            "font-family:Menlo,monospace; font-size:9pt; color:#555;")
+            scaled_qss("font-family:Menlo,monospace; font-size:9pt; color:#555;"))
         bar.addWidget(self._info)
         bar.addStretch()
 

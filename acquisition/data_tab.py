@@ -27,6 +27,7 @@ from .session_manager import SessionManager
 from .processing      import to_display, apply_colormap, COLORMAP_OPTIONS, COLORMAP_TOOLTIPS, setup_cmap_combo
 import config as cfg_mod
 from ui.icons import set_btn_icon
+from ui.theme import FONT, scaled_qss
 
 
 # ------------------------------------------------------------------ #
@@ -55,14 +56,14 @@ class NotesDialog(QDialog):
         self.setMinimumWidth(560)
         self.setMinimumHeight(340)
         self.setStyleSheet(
-            "QDialog  { background:#1a1a1a; }"
-            "QLabel   { color:#aaa; font-size:14pt; }"
-            "QGroupBox { color:#666; font-size:13pt; border:1px solid #2a2a2a; "
-            "            border-radius:3px; margin-top:8px; padding-top:6px; }"
-            "QGroupBox::title { subcontrol-origin:margin; left:8px; }"
-            "QPushButton { background:#252525; color:#aaa; border:1px solid #333; "
-            "              border-radius:2px; padding:4px 10px; font-size:13pt; }"
-            "QPushButton:hover { background:#2e2e2e; color:#fff; }")
+            f"QDialog  {{ background:#1a1a1a; }}"
+            f"QLabel   {{ color:#aaa; font-size:{FONT['heading']}pt; }}"
+            f"QGroupBox {{ color:#666; font-size:{FONT['body']}pt; border:1px solid #2a2a2a; "
+            f"            border-radius:3px; margin-top:8px; padding-top:6px; }}"
+            f"QGroupBox::title {{ subcontrol-origin:margin; left:8px; }}"
+            f"QPushButton {{ background:#252525; color:#aaa; border:1px solid #333; "
+            f"              border-radius:2px; padding:4px 10px; font-size:{FONT['body']}pt; }}"
+            f"QPushButton:hover {{ background:#2e2e2e; color:#fff; }}")
 
         lay = QVBoxLayout(self)
         lay.setContentsMargins(16, 14, 16, 14)
@@ -70,22 +71,22 @@ class NotesDialog(QDialog):
 
         # Title
         title = QLabel("Edit Notes")
-        title.setStyleSheet("font-size:18pt; font-weight:bold; color:#ccc;")
+        title.setStyleSheet(scaled_qss("font-size:18pt; font-weight:bold; color:#ccc;"))
         lay.addWidget(title)
 
         hint = QLabel(
             "Describe the sample, conditions, DUT ID, or anything needed "
             "to reproduce this measurement.")
         hint.setWordWrap(True)
-        hint.setStyleSheet("font-size:13pt; color:#555;")
+        hint.setStyleSheet(f"font-size:{FONT['body']}pt; color:#555;")
         lay.addWidget(hint)
 
         # Main text editor
         self._edit = QTextEdit()
         self._edit.setPlainText(initial_text)
         self._edit.setStyleSheet(
-            "background:#161616; color:#ccc; border:1px solid #2a2a2a; "
-            "font-size:14pt; font-family:Menlo,monospace;")
+            f"background:#161616; color:#ccc; border:1px solid #2a2a2a; "
+            f"font-size:{FONT['heading']}pt; font-family:Menlo,monospace;")
         self._edit.setMinimumHeight(120)
         lay.addWidget(self._edit)
 
@@ -98,17 +99,17 @@ class NotesDialog(QDialog):
             btn = QPushButton(tag)
             btn.setFixedHeight(26)
             btn.setStyleSheet(
-                "QPushButton { background:#1e2a28; color:#00d4aa; "
-                "border:1px solid #00d4aa33; border-radius:12px; "
-                "font-size:12pt; padding:0 8px; }"
-                "QPushButton:hover { background:#254d42; border-color:#00d4aa99; }")
+                f"QPushButton {{ background:#1e2a28; color:#00d4aa; "
+                f"border:1px solid #00d4aa33; border-radius:12px; "
+                f"font-size:{FONT['label']}pt; padding:0 8px; }}"
+                f"QPushButton:hover {{ background:#254d42; border-color:#00d4aa99; }}")
             btn.clicked.connect(lambda _, t=tag: self._insert(t))
             chips_lay.addWidget(btn, i // cols, i % cols)
         lay.addWidget(chips_box)
 
         # Character count
         self._char_lbl = QLabel()
-        self._char_lbl.setStyleSheet("color:#444; font-size:12pt;")
+        self._char_lbl.setStyleSheet(f"color:#444; font-size:{FONT['label']}pt;")
         self._edit.textChanged.connect(self._update_char_count)
         self._update_char_count()
         lay.addWidget(self._char_lbl)
@@ -179,7 +180,7 @@ class SessionCard(QFrame):
 
         self._label_lbl = QLabel(meta.label or meta.uid)
         self._label_lbl.setStyleSheet(
-            "font-size:15pt; color:#ccc; font-weight:bold;")
+            scaled_qss("font-size:15pt; color:#ccc; font-weight:bold;"))
         self._label_lbl.setWordWrap(False)
 
         snr_str = f"SNR {meta.snr_db:.1f} dB" if meta.snr_db else "SNR —"
@@ -187,7 +188,7 @@ class SessionCard(QFrame):
         sub = QLabel(
             f"{meta.timestamp_str}   ·   {meta.n_frames} frames   ·   "
             f"{snr_str}   ·   {size_str}")
-        sub.setStyleSheet("font-size:12pt; color:#555;")
+        sub.setStyleSheet(f"font-size:{FONT['label']}pt; color:#555;")
 
         info.addWidget(self._label_lbl)
         info.addWidget(sub)
@@ -197,7 +198,7 @@ class SessionCard(QFrame):
         self._notes_badge = QLabel("📝")
         self._notes_badge.setFixedSize(20, 20)
         self._notes_badge.setAlignment(Qt.AlignCenter)
-        self._notes_badge.setStyleSheet("color:#00d4aa66; font-size:13pt;")
+        self._notes_badge.setStyleSheet(f"color:#00d4aa66; font-size:{FONT['body']}pt;")
         self._notes_badge.setToolTip("This session has notes")
         self._notes_badge.setVisible(bool(meta.notes))
         lay.addWidget(self._notes_badge)
@@ -207,7 +208,7 @@ class SessionCard(QFrame):
         del_btn.setText("✕")
         del_btn.setFixedSize(22, 22)
         del_btn.setStyleSheet(
-            "background:transparent; color:#444; border:none; font-size:15pt;")
+            scaled_qss("background:transparent; color:#444; border:none; font-size:15pt;"))
         del_btn.clicked.connect(lambda: self.deleted.emit(self.uid))
         lay.addWidget(del_btn)
 
@@ -221,8 +222,8 @@ class SessionCard(QFrame):
         else:
             self._thumb.setText("No\npreview")
             self._thumb.setStyleSheet(
-                "background:#0d0d0d; border:1px solid #2a2a2a; "
-                "color:#333; font-size:16.5pt;")
+                scaled_qss("background:#0d0d0d; border:1px solid #2a2a2a; "
+                           "color:#333; font-size:16.5pt;"))
 
     def set_has_notes(self, has_notes: bool):
         """Show or hide the notes badge."""
@@ -265,11 +266,11 @@ class DataImagePane(QWidget):
         self._title = QLabel(title)
         self._title.setAlignment(Qt.AlignCenter)
         self._title.setStyleSheet(
-            "font-size:12pt; color:#444; letter-spacing:1px;")
+            f"font-size:{FONT['label']}pt; color:#444; letter-spacing:1px;")
         self._stats = QLabel("")
         self._stats.setAlignment(Qt.AlignCenter)
         self._stats.setStyleSheet(
-            "font-family:Menlo,monospace; font-size:12pt; color:#444;")
+            f"font-family:Menlo,monospace; font-size:{FONT['label']}pt; color:#444;")
         lay.addWidget(self._lbl)
         lay.addWidget(self._title)
         lay.addWidget(self._stats)
@@ -342,14 +343,14 @@ class DataTab(QWidget):
         hdr = QHBoxLayout()
         title = QLabel("Sessions")
         title.setStyleSheet(
-            "font-size:15pt; color:#888; letter-spacing:2px; "
-            "text-transform:uppercase;")
+            scaled_qss("font-size:15pt; color:#888; letter-spacing:2px; "
+                       "text-transform:uppercase;"))
         hdr.addWidget(title)
         hdr.addStretch()
 
         self._count_lbl = QLabel("0")
         self._count_lbl.setStyleSheet(
-            "font-family:Menlo,monospace; font-size:14pt; color:#444;")
+            f"font-family:Menlo,monospace; font-size:{FONT['heading']}pt; color:#444;")
         hdr.addWidget(self._count_lbl)
         lay.addLayout(hdr)
 
@@ -419,7 +420,7 @@ class DataTab(QWidget):
             ml.addWidget(self._sub(lbl), r, 0)
             val = QLabel("—")
             val.setStyleSheet(
-                "font-family:Menlo,monospace; font-size:14pt; color:#aaa;")
+                f"font-family:Menlo,monospace; font-size:{FONT['heading']}pt; color:#aaa;")
             val.setWordWrap(True)
             ml.addWidget(val, r, 1)
             self._meta_fields[key] = val
@@ -431,8 +432,8 @@ class DataTab(QWidget):
         self._notes_edit.setPlaceholderText("Click to add notes…")
         self._notes_edit.setFixedHeight(72)
         self._notes_edit.setStyleSheet(
-            "background:#161616; color:#bbb; border:1px solid #2a2a2a; "
-            "font-size:13pt; font-family:Menlo,monospace;")
+            f"background:#161616; color:#bbb; border:1px solid #2a2a2a; "
+            f"font-size:{FONT['body']}pt; font-family:Menlo,monospace;")
         self._notes_edit.focusOutEvent = self._notes_focus_out
         ml.addWidget(self._notes_edit, notes_row, 1)
         top.addWidget(meta_box, 1)
@@ -466,14 +467,14 @@ class DataTab(QWidget):
 
         cmp_lbl = QLabel("Compare")
         cmp_lbl.setStyleSheet(
-            "font-size:12pt; color:#555; letter-spacing:1px;")
+            f"font-size:{FONT['label']}pt; color:#555; letter-spacing:1px;")
         cl.addWidget(cmp_lbl)
 
         self._cmp_a_lbl = QLabel("A: —")
         self._cmp_b_lbl = QLabel("B: —")
         for l in [self._cmp_a_lbl, self._cmp_b_lbl]:
             l.setStyleSheet(
-                "font-family:Menlo,monospace; font-size:12pt; color:#666;")
+                f"font-family:Menlo,monospace; font-size:{FONT['label']}pt; color:#666;")
             l.setWordWrap(True)
 
         for b in [self._cmp_a_btn, self._cmp_b_btn]:
@@ -744,22 +745,22 @@ class DataTab(QWidget):
 
         dlg = QDialog(self)
         dlg.setWindowTitle("Export Session")
-        dlg.setStyleSheet(
+        dlg.setStyleSheet(scaled_qss(
             "QDialog { background:#1e1e1e; } "
             "QLabel  { color:#ccc; font-size:15pt; } "
             "QCheckBox { color:#ccc; font-size:15pt; } "
             "QPushButton { background:#2a2a2a; color:#ccc; "
             "  border:1px solid #444; border-radius:2px; padding:5px 14px; } "
-            "QPushButton:hover { background:#333; color:#fff; }")
+            "QPushButton:hover { background:#333; color:#fff; }"))
         v = QVBoxLayout(dlg)
         v.setContentsMargins(20, 16, 20, 16)
         v.setSpacing(8)
 
         title = QLabel("Select export formats")
-        title.setStyleSheet("font-size:18pt; font-weight:bold; color:#ccc;")
+        title.setStyleSheet(scaled_qss("font-size:18pt; font-weight:bold; color:#ccc;"))
         v.addWidget(title)
         sub = QLabel("All selected formats will be written to a single output folder.")
-        sub.setStyleSheet("font-size:14pt; color:#666;")
+        sub.setStyleSheet(f"font-size:{FONT['heading']}pt; color:#666;")
         v.addWidget(sub)
         v.addSpacing(4)
 
@@ -780,7 +781,7 @@ class DataTab(QWidget):
         v.addSpacing(8)
         px_row = QHBoxLayout()
         px_lbl = QLabel("Spatial calibration (px/μm, 0 = unknown):")
-        px_lbl.setStyleSheet("color:#888; font-size:14pt;")
+        px_lbl.setStyleSheet(f"color:#888; font-size:{FONT['heading']}pt;")
         px_spin = QDoubleSpinBox()
         px_spin.setRange(0, 100)
         px_spin.setValue(0)

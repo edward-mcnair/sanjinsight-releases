@@ -110,6 +110,34 @@ def apply_dpi_scale(scale: float) -> None:
 FONT: dict = {k: max(8, int(round(v * _DPI_SCALE))) for k, v in _FONT_BASE.items()}
 
 
+def scaled_qss(qss: str) -> str:
+    """Scale every ``font-size: Npt`` token in a QSS string by the current DPI scale.
+
+    Use this when a widget builds its own stylesheet with hardcoded pt values
+    so the sizes stay consistent with the DPI-scaled global STYLE applied in
+    ``main()``.  On macOS (scale = 1.0) the string is returned unchanged with
+    zero regex overhead.
+
+    Example::
+
+        self.setStyleSheet(scaled_qss(\"\"\"
+            QLabel { font-size: 13pt; color: #ccc; }
+            QPushButton { font-size: 12pt; }
+        \"\"\"))
+
+    The base pt values should always be the macOS 72-DPI baseline (i.e. the
+    same values stored in ``_FONT_BASE``).
+    """
+    if _DPI_SCALE == 1.0:
+        return qss
+    import re as _re
+    return _re.sub(
+        r'font-size:\s*(\d+)pt',
+        lambda m: f"font-size:{max(8, int(round(int(m.group(1)) * _DPI_SCALE)))}pt",
+        qss,
+    )
+
+
 # ── QPalette builder ───────────────────────────────────────────────────────────
 
 def build_qt_palette():

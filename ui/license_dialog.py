@@ -21,6 +21,7 @@ from PyQt5.QtWidgets import (
 )
 
 from version import APP_NAME, APP_VENDOR, SUPPORT_EMAIL
+from ui.theme import FONT, scaled_qss
 
 log = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ _RED       = "#ff4444"
 _BTN_PRIMARY = f"""
     QPushButton {{
         background:{_ACCENT}; color:#fff; border:none;
-        border-radius:6px; padding:8px 22px; font-size:13pt; font-weight:600;
+        border-radius:6px; padding:8px 22px; font-size:{FONT["body"]}pt; font-weight:600;
     }}
     QPushButton:hover   {{ background:#3a5fc8; }}
     QPushButton:pressed {{ background:#2e4fa8; }}
@@ -47,7 +48,7 @@ _BTN_PRIMARY = f"""
 _BTN_SECONDARY = f"""
     QPushButton {{
         background:{_BG2}; color:{_MUTED}; border:1px solid {_BORDER};
-        border-radius:6px; padding:8px 22px; font-size:13pt;
+        border-radius:6px; padding:8px 22px; font-size:{FONT["body"]}pt;
     }}
     QPushButton:hover   {{ background:#1e2540; color:{_TEXT}; }}
     QPushButton:pressed {{ background:#1a1f33; }}
@@ -55,7 +56,7 @@ _BTN_SECONDARY = f"""
 _BTN_RED = f"""
     QPushButton {{
         background:{_RED}22; color:{_RED}; border:1px solid {_RED}55;
-        border-radius:6px; padding:8px 22px; font-size:13pt; font-weight:600;
+        border-radius:6px; padding:8px 22px; font-size:{FONT["body"]}pt; font-weight:600;
     }}
     QPushButton:hover   {{ background:{_RED}44; }}
     QPushButton:pressed {{ background:{_RED}66; }}
@@ -106,15 +107,15 @@ class LicenseDialog(QDialog):
         lay.setSpacing(12)
 
         icon = QLabel("🔑")
-        icon.setStyleSheet("font-size:22pt;")
+        icon.setStyleSheet(scaled_qss("font-size:22pt;"))
         lay.addWidget(icon)
 
         col = QVBoxLayout()
         col.setSpacing(2)
         t1 = QLabel(f"{APP_VENDOR} {APP_NAME} — License")
-        t1.setStyleSheet("font-size:15pt; font-weight:700; color:#fff;")
+        t1.setStyleSheet(scaled_qss(f"font-size:15pt; font-weight:700; color:#fff;"))
         t2 = QLabel("Manage your software license key")
-        t2.setStyleSheet(f"font-size:11pt; color:{_MUTED};")
+        t2.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_MUTED};")
         col.addWidget(t1)
         col.addWidget(t2)
         lay.addLayout(col, 1)
@@ -129,7 +130,7 @@ class LicenseDialog(QDialog):
 
         title = QLabel("Current License")
         title.setStyleSheet(
-            f"font-size:11pt; font-weight:700; color:{_MUTED}; letter-spacing:1px;")
+            f"font-size:{FONT['sublabel']}pt; font-weight:700; color:{_MUTED}; letter-spacing:1px;")
         lay.addWidget(title)
 
         # Status grid
@@ -146,10 +147,10 @@ class LicenseDialog(QDialog):
             rl = QHBoxLayout(row)
             rl.setContentsMargins(0, 0, 0, 0)
             lbl = QLabel(label)
-            lbl.setStyleSheet(f"font-size:11pt; color:{_MUTED}; min-width:90px;")
+            lbl.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_MUTED}; min-width:90px;")
             lbl.setFixedWidth(110)
             val = QLabel("—")
-            val.setStyleSheet(f"font-size:11pt; color:{_TEXT};")
+            val.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_TEXT};")
             rl.addWidget(lbl)
             rl.addWidget(val, 1)
             grid_lay.addWidget(row)
@@ -188,14 +189,14 @@ class LicenseDialog(QDialog):
 
         title = QLabel("Activate License")
         title.setStyleSheet(
-            f"font-size:11pt; font-weight:700; color:{_MUTED}; letter-spacing:1px;")
+            f"font-size:{FONT['sublabel']}pt; font-weight:700; color:{_MUTED}; letter-spacing:1px;")
         lay.addWidget(title)
 
         hint = QLabel(
             "Paste your license key below. "
             f"To purchase a license, contact {SUPPORT_EMAIL}."
         )
-        hint.setStyleSheet(f"font-size:11pt; color:{_MUTED};")
+        hint.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_MUTED};")
         hint.setWordWrap(True)
         lay.addWidget(hint)
 
@@ -208,7 +209,7 @@ class LicenseDialog(QDialog):
             QTextEdit {{
                 background:{_BG2}; color:{_TEXT};
                 border:1px solid {_BORDER}; border-radius:4px;
-                font-size:10pt; font-family:Menlo,Consolas,monospace;
+                font-size:{FONT["caption"]}pt; font-family:Menlo,Consolas,monospace;
                 padding:8px;
             }}
             QTextEdit:focus {{ border-color:{_ACCENT}; }}
@@ -219,7 +220,7 @@ class LicenseDialog(QDialog):
 
         # Status message label (shown after activation attempt)
         self._msg_label = QLabel("")
-        self._msg_label.setStyleSheet(f"font-size:11pt; color:{_MUTED};")
+        self._msg_label.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_MUTED};")
         self._msg_label.setWordWrap(True)
         self._msg_label.hide()
         lay.addWidget(self._msg_label)
@@ -240,7 +241,7 @@ class LicenseDialog(QDialog):
         lay.setContentsMargins(28, 0, 28, 0)
 
         contact = QLabel(f"Questions? Contact {SUPPORT_EMAIL}")
-        contact.setStyleSheet(f"font-size:10pt; color:{_MUTED};")
+        contact.setStyleSheet(f"font-size:{FONT['caption']}pt; color:{_MUTED};")
         lay.addWidget(contact, 1)
 
         close_btn = QPushButton("Close")
@@ -262,7 +263,7 @@ class LicenseDialog(QDialog):
 
         if info.tier == LicenseTier.UNLICENSED:
             self._lbl_status.setText("⚠ Unlicensed — demo mode only")
-            self._lbl_status.setStyleSheet(f"font-size:11pt; color:{_AMBER}; font-weight:600;")
+            self._lbl_status.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_AMBER}; font-weight:600;")
             self._lbl_tier.setText("—")
             self._lbl_customer.setText("—")
             self._lbl_email.setText("—")
@@ -280,7 +281,7 @@ class LicenseDialog(QDialog):
 
             self._lbl_status.setText(status_text)
             self._lbl_status.setStyleSheet(
-                f"font-size:11pt; color:{status_color}; font-weight:600;")
+                f"font-size:{FONT['sublabel']}pt; color:{status_color}; font-weight:600;")
             self._lbl_tier.setText(info.tier_display)
             self._lbl_customer.setText(info.customer or "—")
             self._lbl_email.setText(info.email or "—")
@@ -291,7 +292,7 @@ class LicenseDialog(QDialog):
 
     def _set_message(self, text: str, color: str = _MUTED):
         self._msg_label.setText(text)
-        self._msg_label.setStyleSheet(f"font-size:11pt; color:{color};")
+        self._msg_label.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{color};")
         self._msg_label.show()
 
     # ── Slots ─────────────────────────────────────────────────────────────────

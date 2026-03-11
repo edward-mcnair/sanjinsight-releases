@@ -18,7 +18,7 @@ from PyQt5.QtWidgets import (
     QGroupBox, QComboBox, QTextEdit, QFileDialog)
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from ui.icons import set_btn_icon
-from ui.theme import progress_bar_qss
+from ui.theme import progress_bar_qss, FONT, scaled_qss
 
 from hardware.app_state import app_state
 from acquisition        import AcquisitionProgress, AcqState
@@ -132,11 +132,11 @@ class AcquireTab(QWidget):
         from PyQt5.QtWidgets import QFrame as _QFrame
         recipe_row = QHBoxLayout()
         recipe_lbl = QLabel("Recipe:")
-        recipe_lbl.setStyleSheet("color:#555; font-size:12pt;")
+        recipe_lbl.setStyleSheet(f"color:#555; font-size:{FONT['label']}pt;")
         recipe_row.addWidget(recipe_lbl)
         self._active_recipe_lbl = QLabel("(none)")
         self._active_recipe_lbl.setStyleSheet(
-            "color:#00d4aa; font-size:12pt; font-style:italic;")
+            f"color:#00d4aa; font-size:{FONT['label']}pt; font-style:italic;")
         recipe_row.addWidget(self._active_recipe_lbl, 1)
         self._load_recipe_btn = QPushButton("Load Recipe…")
         set_btn_icon(self._load_recipe_btn, "fa5s.clipboard-list")
@@ -174,8 +174,8 @@ class AcquireTab(QWidget):
             "e.g.  Au on Si, 25°C ambient, Vbias=1.5 V, dark room")
         self._notes_edit.setMaximumHeight(70)
         self._notes_edit.setStyleSheet(
-            "background:#161616; color:#bbb; border:1px solid #2a2a2a; "
-            "font-size:13pt; font-family:Menlo,monospace;")
+            f"background:#161616; color:#bbb; border:1px solid #2a2a2a; "
+            f"font-size:{FONT['body']}pt; font-family:Menlo,monospace;")
         nl.addWidget(self._notes_edit)
 
         # Quick-insert chips for common tags
@@ -189,9 +189,9 @@ class AcquireTab(QWidget):
             btn = QPushButton(chip_text)
             btn.setFixedHeight(22)
             btn.setStyleSheet(
-                "QPushButton { background:#1e2a28; color:#00d4aa; "
-                "border:1px solid #00d4aa44; border-radius:10px; "
-                "font-size:11pt; padding:0 8px; }"
+                f"QPushButton {{ background:#1e2a28; color:#00d4aa; "
+                f"border:1px solid #00d4aa44; border-radius:10px; "
+                f"font-size:{FONT['sublabel']}pt; padding:0 8px; }}"
                 "QPushButton:hover { background:#254d42; }")
             btn.clicked.connect(
                 lambda _, t=chip_text: self._insert_notes_chip(t))
@@ -223,7 +223,7 @@ class AcquireTab(QWidget):
         bot = QHBoxLayout()
         self._snr_lbl = QLabel("SNR  —")
         self._snr_lbl.setStyleSheet(
-            "font-family:Menlo,monospace; font-size:15pt; color:#555;")
+            scaled_qss("font-family:Menlo,monospace; font-size:15pt; color:#555;"))
         self._export_btn = QPushButton("Export")
         set_btn_icon(self._export_btn, "fa5s.file-export")
         self._export_btn.setToolTip("Export acquisition results to a folder")

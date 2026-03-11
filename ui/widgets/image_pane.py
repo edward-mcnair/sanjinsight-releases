@@ -17,6 +17,7 @@ from PyQt5.QtGui     import QImage, QPixmap
 
 from acquisition.processing import to_display
 from acquisition             import apply_colormap
+from ui.theme import FONT, scaled_qss
 
 
 class ImagePane(QWidget):
@@ -31,10 +32,10 @@ class ImagePane(QWidget):
         self._lbl.setAlignment(Qt.AlignCenter)
         self._title = QLabel(title)
         self._title.setAlignment(Qt.AlignCenter)
-        self._title.setStyleSheet("font-size:13pt; color:#666; letter-spacing:1px;")
+        self._title.setStyleSheet(f"font-size:{FONT['body']}pt; color:#666; letter-spacing:1px;")
         self._stats = QLabel("")
         self._stats.setAlignment(Qt.AlignCenter)
-        self._stats.setStyleSheet("font-family:Menlo,monospace; font-size:13pt; color:#666;")
+        self._stats.setStyleSheet(f"font-family:Menlo,monospace; font-size:{FONT['body']}pt; color:#666;")
         layout.addWidget(self._lbl)
         layout.addWidget(self._title)
         layout.addWidget(self._stats)

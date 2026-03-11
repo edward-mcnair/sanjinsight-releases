@@ -27,6 +27,7 @@ from PyQt5.QtWidgets import (
     QFrame, QApplication, QSizePolicy, QGraphicsDropShadowEffect)
 from PyQt5.QtCore  import Qt, QPoint, QTimer, QRect, pyqtSignal
 from PyQt5.QtGui   import QColor, QFont, QCursor
+from ui.theme import FONT, scaled_qss
 
 
 # ------------------------------------------------------------------ #
@@ -673,17 +674,17 @@ class HelpPopover(QWidget):
         icon.setStyleSheet(
             f"background:{self._ACCENT}22; color:{self._ACCENT}; "
             f"border:1px solid {self._ACCENT}44; border-radius:11px; "
-            f"font-size:14pt; font-weight:bold;")
+            f"font-size:{FONT['heading']}pt; font-weight:bold;")
         title = QLabel(content["title"])
         title.setStyleSheet(
-            f"font-size:15pt; font-weight:bold; color:#ddd;")
+            scaled_qss("font-size:15pt; font-weight:bold; color:#ddd;"))
         title.setWordWrap(True)
 
         close_btn = QPushButton("✕")
         close_btn.setFixedSize(20, 20)
         close_btn.setStyleSheet(
-            "QPushButton{background:transparent; color:#444; border:none; "
-            "font-size:14pt;} QPushButton:hover{color:#888;}")
+            f"QPushButton{{background:transparent; color:#444; border:none; "
+            f"font-size:{FONT['heading']}pt;}} QPushButton:hover{{color:#888;}}")
         close_btn.clicked.connect(self.close)
 
         hdr.addWidget(icon)
@@ -701,12 +702,12 @@ class HelpPopover(QWidget):
             sl.setSpacing(3)
             h = QLabel(heading.upper())
             h.setStyleSheet(
-                f"font-size:11pt; letter-spacing:1.5px; "
+                f"font-size:{FONT['sublabel']}pt; letter-spacing:1.5px; "
                 f"color:{self._ACCENT if accent else '#777'};")
             b = QLabel(body)
             b.setWordWrap(True)
             b.setStyleSheet(
-                f"font-size:12pt; "
+                f"font-size:{FONT['label']}pt; "
                 f"color:{'#ddd' if accent else '#999'};")
             sl.addWidget(h)
             sl.addWidget(b)
@@ -724,12 +725,12 @@ class HelpPopover(QWidget):
             warn_row = QHBoxLayout()
             warn_row.setSpacing(8)
             warn_icon = QLabel("⚠")
-            warn_icon.setStyleSheet("color:#ffb300; font-size:14pt;")
+            warn_icon.setStyleSheet(f"color:#ffb300; font-size:{FONT['heading']}pt;")
             warn_icon.setFixedWidth(16)
             warn_text = QLabel(content["warning"])
             warn_text.setWordWrap(True)
             warn_text.setStyleSheet(
-                "font-size:12pt; color:#cc9900; font-style:italic;")
+                f"font-size:{FONT['label']}pt; color:#cc9900; font-style:italic;")
             warn_row.addWidget(warn_icon, 0, Qt.AlignTop)
             warn_row.addWidget(warn_text, 1)
             cl.addLayout(warn_row)
@@ -737,7 +738,7 @@ class HelpPopover(QWidget):
         if content.get("docs"):
             docs_lbl = QLabel(f"📖  User Guide: {content['docs']}")
             docs_lbl.setStyleSheet(
-                "font-size:12pt; color:#666; font-style:italic;")
+                f"font-size:{FONT['label']}pt; color:#666; font-style:italic;")
             cl.addWidget(docs_lbl)
 
         outer.addWidget(card)
@@ -798,20 +799,20 @@ class HelpButton(QPushButton):
         super().__init__("?", parent)
         self._topic = topic_id
         self.setFixedSize(22, 22)
-        self.setStyleSheet("""
-            QPushButton {
+        self.setStyleSheet(f"""
+            QPushButton {{
                 background:#1a1a1a;
                 color:#00d4aa99;
                 border:1px solid #2a2a2a;
                 border-radius:11px;
-                font-size:12pt;
+                font-size:{FONT['label']}pt;
                 font-weight:bold;
-            }
-            QPushButton:hover {
+            }}
+            QPushButton:hover {{
                 color:#00d4aa;
                 border-color:#00d4aa66;
                 background:#0d2a1a;
-            }
+            }}
         """)
         self.setCursor(Qt.PointingHandCursor)
         self.setToolTip(f"Help: {HELP_CONTENT.get(topic_id, {}).get('title', topic_id)}")

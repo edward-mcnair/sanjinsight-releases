@@ -33,6 +33,7 @@ from PyQt5.QtCore import (
     QEasingCurve, QRect, QPoint
 )
 from PyQt5.QtGui import QFont, QColor
+from ui.theme import FONT, scaled_qss
 
 
 # ================================================================== #
@@ -199,14 +200,14 @@ class _DeviceRow(QWidget):
 
         self._icon = QLabel("○")
         self._icon.setFixedWidth(20)
-        self._icon.setStyleSheet("color:#444; font-size:16pt;")
+        self._icon.setStyleSheet(f"color:#444; font-size:{FONT['readoutSm']}pt;")
 
         self._name = QLabel(name)
-        self._name.setStyleSheet("color:#888; font-size:14pt;")
+        self._name.setStyleSheet(f"color:#888; font-size:{FONT['heading']}pt;")
         self._name.setMinimumWidth(160)
 
         self._status = QLabel("Connecting…")
-        self._status.setStyleSheet("color:#666; font-size:13pt; font-style:italic;")
+        self._status.setStyleSheet(f"color:#666; font-size:{FONT['body']}pt; font-style:italic;")
 
         lay.addWidget(self._icon)
         lay.addWidget(self._name)
@@ -226,26 +227,26 @@ class _DeviceRow(QWidget):
 
     def set_ok(self, detail: str = ""):
         self._timer.stop()
-        self._icon.setStyleSheet("color:#00d4aa; font-size:16pt;")
+        self._icon.setStyleSheet(f"color:#00d4aa; font-size:{FONT['readoutSm']}pt;")
         self._icon.setText("●")
-        self._name.setStyleSheet("color:#ccc; font-size:14pt;")
-        self._status.setStyleSheet("color:#00d4aa; font-size:13pt;")
+        self._name.setStyleSheet(f"color:#ccc; font-size:{FONT['heading']}pt;")
+        self._status.setStyleSheet(f"color:#00d4aa; font-size:{FONT['body']}pt;")
         self._status.setText(detail or "Connected")
 
     def set_failed(self, detail: str = ""):
         self._timer.stop()
-        self._icon.setStyleSheet("color:#ff4444; font-size:16pt;")
+        self._icon.setStyleSheet(f"color:#ff4444; font-size:{FONT['readoutSm']}pt;")
         self._icon.setText("●")
-        self._name.setStyleSheet("color:#ccc; font-size:14pt;")
-        self._status.setStyleSheet("color:#ff4444; font-size:13pt;")
+        self._name.setStyleSheet(f"color:#ccc; font-size:{FONT['heading']}pt;")
+        self._status.setStyleSheet(f"color:#ff4444; font-size:{FONT['body']}pt;")
         self._status.setText(detail or "Failed")
 
     def set_skipped(self):
         self._timer.stop()
-        self._icon.setStyleSheet("color:#444; font-size:16pt;")
+        self._icon.setStyleSheet(f"color:#444; font-size:{FONT['readoutSm']}pt;")
         self._icon.setText("○")
-        self._name.setStyleSheet("color:#555; font-size:14pt;")
-        self._status.setStyleSheet("color:#555; font-size:13pt; font-style:italic;")
+        self._name.setStyleSheet(f"color:#555; font-size:{FONT['heading']}pt;")
+        self._status.setStyleSheet(f"color:#555; font-size:{FONT['body']}pt; font-style:italic;")
         self._status.setText("Not configured")
 
 
@@ -314,9 +315,9 @@ class StartupProgressDialog(QDialog):
 
         title = QLabel("Starting SanjINSIGHT")
         title.setStyleSheet(
-            "color:#ccc; font-size:16pt; font-family:'Helvetica Neue',Arial;")
+            f"color:#ccc; font-size:{FONT['readoutSm']}pt; font-family:'Helvetica Neue',Arial;")
         sub = QLabel("Initializing hardware…")
-        sub.setStyleSheet("color:#555; font-size:12pt;")
+        sub.setStyleSheet(f"color:#555; font-size:{FONT['label']}pt;")
         h_col = QVBoxLayout()
         h_col.setSpacing(2)
         h_col.addWidget(title)
@@ -349,18 +350,18 @@ class StartupProgressDialog(QDialog):
         f_lay = QHBoxLayout(footer)
         f_lay.setContentsMargins(16, 0, 16, 0)
         self._footer_label = QLabel("Connecting to hardware…")
-        self._footer_label.setStyleSheet("color:#555; font-size:12pt;")
+        self._footer_label.setStyleSheet(f"color:#555; font-size:{FONT['label']}pt;")
         f_lay.addWidget(self._footer_label)
         f_lay.addStretch()
 
         skip_btn = QPushButton("Continue without hardware")
         skip_btn.setFixedHeight(24)
-        skip_btn.setStyleSheet("""
-            QPushButton {
+        skip_btn.setStyleSheet(f"""
+            QPushButton {{
                 background:transparent; color:#555;
-                border:none; font-size:11pt;
-            }
-            QPushButton:hover { color:#888; }
+                border:none; font-size:{FONT['sublabel']}pt;
+            }}
+            QPushButton:hover {{ color:#888; }}
         """)
         skip_btn.clicked.connect(self._on_skip)
         f_lay.addWidget(skip_btn)
@@ -369,16 +370,16 @@ class StartupProgressDialog(QDialog):
         self._demo_btn = QPushButton("▶  Demo Mode")
         self._demo_btn.setFixedHeight(28)
         self._demo_btn.setVisible(False)
-        self._demo_btn.setStyleSheet("""
-            QPushButton {
+        self._demo_btn.setStyleSheet(f"""
+            QPushButton {{
                 background:#1a1a1a; color:#ff9900;
                 border:1px solid #ff990055; border-radius:3px;
-                font-size:12pt; padding: 0 10px;
-            }
-            QPushButton:hover {
+                font-size:{FONT['label']}pt; padding: 0 10px;
+            }}
+            QPushButton:hover {{
                 background:#ff990015; color:#ffaa22;
                 border-color:#ff9900;
-            }
+            }}
         """)
         self._demo_btn.clicked.connect(self._on_demo)
         f_lay.addWidget(self._demo_btn)
@@ -432,16 +433,16 @@ class StartupProgressDialog(QDialog):
 
             if n_failed == 0:
                 self._sub_label.setText("All hardware ready")
-                self._sub_label.setStyleSheet("color:#00d4aa; font-size:12pt;")
+                self._sub_label.setStyleSheet(f"color:#00d4aa; font-size:{FONT['label']}pt;")
                 self._footer_label.setText(f"All {n_total} devices connected")
                 delay = 1200
             else:
                 self._sub_label.setText(
                     f"{n_failed} device(s) failed — check the Log tab for details")
-                self._sub_label.setStyleSheet("color:#ff9900; font-size:12pt;")
+                self._sub_label.setStyleSheet(f"color:#ff9900; font-size:{FONT['label']}pt;")
                 self._footer_label.setText(
                     f"{n_ok}/{n_total} connected  •  {n_failed} failed")
-                self._footer_label.setStyleSheet("color:#ff9900; font-size:12pt;")
+                self._footer_label.setStyleSheet(f"color:#ff9900; font-size:{FONT['label']}pt;")
                 # Show demo mode button
                 self._demo_btn.setVisible(True)
                 self.adjustSize()
@@ -538,24 +539,24 @@ class ToastNotification(QWidget):
 
         icon_lbl = QLabel(icon)
         icon_lbl.setStyleSheet(
-            f"color:{color}; font-size:16pt; background:transparent; border:none;")
+            f"color:{color}; font-size:{FONT['readoutSm']}pt; background:transparent; border:none;")
         icon_lbl.setFixedWidth(22)
 
         title_lbl = QLabel(title)
         title_lbl.setStyleSheet(
-            "color:#ccc; font-size:13pt; font-weight:bold; "
+            f"color:#ccc; font-size:{FONT['body']}pt; font-weight:bold; "
             "background:transparent; border:none;")
         title_lbl.setWordWrap(True)
 
         dismiss_btn = QPushButton("×")
         dismiss_btn.setFixedSize(20, 20)
-        dismiss_btn.setStyleSheet("""
+        dismiss_btn.setStyleSheet(scaled_qss("""
             QPushButton {
                 background:transparent; color:#555;
                 border:none; font-size:15pt; padding:0;
             }
             QPushButton:hover { color:#ccc; }
-        """)
+        """))
         dismiss_btn.clicked.connect(self._dismiss)
 
         top.addWidget(icon_lbl)
@@ -567,7 +568,7 @@ class ToastNotification(QWidget):
         if message:
             msg_lbl = QLabel(message)
             msg_lbl.setStyleSheet(
-                "color:#888; font-size:12pt; "
+                f"color:#888; font-size:{FONT['label']}pt; "
                 "background:transparent; border:none;")
             msg_lbl.setWordWrap(True)
             msg_lbl.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -583,7 +584,7 @@ class ToastNotification(QWidget):
 
             guide_header = QLabel("What to check  ▸")
             guide_header.setStyleSheet(
-                "color:#666; font-size:12pt; "
+                f"color:#666; font-size:{FONT['label']}pt; "
                 "background:transparent; border:none;")
             guide_header.setCursor(Qt.PointingHandCursor)
 
@@ -596,7 +597,7 @@ class ToastNotification(QWidget):
             for bullet in guidance:
                 b = QLabel(f"• {bullet}")
                 b.setStyleSheet(
-                    "color:#777; font-size:11pt; "
+                    f"color:#777; font-size:{FONT['sublabel']}pt; "
                     "background:transparent; border:none;")
                 b.setWordWrap(True)
                 gb_lay.addWidget(b)

@@ -30,6 +30,7 @@ from PyQt5.QtGui   import QImage, QPixmap, QFont, QColor
 
 import config
 from hardware.cameras   import create_camera
+from ui.theme import FONT, scaled_qss
 from acquisition        import (AcquisitionPipeline, AcquisitionResult,
                                 AcquisitionProgress, AcqState,
                                 to_display, apply_colormap, export_result)
@@ -70,12 +71,12 @@ class ImagePane(QWidget):
         self._title_lbl = QLabel(title)
         self._title_lbl.setAlignment(Qt.AlignCenter)
         self._title_lbl.setStyleSheet(
-            "font-size:9pt; color:#aaa; font-family:Consolas;")
+            scaled_qss("font-size:9pt; color:#aaa; font-family:Consolas;"))
 
         self._stat_lbl = QLabel("--")
         self._stat_lbl.setAlignment(Qt.AlignCenter)
         self._stat_lbl.setStyleSheet(
-            "font-size:8pt; color:#666; font-family:Consolas;")
+            scaled_qss("font-size:8pt; color:#666; font-family:Consolas;"))
 
         layout.addWidget(self._img_lbl)
         layout.addWidget(self._title_lbl)
@@ -249,7 +250,7 @@ class AcquisitionPanel(QMainWindow):
         self._log.setReadOnly(True)
         self._log.setMaximumHeight(100)
         self._log.setStyleSheet(
-            "background:#1a1a1a; color:#aaa; font-family:Consolas; font-size:9pt;")
+            scaled_qss("background:#1a1a1a; color:#aaa; font-family:Consolas; font-size:9pt;"))
         ctrl_layout.addWidget(self._log, 5, 0, 1, 2)
 
         left.addWidget(ctrl_box)
@@ -279,7 +280,7 @@ class AcquisitionPanel(QMainWindow):
         self._export_btn.setEnabled(False)
         self._export_btn.clicked.connect(self._export)
         self._snr_lbl = QLabel("SNR: --")
-        self._snr_lbl.setStyleSheet("font-family:Consolas; font-size:10pt;")
+        self._snr_lbl.setStyleSheet(f"font-family:Consolas; font-size:{FONT['caption']}pt;")
         export_row.addWidget(self._snr_lbl)
         export_row.addStretch()
         export_row.addWidget(self._export_btn)

@@ -17,7 +17,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore    import Qt, pyqtSignal
 
 from hardware.app_state import app_state
-from ui.theme import FONT, PALETTE
+from ui.theme import FONT, PALETTE, scaled_qss
 from ai.instrument_knowledge import (
     BIAS_VO_INT_MAX_V, BIAS_AUX_INT_MAX_V, BIAS_VO_EXT_MAX_V,
     SHUNT_20MA_OHM)
@@ -282,29 +282,29 @@ class BiasTab(QWidget):
             icon_lbl.setPixmap(qta.icon("fa5s.unlink", color="#555").pixmap(64, 64))
         except Exception:
             icon_lbl = QLabel("⚡")
-            icon_lbl.setStyleSheet("font-size: 48pt; color: #333;")
+            icon_lbl.setStyleSheet(scaled_qss("font-size: 48pt; color: #333;"))
         icon_lbl.setAlignment(Qt.AlignCenter)
 
         title_lbl = QLabel(f"{title} Not Connected")
         title_lbl.setAlignment(Qt.AlignCenter)
-        title_lbl.setStyleSheet("font-size: 16pt; font-weight: bold; color: #888;")
+        title_lbl.setStyleSheet(f"font-size: {FONT['readoutSm']}pt; font-weight: bold; color: #888;")
 
         tip_lbl = QLabel(tip)
         tip_lbl.setAlignment(Qt.AlignCenter)
         tip_lbl.setWordWrap(True)
-        tip_lbl.setStyleSheet("font-size: 12pt; color: #555;")
+        tip_lbl.setStyleSheet(f"font-size: {FONT['label']}pt; color: #555;")
         tip_lbl.setMaximumWidth(400)
 
         btn = QPushButton("Open Device Manager")
         btn.setFixedWidth(200)
         btn.setFixedHeight(36)
-        btn.setStyleSheet("""
-            QPushButton {
+        btn.setStyleSheet(f"""
+            QPushButton {{
                 background: #1a2a20; color: #00d4aa;
                 border: 1px solid #00d4aa66; border-radius: 5px;
-                font-size: 12pt; font-weight: 600;
-            }
-            QPushButton:hover { background: #1e3028; }
+                font-size: {FONT['label']}pt; font-weight: 600;
+            }}
+            QPushButton:hover {{ background: #1e3028; }}
         """)
         btn.clicked.connect(self.open_device_manager)
 

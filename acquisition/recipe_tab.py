@@ -236,6 +236,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QColor, QFont
 from ui.icons import set_btn_icon
+from ui.theme import FONT, scaled_qss
 
 
 class RecipeTab(QWidget):
@@ -276,15 +277,15 @@ class RecipeTab(QWidget):
         left_lay.setSpacing(4)
 
         list_hdr = QLabel("Saved Recipes")
-        list_hdr.setStyleSheet("color:#ccc; font-size:14pt; font-weight:600;")
+        list_hdr.setStyleSheet(f"color:#ccc; font-size:{FONT['heading']}pt; font-weight:600;")
         left_lay.addWidget(list_hdr)
 
         self._list = QListWidget()
-        self._list.setStyleSheet("""
-            QListWidget { background:#141414; color:#ccc; border:1px solid #2a2a2a;
-                          font-size:12pt; font-family:Menlo,monospace; }
-            QListWidget::item:selected { background:#0d3a52; color:#fff; }
-            QListWidget::item:hover    { background:#1a2a2a; }
+        self._list.setStyleSheet(f"""
+            QListWidget {{ background:#141414; color:#ccc; border:1px solid #2a2a2a;
+                          font-size:{FONT['label']}pt; font-family:Menlo,monospace; }}
+            QListWidget::item:selected {{ background:#0d3a52; color:#fff; }}
+            QListWidget::item:hover    {{ background:#1a2a2a; }}
         """)
         self._list.currentRowChanged.connect(self._on_select)
         left_lay.addWidget(self._list, 1)
@@ -325,7 +326,7 @@ class RecipeTab(QWidget):
         right_lay.setSpacing(6)
 
         right_hdr = QLabel("Recipe Editor")
-        right_hdr.setStyleSheet("color:#ccc; font-size:14pt; font-weight:600;")
+        right_hdr.setStyleSheet(f"color:#ccc; font-size:{FONT['heading']}pt; font-weight:600;")
         right_lay.addWidget(right_hdr)
 
         # Identity
@@ -395,7 +396,7 @@ class RecipeTab(QWidget):
         self._notes_edit = QTextEdit()
         self._notes_edit.setFixedHeight(70)
         self._notes_edit.setStyleSheet(
-            "background:#111; color:#ccc; font-size:12pt; border:none;")
+            f"background:#111; color:#ccc; font-size:{FONT['label']}pt; border:none;")
         notes_lay.addWidget(self._notes_edit)
         right_lay.addWidget(notes_box)
 
@@ -426,11 +427,11 @@ class RecipeTab(QWidget):
     @staticmethod
     def _box_style() -> str:
         return (
-            "QGroupBox { color:#aaa; font-size:12pt; border:1px solid #2a2a2a; "
+            f"QGroupBox {{ color:#aaa; font-size:{FONT['label']}pt; border:1px solid #2a2a2a; "
             "border-radius:4px; margin-top:6px; } "
             "QGroupBox::title { subcontrol-position:top left; padding:0 4px; } "
             "QDoubleSpinBox, QSpinBox, QLineEdit, QComboBox { "
-            "background:#111; color:#ddd; border:1px solid #333; font-size:12pt; }"
+            f"background:#111; color:#ddd; border:1px solid #333; font-size:{FONT['label']}pt; }}"
         )
 
     def _set_editor_enabled(self, enabled: bool):
@@ -575,15 +576,15 @@ class RecipeTab(QWidget):
             "Choose a preset to load into the Recipe Editor.\n"
             "Rename and save it to create your own recipe."
         )
-        hdr.setStyleSheet("color:#aaa; font-size:11pt;")
+        hdr.setStyleSheet(f"color:#aaa; font-size:{FONT['sublabel']}pt;")
         lay.addWidget(hdr)
 
         lst = QListWidget()
-        lst.setStyleSheet("""
-            QListWidget { background:#141414; color:#ccc; border:1px solid #2a2a2a;
-                          font-size:12pt; font-family:Menlo,monospace; }
-            QListWidget::item:selected { background:#0d3a52; color:#fff; }
-            QListWidget::item:hover    { background:#1a2a2a; }
+        lst.setStyleSheet(f"""
+            QListWidget {{ background:#141414; color:#ccc; border:1px solid #2a2a2a;
+                          font-size:{FONT['label']}pt; font-family:Menlo,monospace; }}
+            QListWidget::item:selected {{ background:#0d3a52; color:#fff; }}
+            QListWidget::item:hover    {{ background:#1a2a2a; }}
         """)
         for preset in PRESETS:
             item = QListWidgetItem(preset.label)
@@ -595,7 +596,7 @@ class RecipeTab(QWidget):
 
         desc_lbl = QLabel(PRESETS[0].description if PRESETS else "")
         desc_lbl.setStyleSheet(
-            "color:#888; font-size:11pt; font-style:italic; padding:4px 0;")
+            f"color:#888; font-size:{FONT['sublabel']}pt; font-style:italic; padding:4px 0;")
         desc_lbl.setWordWrap(True)
         lay.addWidget(desc_lbl)
 

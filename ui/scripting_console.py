@@ -53,6 +53,8 @@ from typing import List, Optional
 import config as _config_module
 import numpy as np
 
+from ui.theme import FONT, scaled_qss
+
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QPlainTextEdit,
     QPushButton, QLabel, QFrame, QShortcut, QSizePolicy,
@@ -180,7 +182,7 @@ class ScriptingConsoleTab(QWidget):
 
         title_lbl = QLabel("Python Console")
         title_lbl.setStyleSheet(
-            "color:#ccc; font-size:14pt; font-weight:600; font-family:Menlo,monospace;")
+            f"color:#ccc; font-size:{FONT['heading']}pt; font-weight:600; font-family:Menlo,monospace;")
         toolbar.addWidget(title_lbl)
         toolbar.addStretch(1)
 
@@ -219,7 +221,7 @@ class ScriptingConsoleTab(QWidget):
 
         editor_lbl = QLabel("  Script Editor")
         editor_lbl.setStyleSheet(
-            "color:#888; font-size:12pt; padding:3px 0; "
+            f"color:#888; font-size:{FONT['label']}pt; padding:3px 0; "
             "background:#161616; border-bottom:1px solid #2a2a2a;")
         editor_lay.addWidget(editor_lbl)
 
@@ -249,7 +251,7 @@ class ScriptingConsoleTab(QWidget):
 
         output_lbl = QLabel("  Output")
         output_lbl.setStyleSheet(
-            "color:#888; font-size:12pt; padding:3px 0; "
+            f"color:#888; font-size:{FONT['label']}pt; padding:3px 0; "
             "background:#161616; border-bottom:1px solid #2a2a2a;")
         output_lay.addWidget(output_lbl)
 
@@ -270,7 +272,7 @@ class ScriptingConsoleTab(QWidget):
         # ─ Namespace info ─
         ns_lbl = QLabel(
             "Namespace: app · cam · fpga · bias · stage · tecs · pipeline · np · log")
-        ns_lbl.setStyleSheet("color:#555; font-size:12pt; font-family:Menlo,monospace;"
+        ns_lbl.setStyleSheet(f"color:#555; font-size:{FONT['label']}pt; font-family:Menlo,monospace;"
                              " padding:2px 4px;")
         root.addWidget(ns_lbl)
 
@@ -280,7 +282,7 @@ class ScriptingConsoleTab(QWidget):
                 "⚠  Script console enabled — executes arbitrary Python in-process."
                 "  Enable only for trusted operators.")
             warn_lbl.setStyleSheet(
-                "background:#4a3200; color:#ffcc55; font-size:11pt;"
+                f"background:#4a3200; color:#ffcc55; font-size:{FONT['sublabel']}pt;"
                 " padding:4px 8px; border-radius:3px;")
             warn_lbl.setWordWrap(True)
             root.addWidget(warn_lbl)
@@ -289,7 +291,7 @@ class ScriptingConsoleTab(QWidget):
                 "🔒  Script console is disabled.  "
                 "Set  developer.enable_script_console: true  in config.yaml to enable.")
             disabled_lbl.setStyleSheet(
-                "background:#1a1a1a; color:#666; font-size:11pt;"
+                f"background:#1a1a1a; color:#666; font-size:{FONT['sublabel']}pt;"
                 " padding:4px 8px; border-radius:3px;")
             disabled_lbl.setWordWrap(True)
             root.addWidget(disabled_lbl)

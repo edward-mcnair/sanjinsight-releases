@@ -36,6 +36,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QTimer
 from ui.icons import set_btn_icon
+from ui.theme import FONT, scaled_qss
 from .processing import (COLORMAP_OPTIONS, COLORMAP_TOOLTIPS,
                          setup_cmap_combo, get_mpl_cmap_name)
 import config as cfg_mod
@@ -105,7 +106,7 @@ class SurfacePlotTab(QWidget):
 
         # Threshold plane
         self._thresh_cb = QCheckBox("Show threshold plane")
-        self._thresh_cb.setStyleSheet("color:#aaa; font-size:12pt;")
+        self._thresh_cb.setStyleSheet(f"color:#aaa; font-size:{FONT['label']}pt;")
         self._thresh_cb.stateChanged.connect(self._replot)
         toolbar.addWidget(self._thresh_cb)
 
@@ -147,13 +148,13 @@ class SurfacePlotTab(QWidget):
 
         # ─ Status ─
         self._status_lbl = QLabel("No data loaded — call set_data() to display a surface.")
-        self._status_lbl.setStyleSheet("color:#888; font-size:12pt; padding:2px 4px;")
+        self._status_lbl.setStyleSheet(f"color:#888; font-size:{FONT['label']}pt; padding:2px 4px;")
         root.addWidget(self._status_lbl)
 
         # Apply label styling to toolbar labels
         for lbl in toolbar.parentWidget().findChildren(QLabel) if toolbar.parentWidget() else []:
             if not lbl.styleSheet():
-                lbl.setStyleSheet("color:#aaa; font-size:12pt;")
+                lbl.setStyleSheet(f"color:#aaa; font-size:{FONT['label']}pt;")
 
     def _build_empty_state(self, icon, title, desc, btn_text="", btn_callback=None):
         w = QWidget()
@@ -163,16 +164,16 @@ class SurfacePlotTab(QWidget):
 
         icon_lbl = QLabel(icon)
         icon_lbl.setAlignment(Qt.AlignCenter)
-        icon_lbl.setStyleSheet("font-size: 52pt; color: #2a2a2a;")
+        icon_lbl.setStyleSheet(scaled_qss("font-size: 52pt; color: #2a2a2a;"))
 
         title_lbl = QLabel(title)
         title_lbl.setAlignment(Qt.AlignCenter)
-        title_lbl.setStyleSheet("font-size: 16pt; font-weight: bold; color: #555;")
+        title_lbl.setStyleSheet(f"font-size: {FONT['readoutSm']}pt; font-weight: bold; color: #555;")
 
         desc_lbl = QLabel(desc)
         desc_lbl.setAlignment(Qt.AlignCenter)
         desc_lbl.setWordWrap(True)
-        desc_lbl.setStyleSheet("font-size: 12pt; color: #444;")
+        desc_lbl.setStyleSheet(f"font-size: {FONT['label']}pt; color: #444;")
         desc_lbl.setMaximumWidth(450)
 
         lay.addStretch()
@@ -184,13 +185,13 @@ class SurfacePlotTab(QWidget):
             btn = QPushButton(btn_text)
             btn.setFixedWidth(200)
             btn.setFixedHeight(36)
-            btn.setStyleSheet("""
-                QPushButton {
+            btn.setStyleSheet(f"""
+                QPushButton {{
                     background: #1a2a20; color: #00d4aa;
                     border: 1px solid #00d4aa55; border-radius: 5px;
-                    font-size: 12pt; font-weight: 600;
-                }
-                QPushButton:hover { background: #1e3028; }
+                    font-size: {FONT['label']}pt; font-weight: 600;
+                }}
+                QPushButton:hover {{ background: #1e3028; }}
             """)
             btn.clicked.connect(btn_callback)
             lay.addSpacing(4)
@@ -217,7 +218,7 @@ class SurfacePlotTab(QWidget):
         lay.addLayout(angle_row)
 
         el_lbl = QLabel("Elevation:")
-        el_lbl.setStyleSheet("color:#aaa; font-size:12pt;")
+        el_lbl.setStyleSheet(f"color:#aaa; font-size:{FONT['label']}pt;")
         angle_row.addWidget(el_lbl)
         self._el_slider = QSlider(Qt.Horizontal)
         self._el_slider.setRange(-90, 90)
@@ -226,7 +227,7 @@ class SurfacePlotTab(QWidget):
         angle_row.addWidget(self._el_slider)
 
         az_lbl = QLabel("  Azimuth:")
-        az_lbl.setStyleSheet("color:#aaa; font-size:12pt;")
+        az_lbl.setStyleSheet(f"color:#aaa; font-size:{FONT['label']}pt;")
         angle_row.addWidget(az_lbl)
         self._az_slider = QSlider(Qt.Horizontal)
         self._az_slider.setRange(0, 359)

@@ -56,7 +56,7 @@ from PyQt5.QtWidgets import (
 
 from ui.theme import (
     btn_wizard_primary_qss, btn_wizard_secondary_qss, wizard_input_qss,
-    FONT, PALETTE,
+    FONT, PALETTE, scaled_qss,
 )
 
 log = logging.getLogger(__name__)
@@ -272,7 +272,7 @@ _BTN_PRIMARY   = btn_wizard_primary_qss()
 _BTN_SECONDARY = btn_wizard_secondary_qss()
 _INPUT_SS      = wizard_input_qss()
 
-_LABEL_H1   = "font-size:20pt; font-weight:700; color:#fff;"
+_LABEL_H1   = scaled_qss("font-size:20pt; font-weight:700; color:#fff;")
 _LABEL_BODY = f"font-size:{FONT['body']}pt; color:{PALETTE['textSub']};"
 _LABEL_HINT = f"font-size:{FONT['caption']}pt; color:{PALETTE['textSub']}; font-style:italic;"
 
@@ -334,7 +334,7 @@ class _PageWelcome(_PageBase):
             "  ③  FPGA              — NI 9637 via NI-RIO\n\n"
             "Your answers are saved to  config.yaml  and can be changed at any "
             "time from  Settings → Hardware Setup.")
-        body.setStyleSheet("font-size:13pt; color:#c0c8e0; line-height:1.6;")
+        body.setStyleSheet(f"font-size:{FONT['body']}pt; color:#c0c8e0; line-height:1.6;")
         body.setWordWrap(True)
         self._content.addWidget(body)
         self._content.addStretch(1)
@@ -344,7 +344,7 @@ class _PageWelcome(_PageBase):
             "leave all drivers set to  simulated  — the app will still open and operate "
             "with synthetic data.")
         tip.setStyleSheet(
-            "font-size:11pt; color:#5a6480; font-style:italic; "
+            f"font-size:{FONT['sublabel']}pt; color:#5a6480; font-style:italic; "
             "background:#13172a; border:1px solid #1e2337; border-radius:5px; "
             "padding:10px;")
         tip.setWordWrap(True)
@@ -353,7 +353,7 @@ class _PageWelcome(_PageBase):
         # Live scan-status line — updated by _ScanWorker signals
         self._scan_label = QLabel("🔍  Scanning for connected hardware…")
         self._scan_label.setStyleSheet(
-            "font-size:11pt; color:#8892a4; font-style:italic; padding:4px 0;")
+            f"font-size:{FONT['sublabel']}pt; color:#8892a4; font-style:italic; padding:4px 0;")
         self._content.addWidget(self._scan_label)
 
     def set_scan_status(self, msg: str):
@@ -367,13 +367,13 @@ class _PageWelcome(_PageBase):
                 f"✓  Scan complete — {known_count} known device(s) detected. "
                 "Settings have been pre-filled on the following pages.")
             self._scan_label.setStyleSheet(
-                "font-size:11pt; color:#00d4aa; padding:4px 0;")
+                f"font-size:{FONT['sublabel']}pt; color:#00d4aa; padding:4px 0;")
         else:
             self._scan_label.setText(
                 "⚠  Scan complete — no known devices found. "
                 "Select drivers and ports manually, or check USB connections.")
             self._scan_label.setStyleSheet(
-                "font-size:11pt; color:#e8a020; padding:4px 0;")
+                f"font-size:{FONT['sublabel']}pt; color:#e8a020; padding:4px 0;")
 
 
 class _PortRow(QWidget):
@@ -395,7 +395,7 @@ class _PortRow(QWidget):
         row.setSpacing(8)
 
         lbl = QLabel(label)
-        lbl.setStyleSheet("font-size:12pt; color:#8892a4;")
+        lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:#8892a4;")
         lbl.setFixedWidth(220)
         row.addWidget(lbl)
 
@@ -505,7 +505,7 @@ class _PageTEC(_PageBase):
         atec_cfg        = cfg.get("tec_atec",        {})
 
         _grp_ss = (
-            "QGroupBox { color:#8892a4; font-size:12pt; border:1px solid #2a3249; "
+            f"QGroupBox {{ color:#8892a4; font-size:{FONT['label']}pt; border:1px solid #2a3249; "
             "border-radius:5px; margin-top:8px; padding:12px; }"
             "QGroupBox::title { subcontrol-origin:margin; left:10px; padding:0 4px; }")
 
@@ -714,7 +714,7 @@ class _PageCamera(_PageBase):
 
         g = QGroupBox("Camera")
         g.setStyleSheet(
-            "QGroupBox { color:#8892a4; font-size:12pt; border:1px solid #2a3249; "
+            f"QGroupBox {{ color:#8892a4; font-size:{FONT['label']}pt; border:1px solid #2a3249; "
             "border-radius:5px; margin-top:8px; padding:12px; }"
             "QGroupBox::title { subcontrol-origin:margin; left:10px; padding:0 4px; }")
         fl = QFormLayout(g)
@@ -965,7 +965,7 @@ class _PageFPGA(_PageBase):
 
         g = QGroupBox("NI 9637 FPGA Module")
         g.setStyleSheet(
-            "QGroupBox { color:#8892a4; font-size:12pt; border:1px solid #2a3249; "
+            f"QGroupBox {{ color:#8892a4; font-size:{FONT['label']}pt; border:1px solid #2a3249; "
             "border-radius:5px; margin-top:8px; padding:12px; }"
             "QGroupBox::title { subcontrol-origin:margin; left:10px; padding:0 4px; }")
         fl = QFormLayout(g)
@@ -1087,7 +1087,7 @@ class _PageBias(_PageBase):
         # ── GroupBox ──────────────────────────────────────────────────────────
         g = QGroupBox("Bias Source Configuration")
         g.setStyleSheet(
-            "QGroupBox { color:#8892a4; font-size:12pt; border:1px solid #2a3249; "
+            f"QGroupBox {{ color:#8892a4; font-size:{FONT['label']}pt; border:1px solid #2a3249; "
             "border-radius:5px; margin-top:8px; padding:12px; }"
             "QGroupBox::title { subcontrol-origin:margin; left:10px; padding:0 4px; }")
         fl = QFormLayout(g)
@@ -1167,7 +1167,7 @@ class _PageBias(_PageBase):
         self._visa_notice.setOpenExternalLinks(True)
         self._visa_notice.setWordWrap(True)
         self._visa_notice.setStyleSheet(
-            f"font-size:11pt; color:{self._AMBER}; background:#13172a; "
+            f"font-size:{FONT['sublabel']}pt; color:{self._AMBER}; background:#13172a; "
             "border:1px solid #f5a62344; border-radius:4px; padding:8px;")
         self._visa_notice.setVisible(False)
         self._content.addWidget(self._visa_notice)
@@ -1184,7 +1184,7 @@ class _PageBias(_PageBase):
         self._dp832_notice.setOpenExternalLinks(True)
         self._dp832_notice.setWordWrap(True)
         self._dp832_notice.setStyleSheet(
-            f"font-size:11pt; color:{self._AMBER}; background:#13172a; "
+            f"font-size:{FONT['sublabel']}pt; color:{self._AMBER}; background:#13172a; "
             "border:1px solid #f5a62344; border-radius:4px; padding:8px;")
         self._dp832_notice.setVisible(False)
         self._content.addWidget(self._dp832_notice)
@@ -1250,7 +1250,7 @@ class _PageBias(_PageBase):
             if drv == "simulated":
                 self._test_result.setText("✓  Simulated driver ready")
                 self._test_result.setStyleSheet(
-                    f"font-size:11pt; color:{self._GREEN};")
+                    f"font-size:{FONT['sublabel']}pt; color:{self._GREEN};")
                 self._test_result.setVisible(True)
                 return
 
@@ -1264,11 +1264,11 @@ class _PageBias(_PageBase):
                 f"✓  Connected  — V = {st.actual_voltage:.3f} V, "
                 f"I = {st.actual_current:.4f} A")
             self._test_result.setStyleSheet(
-                f"font-size:11pt; color:{self._GREEN};")
+                f"font-size:{FONT['sublabel']}pt; color:{self._GREEN};")
         except Exception as exc:
             self._test_result.setText(f"✗  {exc}")
             self._test_result.setStyleSheet(
-                f"font-size:11pt; color:{self._DANGER};")
+                f"font-size:{FONT['sublabel']}pt; color:{self._DANGER};")
         self._test_result.setVisible(True)
 
     def _build_cfg(self) -> dict:
@@ -1352,7 +1352,7 @@ class _PageStage(_PageBase):
         # ── GroupBox ──────────────────────────────────────────────────────────
         g = QGroupBox("Stage Configuration")
         g.setStyleSheet(
-            "QGroupBox { color:#8892a4; font-size:12pt; border:1px solid #2a3249; "
+            f"QGroupBox {{ color:#8892a4; font-size:{FONT['label']}pt; border:1px solid #2a3249; "
             "border-radius:5px; margin-top:8px; padding:12px; }"
             "QGroupBox::title { subcontrol-origin:margin; left:10px; padding:0 4px; }")
         fl = QFormLayout(g)
@@ -1437,7 +1437,7 @@ class _PageStage(_PageBase):
         self._apt_notice.setOpenExternalLinks(True)
         self._apt_notice.setWordWrap(True)
         self._apt_notice.setStyleSheet(
-            f"font-size:11pt; color:{self._AMBER}; background:#13172a; "
+            f"font-size:{FONT['sublabel']}pt; color:{self._AMBER}; background:#13172a; "
             "border:1px solid #f5a62344; border-radius:4px; padding:8px;")
         self._apt_notice.setVisible(False)
         self._content.addWidget(self._apt_notice)
@@ -1487,7 +1487,7 @@ class _PageStage(_PageBase):
             if drv == "simulated":
                 self._test_result.setText("✓  Simulated driver ready")
                 self._test_result.setStyleSheet(
-                    f"font-size:11pt; color:{self._GREEN};")
+                    f"font-size:{FONT['sublabel']}pt; color:{self._GREEN};")
                 self._test_result.setVisible(True)
                 return
 
@@ -1500,11 +1500,11 @@ class _PageStage(_PageBase):
             self._test_result.setText(
                 f"✓  Connected — position X={pos.x:.3f} Y={pos.y:.3f} Z={pos.z:.3f} mm")
             self._test_result.setStyleSheet(
-                f"font-size:11pt; color:{self._GREEN};")
+                f"font-size:{FONT['sublabel']}pt; color:{self._GREEN};")
         except Exception as exc:
             self._test_result.setText(f"✗  {exc}")
             self._test_result.setStyleSheet(
-                f"font-size:11pt; color:{self._DANGER};")
+                f"font-size:{FONT['sublabel']}pt; color:{self._DANGER};")
         self._test_result.setVisible(True)
 
     def _build_cfg(self) -> dict:
@@ -1586,7 +1586,7 @@ class _PageAI(_PageBase):
         # ── Status badge ──────────────────────────────────────────────────
         self._status_lbl = QLabel("")
         self._status_lbl.setWordWrap(True)
-        self._status_lbl.setStyleSheet("font-size:12pt;")
+        self._status_lbl.setStyleSheet(f"font-size:{FONT['label']}pt;")
         self._content.addWidget(self._status_lbl)
 
         # ── Install section ───────────────────────────────────────────────
@@ -1600,7 +1600,7 @@ class _PageAI(_PageBase):
         if_lay.addWidget(QLabel(
             "Step 1 — Install Ollama (free, takes about 1 minute):"))
         if_lay.widget(0).setStyleSheet(
-            f"font-size:12pt; font-weight:600; color:#fff;")
+            f"font-size:{FONT['label']}pt; font-weight:600; color:#fff;")
 
         btn_row = QHBoxLayout()
         self._install_btn = QPushButton("⬇  Install Ollama for me")
@@ -1614,7 +1614,7 @@ class _PageAI(_PageBase):
             f'or &nbsp;<a href="https://ollama.com/download" '
             f'style="color:{self._ACCENT};">download manually ↗</a>')
         manual.setOpenExternalLinks(True)
-        manual.setStyleSheet(f"font-size:11pt; color:{self._MUTED};")
+        manual.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{self._MUTED};")
         btn_row.addWidget(manual)
         btn_row.addStretch(1)
         if_lay.addLayout(btn_row)
@@ -1633,7 +1633,7 @@ class _PageAI(_PageBase):
         if_lay.addWidget(self._install_cancel_btn)
 
         self._install_msg = QLabel("")
-        self._install_msg.setStyleSheet(f"font-size:11pt; color:{self._MUTED};")
+        self._install_msg.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{self._MUTED};")
         self._install_msg.setWordWrap(True)
         self._install_msg.setVisible(False)
         if_lay.addWidget(self._install_msg)
@@ -1649,19 +1649,19 @@ class _PageAI(_PageBase):
         pf_lay.setSpacing(8)
 
         step2_hdr = QLabel("Step 2 — Download a model (2 – 4 GB):")
-        step2_hdr.setStyleSheet("font-size:12pt; font-weight:600; color:#fff;")
+        step2_hdr.setStyleSheet(f"font-size:{FONT['label']}pt; font-weight:600; color:#fff;")
         pf_lay.addWidget(step2_hdr)
 
         pull_hint = QLabel(
             "Phi-3 Mini is recommended for first-time users "
             "(2.3 GB, good on 4 GB GPU, fast responses).")
         pull_hint.setWordWrap(True)
-        pull_hint.setStyleSheet(f"font-size:11pt; color:{self._MUTED};")
+        pull_hint.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{self._MUTED};")
         pf_lay.addWidget(pull_hint)
 
         pull_row = QHBoxLayout()
         pull_lbl = QLabel("Model:")
-        pull_lbl.setStyleSheet(f"font-size:12pt; color:{self._MUTED};")
+        pull_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{self._MUTED};")
         pull_lbl.setFixedWidth(55)
         pull_row.addWidget(pull_lbl)
 
@@ -1692,7 +1692,7 @@ class _PageAI(_PageBase):
         pf_lay.addWidget(self._pull_prog)
 
         self._pull_msg = QLabel("")
-        self._pull_msg.setStyleSheet(f"font-size:11pt; color:{self._MUTED};")
+        self._pull_msg.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{self._MUTED};")
         self._pull_msg.setWordWrap(True)
         self._pull_msg.setVisible(False)
         pf_lay.addWidget(self._pull_msg)
@@ -1725,7 +1725,7 @@ class _PageAI(_PageBase):
                 "⚠  Ollama is not installed yet.  "
                 "Use  Step 1  below, or skip this page for now.")
             self._status_lbl.setStyleSheet(
-                f"font-size:12pt; color:{self._AMBER};")
+                f"font-size:{FONT['label']}pt; color:{self._AMBER};")
             return
 
         running = is_ollama_running(timeout=1.5)
@@ -1735,7 +1735,7 @@ class _PageAI(_PageBase):
                 "✓  Ollama installed.  "
                 "Launch the Ollama app, then click  ⟳ Check status.")
             self._status_lbl.setStyleSheet(
-                f"font-size:12pt; color:{self._AMBER};")
+                f"font-size:{FONT['label']}pt; color:{self._AMBER};")
             return
 
         models = get_ollama_models()
@@ -1745,7 +1745,7 @@ class _PageAI(_PageBase):
                 "✓  Ollama is running.  "
                 "No models downloaded yet — use Step 2 below.")
             self._status_lbl.setStyleSheet(
-                f"font-size:12pt; color:{self._AMBER};")
+                f"font-size:{FONT['label']}pt; color:{self._AMBER};")
             return
 
         # All good
@@ -1755,7 +1755,7 @@ class _PageAI(_PageBase):
             f"✓  Ollama ready with {len(models)} model(s): {names}\n"
             "You can connect to it from  Settings → Ollama.")
         self._status_lbl.setStyleSheet(
-            f"font-size:12pt; color:{self._GREEN};")
+            f"font-size:{FONT['label']}pt; color:{self._GREEN};")
 
     # ── Install handlers ───────────────────────────────────────────────────────
 
@@ -1770,7 +1770,7 @@ class _PageAI(_PageBase):
             self._install_cancel_btn.setText("✕  Cancel Download")
             self._install_msg.setText("Connecting to ollama.com…")
             self._install_msg.setStyleSheet(
-                f"font-size:11pt; color:{self._MUTED};")
+                f"font-size:{FONT['sublabel']}pt; color:{self._MUTED};")
             self._install_msg.setVisible(True)
 
             self._install_thread = _WizOllamaInstallThread(self)
@@ -1785,7 +1785,7 @@ class _PageAI(_PageBase):
                 "Opened  ollama.com/download  in your browser.\n"
                 "Install Ollama, then click  ⟳ Check status.")
             self._install_msg.setStyleSheet(
-                f"font-size:11pt; color:{self._MUTED};")
+                f"font-size:{FONT['sublabel']}pt; color:{self._MUTED};")
             self._install_msg.setVisible(True)
 
     def _on_install_progress(self, pct: int, msg: str) -> None:
@@ -1807,7 +1807,7 @@ class _PageAI(_PageBase):
         self._install_msg.setText(
             "Download cancelled." if _cancelled else msg)
         self._install_msg.setStyleSheet(
-            f"font-size:11pt; color:"
+            f"font-size:{FONT['sublabel']}pt; color:"
             f"{self._MUTED if _cancelled else (self._GREEN if ok else self._DANGER)};")
         self._install_btn.setEnabled(True)
         if ok:
@@ -1827,7 +1827,7 @@ class _PageAI(_PageBase):
         self._pull_cancel_btn.setText("✕  Cancel")
         self._pull_prog.setVisible(True)
         self._pull_msg.setText(f"Downloading  {model} …  (may take several minutes)")
-        self._pull_msg.setStyleSheet(f"font-size:11pt; color:{self._MUTED};")
+        self._pull_msg.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{self._MUTED};")
         self._pull_msg.setVisible(True)
 
         self._pull_thread = _WizOllamaPullThread(model, self)
@@ -1856,7 +1856,7 @@ class _PageAI(_PageBase):
         self._pull_msg.setText(
             "Pull cancelled." if _cancelled else msg)
         self._pull_msg.setStyleSheet(
-            f"font-size:11pt; color:"
+            f"font-size:{FONT['sublabel']}pt; color:"
             f"{self._MUTED if _cancelled else (self._GREEN if ok else self._DANGER)};")
         if ok:
             from PyQt5.QtCore import QTimer
@@ -1876,7 +1876,7 @@ class _PageDone(_PageBase):
 
         self._summary = QLabel("(summary will appear here)")
         self._summary.setStyleSheet(
-            "font-size:12pt; color:#8892a4; background:#13172a; "
+            f"font-size:{FONT['label']}pt; color:#8892a4; background:#13172a; "
             "border:1px solid #1e2337; border-radius:5px; padding:12px;")
         self._summary.setWordWrap(True)
         self._content.addWidget(self._summary)
@@ -1900,7 +1900,7 @@ class _PageDone(_PageBase):
 
 def _lbl(text: str) -> QLabel:
     l = QLabel(text)
-    l.setStyleSheet("font-size:12pt; color:#8892a4;")
+    l.setStyleSheet(f"font-size:{FONT['label']}pt; color:#8892a4;")
     return l
 
 
@@ -1956,7 +1956,7 @@ class FirstRunWizard(QDialog):
         for i, lbl in enumerate(step_labels):
             dot = QLabel(f"● {lbl}")
             dot.setAlignment(Qt.AlignCenter)
-            dot.setStyleSheet("font-size:11pt; color:#2a3249;")
+            dot.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:#2a3249;")
             pb_lay.addWidget(dot, 1)
             self._dots.append(dot)
             if i < len(step_labels) - 1:
@@ -2046,11 +2046,11 @@ class FirstRunWizard(QDialog):
 
         for i, dot in enumerate(self._dots):
             if i == idx:
-                dot.setStyleSheet("font-size:11pt; color:#4e73df; font-weight:700;")
+                dot.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:#4e73df; font-weight:700;")
             elif i < idx:
-                dot.setStyleSheet("font-size:11pt; color:#00d4aa;")
+                dot.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:#00d4aa;")
             else:
-                dot.setStyleSheet("font-size:11pt; color:#2a3249;")
+                dot.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:#2a3249;")
 
     def _on_next(self):
         idx = self._stack.currentIndex()

@@ -24,6 +24,7 @@ from PyQt5.QtGui   import QColor, QPainter, QPen, QFont
 
 import config
 from ui.font_utils import mono_font
+from ui.theme import FONT, scaled_qss
 from hardware.tec import create_tec
 
 # How often to poll the TEC for status (ms)
@@ -176,26 +177,26 @@ class TecPanel(QMainWindow):
 
     def _build_tec_panel(self, tec, sig, title: str) -> QGroupBox:
         box = QGroupBox(title)
-        box.setStyleSheet("""
-            QGroupBox {
+        box.setStyleSheet(f"""
+            QGroupBox {{
                 font-weight: bold;
-                font-size: 11pt;
+                font-size: {FONT['sublabel']}pt;
                 border: 1px solid #555;
                 border-radius: 4px;
                 margin-top: 8px;
                 padding: 8px;
-            }
-            QGroupBox::title { subcontrol-position: top left; padding: 0 4px; }
+            }}
+            QGroupBox::title {{ subcontrol-position: top left; padding: 0 4px; }}
         """)
         layout = QVBoxLayout(box)
 
         # --- Readouts row ---
         readout_row = QHBoxLayout()
 
-        actual_box = self._value_box("Actual Temp", "-- °C", "font-size:22pt; color:#00c864;")
-        target_box = self._value_box("Setpoint",    "-- °C", "font-size:22pt; color:#ffa000;")
-        power_box  = self._value_box("Output Power","-- W",  "font-size:18pt; color:#55aaff;")
-        stable_box = self._value_box("Status",      "UNKNOWN","font-size:14pt; color:#888;")
+        actual_box = self._value_box("Actual Temp", "-- °C", scaled_qss("font-size:22pt; color:#00c864;"))
+        target_box = self._value_box("Setpoint",    "-- °C", scaled_qss("font-size:22pt; color:#ffa000;"))
+        power_box  = self._value_box("Output Power","-- W",  scaled_qss("font-size:18pt; color:#55aaff;"))
+        stable_box = self._value_box("Status",      "UNKNOWN",f"font-size:{FONT['heading']}pt; color:#888;")
 
         for b in [actual_box, target_box, power_box, stable_box]:
             readout_row.addWidget(b)
@@ -223,7 +224,7 @@ class TecPanel(QMainWindow):
         spin.setValue(25.0)
         spin.setDecimals(1)
         spin.setFixedWidth(90)
-        spin.setStyleSheet("font-size:12pt;")
+        spin.setStyleSheet(f"font-size:{FONT['label']}pt;")
         ctrl_row.addWidget(spin)
         box._spin = spin
 
@@ -266,7 +267,7 @@ class TecPanel(QMainWindow):
         v.setAlignment(Qt.AlignCenter)
         lbl = QLabel(label)
         lbl.setAlignment(Qt.AlignCenter)
-        lbl.setStyleSheet("font-size:9pt; color:#aaa;")
+        lbl.setStyleSheet(scaled_qss("font-size:9pt; color:#aaa;"))
         val = QLabel(initial)
         val.setObjectName("value")
         val.setAlignment(Qt.AlignCenter)
@@ -300,7 +301,7 @@ class TecPanel(QMainWindow):
         if status.error:
             panel._actual_lbl.setText("ERROR")
             panel._stable_lbl.setText(status.error[:30])
-            panel._stable_lbl.setStyleSheet("font-size:11pt; color:#ff4444;")
+            panel._stable_lbl.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:#ff4444;")
             return
 
         panel._actual_lbl.setText(f"{status.actual_temp:.2f} °C")
@@ -309,15 +310,15 @@ class TecPanel(QMainWindow):
 
         if not status.enabled:
             panel._stable_lbl.setText("DISABLED")
-            panel._stable_lbl.setStyleSheet("font-size:14pt; color:#888;")
+            panel._stable_lbl.setStyleSheet(f"font-size:{FONT['heading']}pt; color:#888;")
         elif status.stable:
             panel._stable_lbl.setText("STABLE ✓")
-            panel._stable_lbl.setStyleSheet("font-size:14pt; color:#00c864;")
+            panel._stable_lbl.setStyleSheet(f"font-size:{FONT['heading']}pt; color:#00c864;")
         else:
             diff = status.actual_temp - status.target_temp
             arrow = "▼" if diff > 0 else "▲"
             panel._stable_lbl.setText(f"SETTLING {arrow}")
-            panel._stable_lbl.setStyleSheet("font-size:14pt; color:#ffa000;")
+            panel._stable_lbl.setStyleSheet(f"font-size:{FONT['heading']}pt; color:#ffa000;")
 
         panel._plot.push(status.actual_temp, status.target_temp)
 

@@ -38,6 +38,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QFont, QImage, QPixmap, QColor
 from ui.icons import set_btn_icon
+from ui.theme import FONT, scaled_qss
 
 import matplotlib
 if matplotlib.get_backend().lower() in ("", "agg"):
@@ -105,7 +106,7 @@ class _MapPanel(QFrame):
 
         self._title_lbl = QLabel(self._title_str)
         self._title_lbl.setStyleSheet(
-            "color:#ddd; font-size:14pt; font-weight:600; font-family:Menlo,monospace;")
+            f"color:#ddd; font-size:{FONT['heading']}pt; font-weight:600; font-family:Menlo,monospace;")
         self._title_lbl.setAlignment(Qt.AlignCenter)
         lay.addWidget(self._title_lbl)
 
@@ -117,7 +118,7 @@ class _MapPanel(QFrame):
 
         self._range_lbl = QLabel("—")
         self._range_lbl.setAlignment(Qt.AlignCenter)
-        self._range_lbl.setStyleSheet("color:#888; font-size:12pt; font-family:Menlo,monospace;")
+        self._range_lbl.setStyleSheet(f"color:#888; font-size:{FONT['label']}pt; font-family:Menlo,monospace;")
         lay.addWidget(self._range_lbl)
 
     def set_data(self, arr: Optional[np.ndarray],
@@ -182,12 +183,12 @@ class _StatsTable(QTableWidget):
         self.verticalHeader().hide()
         self.setEditTriggers(QTableWidget.NoEditTriggers)
         self.setAlternatingRowColors(True)
-        self.setStyleSheet("""
-            QTableWidget { background:#141414; color:#ccc; font-size:12pt;
-                           font-family:Menlo,monospace; gridline-color:#222; }
-            QHeaderView::section { background:#1e1e1e; color:#aaa; font-size:12pt;
-                                   padding: 4px 16px 4px 8px; }
-            QTableWidget::item:alternate { background:#191919; }
+        self.setStyleSheet(f"""
+            QTableWidget {{ background:#141414; color:#ccc; font-size:{FONT['label']}pt;
+                           font-family:Menlo,monospace; gridline-color:#222; }}
+            QHeaderView::section {{ background:#1e1e1e; color:#aaa; font-size:{FONT['label']}pt;
+                                   padding: 4px 16px 4px 8px; }}
+            QTableWidget::item:alternate {{ background:#191919; }}
         """)
         for r, (name, _) in enumerate(self._METRICS):
             item = QTableWidgetItem(name)
@@ -281,7 +282,7 @@ class ComparisonTab(QWidget):
                   QLabel("Colormap:"), self._cmap_combo,
                   self._blink_btn, self._export_btn]:
             if isinstance(w, QLabel):
-                w.setStyleSheet("color:#aaa; font-size:12pt;")
+                w.setStyleSheet(f"color:#aaa; font-size:{FONT['label']}pt;")
             toolbar.addWidget(w)
         toolbar.addStretch(1)
 
@@ -302,7 +303,7 @@ class ComparisonTab(QWidget):
 
         # ─ Status bar ─
         self._status_lbl = QLabel("Load two sessions to compare.")
-        self._status_lbl.setStyleSheet("color:#888; font-size:12pt; padding:2px 4px;")
+        self._status_lbl.setStyleSheet(f"color:#888; font-size:{FONT['label']}pt; padding:2px 4px;")
         root.addWidget(self._status_lbl)
 
     def _build_empty_state(self, icon, title, desc, btn_text="", btn_callback=None):
@@ -313,16 +314,16 @@ class ComparisonTab(QWidget):
 
         icon_lbl = QLabel(icon)
         icon_lbl.setAlignment(Qt.AlignCenter)
-        icon_lbl.setStyleSheet("font-size: 52pt; color: #2a2a2a;")
+        icon_lbl.setStyleSheet(scaled_qss("font-size: 52pt; color: #2a2a2a;"))
 
         title_lbl = QLabel(title)
         title_lbl.setAlignment(Qt.AlignCenter)
-        title_lbl.setStyleSheet("font-size: 16pt; font-weight: bold; color: #555;")
+        title_lbl.setStyleSheet(f"font-size: {FONT['readoutSm']}pt; font-weight: bold; color: #555;")
 
         desc_lbl = QLabel(desc)
         desc_lbl.setAlignment(Qt.AlignCenter)
         desc_lbl.setWordWrap(True)
-        desc_lbl.setStyleSheet("font-size: 12pt; color: #444;")
+        desc_lbl.setStyleSheet(f"font-size: {FONT['label']}pt; color: #444;")
         desc_lbl.setMaximumWidth(450)
 
         lay.addStretch()
@@ -334,13 +335,13 @@ class ComparisonTab(QWidget):
             btn = QPushButton(btn_text)
             btn.setFixedWidth(200)
             btn.setFixedHeight(36)
-            btn.setStyleSheet("""
-                QPushButton {
+            btn.setStyleSheet(f"""
+                QPushButton {{
                     background: #1a2a20; color: #00d4aa;
                     border: 1px solid #00d4aa55; border-radius: 5px;
-                    font-size: 12pt; font-weight: 600;
-                }
-                QPushButton:hover { background: #1e3028; }
+                    font-size: {FONT['label']}pt; font-weight: 600;
+                }}
+                QPushButton:hover {{ background: #1e3028; }}
             """)
             btn.clicked.connect(btn_callback)
             lay.addSpacing(4)
@@ -371,10 +372,10 @@ class ComparisonTab(QWidget):
 
         # ─ Stats table ─
         stats_box = QGroupBox("Comparison Statistics")
-        stats_box.setStyleSheet("""
-            QGroupBox { color:#aaa; font-size:12pt; border:1px solid #2a2a2a;
-                        border-radius:4px; margin-top:6px; }
-            QGroupBox::title { subcontrol-position:top left; padding:0 4px; }
+        stats_box.setStyleSheet(f"""
+            QGroupBox {{ color:#aaa; font-size:{FONT['label']}pt; border:1px solid #2a2a2a;
+                        border-radius:4px; margin-top:6px; }}
+            QGroupBox::title {{ subcontrol-position:top left; padding:0 4px; }}
         """)
         stats_lay = QVBoxLayout(stats_box)
         stats_lay.setContentsMargins(4, 12, 4, 4)

@@ -29,7 +29,7 @@ from PyQt5.QtCore    import Qt
 from hardware.app_state    import app_state
 from ui.widgets.temp_plot  import TempPlot
 from ui.widgets.collapsible_panel import CollapsiblePanel
-from ui.theme import FONT, PALETTE
+from ui.theme import FONT, PALETTE, scaled_qss
 
 # Approximate TEC temperature ramp rate (°C per minute).
 # Used for the stabilization time estimate shown in the UI.
@@ -65,19 +65,19 @@ class TemperatureTab(QWidget):
         ab_lay = QHBoxLayout(alarm_banner)
         ab_lay.setContentsMargins(10, 6, 10, 6)
         ab_icon = QLabel("⊗")
-        ab_icon.setStyleSheet("color:#ff4444; font-size:16pt;")
+        ab_icon.setStyleSheet(f"color:#ff4444; font-size:{FONT['readoutSm']}pt;")
         ab_msg  = QLabel("Temperature alarm")
-        ab_msg.setStyleSheet("color:#ff6666; font-size:13pt;")
+        ab_msg.setStyleSheet(f"color:#ff6666; font-size:{FONT['body']}pt;")
         ab_msg.setWordWrap(True)
         ab_ack  = QPushButton("Acknowledge")
         ab_ack.setFixedHeight(26)
-        ab_ack.setStyleSheet("""
-            QPushButton {
+        ab_ack.setStyleSheet(f"""
+            QPushButton {{
                 background:#550000; color:#ff9999;
                 border:1px solid #ff444466; border-radius:3px;
-                font-size:12pt; padding: 0 10px;
-            }
-            QPushButton:hover { background:#660000; color:#ffbbbb; }
+                font-size:{FONT['label']}pt; padding: 0 10px;
+            }}
+            QPushButton:hover {{ background:#660000; color:#ffbbbb; }}
         """)
         ab_lay.addWidget(ab_icon)
         ab_lay.addWidget(ab_msg, 1)
@@ -95,9 +95,9 @@ class TemperatureTab(QWidget):
         wb_lay = QHBoxLayout(warn_banner)
         wb_lay.setContentsMargins(10, 4, 10, 4)
         wb_icon = QLabel("⚠")
-        wb_icon.setStyleSheet("color:#ff9900; font-size:14pt;")
+        wb_icon.setStyleSheet(f"color:#ff9900; font-size:{FONT['heading']}pt;")
         wb_msg  = QLabel("Approaching limit")
-        wb_msg.setStyleSheet("color:#ffaa44; font-size:12pt;")
+        wb_msg.setStyleSheet(f"color:#ffaa44; font-size:{FONT['label']}pt;")
         wb_msg.setWordWrap(True)
         wb_lay.addWidget(wb_icon)
         wb_lay.addWidget(wb_msg, 1)

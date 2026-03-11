@@ -29,6 +29,7 @@ from version import (
     __version__, BUILD_DATE, APP_NAME, APP_VENDOR,
     full_version_string, RELEASES_PAGE_URL, SUPPORT_EMAIL, DOCS_URL,
 )
+from ui.theme import FONT, scaled_qss
 
 log = logging.getLogger(__name__)
 
@@ -47,7 +48,7 @@ _RED       = "#ff4444"
 _BTN_PRIMARY = f"""
     QPushButton {{
         background:{_ACCENT}; color:#fff; border:none;
-        border-radius:6px; padding:8px 22px; font-size:13pt; font-weight:600;
+        border-radius:6px; padding:8px 22px; font-size:{FONT["body"]}pt; font-weight:600;
     }}
     QPushButton:hover   {{ background:#3a5fc8; }}
     QPushButton:pressed {{ background:#2e4fa8; }}
@@ -55,7 +56,7 @@ _BTN_PRIMARY = f"""
 _BTN_SECONDARY = f"""
     QPushButton {{
         background:{_BG2}; color:{_MUTED}; border:1px solid {_BORDER};
-        border-radius:6px; padding:8px 22px; font-size:13pt;
+        border-radius:6px; padding:8px 22px; font-size:{FONT["body"]}pt;
     }}
     QPushButton:hover   {{ background:#1e2540; color:{_TEXT}; }}
     QPushButton:pressed {{ background:#1a1f33; }}
@@ -63,7 +64,7 @@ _BTN_SECONDARY = f"""
 _BTN_AMBER = f"""
     QPushButton {{
         background:{_AMBER}; color:#1a1200; border:none;
-        border-radius:6px; padding:8px 22px; font-size:13pt; font-weight:700;
+        border-radius:6px; padding:8px 22px; font-size:{FONT["body"]}pt; font-weight:700;
     }}
     QPushButton:hover   {{ background:#e6961a; }}
     QPushButton:pressed {{ background:#cc8615; }}
@@ -92,7 +93,7 @@ class UpdateBadge(QPushButton):
             QPushButton {{
                 background:{_AMBER}22; color:{_AMBER};
                 border:1px solid {_AMBER}66; border-radius:4px;
-                font-size:12pt; font-weight:700; padding:0 10px;
+                font-size:{FONT["label"]}pt; font-weight:700; padding:0 10px;
             }}
             QPushButton:hover {{
                 background:{_AMBER}44; border-color:{_AMBER};
@@ -147,15 +148,15 @@ class UpdateDialog(QDialog):
         hdr_lay.setContentsMargins(30, 0, 30, 0)
 
         icon = QLabel("↑")
-        icon.setStyleSheet(f"font-size:30pt; color:{_AMBER}; font-weight:700;")
+        icon.setStyleSheet(scaled_qss(f"font-size:30pt; color:{_AMBER}; font-weight:700;"))
         hdr_lay.addWidget(icon)
         hdr_lay.addSpacing(16)
 
         title_col = QVBoxLayout()
         t1 = QLabel(f"Update available for {APP_NAME}")
-        t1.setStyleSheet(f"font-size:15pt; font-weight:700; color:#fff;")
+        t1.setStyleSheet(scaled_qss(f"font-size:15pt; font-weight:700; color:#fff;"))
         t2 = QLabel(f"v{__version__}  →  v{info.version}")
-        t2.setStyleSheet(f"font-size:12pt; color:{_AMBER};")
+        t2.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_AMBER};")
         title_col.addWidget(t1)
         title_col.addWidget(t2)
         hdr_lay.addLayout(title_col, 1)
@@ -164,7 +165,7 @@ class UpdateDialog(QDialog):
             pre = QLabel("PRE-RELEASE")
             pre.setStyleSheet(
                 f"background:{_RED}22; color:{_RED}; border:1px solid {_RED}66; "
-                f"border-radius:4px; font-size:10pt; font-weight:700; padding:2px 6px;")
+                f"border-radius:4px; font-size:{FONT['caption']}pt; font-weight:700; padding:2px 6px;")
             hdr_lay.addWidget(pre)
 
         root.addWidget(hdr)
@@ -176,7 +177,7 @@ class UpdateDialog(QDialog):
         notes_lay.setContentsMargins(30, 20, 30, 10)
 
         rn_title = QLabel("What's new:")
-        rn_title.setStyleSheet(f"font-size:12pt; font-weight:700; color:{_TEXT};")
+        rn_title.setStyleSheet(f"font-size:{FONT['label']}pt; font-weight:700; color:{_TEXT};")
         notes_lay.addWidget(rn_title)
 
         rn_text = QTextEdit()
@@ -186,7 +187,7 @@ class UpdateDialog(QDialog):
             QTextEdit {{
                 background:{_BG2}; color:{_MUTED};
                 border:1px solid {_BORDER}; border-radius:4px;
-                font-size:12pt; padding:10px;
+                font-size:{FONT["label"]}pt; padding:10px;
                 font-family:Menlo, Consolas, monospace;
             }}
         """)
@@ -270,11 +271,11 @@ class AboutDialog(QDialog):
 
         app_name = QLabel(f"{APP_VENDOR}  {APP_NAME}")
         app_name.setStyleSheet(
-            "font-size:18pt; font-weight:700; color:#fff; letter-spacing:1px;")
+            scaled_qss("font-size:18pt; font-weight:700; color:#fff; letter-spacing:1px;"))
         hdr_lay.addWidget(app_name)
 
         ver_lbl = QLabel(full_version_string())
-        ver_lbl.setStyleSheet(f"font-size:12pt; color:{_GREEN};")
+        ver_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_GREEN};")
         hdr_lay.addWidget(ver_lbl)
 
         root.addWidget(hdr)
@@ -308,7 +309,7 @@ class AboutDialog(QDialog):
             QTextEdit {{
                 background:{_BG2}; color:{_MUTED};
                 border:1px solid {_BORDER}; border-radius:4px;
-                font-size:11pt; padding:10px;
+                font-size:{FONT["sublabel"]}pt; padding:10px;
                 font-family:Menlo, Consolas, monospace;
             }}
         """)
@@ -349,7 +350,7 @@ class AboutDialog(QDialog):
             btn = QPushButton(text)
             btn.setStyleSheet(
                 f"QPushButton {{ background:transparent; color:{_ACCENT}; border:none; "
-                f"font-size:12pt; text-decoration:underline; }}"
+                f"font-size:{FONT['label']}pt; text-decoration:underline; }}"
                 f"QPushButton:hover {{ color:#6b8ef7; }}")
             btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(url)))
             return btn
@@ -360,7 +361,7 @@ class AboutDialog(QDialog):
         foot_lay.addStretch(1)
 
         support_lbl = QLabel(f"Support: {SUPPORT_EMAIL}")
-        support_lbl.setStyleSheet(f"font-size:11pt; color:{_MUTED};")
+        support_lbl.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_MUTED};")
         foot_lay.addWidget(support_lbl)
 
         close_btn = QPushButton("Close")
@@ -453,7 +454,7 @@ class AboutDialog(QDialog):
         table.setStyleSheet(f"""
             QTableWidget {{
                 background:{_BG}; alternate-background-color:{_BG2};
-                border:none; font-size:11pt; color:{_MUTED};
+                border:none; font-size:{FONT["sublabel"]}pt; color:{_MUTED};
                 selection-background-color:#252525; outline:none;
             }}
             QHeaderView::section {{
