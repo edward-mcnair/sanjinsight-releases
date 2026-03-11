@@ -40,7 +40,7 @@ def sans_font(point_size: int = 11, bold: bool = False) -> QFont:
 
     * Windows → Segoe UI        (native Windows UI font since Vista)
     * macOS   → Helvetica Neue  (ships on every macOS since 10.9)
-    * Linux   → system default  (empty name → Qt picks the desktop UI font)
+    * Linux   → DejaVu Sans     (present on virtually all Linux distros)
 
     The ``SansSerif`` style hint is always set so Qt's font matcher picks
     the best installed sans-serif family even if the named family is absent.
@@ -53,7 +53,7 @@ def sans_font(point_size: int = 11, bold: bool = False) -> QFont:
     elif sys.platform == "darwin":
         name = "Helvetica Neue"
     else:
-        name = ""      # empty string → Qt uses the current application font
+        name = "DejaVu Sans"   # standard on Debian/Ubuntu/Fedora/Arch/etc.
     font = QFont(name, point_size)
     font.setStyleHint(QFont.SansSerif)
     if bold:
