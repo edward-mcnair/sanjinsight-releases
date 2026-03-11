@@ -19,7 +19,8 @@ from PyQt5.QtCore    import Qt
 from hardware.app_state import app_state
 from ui.theme import FONT, PALETTE
 from ai.instrument_knowledge import (
-    BIAS_VO_INT_MAX_V, BIAS_AUX_INT_MAX_V, BIAS_VO_EXT_MAX_V)
+    BIAS_VO_INT_MAX_V, BIAS_AUX_INT_MAX_V, BIAS_VO_EXT_MAX_V,
+    SHUNT_20MA_OHM)
 from ui.icons import set_btn_icon
 
 
@@ -193,8 +194,10 @@ class BiasTab(QWidget):
         # ── Row 7: 20 mA Range Mode (new) ────────────────────────────
         self._ma_range_cb = QCheckBox("20 mA Range Mode")
         self._ma_range_cb.setChecked(True)
+        _ma_limit_mA = int(round(BIAS_VO_INT_MAX_V / SHUNT_20MA_OHM * 1000))
         self._ma_range_cb.setToolTip(
-            "Checked: current is limited to ≤20 mA (safe default).\n"
+            f"Checked: a {SHUNT_20MA_OHM:.0f} Ω series resistor limits device "
+            f"current to ≤{_ma_limit_mA} mA at max VO ({BIAS_VO_INT_MAX_V:.0f} V).\n"
             "Uncheck when using IR camera FA / Movie mode — hotspot\n"
             "detection requires >20 mA. Always verify device thermal\n"
             "budget before unchecking.")

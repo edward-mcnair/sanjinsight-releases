@@ -157,6 +157,33 @@ TEC_PID_D_PT1:    float =  0.3   # PAR_TEMP1_REGUL_D_PT1 — derivative filter (
 TEC_CONTROL_HZ:   int   =  10    # PAR_TCTRL_CYCLE1      — control loop rate (Hz)
 
 
+# ── TEC-1089 Per-Unit ADC Calibration Trim (documentation only) ──────────────
+#
+# The TEC-1089 firmware applies a linear correction to raw ADC counts before
+# computing temperature and before reporting via MeCom Parameter 1000.
+# Consequently the Python driver always receives a fully corrected temperature
+# in °C — these constants document the values programmed into unit S/N 9376
+# and are NOT applied again in software.
+#
+# Formula (firmware-internal):  T_out = A0 + A1 × T_raw
+#
+# ⚠  UNIT SWAP WARNING ─────────────────────────────────────────────────────────
+# When replacing the TEC-1089, read back PAR_TO1_ADCADJ_A0/A1 and
+# PAR_TS1_ADCADJ_A0/A1 from the replacement unit via TEC Service Software.
+# A 1 % A1 slope mismatch causes a sustained 0.5–1.5 °C temperature error
+# that is invisible without comparing against an independent reference.
+# Verify that the new unit's trim values match the ones below before use.
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Source: TEC1089_Configuration file.ini, unit S/N 9376.
+
+TEC_UNIT_SN:        int   = 9376         # serial number these trim values apply to
+TEC_OBJ_ADC_A0:     float = -130.2993    # PAR_TO1_ADCADJ_A0 — object ADC zero offset
+TEC_OBJ_ADC_A1:     float =    0.9993604 # PAR_TO1_ADCADJ_A1 — object ADC slope (0.07 % err)
+TEC_SINK_ADC_A0:    float =  -12.2633    # PAR_TS1_ADCADJ_A0 — sink ADC zero offset
+TEC_SINK_ADC_A1:    float =    1.016483  # PAR_TS1_ADCADJ_A1 — sink ADC slope (1.6 % err)
+
+
 # ── NTC Thermistor Calibration Points (both TEC1089 and LDD1121) ──────────────
 #
 # Both Meerstetter devices (TEC-1089 and LDD-1121) use the same 3-point NTC
@@ -191,6 +218,29 @@ LDD_RS485_BAUD:       int   = 57600  # RS485_CH1_BaudRate — serial baud rate
 LDD_RS485_ADDRESS:    int   = 1      # PAR_RS485_1_ADDR — default LDD device address
 
 
+# ── LDD-1121 Per-Unit Temperature Offset (documentation only) ────────────────
+#
+# The LDD-1121 firmware applies a linear correction to the raw NTC reading
+# before reporting the diode temperature via MeCom.  The Python driver reads
+# the already-corrected value — this constant is NOT applied again in software.
+#
+# Formula (firmware-internal):  T_out = TLD_TEMP_Offset + TLD_TEMP_Gain × T_ntc
+#
+# ⚠  UNIT SWAP WARNING ─────────────────────────────────────────────────────────
+# A replacement LDD-1121 may have a different TLD_TEMP_Offset programmed in its
+# flash.  The diode protection limits (LDD_DIODE_MIN_C / LDD_DIODE_MAX_C) are
+# evaluated on the corrected reading, so safety bounds remain valid — but logged
+# temperatures will differ from legacy data if the offset changes.
+# Verify via Meerstetter Service Software after installing a new unit.
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Source: LDD1121_Configuration file.ini, unit S/N 4798.
+
+LDD_UNIT_SN:              int   = 4798  # serial number these trim values apply to
+LDD_DIODE_TEMP_OFFSET_C:  float = -0.8  # TLD_TEMP_Offset — firmware correction offset (°C)
+LDD_DIODE_TEMP_GAIN:      float =  1.0  # TLD_TEMP_Gain   — firmware correction gain (unity)
+
+
 # ── Bias / Electrical Output Limits ─────────────────────────────────────────
 #
 # VO INT  — pulsed output via internal DAC, ±10 V maximum
@@ -200,6 +250,26 @@ LDD_RS485_ADDRESS:    int   = 1      # PAR_RS485_1_ADDR — default LDD device a
 BIAS_VO_INT_MAX_V   =  10.0   # VO INT pulsed (bipolar ±10 V)
 BIAS_AUX_INT_MAX_V  =  10.0   # AUX INT DC (bipolar ±10 V)
 BIAS_VO_EXT_MAX_V   =  60.0   # VO EXT passthrough (unipolar 0–60 V)
+
+
+# ── EZ500 PCB Shunt / Current-Limit Resistors (SYSTEM_CONFIG) ────────────────
+#
+# These resistors are on the EZ500 PCB and define the current-sense scale for
+# SanjVIEW7 internal analogue measurements (via DAQ inputs).
+#
+# When Python bias drivers use an external instrument (Keithley, Rigol, etc.)
+# that instrument handles V/I sensing internally — SHUNT_VA_OHM / SHUNT_VO_OHM
+# are NOT applied by the Python drivers.
+#
+# SHUNT_20MA_OHM is relevant to the UI "20 mA Range" checkbox: with that mode
+# active the 500 Ω series resistor limits device current to:
+#       I_max = V_set / SHUNT_20MA_OHM    (e.g. 10 V / 500 Ω = 20 mA)
+#
+# Source: SYSTEM_CONFIG in LabVIEW SV7 project root.
+
+SHUNT_VA_OHM:    float = 0.100   # VA CURR RESISTOR — aux output current shunt (Ω)
+SHUNT_VO_OHM:    float = 0.100   # VO CURR RESISTOR — main output current shunt (Ω)
+SHUNT_20MA_OHM:  float = 500.0   # 20MA RESISTOR    — series resistor in 20 mA limit mode (Ω)
 
 
 # ── Camera Pixel Limits (12-bit sensor) ──────────────────────────────────────
