@@ -33,7 +33,7 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QSplitter, QFileDialog, QTableWidget, QTableWidgetItem,
     QHeaderView, QFrame, QGroupBox, QCheckBox, QSlider,
-    QMessageBox, QComboBox,
+    QMessageBox, QComboBox, QStackedWidget,
 )
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QFont, QImage, QPixmap, QColor
@@ -244,7 +244,7 @@ class ComparisonTab(QWidget):
         root.setContentsMargins(8, 8, 8, 8)
         root.setSpacing(8)
 
-        # ─ Toolbar ─
+        # ─ Toolbar (always visible) ─
         toolbar = QHBoxLayout()
         root.addLayout(toolbar)
 
@@ -285,6 +285,77 @@ class ComparisonTab(QWidget):
             toolbar.addWidget(w)
         toolbar.addStretch(1)
 
+        # ─ Stacked widget: page 0 = empty state, page 1 = content ─
+        self._data_stack = QStackedWidget()
+        self._data_stack.addWidget(self._build_empty_state(
+            icon="⇔",
+            title="No Sessions to Compare",
+            desc="Load two saved acquisition sessions from disk to compare them "
+                 "side-by-side. Save sessions from the Analysis tab after running "
+                 "an acquisition.",
+            btn_text="Load Session A",
+            btn_callback=lambda: self._load_session("A"),
+        ))
+        self._data_stack.addWidget(self._build_content_widget())
+        self._data_stack.setCurrentIndex(0)
+        root.addWidget(self._data_stack, 1)
+
+        # ─ Status bar ─
+        self._status_lbl = QLabel("Load two sessions to compare.")
+        self._status_lbl.setStyleSheet("color:#888; font-size:12pt; padding:2px 4px;")
+        root.addWidget(self._status_lbl)
+
+    def _build_empty_state(self, icon, title, desc, btn_text="", btn_callback=None):
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.setAlignment(Qt.AlignCenter)
+        lay.setSpacing(16)
+
+        icon_lbl = QLabel(icon)
+        icon_lbl.setAlignment(Qt.AlignCenter)
+        icon_lbl.setStyleSheet("font-size: 52pt; color: #2a2a2a;")
+
+        title_lbl = QLabel(title)
+        title_lbl.setAlignment(Qt.AlignCenter)
+        title_lbl.setStyleSheet("font-size: 16pt; font-weight: bold; color: #555;")
+
+        desc_lbl = QLabel(desc)
+        desc_lbl.setAlignment(Qt.AlignCenter)
+        desc_lbl.setWordWrap(True)
+        desc_lbl.setStyleSheet("font-size: 12pt; color: #444;")
+        desc_lbl.setMaximumWidth(450)
+
+        lay.addStretch()
+        lay.addWidget(icon_lbl)
+        lay.addWidget(title_lbl)
+        lay.addWidget(desc_lbl)
+
+        if btn_text and btn_callback:
+            btn = QPushButton(btn_text)
+            btn.setFixedWidth(200)
+            btn.setFixedHeight(36)
+            btn.setStyleSheet("""
+                QPushButton {
+                    background: #1a2a20; color: #00d4aa;
+                    border: 1px solid #00d4aa55; border-radius: 5px;
+                    font-size: 12pt; font-weight: 600;
+                }
+                QPushButton:hover { background: #1e3028; }
+            """)
+            btn.clicked.connect(btn_callback)
+            lay.addSpacing(4)
+            lay.addWidget(btn, 0, Qt.AlignCenter)
+
+        lay.addStretch()
+        return w
+
+    def _build_content_widget(self) -> QWidget:
+        """Build the main comparison content (maps + stats table)."""
+        content = QWidget()
+        lay = QVBoxLayout(content)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(8)
+
         # ─ Three map panels ─
         maps_split = QSplitter(Qt.Horizontal)
 
@@ -296,7 +367,7 @@ class ComparisonTab(QWidget):
         maps_split.addWidget(self._panel_b)
         maps_split.addWidget(self._panel_diff)
         maps_split.setSizes([400, 400, 400])
-        root.addWidget(maps_split, 3)
+        lay.addWidget(maps_split, 3)
 
         # ─ Stats table ─
         stats_box = QGroupBox("Comparison Statistics")
@@ -309,12 +380,16 @@ class ComparisonTab(QWidget):
         stats_lay.setContentsMargins(4, 12, 4, 4)
         self._stats_table = _StatsTable()
         stats_lay.addWidget(self._stats_table)
-        root.addWidget(stats_box, 1)
+        lay.addWidget(stats_box, 1)
 
-        # ─ Status bar ─
-        self._status_lbl = QLabel("Load two sessions to compare.")
-        self._status_lbl.setStyleSheet("color:#888; font-size:12pt; padding:2px 4px;")
-        root.addWidget(self._status_lbl)
+        return content
+
+    def _check_empty_state(self):
+        """Show empty state (page 0) or content (page 1) based on loaded data."""
+        if self._arrA is not None or self._arrB is not None:
+            self._data_stack.setCurrentIndex(1)
+        else:
+            self._data_stack.setCurrentIndex(0)
 
     # ── Session loading ─────────────────────────────────────────────
 
@@ -341,6 +416,7 @@ class ComparisonTab(QWidget):
             self._arrB  = arr
             self._pathB = folder
 
+        self._check_empty_state()
         self._refresh_maps()
         self._status_lbl.setText(
             f"A: {Path(self._pathA).name if self._pathA else '—'}   "

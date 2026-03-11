@@ -271,14 +271,48 @@ class SettingsTab(QWidget):
         super().__init__(parent)
         self.setStyleSheet(f"background:{_BG};")
 
-        # Outer scroll area so content works on small screens
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        # ── Search bar + status label (above the scroll area) ─────────
+        search_bar_widget = QWidget()
+        search_bar_widget.setStyleSheet(f"background:{_BG};")
+        search_bar_lay = QVBoxLayout(search_bar_widget)
+        search_bar_lay.setContentsMargins(30, 12, 30, 4)
+        search_bar_lay.setSpacing(2)
+
+        self._settings_search = QLineEdit()
+        self._settings_search.setPlaceholderText("Filter settings\u2026")
+        self._settings_search.setStyleSheet("""
+            QLineEdit {
+                background: #1a1a1a;
+                border: 1px solid #333;
+                border-radius: 4px;
+                color: #ccc;
+                padding: 4px 8px;
+                font-size: 12pt;
+            }
+            QLineEdit:focus {
+                border-color: #00d4aa;
+            }
+        """)
+        self._settings_search.setFixedHeight(32)
+        self._settings_search.textChanged.connect(self._filter_settings)
+        search_bar_lay.addWidget(self._settings_search)
+
+        self._settings_filter_status = QLabel("")
+        self._settings_filter_status.setStyleSheet("font-size: 10pt; color: #555;")
+        search_bar_lay.addWidget(self._settings_filter_status)
+
+        outer.addWidget(search_bar_widget)
+
+        # ── Outer scroll area so content works on small screens ───────
         scroll = QScrollArea(self)
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet("QScrollArea { border:none; background:transparent; }")
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(scroll)
 
         content = QWidget()
@@ -318,6 +352,15 @@ class SettingsTab(QWidget):
         lay.addWidget(self._build_support_group())
 
         lay.addStretch(1)
+
+        # ── Collect all top-level QGroupBox sections for filtering ─────
+        self._setting_groups: list[QGroupBox] = content.findChildren(
+            QGroupBox, options=Qt.FindDirectChildrenOnly
+        )
+        # Update the status label with the total count
+        self._settings_filter_status.setText(
+            f"Showing {len(self._setting_groups)} of {len(self._setting_groups)} sections"
+        )
 
     # ── Section builders ──────────────────────────────────────────────
 
@@ -1793,3 +1836,48 @@ class SettingsTab(QWidget):
         from ui.update_dialog import AboutDialog
         dlg = AboutDialog(self)
         dlg.exec_()
+
+    # ── Settings search / filter ───────────────────────────────────────
+
+    def _filter_settings(self, text: str) -> None:
+        """Show/hide QGroupBox sections based on search text."""
+        groups = getattr(self, "_setting_groups", [])
+        if not groups:
+            return
+
+        needle = text.strip().lower()
+
+        visible_count = 0
+        for group in groups:
+            if not needle:
+                group.setVisible(True)
+                visible_count += 1
+                continue
+
+            # Match on group box title
+            if needle in group.title().lower():
+                group.setVisible(True)
+                visible_count += 1
+                continue
+
+            # Match on any QLabel text within the group
+            matched = any(
+                needle in lbl.text().lower()
+                for lbl in group.findChildren(QLabel)
+                if lbl.text()
+            )
+            group.setVisible(matched)
+            if matched:
+                visible_count += 1
+
+        total = len(groups)
+        if hasattr(self, "_settings_filter_status"):
+            self._settings_filter_status.setText(
+                f"Showing {visible_count} of {total} sections"
+            )
+
+    def keyPressEvent(self, event) -> None:
+        if event.modifiers() == Qt.ControlModifier and event.key() == Qt.Key_F:
+            self._settings_search.setFocus()
+            self._settings_search.selectAll()
+        super().keyPressEvent(event)

@@ -70,6 +70,8 @@ from profiles.profile_manager import ProfileManager
 from profiles.profile_tab     import ProfileTab
 from ui.settings_tab          import SettingsTab
 from ui.widgets.safe_mode_banner import SafeModeBanner
+from ui.widgets.shortcut_overlay import show_shortcut_overlay
+from ui.widgets.command_palette import CommandPalette, PaletteItem
 from hardware.requirements_resolver import (
     check_readiness, OP_ACQUIRE, OP_SCAN,
 )
@@ -453,6 +455,17 @@ class MainWindow(QMainWindow):
         self._fpga_tab     = FpgaTab(hw_service=hw_service)
         self._bias_tab     = BiasTab(hw_service=hw_service)
         self._stage_tab    = StageTab(hw_service=hw_service)
+
+        # Wire "Open Device Manager" signals from hardware tabs
+        self._camera_tab.open_device_manager.connect(self._open_device_manager)
+        self._fpga_tab.open_device_manager.connect(self._open_device_manager)
+        self._bias_tab.open_device_manager.connect(self._open_device_manager)
+        self._stage_tab.open_device_manager.connect(self._open_device_manager)
+
+        # Wire "Go to Acquire" from the analysis empty-state button
+        self._analysis_tab.navigate_to_acquire.connect(
+            lambda: self._nav.navigate_to(self._acquire_tab))
+
         self._roi_tab      = RoiTab()
         self._af_tab       = AutofocusTab()
         self._cal_tab      = CalibrationTab()
@@ -576,6 +589,29 @@ class MainWindow(QMainWindow):
             NI("Settings",    _I["Settings"],    self._settings_tab),
         ])
         self._nav.finish()
+
+        # ── Auto-hide unconfigured hardware items ─────────────────────────
+        # Items whose device is disabled in config are hidden by default.
+        # The "Show all…" toggle at the bottom of the Hardware group reveals
+        # them if the user wants to browse or re-enable them.
+        _hw_cfg = config.get("hardware", {})
+        # Camera is enabled by default; always shown
+        # Temperature: shown if at least one TEC is enabled
+        if n_tecs == 0:
+            self._nav.set_item_visible("Temperature", False)
+        # FPGA: shown if enabled
+        if not _hw_cfg.get("fpga", {}).get("enabled", True):
+            self._nav.set_item_visible("FPGA", False)
+        # Bias Source: hidden unless explicitly enabled
+        if not _hw_cfg.get("bias", {}).get("enabled", False):
+            self._nav.set_item_visible("Bias Source", False)
+        # Stage: hidden unless explicitly enabled
+        if not _hw_cfg.get("stage", {}).get("enabled", False):
+            self._nav.set_item_visible("Stage", False)
+        # Prober: hidden unless explicitly enabled
+        if not _hw_cfg.get("prober", {}).get("enabled", False):
+            self._nav.set_item_visible("Prober", False)
+
         self._nav.select_first()
 
         # Build wizard (Standard mode)
@@ -626,6 +662,9 @@ class MainWindow(QMainWindow):
         )
         hw_service.emergency_stop_complete.connect(self._on_estop_complete)
 
+        # Persistent readiness dot — always-visible grade indicator
+        self._header.add_readiness_dot()
+
         # Update badge in header
         self._update_badge = self._header.add_update_badge()
         self._update_badge.clicked_with_info.connect(self._show_update_dialog)
@@ -650,6 +689,66 @@ class MainWindow(QMainWindow):
 
         # Toast notification manager — bottom-right corner of the window
         self._toasts = ToastManager(self)
+
+        # ── Command Palette ───────────────────────────────────────────
+        self._cmd_palette = CommandPalette(self)
+        self._cmd_palette.set_items(self._build_palette_items())
+
+    def _build_palette_items(self) -> list:
+        """Return all PaletteItems for the command palette (Ctrl+K)."""
+        return [
+            # MEASURE
+            PaletteItem("Live",       "Measure",   lambda: self._nav.navigate_to(self._live_tab),
+                        keywords=["live", "stream", "preview", "camera"]),
+            PaletteItem("Acquire",    "Measure",   lambda: self._nav.navigate_to(self._acquire_tab),
+                        keywords=["acquire", "capture", "run", "start"]),
+            PaletteItem("Scan",       "Measure",   lambda: self._nav.navigate_to(self._scan_tab),
+                        keywords=["scan", "sweep", "map"]),
+            PaletteItem("Movie",      "Measure",   lambda: self._nav.navigate_to(self._movie_tab),
+                        keywords=["movie", "burst", "video"]),
+            PaletteItem("Transient",  "Measure",   lambda: self._nav.navigate_to(self._transient_tab),
+                        keywords=["transient", "time-resolved", "pulsed"]),
+            # ANALYSIS
+            PaletteItem("Calibration","Analysis",  lambda: self._nav.navigate_to(self._cal_tab),
+                        keywords=["calibration", "cal", "reference"]),
+            PaletteItem("Analysis",   "Analysis",  lambda: self._nav.navigate_to(self._analysis_tab),
+                        keywords=["analysis", "process", "result"]),
+            PaletteItem("Compare",    "Analysis",  lambda: self._nav.navigate_to(self._compare_tab),
+                        keywords=["compare", "comparison", "diff"]),
+            PaletteItem("3D Surface", "Analysis",  lambda: self._nav.navigate_to(self._surface_tab),
+                        keywords=["3d", "surface", "plot", "mesh"]),
+            # HARDWARE
+            PaletteItem("Camera",     "Hardware",  lambda: self._nav.navigate_to(self._camera_tab),
+                        keywords=["camera", "sensor", "exposure", "gain"]),
+            PaletteItem("Temperature","Hardware",  lambda: self._nav.navigate_to(self._temp_tab),
+                        keywords=["temperature", "tec", "thermoelectric", "heat"]),
+            PaletteItem("FPGA",       "Hardware",  lambda: self._nav.navigate_to(self._fpga_tab),
+                        keywords=["fpga", "modulation", "lock-in"]),
+            PaletteItem("Bias Source","Hardware",  lambda: self._nav.navigate_to(self._bias_tab),
+                        keywords=["bias", "voltage", "current", "source"]),
+            PaletteItem("Stage",      "Hardware",  lambda: self._nav.navigate_to(self._stage_tab),
+                        keywords=["stage", "motion", "xy", "position"]),
+            PaletteItem("Prober",     "Hardware",  lambda: self._nav.navigate_to(self._prober_tab),
+                        keywords=["prober", "probe", "chuck"]),
+            PaletteItem("ROI",        "Hardware",  lambda: self._nav.navigate_to(self._roi_tab),
+                        keywords=["roi", "region", "crop", "area"]),
+            PaletteItem("Autofocus",  "Hardware",  lambda: self._nav.navigate_to(self._af_tab),
+                        keywords=["autofocus", "focus", "af", "z"]),
+            # SETUP
+            PaletteItem("Profiles",   "Setup",     lambda: self._nav.navigate_to(self._profile_tab),
+                        keywords=["profile", "material", "sample"]),
+            PaletteItem("Recipes",    "Setup",     lambda: self._nav.navigate_to(self._recipe_tab),
+                        keywords=["recipe", "preset", "workflow"]),
+            # TOOLS
+            PaletteItem("Data",       "Tools",     lambda: self._nav.navigate_to(self._data_tab),
+                        keywords=["data", "sessions", "export", "files"]),
+            PaletteItem("Console",    "Tools",     lambda: self._nav.navigate_to(self._console_tab),
+                        keywords=["console", "python", "script", "repl"]),
+            PaletteItem("Log",        "Tools",     lambda: self._nav.navigate_to(self._log_tab),
+                        keywords=["log", "events", "history"]),
+            PaletteItem("Settings",   "Tools",     lambda: self._nav.navigate_to(self._settings_tab),
+                        keywords=["settings", "preferences", "config"]),
+        ]
 
     def _connect_signals(self):
         signals.new_live_frame.connect(self._on_frame)
@@ -1076,6 +1175,14 @@ class MainWindow(QMainWindow):
         estop_sc = QShortcut(QKeySequence("Ctrl+."), self)
         estop_sc.activated.connect(self._trigger_estop)
 
+        # ── Shortcut reference overlay ────────────────────────────
+        shortcuts_sc = QShortcut(QKeySequence("Ctrl+?"), self)
+        shortcuts_sc.activated.connect(lambda: show_shortcut_overlay(self))
+
+        # ── Command palette (quick navigation) ────────────────────
+        palette_sc = QShortcut(QKeySequence("Ctrl+K"), self)
+        palette_sc.activated.connect(self._cmd_palette.show_palette)
+
     # ── Keyboard shortcut helpers ──────────────────────────────────
 
     def _toggle_scan(self):
@@ -1095,8 +1202,11 @@ class MainWindow(QMainWindow):
                     f"{rdns.blocked_reason}\n\n"
                     f"Connect the device in Device Manager to proceed."
                 )
-                box.setStandardButtons(QMessageBox.Ok)
+                open_btn  = box.addButton("Open Device Manager", QMessageBox.AcceptRole)
+                box.addButton("Close", QMessageBox.RejectRole)
                 box.exec_()
+                if box.clickedButton() is open_btn:
+                    self._on_device_manager()
                 return
             self._scan_start_ts = time.time()
             try:
@@ -1745,6 +1855,9 @@ class MainWindow(QMainWindow):
             self._ai_panel.refresh_evidence(results)
 
             grade = self._compute_grade(results)
+            issues = [r for r in results if r.severity in ("fail", "warn")]
+            self._header.set_readiness_grade(grade, issues)
+
             if grade != self._last_grade:
                 prev, self._last_grade = self._last_grade, grade
                 if grade in ("C", "D") and prev not in ("C", "D"):
@@ -1783,8 +1896,11 @@ class MainWindow(QMainWindow):
                 f"{msg}\n\n"
                 f"Connect the device in Device Manager to proceed."
             )
-            box.setStandardButtons(QMessageBox.Ok)
+            open_btn  = box.addButton("Open Device Manager", QMessageBox.AcceptRole)
+            box.addButton("Close", QMessageBox.RejectRole)
             box.exec_()
+            if box.clickedButton() is open_btn:
+                self._on_device_manager()
             return
 
         try:
@@ -1830,7 +1946,7 @@ class MainWindow(QMainWindow):
                 f"Proceeding may affect data quality."
             )
             msg.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
-            msg.button(QMessageBox.Ok).setText("Proceed anyway")
+            msg.button(QMessageBox.Ok).setText("Start Acquisition Anyway")
             msg.setDefaultButton(QMessageBox.Cancel)
             if msg.exec_() == QMessageBox.Ok:
                 self._acquire_tab.start_acquisition(n_frames, delay)
@@ -1846,7 +1962,7 @@ class MainWindow(QMainWindow):
                 f"Resolve failures before proceeding if possible."
             )
             msg.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
-            msg.button(QMessageBox.Ok).setText("Proceed despite failures")
+            msg.button(QMessageBox.Ok).setText("Start Despite Failures")
             msg.setDefaultButton(QMessageBox.Cancel)
             if msg.exec_() == QMessageBox.Ok:
                 self._acquire_tab.start_acquisition(n_frames, delay)
@@ -2323,13 +2439,17 @@ if __name__ == "__main__":
                 cp = _as.load()
                 if cp:
                     saved_at = cp.get("saved_at", "?")
-                    r = _QMB.question(
-                        window,
-                        "Restore Unsaved Result",
+                    _dlg = _QMB(window)
+                    _dlg.setWindowTitle("Restore Unsaved Result")
+                    _dlg.setIcon(_QMB.Question)
+                    _dlg.setText(
                         f"An unsaved {_label} result from {saved_at} was found.\n\n"
-                        "Restore it now?",
-                        _QMB.Yes | _QMB.No, _QMB.Yes)
-                    if r == _QMB.Yes:
+                        "Restore it now?")
+                    _restore_btn = _dlg.addButton("Restore",  _QMB.AcceptRole)
+                    _dlg.addButton("Discard", _QMB.RejectRole)
+                    _dlg.setDefaultButton(_restore_btn)
+                    _dlg.exec_()
+                    if _dlg.clickedButton() is _restore_btn:
                         try:
                             _arrays = cp.get("arrays", {})
                             if _label == "acquisition":

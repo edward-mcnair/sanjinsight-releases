@@ -12,8 +12,8 @@ log = logging.getLogger(__name__)
 
 from PyQt5.QtWidgets import (
     QWidget, QLabel, QPushButton, QDoubleSpinBox, QVBoxLayout,
-    QHBoxLayout, QGridLayout, QGroupBox, QComboBox)
-from PyQt5.QtCore    import Qt
+    QHBoxLayout, QGridLayout, QGroupBox, QComboBox, QStackedWidget)
+from PyQt5.QtCore    import Qt, pyqtSignal
 
 from hardware.app_state import app_state
 from ui.theme import FONT, PALETTE
@@ -21,12 +21,30 @@ from ui.icons import set_btn_icon
 
 
 class StageTab(QWidget):
+    open_device_manager = pyqtSignal()
+
     def __init__(self, hw_service=None):
         super().__init__()
         self._hw = hw_service
-        root = QVBoxLayout(self)
+
+        # Outer layout holds the stacked widget
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        self._stack = QStackedWidget()
+        outer.addWidget(self._stack)
+
+        # Page 0: not-connected empty state
+        self._stack.addWidget(self._build_empty_state(
+            "Stage", "Zaber motion stage",
+            "Connect the Zaber motion stage in Device Manager to enable controls."))
+
+        # Page 1: full controls
+        controls = QWidget()
+        root = QVBoxLayout(controls)
         root.setContentsMargins(10, 10, 10, 10)
         root.setSpacing(10)
+        self._stack.addWidget(controls)
+        self._stack.setCurrentIndex(1)  # show controls by default
 
         # Position readouts
         pos_box = QGroupBox("Current Position")
@@ -118,6 +136,59 @@ class StageTab(QWidget):
         stop_btn.clicked.connect(self._stop)
         root.addLayout(ctrl_row)
         root.addStretch()
+
+    # ── Empty state ───────────────────────────────────────────────────
+
+    def _build_empty_state(self, title: str, device: str, tip: str) -> QWidget:
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.setAlignment(Qt.AlignCenter)
+        lay.setSpacing(16)
+
+        try:
+            import qtawesome as qta
+            icon_lbl = QLabel()
+            icon_lbl.setPixmap(qta.icon("fa5s.unlink", color="#555").pixmap(64, 64))
+        except Exception:
+            icon_lbl = QLabel("⚡")
+            icon_lbl.setStyleSheet("font-size: 48pt; color: #333;")
+        icon_lbl.setAlignment(Qt.AlignCenter)
+
+        title_lbl = QLabel(f"{title} Not Connected")
+        title_lbl.setAlignment(Qt.AlignCenter)
+        title_lbl.setStyleSheet("font-size: 16pt; font-weight: bold; color: #888;")
+
+        tip_lbl = QLabel(tip)
+        tip_lbl.setAlignment(Qt.AlignCenter)
+        tip_lbl.setWordWrap(True)
+        tip_lbl.setStyleSheet("font-size: 12pt; color: #555;")
+        tip_lbl.setMaximumWidth(400)
+
+        btn = QPushButton("Open Device Manager")
+        btn.setFixedWidth(200)
+        btn.setFixedHeight(36)
+        btn.setStyleSheet("""
+            QPushButton {
+                background: #1a2a20; color: #00d4aa;
+                border: 1px solid #00d4aa66; border-radius: 5px;
+                font-size: 12pt; font-weight: 600;
+            }
+            QPushButton:hover { background: #1e3028; }
+        """)
+        btn.clicked.connect(self.open_device_manager)
+
+        lay.addStretch()
+        lay.addWidget(icon_lbl)
+        lay.addWidget(title_lbl)
+        lay.addWidget(tip_lbl)
+        lay.addSpacing(8)
+        lay.addWidget(btn, 0, Qt.AlignCenter)
+        lay.addStretch()
+        return w
+
+    def set_hardware_available(self, available: bool) -> None:
+        """Switch between empty state (page 0) and full controls (page 1)."""
+        self._stack.setCurrentIndex(1 if available else 0)
 
     # ---------------------------------------------------------------- #
 

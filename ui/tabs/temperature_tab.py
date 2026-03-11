@@ -31,6 +31,10 @@ from ui.widgets.temp_plot  import TempPlot
 from ui.widgets.collapsible_panel import CollapsiblePanel
 from ui.theme import FONT, PALETTE
 
+# Approximate TEC temperature ramp rate (°C per minute).
+# Used for the stabilization time estimate shown in the UI.
+_TEC_RAMP_RATE_C_PER_MIN = 0.5
+
 
 class TemperatureTab(QWidget):
     def __init__(self, n_tecs: int, hw_service=None):
@@ -274,10 +278,13 @@ class TemperatureTab(QWidget):
         else:
             diff  = status.actual_temp - status.target_temp
             arrow = "▼" if diff > 0 else "▲"
-            p._state_lbl.setText(f"SETTLING {arrow}")
+            eta_min = abs(diff) / _TEC_RAMP_RATE_C_PER_MIN
+            eta_s   = int(eta_min * 60)
+            eta_str = f"~{eta_s // 60}:{eta_s % 60:02d}"
+            p._state_lbl.setText(f"SETTLING {arrow}  {eta_str}")
             p._state_lbl.setStyleSheet(
                 f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:{PALETTE['warning']};")
-            p._ready_lbl.setText("SETTLING…")
+            p._ready_lbl.setText(f"{eta_str} remaining")
             p._ready_lbl.setStyleSheet(
                 f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:{PALETTE['warning']};")
         p._plot.push(status.actual_temp, status.target_temp)

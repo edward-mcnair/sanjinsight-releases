@@ -25,7 +25,7 @@ from PyQt5.QtWidgets import (
     QDoubleSpinBox, QSpinBox, QGroupBox, QGridLayout, QSplitter,
     QSizePolicy, QCheckBox, QTableWidget, QTableWidgetItem,
     QHeaderView, QAbstractItemView, QFileDialog, QMessageBox,
-    QFrame, QComboBox)
+    QFrame, QComboBox, QStackedWidget)
 from PyQt5.QtCore  import Qt, pyqtSignal, QTimer
 from PyQt5.QtGui   import QImage, QPixmap, QPainter, QColor, QFont, QPen
 
@@ -253,7 +253,8 @@ class AnalysisTab(QWidget):
       2. User clicks "▶ Run Analysis" to reprocess with new thresholds
     """
 
-    analysis_complete = pyqtSignal(object)   # AnalysisResult
+    analysis_complete  = pyqtSignal(object)   # AnalysisResult
+    navigate_to_acquire = pyqtSignal()
 
     def __init__(self):
         super().__init__()
@@ -274,7 +275,67 @@ class AnalysisTab(QWidget):
         self._body_splitter.addWidget(self._build_canvas())
         self._body_splitter.addWidget(self._build_results())
         self._body_splitter.setSizes([230, 780, 290])
-        root.addWidget(self._body_splitter, 1)
+
+        self._data_stack = QStackedWidget()
+        self._data_stack.addWidget(self._build_empty_state(
+            icon="📊",
+            title="No Analysis Data Yet",
+            desc="Run an acquisition to generate thermal measurement data, "
+                 "then click 'Run Analysis' to see results here.",
+            btn_text="Go to Acquire",
+            btn_callback=self.navigate_to_acquire.emit,
+        ))
+        self._data_stack.addWidget(self._body_splitter)
+        self._data_stack.setCurrentIndex(0)
+        root.addWidget(self._data_stack, 1)
+
+    # ---------------------------------------------------------------- #
+    #  Empty state helper                                               #
+    # ---------------------------------------------------------------- #
+
+    def _build_empty_state(self, icon, title, desc, btn_text="", btn_callback=None):
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.setAlignment(Qt.AlignCenter)
+        lay.setSpacing(16)
+
+        icon_lbl = QLabel(icon)
+        icon_lbl.setAlignment(Qt.AlignCenter)
+        icon_lbl.setStyleSheet("font-size: 52pt; color: #2a2a2a;")
+
+        title_lbl = QLabel(title)
+        title_lbl.setAlignment(Qt.AlignCenter)
+        title_lbl.setStyleSheet("font-size: 16pt; font-weight: bold; color: #555;")
+
+        desc_lbl = QLabel(desc)
+        desc_lbl.setAlignment(Qt.AlignCenter)
+        desc_lbl.setWordWrap(True)
+        desc_lbl.setStyleSheet("font-size: 12pt; color: #444;")
+        desc_lbl.setMaximumWidth(450)
+
+        lay.addStretch()
+        lay.addWidget(icon_lbl)
+        lay.addWidget(title_lbl)
+        lay.addWidget(desc_lbl)
+
+        if btn_text and btn_callback:
+            btn = QPushButton(btn_text)
+            btn.setFixedWidth(200)
+            btn.setFixedHeight(36)
+            btn.setStyleSheet("""
+                QPushButton {
+                    background: #1a2a20; color: #00d4aa;
+                    border: 1px solid #00d4aa55; border-radius: 5px;
+                    font-size: 12pt; font-weight: 600;
+                }
+                QPushButton:hover { background: #1e3028; }
+            """)
+            btn.clicked.connect(btn_callback)
+            lay.addSpacing(4)
+            lay.addWidget(btn, 0, Qt.AlignCenter)
+
+        lay.addStretch()
+        return w
 
     # ---------------------------------------------------------------- #
     #  Toolbar                                                          #
@@ -547,6 +608,8 @@ class AnalysisTab(QWidget):
         self._source_lbl.setStyleSheet(
             "background:#1a2a1a; color:#00d4aa; padding:0 10px; "
             "border-radius:3px; font-family:Menlo,monospace; font-size:12pt;")
+        if dt_map is not None or drr_map is not None:
+            self._data_stack.setCurrentIndex(1)
         if self._auto_cb.isChecked():
             self._run()
 

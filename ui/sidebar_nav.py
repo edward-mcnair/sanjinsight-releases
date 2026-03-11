@@ -429,12 +429,68 @@ class _Sidebar(QWidget):
         c.setVisible(not collapsed)
         self._containers.append(c)
 
+        # ── "Show all" toggle row — appended at the bottom of the group ──
+        self._show_all_rows: dict   # group_title → (toggle_widget, hidden_set)
+        if not hasattr(self, "_show_all_rows"):
+            self._show_all_rows = {}
+        show_all_w = QWidget()
+        show_all_w.setStyleSheet(f"background:{_BG};")
+        show_all_w.setFixedHeight(22)
+        show_all_w.setVisible(False)   # hidden until set_item_visible() hides something
+        sa_lay = QHBoxLayout(show_all_w)
+        sa_lay.setContentsMargins(32, 0, 8, 0)
+        sa_lbl = QLabel("Show all…")
+        sa_lbl.setStyleSheet(
+            f"font-size:{_FONT['caption']}pt; color:{_TEXT_DIM}; "
+            "text-decoration:underline;")
+        sa_lbl.setCursor(Qt.PointingHandCursor)
+        sa_lay.addWidget(sa_lbl)
+        sa_lay.addStretch()
+        cl.addWidget(show_all_w)
+        self._show_all_rows[title] = {
+            "widget":  show_all_w,
+            "label":   sa_lbl,
+            "hidden":  set(),     # labels of currently-hidden items
+            "showing": False,
+        }
+
+        # Wire click to toggle
+        def _toggle_show_all(title=title):
+            row = self._show_all_rows[title]
+            row["showing"] = not row["showing"]
+            for mi in self._items:
+                if mi._item.label in row["hidden"]:
+                    mi.setVisible(row["showing"])
+            row["label"].setText("Show fewer…" if row["showing"] else "Show all…")
+        sa_lbl.mousePressEvent = lambda e: _toggle_show_all()
+
         idx = len(self._containers) - 1
         hdr.toggled.connect(lambda col, _c=c, _i=idx: (
             self._coll_states.__setitem__(_i, col) or _c.setVisible(not col)
         ))
         self._lay.addWidget(hdr)
         self._lay.addWidget(c)
+
+    def set_item_visible(self, label: str, visible: bool) -> None:
+        """Show or hide a specific sidebar item by its label.
+
+        Hidden items are tracked per collapsible group so the
+        "Show all…" toggle can reveal them on demand.
+        """
+        for mi in self._items:
+            if mi._item.label == label:
+                mi.setVisible(visible)
+                if not visible:
+                    # Register the hidden item with its group
+                    for row in self._show_all_rows.values():
+                        row["hidden"].add(label)
+                        row["widget"].setVisible(True)
+                else:
+                    for row in self._show_all_rows.values():
+                        row["hidden"].discard(label)
+                        if not row["hidden"]:
+                            row["widget"].setVisible(False)
+                break
 
     def finish(self):
         self._lay.addStretch(1)
@@ -517,6 +573,15 @@ class SidebarNav(QWidget):
 
     def finish(self):       self._sidebar.finish()
     def select_first(self): self._sidebar.select_first()
+
+    def set_item_visible(self, label: str, visible: bool) -> None:
+        """Show or hide a specific sidebar item by its label.
+
+        Hidden items appear under the 'Show all…' toggle in their group.
+        Call after ``add_collapsible()`` / ``finish()`` with the hardware
+        config to suppress unconfigured device entries by default.
+        """
+        self._sidebar.set_item_visible(label, visible)
 
     def navigate_to(self, panel: QWidget):
         idx = self._stack.indexOf(panel)

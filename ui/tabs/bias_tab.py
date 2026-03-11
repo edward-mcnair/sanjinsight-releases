@@ -13,8 +13,8 @@ log = logging.getLogger(__name__)
 from PyQt5.QtWidgets import (
     QWidget, QLabel, QPushButton, QDoubleSpinBox, QVBoxLayout,
     QHBoxLayout, QGridLayout, QGroupBox, QButtonGroup, QRadioButton,
-    QFrame, QComboBox, QCheckBox, QInputDialog, QMessageBox)
-from PyQt5.QtCore    import Qt
+    QFrame, QComboBox, QCheckBox, QInputDialog, QMessageBox, QStackedWidget)
+from PyQt5.QtCore    import Qt, pyqtSignal
 
 from hardware.app_state import app_state
 from ui.theme import FONT, PALETTE
@@ -40,12 +40,30 @@ def hline():
 
 
 class BiasTab(QWidget):
+    open_device_manager = pyqtSignal()
+
     def __init__(self, hw_service=None):
         super().__init__()
         self._hw = hw_service
-        root = QVBoxLayout(self)
+
+        # Outer layout holds the stacked widget
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        self._stack = QStackedWidget()
+        outer.addWidget(self._stack)
+
+        # Page 0: not-connected empty state
+        self._stack.addWidget(self._build_empty_state(
+            "Bias SMU", "Keithley source-measure unit",
+            "Connect the Keithley source-measure unit in Device Manager to enable controls."))
+
+        # Page 1: full controls
+        controls = QWidget()
+        root = QVBoxLayout(controls)
         root.setContentsMargins(10, 10, 10, 10)
         root.setSpacing(10)
+        self._stack.addWidget(controls)
+        self._stack.setCurrentIndex(1)  # show controls by default
 
         # Status readouts
         status_box = QGroupBox("Measured Output")
@@ -144,8 +162,12 @@ class BiasTab(QWidget):
         self._level_spin.setFixedWidth(120)
         self._level_unit = QLabel("V")
         self._level_unit.setStyleSheet(f"color:#666; font-size:{FONT['body']}pt;")
+        self._level_indicator = QLabel("✓")
+        self._level_indicator.setStyleSheet(
+            f"color:#00d4aa; font-size:{FONT['body']}pt; padding-left:6px;")
         level_row.addWidget(self._level_spin)
         level_row.addWidget(self._level_unit)
+        level_row.addWidget(self._level_indicator)
         level_row.addStretch()
         cl.addLayout(level_row, 3, 1)
 
@@ -233,12 +255,71 @@ class BiasTab(QWidget):
         self._on_btn.clicked.connect(self._enable)
         self._off_btn.clicked.connect(self._disable)
 
+        # Wire level spinbox and port/mode changes to inline validation
+        self._level_spin.valueChanged.connect(lambda _: self._validate_level())
+        self._port_combo.currentIndexChanged.connect(lambda _: self._validate_level())
+        self._mode_bg.buttonClicked.connect(lambda _: self._validate_level())
+
         root.addWidget(ctrl_box)
         root.addStretch()
 
         # Initialise to port defaults and show voltage presets
         self._on_port_change()
         self._show_presets("voltage")
+        self._validate_level()
+
+    # ── Empty state ───────────────────────────────────────────────────
+
+    def _build_empty_state(self, title: str, device: str, tip: str) -> QWidget:
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.setAlignment(Qt.AlignCenter)
+        lay.setSpacing(16)
+
+        try:
+            import qtawesome as qta
+            icon_lbl = QLabel()
+            icon_lbl.setPixmap(qta.icon("fa5s.unlink", color="#555").pixmap(64, 64))
+        except Exception:
+            icon_lbl = QLabel("⚡")
+            icon_lbl.setStyleSheet("font-size: 48pt; color: #333;")
+        icon_lbl.setAlignment(Qt.AlignCenter)
+
+        title_lbl = QLabel(f"{title} Not Connected")
+        title_lbl.setAlignment(Qt.AlignCenter)
+        title_lbl.setStyleSheet("font-size: 16pt; font-weight: bold; color: #888;")
+
+        tip_lbl = QLabel(tip)
+        tip_lbl.setAlignment(Qt.AlignCenter)
+        tip_lbl.setWordWrap(True)
+        tip_lbl.setStyleSheet("font-size: 12pt; color: #555;")
+        tip_lbl.setMaximumWidth(400)
+
+        btn = QPushButton("Open Device Manager")
+        btn.setFixedWidth(200)
+        btn.setFixedHeight(36)
+        btn.setStyleSheet("""
+            QPushButton {
+                background: #1a2a20; color: #00d4aa;
+                border: 1px solid #00d4aa66; border-radius: 5px;
+                font-size: 12pt; font-weight: 600;
+            }
+            QPushButton:hover { background: #1e3028; }
+        """)
+        btn.clicked.connect(self.open_device_manager)
+
+        lay.addStretch()
+        lay.addWidget(icon_lbl)
+        lay.addWidget(title_lbl)
+        lay.addWidget(tip_lbl)
+        lay.addSpacing(8)
+        lay.addWidget(btn, 0, Qt.AlignCenter)
+        lay.addStretch()
+        return w
+
+    def set_hardware_available(self, available: bool) -> None:
+        """Switch between empty state (page 0) and full controls (page 1)."""
+        self._stack.setCurrentIndex(1 if available else 0)
 
     # ---------------------------------------------------------------- #
 
@@ -273,6 +354,36 @@ class BiasTab(QWidget):
             item = self._i_presets.itemAt(i)
             if item and item.widget():
                 item.widget().setVisible(mode == "current")
+
+    def _validate_level(self) -> None:
+        """Update the inline level indicator based on the current port and mode."""
+        data = self._port_combo.currentData()
+        if data is None:
+            return
+        max_v, bipolar = data
+        value = self._level_spin.value()
+        is_voltage_mode = self._mode_bg.checkedId() == 0
+
+        if is_voltage_mode:
+            if bipolar:
+                valid = -max_v <= value <= max_v
+                limit_str = f"\xb1{max_v:g} V"
+            else:
+                valid = 0.0 <= value <= max_v
+                limit_str = f"\u2264+{max_v:g} V"
+        else:
+            # Current mode: range is fixed at ±1 A; compliance is what limits
+            valid = -1.0 <= value <= 1.0
+            limit_str = "\xb11 A"
+
+        if valid:
+            self._level_indicator.setText(f"\u2713 (within {limit_str})")
+            self._level_indicator.setStyleSheet(
+                f"color:#00d4aa; font-size:{FONT['caption']}pt; padding-left:6px;")
+        else:
+            self._level_indicator.setText(f"\u2717 exceeds {limit_str} limit")
+            self._level_indicator.setStyleSheet(
+                f"color:#ff5555; font-size:{FONT['caption']}pt; padding-left:6px;")
 
     def _on_port_change(self):
         """Update level spinbox limits and VO EXT warning for the selected port."""

@@ -25,8 +25,8 @@ log = logging.getLogger(__name__)
 from PyQt5.QtWidgets import (
     QWidget, QLabel, QPushButton, QDoubleSpinBox, QVBoxLayout,
     QHBoxLayout, QGridLayout, QGroupBox, QFrame, QComboBox,
-    QInputDialog, QMessageBox)
-from PyQt5.QtCore    import Qt
+    QInputDialog, QMessageBox, QStackedWidget)
+from PyQt5.QtCore    import Qt, pyqtSignal
 
 from hardware.app_state import app_state
 from ui.widgets.collapsible_panel import CollapsiblePanel
@@ -42,15 +42,33 @@ def hline():
 
 
 class FpgaTab(QWidget):
+    open_device_manager = pyqtSignal()
+
     def __init__(self, hw_service=None):
         super().__init__()
         self._hw = hw_service
         from hardware.hardware_preset_manager import (
             HardwarePresetManager, FPGA_FACTORY_PRESETS)
         self._preset_mgr = HardwarePresetManager("fpga", FPGA_FACTORY_PRESETS)
-        root = QVBoxLayout(self)
+
+        # Outer layout holds the stacked widget
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        self._stack = QStackedWidget()
+        outer.addWidget(self._stack)
+
+        # Page 0: not-connected empty state
+        self._stack.addWidget(self._build_empty_state(
+            "FPGA", "NI FPGA controller",
+            "Connect the NI FPGA controller in Device Manager to enable controls."))
+
+        # Page 1: full controls
+        controls = QWidget()
+        root = QVBoxLayout(controls)
         root.setContentsMargins(10, 10, 10, 10)
         root.setSpacing(10)
+        self._stack.addWidget(controls)
+        self._stack.setCurrentIndex(1)  # show controls by default
 
         # ── Status readouts ───────────────────────────────────────────
         status_box = QGroupBox("Status")
@@ -208,6 +226,10 @@ class FpgaTab(QWidget):
             "Modulation rate — the FPGA switches the stimulus at this frequency.\n"
             "Use the quick-preset buttons above for common values.")
         adv_grid.addWidget(self._freq_spin, 0, 1)
+        self._freq_indicator = QLabel("✓")
+        self._freq_indicator.setStyleSheet(
+            f"color:#00d4aa; font-size:{FONT['body']}pt; padding-left:4px;")
+        adv_grid.addWidget(self._freq_indicator, 0, 2)
 
         adv_grid.addWidget(self._sub("Exact duty cycle (%)"), 1, 0)
         self._duty_spin = QDoubleSpinBox()
@@ -219,6 +241,10 @@ class FpgaTab(QWidget):
             "Fraction of each cycle that the stimulus is ON.\n"
             "50 % = equal hot and cold dwell time.")
         adv_grid.addWidget(self._duty_spin, 1, 1)
+        self._duty_indicator = QLabel("✓")
+        self._duty_indicator.setStyleSheet(
+            f"color:#00d4aa; font-size:{FONT['body']}pt; padding-left:4px;")
+        adv_grid.addWidget(self._duty_indicator, 1, 2)
 
         apply_btn = QPushButton("Apply Only (no start)")
         apply_btn.setToolTip(
@@ -230,12 +256,89 @@ class FpgaTab(QWidget):
         # Connect duty spinbox to the overheating warning
         self._duty_spin.valueChanged.connect(self._on_duty_changed)
 
+        # Connect spinboxes to inline validation indicators
+        self._freq_spin.valueChanged.connect(
+            lambda v: self._validate_indicator(self._freq_indicator, v, 0.1, 100000))
+        self._duty_spin.valueChanged.connect(
+            lambda v: self._validate_indicator(self._duty_indicator, v, 1, 99))
+
+        # Initialise indicators to reflect default values
+        self._validate_indicator(self._freq_indicator, self._freq_spin.value(), 0.1, 100000)
+        self._validate_indicator(self._duty_indicator, self._duty_spin.value(), 1, 99)
+
         adv_panel.addWidget(adv_inner)
         root.addWidget(adv_panel)
         root.addStretch()
 
         # Initialise warning state from the spinbox default (50 %)
         self._on_duty_changed(self._duty_spin.value())
+
+    # ── Empty state ───────────────────────────────────────────────────
+
+    def _build_empty_state(self, title: str, device: str, tip: str) -> QWidget:
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.setAlignment(Qt.AlignCenter)
+        lay.setSpacing(16)
+
+        try:
+            import qtawesome as qta
+            icon_lbl = QLabel()
+            icon_lbl.setPixmap(qta.icon("fa5s.unlink", color="#555").pixmap(64, 64))
+        except Exception:
+            icon_lbl = QLabel("⚡")
+            icon_lbl.setStyleSheet("font-size: 48pt; color: #333;")
+        icon_lbl.setAlignment(Qt.AlignCenter)
+
+        title_lbl = QLabel(f"{title} Not Connected")
+        title_lbl.setAlignment(Qt.AlignCenter)
+        title_lbl.setStyleSheet("font-size: 16pt; font-weight: bold; color: #888;")
+
+        tip_lbl = QLabel(tip)
+        tip_lbl.setAlignment(Qt.AlignCenter)
+        tip_lbl.setWordWrap(True)
+        tip_lbl.setStyleSheet("font-size: 12pt; color: #555;")
+        tip_lbl.setMaximumWidth(400)
+
+        btn = QPushButton("Open Device Manager")
+        btn.setFixedWidth(200)
+        btn.setFixedHeight(36)
+        btn.setStyleSheet("""
+            QPushButton {
+                background: #1a2a20; color: #00d4aa;
+                border: 1px solid #00d4aa66; border-radius: 5px;
+                font-size: 12pt; font-weight: 600;
+            }
+            QPushButton:hover { background: #1e3028; }
+        """)
+        btn.clicked.connect(self.open_device_manager)
+
+        lay.addStretch()
+        lay.addWidget(icon_lbl)
+        lay.addWidget(title_lbl)
+        lay.addWidget(tip_lbl)
+        lay.addSpacing(8)
+        lay.addWidget(btn, 0, Qt.AlignCenter)
+        lay.addStretch()
+        return w
+
+    def set_hardware_available(self, available: bool) -> None:
+        """Switch between empty state (page 0) and full controls (page 1)."""
+        self._stack.setCurrentIndex(1 if available else 0)
+
+    # ── Inline validation indicator ───────────────────────────────────
+
+    def _validate_indicator(self, label: QLabel, value: float,
+                             min_val: float, max_val: float) -> None:
+        """Update *label* with a green ✓ or red ✗ depending on range."""
+        if min_val <= value <= max_val:
+            label.setText("✓")
+            label.setStyleSheet(
+                f"color:#00d4aa; font-size:{FONT['body']}pt; padding-left:4px;")
+        else:
+            label.setText("✗")
+            label.setStyleSheet(
+                f"color:#ff5555; font-size:{FONT['body']}pt; padding-left:4px;")
 
     # ── Duty cycle overheating warning ───────────────────────────────
 

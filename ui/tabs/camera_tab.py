@@ -28,8 +28,8 @@ log = logging.getLogger(__name__)
 from PyQt5.QtWidgets import (
     QWidget, QLabel, QPushButton, QSlider, QVBoxLayout, QHBoxLayout,
     QGridLayout, QGroupBox, QButtonGroup, QRadioButton, QFrame, QComboBox,
-    QFileDialog)
-from PyQt5.QtCore    import Qt, QTimer
+    QFileDialog, QStackedWidget)
+from PyQt5.QtCore    import Qt, QTimer, pyqtSignal
 
 from hardware.app_state    import app_state
 from ui.widgets.image_pane import ImagePane
@@ -53,13 +53,31 @@ def _fmt_exp(us: int) -> str:
 
 
 class CameraTab(QWidget):
+    open_device_manager = pyqtSignal()
+
     def __init__(self, cam_info=None, hw_service=None):
         super().__init__()
         self._hw = hw_service
         self._last_frame = None
-        root = QVBoxLayout(self)
+
+        # Outer layout holds the stacked widget
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        self._stack = QStackedWidget()
+        outer.addWidget(self._stack)
+
+        # Page 0: not-connected empty state
+        self._stack.addWidget(self._build_empty_state(
+            "Camera", "Zyla sCMOS camera",
+            "Connect the Zyla camera in Device Manager to enable controls."))
+
+        # Page 1: full controls
+        controls = QWidget()
+        root = QVBoxLayout(controls)
         root.setContentsMargins(10, 10, 10, 10)
         root.setSpacing(8)
+        self._stack.addWidget(controls)
+        self._stack.setCurrentIndex(1)  # show controls by default
 
         top = QHBoxLayout()
         root.addLayout(top)
@@ -283,6 +301,59 @@ class CameraTab(QWidget):
 
         stats_panel.addWidget(stats_row)
         root.addWidget(stats_panel)
+
+    # ── Empty state ───────────────────────────────────────────────────
+
+    def _build_empty_state(self, title: str, device: str, tip: str) -> QWidget:
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.setAlignment(Qt.AlignCenter)
+        lay.setSpacing(16)
+
+        try:
+            import qtawesome as qta
+            icon_lbl = QLabel()
+            icon_lbl.setPixmap(qta.icon("fa5s.unlink", color="#555").pixmap(64, 64))
+        except Exception:
+            icon_lbl = QLabel("⚡")
+            icon_lbl.setStyleSheet("font-size: 48pt; color: #333;")
+        icon_lbl.setAlignment(Qt.AlignCenter)
+
+        title_lbl = QLabel(f"{title} Not Connected")
+        title_lbl.setAlignment(Qt.AlignCenter)
+        title_lbl.setStyleSheet("font-size: 16pt; font-weight: bold; color: #888;")
+
+        tip_lbl = QLabel(tip)
+        tip_lbl.setAlignment(Qt.AlignCenter)
+        tip_lbl.setWordWrap(True)
+        tip_lbl.setStyleSheet("font-size: 12pt; color: #555;")
+        tip_lbl.setMaximumWidth(400)
+
+        btn = QPushButton("Open Device Manager")
+        btn.setFixedWidth(200)
+        btn.setFixedHeight(36)
+        btn.setStyleSheet("""
+            QPushButton {
+                background: #1a2a20; color: #00d4aa;
+                border: 1px solid #00d4aa66; border-radius: 5px;
+                font-size: 12pt; font-weight: 600;
+            }
+            QPushButton:hover { background: #1e3028; }
+        """)
+        btn.clicked.connect(self.open_device_manager)
+
+        lay.addStretch()
+        lay.addWidget(icon_lbl)
+        lay.addWidget(title_lbl)
+        lay.addWidget(tip_lbl)
+        lay.addSpacing(8)
+        lay.addWidget(btn, 0, Qt.AlignCenter)
+        lay.addStretch()
+        return w
+
+    def set_hardware_available(self, available: bool) -> None:
+        """Switch between empty state (page 0) and full controls (page 1)."""
+        self._stack.setCurrentIndex(1 if available else 0)
 
     # ── Stat readout widget ────────────────────────────────────────────
 

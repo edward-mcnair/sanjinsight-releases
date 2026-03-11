@@ -515,3 +515,66 @@ class StatusHeader(QWidget):
         if target:
             target._dot.setStyleSheet(f"color:#ff9900; font-size:{FONT['label']}pt;")
             target.setToolTip("Connecting…")
+
+    def add_readiness_dot(self):
+        """Add a persistent system-readiness dot to the header bar.
+
+        The dot is placed between the profile pill and the device status dots.
+        Call set_readiness_grade() to update its colour and tooltip.
+
+        This method inserts the widget into the layout at the correct position
+        (immediately after the divider that follows the profile pill) and must
+        be called from outside, like add_device_manager_button(), so that
+        existing callers are unaffected.
+        """
+        # Build the dot widget using the same pattern as _dot()
+        w = QWidget()
+        h = QHBoxLayout(w)
+        h.setContentsMargins(8, 0, 8, 0)
+        h.setSpacing(5)
+        dot = QLabel("●")
+        dot.setStyleSheet(f"color:#555; font-size:{FONT['label']}pt;")
+        lbl = QLabel("System")
+        lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:#888; letter-spacing:1px;")
+        h.addWidget(dot)
+        h.addWidget(lbl)
+        w._dot = dot
+
+        # Insert after the divider that follows the profile pill (div2).
+        # The layout order is: …profile_pill, div2, cam_dot, …
+        # We find div2's index and insert one position after it.
+        lay = self.layout()
+        div2_idx = lay.indexOf(self._cam_dot) - 1   # div2 sits just before cam_dot
+        insert_idx = div2_idx + 1                    # right after div2, before cam_dot
+        lay.insertWidget(insert_idx, w)
+
+        self._readiness_dot = w
+        w.setToolTip("System readiness: unknown")
+
+    def set_readiness_grade(self, grade: str, issues: list = None):
+        """Update the readiness dot colour and tooltip to reflect *grade*.
+
+        Parameters
+        ----------
+        grade:
+            One of "A", "B", "C", or "D".
+        issues:
+            Optional list of issue description strings shown in the tooltip.
+        """
+        if not hasattr(self, "_readiness_dot"):
+            return
+
+        _colors = {
+            "A": "#00d4aa",   # green  — all clear
+            "B": "#4499ff",   # blue   — minor issues
+            "C": "#ffaa44",   # amber  — warnings present
+            "D": "#ff4444",   # red    — critical failures
+        }
+        color = _colors.get(grade, "#555")
+        self._readiness_dot._dot.setStyleSheet(
+            f"color:{color}; font-size:{FONT['label']}pt;")
+
+        tip = f"System readiness: Grade {grade}"
+        if issues:
+            tip += "\n" + "\n".join(f"  • {i}" for i in issues[:8])
+        self._readiness_dot.setToolTip(tip)

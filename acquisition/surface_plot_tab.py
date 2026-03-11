@@ -32,7 +32,7 @@ from typing import Optional
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QSlider, QComboBox, QGroupBox, QDoubleSpinBox, QCheckBox,
-    QFileDialog, QSizePolicy, QSplitter, QFrame,
+    QFileDialog, QSizePolicy, QSplitter, QFrame, QStackedWidget,
 )
 from PyQt5.QtCore import Qt, QTimer
 from ui.icons import set_btn_icon
@@ -77,7 +77,7 @@ class SurfacePlotTab(QWidget):
         root.setContentsMargins(6, 6, 6, 6)
         root.setSpacing(6)
 
-        # ─ Toolbar ─
+        # ─ Toolbar (always visible) ─
         toolbar = QHBoxLayout()
         root.addLayout(toolbar)
 
@@ -133,40 +133,109 @@ class SurfacePlotTab(QWidget):
         self._export_btn.clicked.connect(self._export)
         toolbar.addWidget(self._export_btn)
 
-        # ─ Matplotlib canvas ─
-        self._fig  = Figure(figsize=(8, 5), facecolor="#0d0d0d", tight_layout=True)
-        self._canvas = FigureCanvas(self._fig)
-        self._canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        root.addWidget(self._canvas, 1)
-
-        # ─ View-angle sliders ─
-        angle_row = QHBoxLayout()
-        root.addLayout(angle_row)
-
-        angle_row.addWidget(QLabel("Elevation:"))
-        self._el_slider = QSlider(Qt.Horizontal)
-        self._el_slider.setRange(-90, 90)
-        self._el_slider.setValue(35)
-        self._el_slider.valueChanged.connect(self._on_elevation)
-        angle_row.addWidget(self._el_slider)
-
-        angle_row.addWidget(QLabel("  Azimuth:"))
-        self._az_slider = QSlider(Qt.Horizontal)
-        self._az_slider.setRange(0, 359)
-        self._az_slider.setValue(225)
-        self._az_slider.valueChanged.connect(self._on_azimuth)
-        angle_row.addWidget(self._az_slider)
-
-        for lbl in self.findChildren(QLabel):
-            if not lbl.styleSheet():
-                lbl.setStyleSheet("color:#aaa; font-size:12pt;")
+        # ─ Stacked widget: page 0 = empty state, page 1 = content ─
+        self._data_stack = QStackedWidget()
+        self._data_stack.addWidget(self._build_empty_state(
+            icon="⛰",
+            title="No Surface Data",
+            desc="Run an acquisition and the 3D thermal surface will appear here "
+                 "automatically. You can also load data from the Analysis tab.",
+        ))
+        self._data_stack.addWidget(self._build_content_widget())
+        self._data_stack.setCurrentIndex(0)
+        root.addWidget(self._data_stack, 1)
 
         # ─ Status ─
         self._status_lbl = QLabel("No data loaded — call set_data() to display a surface.")
         self._status_lbl.setStyleSheet("color:#888; font-size:12pt; padding:2px 4px;")
         root.addWidget(self._status_lbl)
 
+        # Apply label styling to toolbar labels
+        for lbl in toolbar.parentWidget().findChildren(QLabel) if toolbar.parentWidget() else []:
+            if not lbl.styleSheet():
+                lbl.setStyleSheet("color:#aaa; font-size:12pt;")
+
+    def _build_empty_state(self, icon, title, desc, btn_text="", btn_callback=None):
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.setAlignment(Qt.AlignCenter)
+        lay.setSpacing(16)
+
+        icon_lbl = QLabel(icon)
+        icon_lbl.setAlignment(Qt.AlignCenter)
+        icon_lbl.setStyleSheet("font-size: 52pt; color: #2a2a2a;")
+
+        title_lbl = QLabel(title)
+        title_lbl.setAlignment(Qt.AlignCenter)
+        title_lbl.setStyleSheet("font-size: 16pt; font-weight: bold; color: #555;")
+
+        desc_lbl = QLabel(desc)
+        desc_lbl.setAlignment(Qt.AlignCenter)
+        desc_lbl.setWordWrap(True)
+        desc_lbl.setStyleSheet("font-size: 12pt; color: #444;")
+        desc_lbl.setMaximumWidth(450)
+
+        lay.addStretch()
+        lay.addWidget(icon_lbl)
+        lay.addWidget(title_lbl)
+        lay.addWidget(desc_lbl)
+
+        if btn_text and btn_callback:
+            btn = QPushButton(btn_text)
+            btn.setFixedWidth(200)
+            btn.setFixedHeight(36)
+            btn.setStyleSheet("""
+                QPushButton {
+                    background: #1a2a20; color: #00d4aa;
+                    border: 1px solid #00d4aa55; border-radius: 5px;
+                    font-size: 12pt; font-weight: 600;
+                }
+                QPushButton:hover { background: #1e3028; }
+            """)
+            btn.clicked.connect(btn_callback)
+            lay.addSpacing(4)
+            lay.addWidget(btn, 0, Qt.AlignCenter)
+
+        lay.addStretch()
+        return w
+
+    def _build_content_widget(self) -> QWidget:
+        """Build the matplotlib canvas + view-angle sliders content widget."""
+        content = QWidget()
+        lay = QVBoxLayout(content)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(6)
+
+        # ─ Matplotlib canvas ─
+        self._fig  = Figure(figsize=(8, 5), facecolor="#0d0d0d", tight_layout=True)
+        self._canvas = FigureCanvas(self._fig)
+        self._canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        lay.addWidget(self._canvas, 1)
+
+        # ─ View-angle sliders ─
+        angle_row = QHBoxLayout()
+        lay.addLayout(angle_row)
+
+        el_lbl = QLabel("Elevation:")
+        el_lbl.setStyleSheet("color:#aaa; font-size:12pt;")
+        angle_row.addWidget(el_lbl)
+        self._el_slider = QSlider(Qt.Horizontal)
+        self._el_slider.setRange(-90, 90)
+        self._el_slider.setValue(35)
+        self._el_slider.valueChanged.connect(self._on_elevation)
+        angle_row.addWidget(self._el_slider)
+
+        az_lbl = QLabel("  Azimuth:")
+        az_lbl.setStyleSheet("color:#aaa; font-size:12pt;")
+        angle_row.addWidget(az_lbl)
+        self._az_slider = QSlider(Qt.Horizontal)
+        self._az_slider.setRange(0, 359)
+        self._az_slider.setValue(225)
+        self._az_slider.valueChanged.connect(self._on_azimuth)
+        angle_row.addWidget(self._az_slider)
+
         self._replot()
+        return content
 
     # ── Public API ──────────────────────────────────────────────────
 
@@ -187,6 +256,8 @@ class SurfacePlotTab(QWidget):
             f"min={np.nanmin(arr):.5g}  max={np.nanmax(arr):.5g}"
             if arr is not None else "No data loaded."
         )
+        if arr is not None:
+            self._data_stack.setCurrentIndex(1)
         self._replot()
 
     # ── Plotting ────────────────────────────────────────────────────
