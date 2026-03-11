@@ -31,7 +31,8 @@ except ImportError:
 _pix_cache: dict = {}
 
 # ── Palette — sourced from ui.theme (single source of truth) ───────
-from ui.theme import PALETTE, FONT as _FONT
+from ui.theme      import PALETTE, FONT as _FONT
+from ui.font_utils import sans_font as _sans_font
 
 _BG         = PALETTE["surface"]
 _BG_HOVER   = "#222222"
@@ -52,9 +53,10 @@ _W_FULL    = 240   # expanded width
 _W_MINI    = 22    # collapsed — thin blue bar
 
 # ── Fonts ──────────────────────────────────────────────────────────
-_ITEM_FONT_PT    = _FONT["body"]      # 13 pt — reduced from 14
-_SECTION_FONT_PT = _FONT["sublabel"]  # 11 pt — section header caps
-_ICON_FONT_PT    = _FONT["label"]     # 12 pt — icon glyphs (reduced from 13)
+# Font point sizes are NOT cached here as module-level constants.
+# Instead, paintEvent methods read _FONT["body"] etc. at call time so
+# they always reflect the DPI-scaled values set by apply_dpi_scale()
+# (which runs in main() after QApplication is created).
 
 
 class NavItem(NamedTuple):
@@ -128,11 +130,11 @@ class _MenuItem(QWidget):
                 _pix_cache[cache_key] = px
             p.drawPixmap(x + 1, (h - 16) // 2, px)
         else:
-            p.setFont(QFont("Segoe UI Symbol", _ICON_FONT_PT))
+            p.setFont(_sans_font(_FONT["label"]))
             p.setPen(icon_col)
             p.drawText(x, 0, 26, h, Qt.AlignVCenter | Qt.AlignLeft, icon_name)
 
-        lf = QFont("Segoe UI", _ITEM_FONT_PT)
+        lf = _sans_font(_FONT["body"])
         if self._active:
             lf.setWeight(QFont.DemiBold)
         p.setFont(lf)
@@ -141,8 +143,7 @@ class _MenuItem(QWidget):
                    Qt.AlignVCenter | Qt.AlignLeft, self._item.label)
 
         if self._item.badge:
-            bf = QFont("Segoe UI", 9)
-            bf.setWeight(QFont.Bold)
+            bf = _sans_font(_FONT["caption"], bold=True)
             p.setFont(bf)
             fm = QFontMetrics(bf)
             bw = fm.horizontalAdvance(self._item.badge) + 10
@@ -175,7 +176,7 @@ class _SectionLabel(QWidget):
         p.setPen(QPen(QColor(_DIVIDER), 1))
         p.drawLine(16, 8, self.width() - 16, 8)
         # Label — bold, spaced caps, slightly larger than items
-        f = QFont("Segoe UI", _SECTION_FONT_PT)
+        f = _sans_font(_FONT["sublabel"])
         f.setWeight(QFont.Black)          # heaviest weight for visual dominance
         f.setLetterSpacing(QFont.AbsoluteSpacing, 1.6)
         p.setFont(f)
@@ -227,17 +228,17 @@ class _CollapseHeader(QWidget):
                 _pix_cache[cache_key] = px
             p.drawPixmap(19, (h - 16) // 2, px)
         else:
-            p.setFont(QFont("Segoe UI Symbol", _ICON_FONT_PT))
+            p.setFont(_sans_font(_FONT["label"]))
             p.setPen(col)
             p.drawText(18, 0, 26, h, Qt.AlignVCenter | Qt.AlignLeft, self._icon)
 
-        f = QFont("Segoe UI", _ITEM_FONT_PT)
+        f = _sans_font(_FONT["body"])
         f.setWeight(QFont.DemiBold)
         p.setFont(f)
         p.setPen(col)
         p.drawText(48, 0, w - 70, h, Qt.AlignVCenter | Qt.AlignLeft, self._title)
 
-        p.setFont(QFont("Segoe UI Symbol", 14))
+        p.setFont(_sans_font(_FONT["body"]))
         p.setPen(QColor(_TEXT_NORM))
         p.drawText(w - 26, 0, 20, h, Qt.AlignVCenter | Qt.AlignLeft,
                    "▾" if not self._collapsed else "▸")
@@ -295,16 +296,13 @@ class _LogoHeader(QWidget):
         p.drawLine(0, h - 1, w, h - 1)
 
         # App name
-        f = QFont("Segoe UI", 17)
-        f.setWeight(QFont.Bold)
-        p.setFont(f)
+        p.setFont(_sans_font(_FONT["title"], bold=True))
         p.setPen(QColor(_TEXT_WHITE))
         p.drawText(18, 0, w - self._ARROW_W - 20, h,
                    Qt.AlignVCenter | Qt.AlignLeft, self._app_name)
 
         # Collapse arrow ◀  (right edge, subtle unless hovered)
-        af = QFont("Segoe UI Symbol", 13)
-        p.setFont(af)
+        p.setFont(_sans_font(_FONT["body"]))
         arrow_col = QColor(_TEXT_WHITE) if self._arrow_hover else QColor(_TEXT_DIM)
         p.setPen(arrow_col)
         ax, ay, aw, ah = self._arrow_rect()
@@ -345,9 +343,7 @@ class _CollapseBar(QWidget):
         p.fillRect(0, 0, w, h, bar_color)
 
         # Centred ▶ arrow, vertically centred
-        f = QFont("Segoe UI Symbol", 10)
-        f.setWeight(QFont.Bold)
-        p.setFont(f)
+        p.setFont(_sans_font(_FONT["caption"], bold=True))
         p.setPen(QColor("#ffffff"))
         p.drawText(0, h // 2 - 40, w, 80, Qt.AlignCenter, "▶")
 

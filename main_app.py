@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import sys
 import os
+import re
 import time
 import threading
 import collections
@@ -82,7 +83,7 @@ STYLE = """
 QMainWindow, QWidget {
     background-color: #1a1a1a;
     color: #d0d0d0;
-    font-family: 'Helvetica Neue', Arial, sans-serif;
+    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
     font-size:13pt;
 }
 QTabWidget::pane {
@@ -253,35 +254,27 @@ QToolTip {
 }
 """
 
-# ── Windows stylesheet font-size fix ─────────────────────────────────────────
-# Qt converts stylesheet `pt` values to pixels using the screen's logical DPI.
-# macOS uses 72 DPI as its pt baseline, so a "13pt" font renders as 13 logical
-# pixels.  Windows uses 96 DPI, making the same rule render as ~17 px — 33%
-# larger.  On Parallels at 200% scaling the compound effect can look ~2× bigger.
-#
-# The fix: scale every explicit pt value in the STYLE string down by 72/96 = ¾.
-# This leaves the app stylesheet matching macOS visual size on Windows.
-# NOTE: do NOT use QT_FONT_DPI — that env var overrides system/default fonts too
-# (e.g. dialogs, Device Manager) which are already correctly DPI-aware.
-if sys.platform == 'win32':
-    STYLE = (STYLE
-             .replace('font-size:13pt', 'font-size:10pt')
-             .replace('font-size:12pt', 'font-size:9pt')
-             .replace('font-size:26pt', 'font-size:20pt'))
+# ── Font-size scaling note ────────────────────────────────────────────────────
+# The STYLE constant above is NOT scaled at module load time — scaling depends
+# on the real screen DPI which is only available after QApplication is created.
+# The scaling is applied inside main() immediately after app = QApplication()
+# using a regex that catches all "font-size: Npt" patterns regardless of
+# spacing, then stored in a local `_scaled_style` that is passed to
+# app.setStyleSheet().  See the DPI-aware block in main() below.
 
 
 def _style_pt(macos_pt: int) -> str:
-    """Return a CSS font-size declaration scaled for the current platform.
+    """Return a CSS font-size declaration scaled for the actual screen DPI.
 
-    Use this for any stylesheet string that is built dynamically (not part
-    of the top-level STYLE constant which is already scaled at module load).
+    Reads ``ui.theme._DPI_SCALE`` which is set by ``apply_dpi_scale()`` in
+    main() once the real screen DPI is known.  Falls back to a platform guess
+    if called before app startup (e.g. during import-time widget construction).
 
-    Example:
+    Example::
         f"QMenuBar {{ font-size: {_style_pt(12)}; }}"
     """
-    if sys.platform == 'win32':
-        return f"{int(round(macos_pt * 0.75))}pt"
-    return f"{macos_pt}pt"
+    from ui.theme import _DPI_SCALE
+    return f"{max(8, int(round(macos_pt * _DPI_SCALE)))}pt"
 
 
 # ------------------------------------------------------------------ #
@@ -2124,7 +2117,35 @@ if __name__ == "__main__":
 
     app = QApplication(_sys.argv)
     app.setStyle("Fusion")
-    app.setStyleSheet(STYLE)
+
+    # ── DPI-aware font scaling ────────────────────────────────────────────────
+    # Must run AFTER QApplication so we can query the real screen logical DPI.
+    # With AA_EnableHighDpiScaling, logicalDotsPerInch() returns the *logical*
+    # DPI (e.g. 96 on a 200 %-scaled 4K Windows display; 72 on macOS Retina).
+    # scale = 72 / logical_dpi normalises all pt values to the macOS baseline.
+    # NOTE: do NOT use QT_FONT_DPI — that env var affects system dialogs too.
+    _screen_dpi = app.primaryScreen().logicalDotsPerInch()
+    _dpi_scale  = max(0.5, min(1.0, 72.0 / _screen_dpi))
+    log.debug("Screen logical DPI=%.1f  →  font scale=%.3f", _screen_dpi, _dpi_scale)
+
+    from ui.theme      import apply_dpi_scale as _apply_dpi_scale, FONT as _FONT_LIVE
+    from ui.font_utils import sans_font as _sans_font
+    _apply_dpi_scale(_dpi_scale)
+
+    # Regex-scale ALL pt values in STYLE — catches every "font-size: Npt"
+    # pattern regardless of spacing, and correctly handles 11pt (tooltip)
+    # and any future additions, unlike the old 3-value string-replace hack.
+    _scaled_style = re.sub(
+        r'font-size:\s*(\d+)pt',
+        lambda m: f"font-size:{max(8, int(round(int(m.group(1)) * _dpi_scale)))}pt",
+        STYLE,
+    )
+
+    # Set base application font so all Qt widgets that don't have an explicit
+    # QSS font rule inherit the platform-appropriate family (Segoe UI on
+    # Windows, Helvetica Neue on macOS) at the correctly-scaled body size.
+    app.setFont(_sans_font(_FONT_LIVE["body"]))
+    app.setStyleSheet(_scaled_style)
 
     # ── Windows: set stable AppUserModelID before any window is created ──
     # Without this, Windows assigns a generic AUMID based on the exe path,

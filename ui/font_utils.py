@@ -11,6 +11,10 @@ rather than a logical font class.  On Windows, "Menlo" does not exist, so
 every ``QFont("Menlo", ...)`` call in a paintEvent produces misaligned
 numbers because Qt silently substitutes Segoe UI.
 
+On macOS, "Segoe UI" does not exist, so every ``QFont("Segoe UI", ...)``
+call produces text rendered in whatever proportional fallback the OS picks —
+typically Helvetica or Lucida Grande, with different metrics.
+
 Solution
 --------
 Use a platform-aware name *and* set ``setStyleHint`` so Qt's font matcher
@@ -19,11 +23,11 @@ together ensure the closest matching installed font is always selected.
 
 Usage
 -----
-    from ui.font_utils import mono_font
+    from ui.font_utils import sans_font, mono_font, mono_family_css
 
-    p.setFont(mono_font(11))        # monospace, 11 pt
-    p.setFont(mono_font(9))         # smaller
-    fmt.setFont(mono_font(11, bold=True))
+    p.setFont(sans_font(11))                  # sans-serif, 11 pt
+    p.setFont(mono_font(11))                  # monospace, 11 pt
+    lbl.setStyleSheet(f"font-family: {mono_family_css()};")
 """
 from __future__ import annotations
 
@@ -34,14 +38,22 @@ from PyQt5.QtGui import QFont
 def sans_font(point_size: int = 11, bold: bool = False) -> QFont:
     """Return a cross-platform sans-serif QFont.
 
-    * Windows  → Segoe UI   (Windows default UI font since Vista)
-    * macOS    → Helvetica  (macOS default sans-serif)
-    * Linux    → system sans-serif via style hint
+    * Windows → Segoe UI        (native Windows UI font since Vista)
+    * macOS   → Helvetica Neue  (ships on every macOS since 10.9)
+    * Linux   → system default  (empty name → Qt picks the desktop UI font)
 
-    Use for large status/placeholder labels drawn in paintEvent.
-    For regular widget labels, prefer the Qt stylesheet ``font-size`` property.
+    The ``SansSerif`` style hint is always set so Qt's font matcher picks
+    the best installed sans-serif family even if the named family is absent.
+
+    Use for custom-painted labels and headers (``paintEvent``).
+    For regular Qt widgets, prefer the stylesheet ``font-size`` property.
     """
-    name = "Segoe UI" if sys.platform == "win32" else "Helvetica"
+    if sys.platform == "win32":
+        name = "Segoe UI"
+    elif sys.platform == "darwin":
+        name = "Helvetica Neue"
+    else:
+        name = ""      # empty string → Qt uses the current application font
     font = QFont(name, point_size)
     font.setStyleHint(QFont.SansSerif)
     if bold:
@@ -52,9 +64,9 @@ def sans_font(point_size: int = 11, bold: bool = False) -> QFont:
 def mono_font(point_size: int = 11, bold: bool = False) -> QFont:
     """Return a cross-platform monospace QFont.
 
-    * Windows  → Consolas   (built-in since Vista, full Unicode coverage)
-    * macOS    → Menlo      (default macOS terminal font)
-    * Linux    → system monospace fallback via style hint
+    * Windows → Consolas   (built-in since Vista, full Unicode coverage)
+    * macOS   → Menlo      (default macOS terminal font)
+    * Linux   → system monospace fallback via style hint
 
     The ``Monospace`` style hint is always set so Qt's font matcher finds
     the best monospace alternative on any platform even if the named family
@@ -66,3 +78,18 @@ def mono_font(point_size: int = 11, bold: bool = False) -> QFont:
     if bold:
         font.setBold(True)
     return font
+
+
+def mono_family_css() -> str:
+    """CSS ``font-family`` string for QSS monospace rules (platform-aware).
+
+    Windows gets Consolas first; macOS/Linux get Menlo first.
+    Both chains include Courier New as a universal fallback.
+
+    Example::
+
+        lbl.setStyleSheet(f"font-family: {mono_family_css()}; font-size:13pt;")
+    """
+    if sys.platform == "win32":
+        return "'Consolas', 'Menlo', 'Courier New', monospace"
+    return "'Menlo', 'Consolas', 'Courier New', monospace"

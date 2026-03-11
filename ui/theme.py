@@ -14,6 +14,8 @@ Quick reference
 
 from __future__ import annotations
 
+import sys as _sys
+
 # ── Colour palette ─────────────────────────────────────────────────────────────
 
 PALETTE: dict = {
@@ -50,8 +52,22 @@ PALETTE: dict = {
 
 
 # ── Font scale (pt sizes) ──────────────────────────────────────────────────────
+#
+# All values are the macOS 72-DPI baseline.  apply_dpi_scale() rescales them
+# to match the real screen DPI once QApplication has been created.
+#
+# Design rationale
+# ----------------
+# Qt converts stylesheet `pt` values to pixels using the screen logical DPI.
+# macOS uses 72 DPI as its baseline, so "13pt" is 13 logical pixels.
+# Windows/Linux use 96 DPI, making "13pt" render as ~17 px — 33 % larger.
+# The fix: query the real logical DPI after QApplication is created and scale
+# all FONT values by 72 / logical_dpi (clamped to [0.5, 1.0]).
+# With AA_EnableHighDpiScaling active, logical DPI is always the *unscaled*
+# DPI (e.g. 96 on a 200%-scaled 4K Windows display), so one scale factor
+# handles both standard- and high-DPI cases correctly.
 
-FONT: dict = {
+_FONT_BASE: dict = {
     "title":     17,   # sidebar app name / wizard h1
     "heading":   14,   # panel section headings
     "body":      13,   # general text, buttons, inputs
@@ -63,6 +79,35 @@ FONT: dict = {
     "readoutSm": 16,   # compact readout (e.g. exposure/gain value labels)
     "mono":      13,   # monospace values (SNR, frame stats)
 }
+
+# Pre-computed best-guess scale before QApplication / QScreen is available.
+# apply_dpi_scale() is called from main() with the real screen DPI and
+# overwrites both this variable and the FONT dict.
+_DPI_SCALE: float = 1.0 if _sys.platform == "darwin" else 72.0 / 96.0
+
+
+def apply_dpi_scale(scale: float) -> None:
+    """Update FONT in-place using the real screen DPI scale factor.
+
+    Call once, right after ``QApplication`` is created:
+
+        from PyQt5.QtWidgets import QApplication
+        app = QApplication(sys.argv)
+        from ui.theme import apply_dpi_scale
+        apply_dpi_scale(72.0 / app.primaryScreen().logicalDotsPerInch())
+
+    All QSS helpers (btn_primary_qss, etc.) read from FONT at call time, so
+    any widget constructed *after* this call automatically gets the right sizes.
+    """
+    global _DPI_SCALE
+    _DPI_SCALE = scale
+    for k, v in _FONT_BASE.items():
+        FONT[k] = max(8, int(round(v * scale)))
+
+
+# FONT is initialised with the best-guess platform scale; apply_dpi_scale()
+# will refine it once the real screen DPI is known.
+FONT: dict = {k: max(8, int(round(v * _DPI_SCALE))) for k, v in _FONT_BASE.items()}
 
 
 # ── QPalette builder ───────────────────────────────────────────────────────────
