@@ -12,6 +12,12 @@ Graceful degradation
 --------------------
 If llama-cpp-python is not installed the ModelRunner still loads and emits
 load_failed() so the rest of the code can respond appropriately.
+
+Cancellation
+------------
+Call cancel() to set a threading.Event that the inference worker checks
+between tokens.  The worker stops emitting tokens and emits
+response_complete() with whatever text was generated so far.
 """
 
 from __future__ import annotations
@@ -59,9 +65,10 @@ class ModelRunner(QObject):
 
     def __init__(self, parent: Optional[QObject] = None):
         super().__init__(parent)
-        self._model = None
-        self._lock  = threading.Lock()
-        self._busy  = False
+        self._model        = None
+        self._lock         = threading.Lock()
+        self._busy         = False
+        self._cancel_event = threading.Event()
 
     # ------------------------------------------------------------------ #
     #  Public API                                                          #
@@ -100,6 +107,7 @@ class ModelRunner(QObject):
         if self._busy:
             self.error.emit("Already generating — please wait")
             return
+        self._cancel_event.clear()
         threading.Thread(
             target=self._infer_worker,
             args=(messages, max_tokens, temperature),
@@ -107,8 +115,20 @@ class ModelRunner(QObject):
             name="ai-infer",
         ).start()
 
+    def cancel(self) -> None:
+        """
+        Request cancellation of the current inference.
+
+        The worker thread checks the cancel event between tokens and will
+        stop after the next token completes.  response_complete() is still
+        emitted with the partial text generated so far.
+        """
+        self._cancel_event.set()
+        log.debug("ModelRunner: cancel requested")
+
     def unload(self) -> None:
         """Release the model from memory."""
+        self.cancel()   # stop any in-progress inference first
         with self._lock:
             self._model = None
         log.info("AI model unloaded")
@@ -152,6 +172,10 @@ class ModelRunner(QObject):
                 stream=True,
             )
             for chunk in stream:
+                if self._cancel_event.is_set():
+                    log.debug("ModelRunner: inference cancelled after %d tokens",
+                               len(full_text))
+                    break
                 delta = chunk["choices"][0].get("delta", {})
                 token = delta.get("content", "")
                 if token:

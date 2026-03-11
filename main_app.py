@@ -695,7 +695,10 @@ class MainWindow(QMainWindow):
         self._ai_panel.ask_requested.connect(self._ai_service.ask)
         self._ai_panel.close_requested.connect(self._toggle_ai_panel)
         self._ai_panel.clear_requested.connect(self._ai_service.clear_history)
+        self._ai_panel.cancel_requested.connect(self._ai_service.cancel)
+        self._ai_panel.export_requested.connect(self._ai_service.export_history)
         self._ai_panel.support_requested.connect(self._open_support_dialog)
+        self._ai_service.history_exported.connect(self._on_history_exported)
 
         # Settings tab → AI service (enable / disable)
         self._settings_tab.ai_enable_requested.connect(self._on_ai_enable)
@@ -1847,6 +1850,10 @@ class MainWindow(QMainWindow):
             msg.setDefaultButton(QMessageBox.Cancel)
             if msg.exec_() == QMessageBox.Ok:
                 self._acquire_tab.start_acquisition(n_frames, delay)
+
+    def _on_history_exported(self, path: str) -> None:
+        """Show a transient status-bar message when a conversation is exported."""
+        self._status.showMessage(f"Conversation saved → {path}", 6000)
 
     def _toggle_ai_panel(self):
         """Show or hide the AI assistant dock widget."""

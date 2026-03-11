@@ -21,11 +21,17 @@ Conversation history
   A rolling window of _MAX_HISTORY_TURNS exchange pairs (user + assistant)
   is prepended to every request so the model can answer follow-up questions.
   History is cleared when disable() is called or clear_history() is invoked.
+  A threading.Lock guards the list so accidental concurrent access (e.g. a
+  queued Qt signal arriving during a direct call) cannot corrupt it.
 """
 
 from __future__ import annotations
 
+import json
 import logging
+import threading
+import time
+from pathlib import Path
 from typing import Optional
 
 from PyQt5.QtCore import QObject, pyqtSignal
@@ -67,6 +73,7 @@ class AIService(QObject):
     response_complete(str, float)     full text + elapsed seconds
     ai_error(str)                     human-readable error
     history_cleared()                 conversation history was reset
+    history_exported(str)             path of the exported conversation file
     """
 
     status_changed    = pyqtSignal(str)
@@ -74,6 +81,7 @@ class AIService(QObject):
     response_complete = pyqtSignal(str, float)
     ai_error          = pyqtSignal(str)
     history_cleared   = pyqtSignal()
+    history_exported  = pyqtSignal(str)   # emitted with the export file path
 
     # Rolling window: keep the last N user+assistant exchange pairs
     _MAX_HISTORY_TURNS = 6
@@ -86,6 +94,7 @@ class AIService(QObject):
         self._ctx            = ContextBuilder()
         self._status         = "off"
         self._history: list[dict] = []   # alternating user / assistant messages
+        self._history_lock   = threading.Lock()
         self._n_ctx:  int = tmpl.DEFAULT_N_CTX  # updated in enable() from catalog
 
         # Wire local runner signals
@@ -165,14 +174,83 @@ class AIService(QObject):
             self._remote_runner.disconnect()
             self._remote_runner  = None
         self._active_backend = "local"
-        self._history.clear()
+        with self._history_lock:
+            self._history.clear()
         self._set_status("off")
+
+    def cancel(self) -> None:
+        """
+        Cancel the in-progress inference (if any).
+
+        Safe to call when not generating — has no effect.
+        For local inference the worker loop checks the cancel event and stops
+        emitting tokens.  For remote inference the connection is closed.
+        """
+        if self._active_backend == "remote" and self._remote_runner is not None:
+            self._remote_runner.cancel()
+        else:
+            self._runner.cancel()
+        log.debug("AIService: cancel requested (backend=%s)", self._active_backend)
 
     def clear_history(self) -> None:
         """Reset the conversation history without unloading the model."""
-        self._history.clear()
+        with self._history_lock:
+            self._history.clear()
         self.history_cleared.emit()
         log.debug("AIService: conversation history cleared")
+
+    def export_history(self, dest_path: str = "") -> None:
+        """
+        Export the current conversation history to a plain-text file.
+
+        Parameters
+        ----------
+        dest_path : str
+            Full path for the output file.  If empty, writes to
+            ~/Documents/sanjinsight_conversation_<timestamp>.txt.
+
+        Emits history_exported(path) on success, ai_error(msg) on failure.
+        """
+        if not dest_path:
+            ts = time.strftime("%Y%m%d_%H%M%S")
+            docs = Path.home() / "Documents"
+            docs.mkdir(parents=True, exist_ok=True)
+            dest_path = str(docs / f"sanjinsight_conversation_{ts}.txt")
+
+        with self._history_lock:
+            history_snapshot = list(self._history)
+
+        if not history_snapshot:
+            self.ai_error.emit("No conversation to export.")
+            return
+
+        try:
+            lines = [
+                "SanjINSIGHT AI Conversation Export",
+                f"Exported: {time.strftime('%Y-%m-%d %H:%M:%S')}",
+                "=" * 60,
+                "",
+            ]
+            for msg in history_snapshot:
+                role = msg.get("role", "?")
+                content = msg.get("content", "")
+                if role == "user":
+                    lines.append(f"▷ You")
+                    lines.append(f"  {content}")
+                else:
+                    lines.append(f"◉ AI")
+                    lines.append(f"  {content}")
+                lines.append("")
+                lines.append("─" * 60)
+                lines.append("")
+
+            Path(dest_path).write_text("\n".join(lines), encoding="utf-8")
+            log.info("AIService: conversation exported to %s", dest_path)
+            self.history_exported.emit(dest_path)
+        except OSError as exc:
+            msg = f"Failed to export conversation:\n{exc}"
+            log.error("AIService: %s", msg)
+            self.ai_error.emit(msg)
 
     def explain_tab(self) -> None:
         """Ask the AI to explain the current active tab."""
@@ -204,6 +282,9 @@ class AIService(QObject):
         Silently skips if the model is not ready.
         """
         if self._status != "ready":
+            log.debug(
+                "AIService.session_report skipped — not ready (status=%s)",
+                self._status)
             return
         sp         = self._active_system_prompt()
         manual_ctx = manual_rag.retrieve(
@@ -246,16 +327,18 @@ class AIService(QObject):
         system_msg = messages[0]
         user_msg   = messages[-1]
         max_msgs   = self._MAX_HISTORY_TURNS * 2          # pairs → messages
-        trimmed    = self._history[-max_msgs:] if self._history else []
+        with self._history_lock:
+            trimmed = self._history[-max_msgs:] if self._history else []
         full_msgs  = [system_msg] + trimmed + [user_msg]
 
         # Record the user turn now (before inference, so cancel still records it)
-        self._history.append(user_msg)
-        # Keep only the messages that will ever be used in context; trimming here
-        # prevents unbounded memory growth over long sessions.
-        max_stored = self._MAX_HISTORY_TURNS * 2
-        if len(self._history) > max_stored:
-            del self._history[:-max_stored]
+        with self._history_lock:
+            self._history.append(user_msg)
+            # Keep only the messages that will ever be used in context; trimming here
+            # prevents unbounded memory growth over long sessions.
+            max_stored = self._MAX_HISTORY_TURNS * 2
+            if len(self._history) > max_stored:
+                del self._history[:-max_stored]
 
         self._set_status("thinking")
         if self._active_backend == "remote" and self._remote_runner is not None:
@@ -284,10 +367,11 @@ class AIService(QObject):
     def _on_response_complete(self, text: str, elapsed: float) -> None:
         # Record the assistant turn so follow-up questions have context
         if text.strip():
-            self._history.append({"role": "assistant", "content": text})
-            max_stored = self._MAX_HISTORY_TURNS * 2
-            if len(self._history) > max_stored:
-                del self._history[:-max_stored]
+            with self._history_lock:
+                self._history.append({"role": "assistant", "content": text})
+                max_stored = self._MAX_HISTORY_TURNS * 2
+                if len(self._history) > max_stored:
+                    del self._history[:-max_stored]
         self._set_status("ready")
         self.response_complete.emit(text, elapsed)
 

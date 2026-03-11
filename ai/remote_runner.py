@@ -194,10 +194,11 @@ class RemoteRunner(QObject):
 
     def __init__(self, parent: Optional[QObject] = None):
         super().__init__(parent)
-        self._provider:  str = ""
-        self._api_key:   str = ""
-        self._model_id:  str = ""
-        self._busy:      bool = False
+        self._provider:    str = ""
+        self._api_key:     str = ""
+        self._model_id:    str = ""
+        self._busy:        bool = False
+        self._cancel_event = threading.Event()
 
     # ------------------------------------------------------------------ #
     #  Public API                                                          #
@@ -228,6 +229,7 @@ class RemoteRunner(QObject):
         if self._busy:
             self.error.emit("Already generating — please wait")
             return
+        self._cancel_event.clear()
         threading.Thread(
             target=self._infer_worker,
             args=(messages, max_tokens, temperature),
@@ -235,8 +237,20 @@ class RemoteRunner(QObject):
             name="ai-cloud-infer",
         ).start()
 
+    def cancel(self) -> None:
+        """
+        Request cancellation of the current streaming inference.
+
+        Sets a threading.Event that all three streaming methods (_stream_anthropic,
+        _stream_openai, _stream_ollama) check between SSE lines.  The worker
+        stops reading and emits response_complete() with partial text.
+        """
+        self._cancel_event.set()
+        log.debug("RemoteRunner: cancel requested (provider=%s)", self._provider)
+
     def disconnect(self) -> None:
-        """Clear credentials."""
+        """Clear credentials and cancel any in-progress inference."""
+        self.cancel()
         self._provider = ""
         self._api_key  = ""
         self._model_id = ""
@@ -314,11 +328,13 @@ class RemoteRunner(QObject):
                 data = json.loads(body)
                 installed = [m.get("name", "") for m in data.get("models", [])]
                 if self._model_id not in installed:
-                    # model not found but server is alive — warn, don't block
-                    log.warning(
-                        "Ollama: model %r not found in installed models %r. "
-                        "Run: ollama pull %s",
-                        self._model_id, installed, self._model_id)
+                    raise _AuthError(
+                        f"Ollama model '{self._model_id}' is not installed.\n"
+                        f"Pull it first:  ollama pull {self._model_id}\n"
+                        f"Installed models: {', '.join(installed) or '(none)'}"
+                    )
+            except _AuthError:
+                raise
             except Exception:
                 pass   # can't parse tag list — server is alive, continue
 
@@ -377,6 +393,9 @@ class RemoteRunner(QObject):
 
         full_text: list[str] = []
         for line in resp_obj:
+            if self._cancel_event.is_set():
+                log.debug("RemoteRunner: Anthropic stream cancelled")
+                break
             line = line.decode("utf-8", errors="replace").rstrip()
             if not line.startswith("data: "):
                 continue
@@ -412,6 +431,9 @@ class RemoteRunner(QObject):
 
         full_text: list[str] = []
         for line in resp_obj:
+            if self._cancel_event.is_set():
+                log.debug("RemoteRunner: OpenAI stream cancelled")
+                break
             line = line.decode("utf-8", errors="replace").rstrip()
             if not line.startswith("data: "):
                 continue
@@ -464,6 +486,9 @@ class RemoteRunner(QObject):
 
         full_text: list[str] = []
         for line in resp:
+            if self._cancel_event.is_set():
+                log.debug("RemoteRunner: Ollama stream cancelled")
+                break
             line = line.decode("utf-8", errors="replace").rstrip()
             if not line.startswith("data: "):
                 continue

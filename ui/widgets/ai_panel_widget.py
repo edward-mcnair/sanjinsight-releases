@@ -32,7 +32,7 @@ import time
 
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QTextEdit, QLineEdit, QSizePolicy, QFrame)
+    QTextEdit, QLineEdit, QSizePolicy, QFrame, QFileDialog)
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QCursor, QTextCharFormat, QColor, QFont
 from ui.icons      import set_btn_icon
@@ -107,8 +107,10 @@ class AIPanelWidget(QWidget):
     diagnose_requested = pyqtSignal()
     ask_requested      = pyqtSignal(str)
     close_requested    = pyqtSignal()
-    clear_requested    = pyqtSignal()   # user clicked "Clear" — reset conversation
-    support_requested  = pyqtSignal()   # user clicked "Get Support"
+    clear_requested    = pyqtSignal()    # user clicked "Clear" — reset conversation
+    cancel_requested   = pyqtSignal()    # user clicked "Stop" — cancel inference
+    export_requested   = pyqtSignal(str) # user chose an export path (file path)
+    support_requested  = pyqtSignal()    # user clicked "Get Support"
 
     def __init__(self, llama_installed: bool = True, parent=None):
         super().__init__(parent)
@@ -275,11 +277,29 @@ class AIPanelWidget(QWidget):
         self._ask_btn.setEnabled(False)
         self._ask_btn.clicked.connect(self._on_ask)
 
+        # Stop button — visible only while "thinking", replaces Ask semantically
+        self._stop_btn = QPushButton("Stop")
+        set_btn_icon(self._stop_btn, "fa5s.stop-circle", "#ff5555")
+        self._stop_btn.setStyleSheet(f"""
+            QPushButton {{
+                background:#2a1010; color:{_RED};
+                border:1px solid {_RED}44; border-radius:4px;
+                font-size:12pt; padding:5px 10px;
+            }}
+            QPushButton:hover   {{ background:#3a1818; border-color:{_RED}88; }}
+            QPushButton:pressed {{ background:#1a0a0a; }}
+        """)
+        self._stop_btn.setFixedWidth(60)
+        self._stop_btn.setVisible(False)
+        self._stop_btn.setToolTip("Cancel the current AI response")
+        self._stop_btn.clicked.connect(self._on_stop)
+
         input_row.addWidget(self._input)
         input_row.addWidget(self._ask_btn)
+        input_row.addWidget(self._stop_btn)
         lay.addLayout(input_row)
 
-        # ── Token rate + Clear row ──
+        # ── Token rate + Clear + Export row ──
         rate_row = QHBoxLayout()
         self._clear_btn = QPushButton("Clear")
         set_btn_icon(self._clear_btn, "fa5s.trash")
@@ -290,10 +310,24 @@ class AIPanelWidget(QWidget):
         )
         self._clear_btn.setToolTip("Clear conversation history")
         self._clear_btn.clicked.connect(self._on_clear)
+
+        self._export_btn = QPushButton("Export")
+        set_btn_icon(self._export_btn, "fa5s.file-export")
+        self._export_btn.setStyleSheet(
+            f"QPushButton {{ background:transparent; color:{_MUTED}; "
+            f"border:none; font-size:10pt; padding:0px 4px; }}"
+            f"QPushButton:hover {{ color:#888; }}"
+        )
+        self._export_btn.setToolTip("Save conversation to a text file")
+        self._export_btn.setEnabled(False)
+        self._export_btn.clicked.connect(self._on_export)
+
         self._rate_lbl = QLabel("")
         self._rate_lbl.setStyleSheet(f"font-size:10pt; color:{_MUTED};")
         self._rate_lbl.setAlignment(Qt.AlignRight)
         rate_row.addWidget(self._clear_btn)
+        rate_row.addSpacing(4)
+        rate_row.addWidget(self._export_btn)
         rate_row.addStretch()
         rate_row.addWidget(self._rate_lbl)
         lay.addLayout(rate_row)
@@ -354,13 +388,22 @@ class AIPanelWidget(QWidget):
         self._status_state.setText(status)
         self._status_state.setStyleSheet(f"font-size:11pt; color:{color};")
 
-        can_act = (status == "ready")
+        can_act    = (status == "ready")
+        thinking   = (status == "thinking")
+        has_model  = status not in ("off", "error")
+
         if hasattr(self, "_explain_btn"):
             self._explain_btn.setEnabled(can_act)
             self._diagnose_btn.setEnabled(can_act)
+        if hasattr(self, "_ask_btn"):
             self._ask_btn.setEnabled(can_act)
+            self._ask_btn.setVisible(not thinking)
+        if hasattr(self, "_stop_btn"):
+            self._stop_btn.setVisible(thinking)
         if hasattr(self, "_input"):
-            self._input.setEnabled(status != "thinking")
+            self._input.setEnabled(not thinking)
+        if hasattr(self, "_export_btn"):
+            self._export_btn.setEnabled(has_model)
 
     def on_token(self, token: str) -> None:
         """Append a streaming token to the display."""
@@ -520,6 +563,34 @@ class AIPanelWidget(QWidget):
     def _on_clear(self) -> None:
         self.clear_display()
         self.clear_requested.emit()
+
+    def _on_stop(self) -> None:
+        """Cancel the in-progress inference."""
+        self.cancel_requested.emit()
+        # Append a visual cue in the display so the user knows it was cancelled
+        if hasattr(self, "_display"):
+            cursor = self._display.textCursor()
+            cursor.movePosition(cursor.End)
+            fmt = QTextCharFormat()
+            fmt.setForeground(QColor(_AMBER))
+            fmt.setFont(mono_font(9))
+            cursor.insertText(" [stopped]\n", fmt)
+            self._display.setTextCursor(cursor)
+            sb = self._display.verticalScrollBar()
+            sb.setValue(sb.maximum())
+
+    def _on_export(self) -> None:
+        """Open a save dialog and emit export_requested with the chosen path."""
+        import time as _time
+        default_name = f"sanjinsight_conversation_{_time.strftime('%Y%m%d_%H%M%S')}.txt"
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Conversation",
+            default_name,
+            "Text files (*.txt);;All files (*)",
+        )
+        if path:
+            self.export_requested.emit(path)
 
     def _on_ask(self) -> None:
         if not hasattr(self, "_input"):

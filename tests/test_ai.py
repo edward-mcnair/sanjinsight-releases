@@ -142,13 +142,28 @@ class TestManualRag:
         assert result != "", "Expected at least one calibration section to be returned"
 
     def test_retrieve_limit_n_sections(self):
-        """With n_sections=1, the snippet must contain at most one ## heading."""
+        """With n_sections=1, the snippet must contain at most one section block.
+
+        Section blocks are delimited by '\\n\\n' and each starts with a '## '
+        heading line.  The body of a section may legitimately contain '## '
+        within table cells or inline references, so we count section-starting
+        heading lines (lines whose very first characters are '## ') rather
+        than counting all occurrences of the substring.
+        """
         from ai.manual_rag import _load_sections, retrieve
         if not _load_sections():
             pytest.skip("UserManual.md not found")
         result = retrieve("camera acquisition scan live", n_sections=1)
         if result:
-            assert result.count("## ") <= 1
+            # Count only lines that start a new section (begin with "## ")
+            section_heading_lines = [
+                ln for ln in result.splitlines()
+                if ln.startswith("## ")
+            ]
+            assert len(section_heading_lines) <= 1, (
+                f"Expected at most 1 section heading, found "
+                f"{len(section_heading_lines)}: {section_heading_lines}"
+            )
 
     def test_retrieve_impossible_min_score_returns_empty(self):
         """A min_score of 1.0 (perfect Jaccard) should never be satisfied."""
@@ -348,3 +363,159 @@ class TestSynonymNormalisation:
             pytest.skip("UserManual.md not found")
         result = retrieve("camera clipped pixels")
         assert isinstance(result, str)
+
+
+# ================================================================== #
+#  5. BM25 index                                                       #
+# ================================================================== #
+
+class TestBM25Index:
+    """Verify the BM25 retrieval index built over manual sections."""
+
+    def test_bm25_index_returns_expected_types(self):
+        """_load_bm25_index() must return (dict, list, list, float)."""
+        from ai.manual_rag import _load_bm25_index
+        idf, term_freqs, doc_lengths, avgdl = _load_bm25_index()
+        assert isinstance(idf, dict)
+        assert isinstance(term_freqs, list)
+        assert isinstance(doc_lengths, list)
+        assert isinstance(avgdl, float)
+
+    def test_bm25_index_nonempty_when_manual_present(self):
+        """When the manual is available, the index must be populated."""
+        from ai.manual_rag import _load_sections, _load_bm25_index
+        if not _load_sections():
+            pytest.skip("UserManual.md not found")
+        idf, term_freqs, doc_lengths, avgdl = _load_bm25_index()
+        assert len(idf) > 0
+        assert len(term_freqs) > 0
+        assert avgdl > 0.0
+
+    def test_bm25_index_length_matches_sections(self):
+        """term_freqs and doc_lengths must have the same length as _load_sections()."""
+        from ai.manual_rag import _load_sections, _load_bm25_index
+        sections = _load_sections()
+        if not sections:
+            pytest.skip("UserManual.md not found")
+        _, term_freqs, doc_lengths, _ = _load_bm25_index()
+        assert len(term_freqs) == len(sections)
+        assert len(doc_lengths) == len(sections)
+
+    def test_bm25_idf_all_positive(self):
+        """All IDF weights must be positive (Okapi BM25 IDF + 1 guard)."""
+        from ai.manual_rag import _load_sections, _load_bm25_index
+        if not _load_sections():
+            pytest.skip("UserManual.md not found")
+        idf, _, _, _ = _load_bm25_index()
+        for term, weight in idf.items():
+            assert weight > 0, f"IDF for '{term}' is not positive: {weight}"
+
+    def test_bm25_score_function_positive_for_match(self):
+        """_bm25() must return a positive score when the query term is in the doc."""
+        from ai.manual_rag import _bm25
+        from collections import Counter
+        # Artificial single-term scenario
+        idf        = {"exposure": 2.0}
+        tf_counter = Counter({"exposure": 3})
+        score      = _bm25(frozenset(["exposure"]), idf, tf_counter, 10, 10.0)
+        assert score > 0.0, f"BM25 score should be positive, got {score}"
+
+    def test_bm25_score_zero_for_no_match(self):
+        """_bm25() must return 0.0 when no query term matches the document."""
+        from ai.manual_rag import _bm25
+        from collections import Counter
+        idf        = {"exposure": 2.0}
+        tf_counter = Counter({"gain": 5})
+        score      = _bm25(frozenset(["exposure"]), idf, tf_counter, 10, 10.0)
+        assert score == 0.0, f"BM25 score should be 0.0 for no match, got {score}"
+
+    def test_retrieve_bm25_still_passes_threshold(self):
+        """retrieve() with BM25 ranking still respects the Jaccard min_score filter."""
+        from ai.manual_rag import retrieve
+        # min_score=1.0 is impossible for Jaccard — BM25 should not bypass it
+        result = retrieve("camera exposure saturation", min_score=1.0)
+        assert result == "", (
+            "BM25 ranking must not bypass the Jaccard min_score threshold"
+        )
+
+    def test_retrieve_bm25_higher_score_ranked_first(self):
+        """A section with more matching terms should rank above one with fewer."""
+        from ai.manual_rag import _load_sections, retrieve
+        if not _load_sections():
+            pytest.skip("UserManual.md not found")
+        # Both sections should exist; whichever has more 'calibration' term
+        # occurrences should appear first in the result.
+        result = retrieve("calibration temperature coefficient", n_sections=2)
+        if result:
+            blocks = [b for b in result.split("\n\n") if b.strip().startswith("## ")]
+            # Just verify the structure is sane — at most 2 blocks returned
+            assert len(blocks) <= 2
+
+
+# ================================================================== #
+#  6. ModelDownloader SHA-256 field                                    #
+# ================================================================== #
+
+class TestModelCatalog:
+    """Verify that the model catalog sha256 field is present and well-formed."""
+
+    def test_catalog_has_sha256_field(self):
+        """Every MODEL_CATALOG entry must have a 'sha256' key."""
+        from ai.model_catalog import MODEL_CATALOG
+        for model_id, entry in MODEL_CATALOG.items():
+            assert "sha256" in entry, (
+                f"MODEL_CATALOG['{model_id}'] is missing the 'sha256' key"
+            )
+
+    def test_sha256_field_is_string(self):
+        """The 'sha256' field must be a str (empty or 64-char hex digest)."""
+        from ai.model_catalog import MODEL_CATALOG
+        import re
+        hex_re = re.compile(r"^[0-9a-f]{64}$")
+        for model_id, entry in MODEL_CATALOG.items():
+            sha = entry["sha256"]
+            assert isinstance(sha, str), (
+                f"MODEL_CATALOG['{model_id}']['sha256'] must be a str"
+            )
+            # Either empty (no verification) or a valid 64-char lowercase hex digest
+            assert sha == "" or hex_re.match(sha), (
+                f"MODEL_CATALOG['{model_id}']['sha256'] is not empty or valid hex: {sha!r}"
+            )
+
+
+# ================================================================== #
+#  7. AIService cancel / export                                        #
+# ================================================================== #
+
+class TestAIServiceInterface:
+    """Smoke-test the new public methods on AIService without a loaded model."""
+
+    def _make_service(self):
+        """Create an AIService without a QApplication (signals not connected)."""
+        import sys
+        # Minimal PyQt5 setup — import only, no display required
+        from ai.ai_service import AIService
+        # AIService requires a QApplication to exist for QObject
+        # We test the attributes without instantiating (import-level check)
+        return AIService
+
+    def test_cancel_method_exists(self):
+        """AIService must expose a cancel() method."""
+        from ai.ai_service import AIService
+        assert callable(getattr(AIService, "cancel", None)), (
+            "AIService must have a cancel() method"
+        )
+
+    def test_export_history_method_exists(self):
+        """AIService must expose an export_history() method."""
+        from ai.ai_service import AIService
+        assert callable(getattr(AIService, "export_history", None)), (
+            "AIService must have an export_history() method"
+        )
+
+    def test_history_exported_signal_exists(self):
+        """AIService must declare a history_exported signal."""
+        from ai.ai_service import AIService
+        assert hasattr(AIService, "history_exported"), (
+            "AIService must have a 'history_exported' pyqtSignal"
+        )

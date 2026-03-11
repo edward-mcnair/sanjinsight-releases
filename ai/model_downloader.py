@@ -19,6 +19,7 @@ Usage
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import threading
@@ -85,11 +86,22 @@ class ModelDownloader(QObject):
     #  Public API                                                          #
     # ------------------------------------------------------------------ #
 
-    def download(self, url: str, dest_path: str) -> None:
+    def download(self, url: str, dest_path: str,
+                 expected_sha256: str = "") -> None:
         """
         Start downloading *url* to *dest_path* in a background daemon thread.
         The destination directory is created if it does not exist.
         A call while already busy is silently ignored.
+
+        Parameters
+        ----------
+        url : str
+            Remote GGUF file URL.
+        dest_path : str
+            Absolute local path for the downloaded file.
+        expected_sha256 : str
+            Lowercase hex SHA-256 digest to verify after download.
+            Pass an empty string (default) to skip verification.
         """
         if self._busy:
             log.warning("ModelDownloader: already busy, ignoring download request")
@@ -97,7 +109,7 @@ class ModelDownloader(QObject):
         self._cancel_flag.clear()
         threading.Thread(
             target=self._worker,
-            args=(url, dest_path),
+            args=(url, dest_path, expected_sha256),
             daemon=True,
             name="ai-download",
         ).start()
@@ -111,7 +123,8 @@ class ModelDownloader(QObject):
     #  Worker thread                                                       #
     # ------------------------------------------------------------------ #
 
-    def _worker(self, url: str, dest_path: str) -> None:
+    def _worker(self, url: str, dest_path: str,
+                expected_sha256: str = "") -> None:
         self._busy = True
         part_path = dest_path + ".part"
         try:
@@ -147,6 +160,23 @@ class ModelDownloader(QObject):
                         speed   = (done / 1024 / 1024) / elapsed if elapsed > 0 else 0.0
                         self.progress.emit(done, total, speed)
 
+            # ── Integrity check ────────────────────────────────────────────
+            if expected_sha256:
+                self.progress.emit(done, total, 0.0)   # final progress update
+                log.info("ModelDownloader: verifying SHA-256…")
+                actual = self._sha256_file(part_path)
+                if actual.lower() != expected_sha256.lower():
+                    self._cleanup_part(part_path)
+                    msg = (
+                        f"SHA-256 mismatch — file may be corrupt or tampered.\n"
+                        f"Expected: {expected_sha256}\n"
+                        f"Actual:   {actual}"
+                    )
+                    log.error("ModelDownloader: %s", msg)
+                    self.failed.emit(msg)
+                    return
+                log.info("ModelDownloader: SHA-256 verified OK")
+
             # Rename .part → final path
             os.replace(part_path, dest_path)
             log.info("ModelDownloader: complete → %s", dest_path)
@@ -166,3 +196,12 @@ class ModelDownloader(QObject):
                 os.remove(part_path)
         except OSError:
             pass
+
+    @staticmethod
+    def _sha256_file(path: str) -> str:
+        """Compute the lowercase hex SHA-256 digest of a file."""
+        h = hashlib.sha256()
+        with open(path, "rb") as f:
+            for block in iter(lambda: f.read(65536), b""):
+                h.update(block)
+        return h.hexdigest()
