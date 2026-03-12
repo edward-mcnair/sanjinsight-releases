@@ -13,7 +13,7 @@ from PyQt5.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QToolTip,
     QStackedWidget, QSizePolicy, QScrollArea, QFrame,
 )
-from PyQt5.QtCore  import Qt, pyqtSignal, QPoint
+from PyQt5.QtCore  import Qt, pyqtSignal, QPoint, QEvent
 from PyQt5.QtGui   import (
     QColor, QFont, QPainter, QPen, QCursor,
     QPainterPath, QFontMetrics, QPixmap,
@@ -68,6 +68,50 @@ class NavItem(NamedTuple):
 
 
 # ================================================================== #
+#  _SidebarTooltip  — custom tooltip; bypasses macOS native rendering #
+# ================================================================== #
+class _SidebarTooltip(QLabel):
+    """Singleton styled tooltip for sidebar items.
+
+    Intercepts QEvent.ToolTip on _MenuItem/_CollapseHeader so the
+    macOS native tooltip (which ignores QSS) is never shown.
+    """
+    _inst: Optional["_SidebarTooltip"] = None
+
+    @classmethod
+    def get(cls) -> "_SidebarTooltip":
+        if cls._inst is None:
+            cls._inst = cls()
+        return cls._inst
+
+    def __init__(self):
+        super().__init__()
+        self.setWindowFlags(
+            Qt.ToolTip | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WA_TranslucentBackground, False)
+        self.setAttribute(Qt.WA_ShowWithoutActivating, True)
+        self._restyle()
+
+    def _restyle(self):
+        self.setStyleSheet(
+            "QLabel { background:#1a1d28; color:#dde3f2; "
+            "border:1px solid #2e3245; border-radius:5px; "
+            "padding:5px 10px; }")
+        self.setFont(_sans_font(_FONT["body"]))
+
+    def show_tip(self, global_pos: QPoint, text: str):
+        self._restyle()
+        self.setText(text)
+        self.adjustSize()
+        self.move(global_pos + QPoint(16, 8))
+        self.show()
+        self.raise_()
+
+    def hide_tip(self):
+        self.hide()
+
+
+# ================================================================== #
 #  _MenuItem                                                          #
 # ================================================================== #
 class _MenuItem(QWidget):
@@ -93,12 +137,19 @@ class _MenuItem(QWidget):
             self._active = v
             self.update()
 
+    def event(self, e):
+        if e.type() == QEvent.ToolTip:
+            _SidebarTooltip.get().show_tip(e.globalPos(), self._item.label)
+            return True          # suppress native tooltip
+        return super().event(e)
+
     def enterEvent(self, e):
         self._hover = True
         self.update()
 
     def leaveEvent(self, e):
         self._hover = False
+        _SidebarTooltip.get().hide_tip()
         self.update()
 
     def mousePressEvent(self, e):
@@ -205,8 +256,17 @@ class _CollapseHeader(QWidget):
         self.setMouseTracking(True)
         self.setToolTip(title)
 
+    def event(self, e):
+        if e.type() == QEvent.ToolTip:
+            _SidebarTooltip.get().show_tip(e.globalPos(), self._title)
+            return True          # suppress native tooltip
+        return super().event(e)
+
     def enterEvent(self, e): self._hover = True;  self.update()
-    def leaveEvent(self, e): self._hover = False; self.update()
+    def leaveEvent(self, e):
+        self._hover = False
+        _SidebarTooltip.get().hide_tip()
+        self.update()
 
     def mousePressEvent(self, e):
         if e.button() == Qt.LeftButton:

@@ -380,7 +380,8 @@ class ConnectedDevicesButton(QWidget):
             f"font-size:{FONT['label']}pt; font-weight:600; "
             f"color:{txt}; background:transparent;")
         self._arrow_lbl.setStyleSheet(
-            f"font-size:{FONT['label']}pt; color:{sub}; background:transparent;")
+            f"font-size:{int(FONT['label'] * 2.4)}pt; color:{txt}; "
+            f"background:transparent; padding-bottom:6px;")
         self._refresh()
 
         if self._popup:
@@ -480,34 +481,16 @@ class StatusHeader(QWidget):
         lay.addWidget(self._devices_btn)
 
         # ── Demo banner (hidden until activated) ─────────────────────
-        # Two-part segmented widget: [  Demo Mode  |✕]
-        # Outer container owns the blue bg + border-radius (avoids Qt
-        # transparency bleed on QLabel).  Exit button sits on the right
-        # with a red bg and shared-edge border.
-        self._demo_banner = QWidget()
+        # Single unified button: [  Demo Mode  ✕  ]
+        self._demo_banner = QPushButton("  Demo Mode  ✕  ")
         self._demo_banner.setObjectName("demoBanner")
         self._demo_banner.setVisible(False)
         self._demo_banner.setFixedHeight(36)
         self._demo_banner.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
-        self._demo_banner.setAttribute(Qt.WA_StyledBackground, True)
         self._demo_banner.setToolTip(
             "Running with simulated hardware — no instrument connected.\n"
-            "All measurements use synthetic data.")
-        db_lay = QHBoxLayout(self._demo_banner)
-        db_lay.setContentsMargins(0, 0, 0, 0)
-        db_lay.setSpacing(0)
-        self._db_mode_lbl = QLabel("  Demo Mode  ")
-        self._db_mode_lbl.setObjectName("dbModeLabel")
-        self._db_mode_lbl.setAlignment(Qt.AlignCenter)
-        self._db_mode_lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
-        self._db_exit = QPushButton("  ✕  ")
-        self._db_exit.setObjectName("dbExitBtn")
-        self._db_exit.setFixedWidth(44)
-        self._db_exit.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
-        self._db_exit.setToolTip("Exit demo mode and scan for real hardware")
-        self._db_exit.clicked.connect(self.exit_demo_requested)
-        db_lay.addWidget(self._db_mode_lbl, 0)
-        db_lay.addWidget(self._db_exit, 0)
+            "Click to exit demo mode.")
+        self._demo_banner.clicked.connect(self.exit_demo_requested)
         self._refresh_demo_banner_style()
         lay.addWidget(self._demo_banner)
 
@@ -603,7 +586,7 @@ class StatusHeader(QWidget):
                 f"font-size:{FONT['label']}pt; color:{dim}; letter-spacing:1px;")
 
         # Demo banner
-        if hasattr(self, "_db_mode_lbl"):
+        if hasattr(self, "_demo_banner"):
             self._refresh_demo_banner_style()
 
         # AI button (added later via add_ai_button) — re-apply base appearance
@@ -648,50 +631,28 @@ class StatusHeader(QWidget):
     # ── Helpers ───────────────────────────────────────────────────────
 
     def _refresh_demo_banner_style(self) -> None:
-        """Apply PALETTE info/danger colors to the two-part demo banner.
-
-        The outer container owns the blue background so Qt's child-widget
-        transparency doesn't bleed through.  CSS is scoped by object name
-        to prevent rules from leaking into nested children.
-        """
-        _info   = PALETTE.get("info",   "#5b8ff9")
-        _danger = PALETTE.get("danger", "#ff4466")
-        _bg     = PALETTE.get("bg",     "#242424")
+        """Apply PALETTE info color to the unified demo banner button."""
+        _info = PALETTE.get("info", "#5b8ff9")
+        _bg   = PALETTE.get("bg",   "#242424")
 
         def _blend(fg: str, bg: str, a: float) -> str:
-            """Blend fg over bg at alpha a → opaque '#rrggbb'."""
             fr, fg2, fb = int(fg[1:3], 16), int(fg[3:5], 16), int(fg[5:7], 16)
             br, bg2, bb = int(bg[1:3], 16), int(bg[3:5], 16), int(bg[5:7], 16)
             return (f"#{int(fr*a + br*(1-a)):02x}"
                     f"{int(fg2*a + bg2*(1-a)):02x}"
                     f"{int(fb*a + bb*(1-a)):02x}")
 
-        _ib  = _blend(_info,   _bg, 0.28)   # muted blue bg
-        _db  = _blend(_danger, _bg, 0.28)   # muted red bg
-        _dh  = _blend(_danger, _bg, 0.42)   # red hover
-        _dp  = _blend(_danger, _bg, 0.58)   # red pressed
-        _div = _blend(_info,   _bg, 0.45)   # divider between sections
+        _ih = _blend(_info, _bg, 0.85)   # slightly darker on hover
+        _ip = _blend(_info, _bg, 0.70)   # pressed
 
-        # Outer container: blue bg + full border + rounded corners
-        self._demo_banner.setStyleSheet(
-            f"#demoBanner {{ background:{_ib}; border:1px solid {_div}; border-radius:5px; }}")
-
-        # Label: transparent so outer container's blue shows through
-        self._db_mode_lbl.setStyleSheet(
-            f"QLabel#dbModeLabel {{"
-            f" background:transparent; color:{_info}; border:none;"
+        self._demo_banner.setStyleSheet(scaled_qss(
+            f"QPushButton#demoBanner {{"
+            f" background:{_info}; color:#ffffff; border:none;"
+            f" border-radius:5px; padding:0 14px;"
             f" font-size:{FONT['label']}pt; font-weight:600; letter-spacing:1px;"
-            f"}}")
-
-        # Exit button: red bg, right-rounded, shares left border with outer
-        self._db_exit.setStyleSheet(scaled_qss(
-            f"QPushButton#dbExitBtn {{"
-            f" background:{_db}; color:{_danger};"
-            f" border:none; border-left:1px solid {_div};"
-            f" border-radius:0 4px 4px 0; font-size:13pt; font-weight:bold;"
             f"}}"
-            f"QPushButton#dbExitBtn:hover   {{ background:{_dh}; }}"
-            f"QPushButton#dbExitBtn:pressed {{ background:{_dp}; }}"
+            f"QPushButton#demoBanner:hover   {{ background:{_ih}; }}"
+            f"QPushButton#demoBanner:pressed {{ background:{_ip}; }}"
         ))
 
     def _restyle_ai_btn(self) -> None:
@@ -748,6 +709,7 @@ class StatusHeader(QWidget):
 
     def set_demo_mode(self, active: bool):
         """Show or hide the DEMO MODE banner in the header."""
+        self._demo_active = active
         self._demo_banner.setVisible(active)
 
     def connect_estop(self, on_stop, on_clear):
@@ -791,6 +753,10 @@ class StatusHeader(QWidget):
         """Update a device's connection state in the dropdown."""
         name = _DEVICE_LABELS.get(which, which.replace("_", " ").title())
         self._devices_btn.set_device(which, name, ok, tooltip)
+        # Auto-hide the demo banner once any real (non-demo) device connects
+        if ok and not getattr(self, "_demo_active", False) \
+                and hasattr(self, "_demo_banner") and self._demo_banner.isVisible():
+            self._demo_banner.setVisible(False)
 
     def set_connecting(self, which: str):
         """Show amber 'connecting' state while device initializes."""

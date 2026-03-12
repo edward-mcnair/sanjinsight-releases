@@ -218,6 +218,42 @@ class _FlexStack(QStackedWidget):
         return QSize(0, 0)
 
 
+class _SplitterTop(QWidget):
+    """Container for the top pane of the content splitter.
+
+    No QLayout is installed on this widget — the single child (SidebarNav)
+    is positioned manually in resizeEvent.  This is deliberate:
+
+    Qt's QSplitter internally calls qSmartMinSize() during setSizes().
+    When a widget *has a layout*, qSmartMinSize() uses
+    ``widget.layout().minimumSize()`` as a hard floor — completely
+    bypassing any minimumSizeHint() override.  The SidebarNav and its
+    12 tabs have a layout minimum of several hundred pixels, which
+    prevents setSizes([total-240, 240]) from ever giving the bottom
+    drawer its full target height.
+
+    By installing *no layout* here, qSmartMinSize() falls back to
+    ``minimumSizeHint()`` (which we override to (0, 0)), giving the
+    splitter complete freedom to allocate space to the drawer.
+    """
+
+    def __init__(self, child: QWidget, parent=None) -> None:
+        super().__init__(parent)
+        child.setParent(self)
+        # Qt's setParent() marks the child as hidden.  Call show() here so the
+        # child's "explicitly shown" flag is set — it will become visible when
+        # this container widget is shown by the splitter.
+        child.show()
+        self._child = child
+
+    def minimumSizeHint(self) -> QSize:   # noqa: N802
+        return QSize(0, 0)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._child.setGeometry(self.rect())
+
+
 # ------------------------------------------------------------------ #
 #  Main Window                                                        #
 # ------------------------------------------------------------------ #
@@ -291,13 +327,9 @@ class MainWindow(QMainWindow):
         # (built after profile manager; added to stack below)
 
         # ---- Advanced mode: sidebar navigation ----
-        adv_widget = QWidget()
-        adv_layout = QVBoxLayout(adv_widget)
-        adv_layout.setContentsMargins(0, 0, 0, 0)
-        adv_layout.setSpacing(0)
-
+        # _SplitterTop has no layout — see class docstring for why this matters.
         self._nav = SidebarNav(app_name="SanjINSIGHT")
-        adv_layout.addWidget(self._nav)
+        adv_widget = _SplitterTop(self._nav)
 
         hw = config.get("hardware")
         n_tecs = sum(1 for k in ["tec_meerstetter","tec_atec"]
@@ -1152,10 +1184,16 @@ class MainWindow(QMainWindow):
             self._bottom_drawer.show()
             self._drawer_toggle_bar.set_open(True)
             self._drawer_toggle_bar.set_active_tab(self._bottom_drawer.current_tab_index())
-            total = self._content_splitter.height()
-            target = BottomDrawer.HEIGHT_OPEN
-            if total >= target + 100:
-                self._content_splitter.setSizes([total - target, target])
+            # Defer setSizes by one event-loop tick so the splitter has fully
+            # processed the show() before we set proportions.
+            QTimer.singleShot(0, self._apply_drawer_open_size)
+
+    def _apply_drawer_open_size(self) -> None:
+        """Set the drawer to HEIGHT_OPEN after the splitter has settled."""
+        total = self._content_splitter.height()
+        target = BottomDrawer.HEIGHT_OPEN
+        if total >= target + 100:
+            self._content_splitter.setSizes([total - target, target])
 
     # ── About ──────────────────────────────────────────────────────
 

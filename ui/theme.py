@@ -229,8 +229,8 @@ def build_qt_palette(mode: str = "dark"):
     pal.setColor(QPalette.WindowText,      QColor(p["text"]))
     pal.setColor(QPalette.Base,            QColor(p["surface3"]))
     pal.setColor(QPalette.AlternateBase,   QColor(p["surface2"]))
-    pal.setColor(QPalette.ToolTipBase,     QColor(p["surface2"]))
-    pal.setColor(QPalette.ToolTipText,     QColor(p["text"]))
+    pal.setColor(QPalette.ToolTipBase,     QColor("#1a1d28"))   # always dark
+    pal.setColor(QPalette.ToolTipText,     QColor("#dde3f2"))   # always light
     pal.setColor(QPalette.Text,            QColor(p["text"]))
     pal.setColor(QPalette.Button,          QColor(p["surface2"]))
     pal.setColor(QPalette.ButtonText,      QColor(p["text"]))
@@ -833,7 +833,6 @@ QToolTip {{
     border-radius: 4px;
     padding: 6px 10px;
     font-size: {f['label']}pt;
-    opacity: 230;
 }}
 
 /* ════════════════════════════════════════════════════════════════════════════

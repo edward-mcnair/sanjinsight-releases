@@ -8,9 +8,9 @@ Layout inside MainWindow (root QVBoxLayout):
     ├── _header
     ├── _safe_banner
     ├── _content_splitter (QSplitter Vertical, stretch=1)
-    │   ├── _mode_stack
+    │   ├── _SplitterTop (nav widget)
     │   └── _bottom_drawer     ← height 0 when closed
-    └── _drawer_toggle_bar     ← always visible, 28 px
+    └── _drawer_toggle_bar     ← always visible, 34 px
 
 Toggle keyboard shortcut
 ------------------------
@@ -23,6 +23,7 @@ from PyQt5.QtWidgets import (
     QSizePolicy,
 )
 from PyQt5.QtCore import Qt, QSize, pyqtSignal
+from PyQt5.QtGui  import QPainter, QPainterPath, QColor
 
 from ui.theme import FONT, PALETTE
 from ui.icons import IC, make_icon
@@ -115,13 +116,78 @@ class BottomDrawer(QWidget):
         """
 
 
+# ── Grip pill indicator ─────────────────────────────────────────────────────
+
+class _GripPill(QWidget):
+    """Pill-shaped grab handle centered inside DrawerToggleBar.
+
+    Acts like an iOS/macOS bottom-sheet handle — visually communicates
+    "this bar opens a panel below".  Draws a short rounded rectangle that
+    brightens on hover.  Clicking anywhere on the pill emits ``clicked``.
+    """
+
+    clicked = pyqtSignal()
+
+    # Pill dimensions (drawn, not the widget)
+    _PILL_W = 36
+    _PILL_H = 4
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(72, 34)           # same height as the toggle bar
+        self.setCursor(Qt.PointingHandCursor)
+        self.setToolTip("Toggle panel  (Ctrl+`)")
+        self._hovered = False
+
+    # ── Events ─────────────────────────────────────────────────────────
+
+    def enterEvent(self, e) -> None:
+        self._hovered = True
+        self.update()
+
+    def leaveEvent(self, e) -> None:
+        self._hovered = False
+        self.update()
+
+    def mousePressEvent(self, e) -> None:
+        if e.button() == Qt.LeftButton:
+            self.clicked.emit()
+
+    def paintEvent(self, e) -> None:
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+
+        # Resting: textDim at 30 % opacity — subtle but clearly not a hairline.
+        # Hover:   textDim at 100 % — immediately obvious.
+        # Using alpha rather than a separate palette key so both light and
+        # dark themes look correct without extra configuration.
+        col = QColor(PALETTE.get("textDim", "#8892aa"))
+        if not self._hovered:
+            col.setAlphaF(0.30)
+
+        x = (self.width()  - self._PILL_W) // 2
+        y = (self.height() - self._PILL_H) // 2
+        r = self._PILL_H / 2.0
+
+        path = QPainterPath()
+        path.addRoundedRect(float(x), float(y),
+                            float(self._PILL_W), float(self._PILL_H), r, r)
+        p.fillPath(path, col)
+        p.end()
+
+
 # ── Always-visible toggle bar ──────────────────────────────────────────────
 
 class DrawerToggleBar(QWidget):
-    """Persistent 28 px strip at the bottom of the window.
+    """Persistent 34 px strip at the bottom of the window.
 
-    Always visible — even when the drawer is fully collapsed.  Contains
-    Console / Log tab-switcher buttons and a chevron to open/close.
+    Always visible — even when the drawer is fully collapsed.  Contains:
+      • Console / Log quick-access buttons on the left
+      • A centered grip pill (visual affordance + click-to-toggle)
+      • A clearly-labeled "Panel ∧ / ∨" button on the right
+
+    The entire bar highlights on hover (WA_Hover + QSS :hover) so users
+    intuitively understand it's an interactive strip, not just a divider.
 
     Signals
     -------
@@ -136,7 +202,10 @@ class DrawerToggleBar(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedHeight(28)
+        self.setFixedHeight(34)
+        # Enable :hover QSS selector on this widget (stays active even when
+        # the pointer is over child buttons, unlike enterEvent/leaveEvent).
+        self.setAttribute(Qt.WA_Hover, True)
         self._is_open = False
         self._build()
         self._apply_styles()
@@ -148,21 +217,31 @@ class DrawerToggleBar(QWidget):
         lay.setContentsMargins(8, 0, 8, 0)
         lay.setSpacing(2)
 
+        # Left — quick-access tab buttons
         self._console_btn = QPushButton("  Console")
         self._log_btn     = QPushButton("  Log")
         for btn in (self._console_btn, self._log_btn):
             btn.setCheckable(True)
-            btn.setFixedHeight(22)
+            btn.setFixedHeight(26)
 
         self._console_btn.clicked.connect(self._on_console)
         self._log_btn.clicked.connect(self._on_log)
 
         lay.addWidget(self._console_btn)
         lay.addWidget(self._log_btn)
-        lay.addStretch()
+        lay.addStretch(1)
 
-        self._chevron_btn = QPushButton("∧")
-        self._chevron_btn.setFixedSize(22, 22)
+        # Center — grip pill (visual affordance)
+        self._grip = _GripPill()
+        self._grip.clicked.connect(self.toggle_requested)
+        lay.addWidget(self._grip)
+
+        lay.addStretch(1)
+
+        # Right — clearly-labeled toggle button
+        self._chevron_btn = QPushButton("Panel  ∧")
+        self._chevron_btn.setFixedHeight(26)
+        self._chevron_btn.setMinimumWidth(88)
         self._chevron_btn.setToolTip("Toggle panel  (Ctrl+`)")
         self._chevron_btn.clicked.connect(self.toggle_requested)
         lay.addWidget(self._chevron_btn)
@@ -171,7 +250,7 @@ class DrawerToggleBar(QWidget):
 
     def set_open(self, is_open: bool) -> None:
         self._is_open = is_open
-        self._chevron_btn.setText("∨" if is_open else "∧")
+        self._chevron_btn.setText("Panel  ∨" if is_open else "Panel  ∧")
         self._apply_styles()
 
     def set_active_tab(self, idx: int) -> None:
@@ -193,19 +272,23 @@ class DrawerToggleBar(QWidget):
     # ── Theme ──────────────────────────────────────────────────────────
 
     def _apply_styles(self) -> None:
-        P = PALETTE
-        bg      = P.get("surface3",    "#252830")
-        border  = P.get("border",      "#2e3245")
-        accent  = P.get("accent",      "#00d4aa")
-        text    = P.get("text",        "#dde3f2")
-        textdim = P.get("textDim",     "#8892aa")
-        hover   = P.get("surfaceHover","#262a38")
+        P       = PALETTE
+        bg      = P.get("surface3",     "#252830")
+        border  = P.get("border",       "#2e3245")
+        accent  = P.get("accent",       "#00d4aa")
+        text    = P.get("text",         "#dde3f2")
+        textdim = P.get("textDim",      "#8892aa")
+        hover   = P.get("surfaceHover", "#262a38")
         sz      = FONT["label"]
 
+        # Bar: normal bg + gentle hover highlight across the whole strip.
+        # WA_Hover (set in __init__) keeps :hover active even over child widgets.
         self.setStyleSheet(
             f"DrawerToggleBar {{ background:{bg}; border-top:1px solid {border}; }}"
+            f"DrawerToggleBar:hover {{ background:{hover}; }}"
         )
 
+        # Console / Log quick-access buttons
         btn_base = f"""
             QPushButton {{
                 background: transparent;
@@ -224,19 +307,26 @@ class DrawerToggleBar(QWidget):
                 font-weight: bold;
             }}
         """
+
+        # "Panel ∧/∨" — slightly bordered to signal it's the primary action
         chevron_style = f"""
             QPushButton {{
                 background: transparent;
                 color: {textdim};
-                border: none;
+                border: 1px solid transparent;
                 font-size: {sz}pt;
                 border-radius: 3px;
+                padding: 0 10px;
             }}
             QPushButton:hover {{
                 background: {hover};
                 color: {text};
+                border-color: {border};
             }}
         """
+
         self._console_btn.setStyleSheet(btn_base)
         self._log_btn.setStyleSheet(btn_base)
         self._chevron_btn.setStyleSheet(chevron_style)
+        # Repaint the grip pill so its color reflects the current palette
+        self._grip.update()

@@ -83,8 +83,9 @@ class _StatusRow(QWidget):
         col = self._COL.get(state, self._COL["dim"])
         self._dot.setStyleSheet(f"color:{col}; background:transparent;")
         active = state in ("ok", "warn", "err")
+        txt_col = PALETTE.get("text", "#ebebeb") if active else PALETTE.get("textDim", "#777777")
         self._txt.setStyleSheet(
-            f"color:{'#ebebeb' if active else '#777'}; background:transparent; "
+            f"color:{txt_col}; background:transparent; "
             f"font-size:{FONT.get('sublabel', 9)}pt;")
         self._txt.setText(text)
 
