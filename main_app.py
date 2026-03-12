@@ -59,7 +59,7 @@ from acquisition.recipe_tab      import RecipeTab           # ← measurement re
 from acquisition.movie_tab       import MovieTab            # ← movie-mode burst
 from acquisition.transient_tab   import TransientTab        # ← time-resolved transient
 from ui.tabs.prober_tab          import ProberTab           # ← probe-station chuck
-from ui.wizard                   import StandardWizard
+from ui.tabs.autoscan_tab        import AutoScanTab
 from ui.scripting_console        import ScriptingConsoleTab # ← Python console
 from ui.sidebar_nav              import SidebarNav          # ← grouped sidebar nav
 from hardware.device_manager     import DeviceManager
@@ -80,379 +80,17 @@ from utils import safe_call
 # ------------------------------------------------------------------ #
 #  App-wide style                                                     #
 # ------------------------------------------------------------------ #
-
-STYLE_DARK = """
-QMainWindow, QWidget {
-    background-color: #1a1a1a;
-    color: #d0d0d0;
-    font-family: 'Helvetica Neue', Arial;
-    font-size:13pt;
-}
-QTabWidget::pane {
-    border: 1px solid #333;
-    background: #1e1e1e;
-}
-QTabBar::tab {
-    background: #252525;
-    color: #888;
-    padding: 8px 20px;
-    border: 1px solid #333;
-    border-bottom: none;
-    font-size:13pt;
-    letter-spacing: 1px;
-}
-QTabBar::tab:selected {
-    background: #1e1e1e;
-    color: #00d4aa;
-    border-top: 2px solid #00d4aa;
-}
-QTabBar::tab:hover { color: #bbb; }
-QGroupBox {
-    border: 1px solid #333;
-    border-radius: 3px;
-    margin-top: 10px;
-    padding: 8px 6px 6px 6px;
-    font-size:13pt;
-    color: #999;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-}
-QGroupBox::title {
-    subcontrol-origin: margin;
-    subcontrol-position: top left;
-    padding: 0 6px;
-    left: 8px;
-}
-QPushButton {
-    background: #2a2a2a;
-    color: #ccc;
-    border: 1px solid #444;
-    border-radius: 2px;
-    padding: 5px 12px;
-    font-size:13pt;
-}
-QPushButton:hover   { background: #383838; color: #fff; border-color: #666; }
-QPushButton:pressed { background: #1a1a1a; border-color: #888; padding-top: 6px; padding-bottom: 4px; }
-QPushButton:focus   { border-color: #00d4aa88; outline: none; }
-QPushButton:disabled { color: #444; border-color: #2a2a2a; background: #1e1e1e; }
-
-QPushButton#primary {
-    background: #003d2e;
-    color: #00d4aa;
-    border-color: #00d4aa;
-    font-weight: bold;
-}
-QPushButton#primary:hover   { background: #005040; border-color: #00e8bb; color: #00e8bb; }
-QPushButton#primary:pressed { background: #002a1e; border-color: #00b090; padding-top: 6px; padding-bottom: 4px; }
-QPushButton#primary:focus   { border-color: #00d4aa; outline: none; }
-QPushButton#primary:disabled { background: #1a1a1a; color: #2a5040; border-color: #1e3030; }
-
-QPushButton#danger {
-    background: #3d0000;
-    color: #ff6666;
-    border-color: #ff4444;
-}
-QPushButton#danger:hover   { background: #550000; border-color: #ff6666; color: #ff8888; }
-QPushButton#danger:pressed { background: #280000; border-color: #cc2222; padding-top: 6px; padding-bottom: 4px; }
-QPushButton#danger:focus   { border-color: #ff4444; outline: none; }
-QPushButton#danger:disabled { background: #1a1a1a; color: #442222; border-color: #2a1a1a; }
-
-QPushButton#cold_btn {
-    background: #001a33;
-    color: #66aaff;
-    border-color: #3377cc;
-    font-weight: bold;
-}
-QPushButton#cold_btn:hover   { background: #002244; border-color: #4488dd; color: #88bbff; }
-QPushButton#cold_btn:pressed { background: #001122; border-color: #2266bb; padding-top: 6px; padding-bottom: 4px; }
-
-QPushButton#hot_btn {
-    background: #331a00;
-    color: #ffaa44;
-    border-color: #cc6600;
-    font-weight: bold;
-}
-QPushButton#hot_btn:hover   { background: #442200; border-color: #dd7700; color: #ffbb66; }
-QPushButton#hot_btn:pressed { background: #221100; border-color: #aa5500; padding-top: 6px; padding-bottom: 4px; }
-
-/* Running / in-progress state — applied via setProperty("running", True) */
-QPushButton[running="true"] {
-    background: #2a1e00;
-    color: #f5a623;
-    border: 2px solid #f5a62388;
-    font-weight: bold;
-    padding: 4px 11px;
-}
-QPushButton[running="true"]#primary {
-    background: #002820;
-    color: #00d4aa;
-    border: 2px solid #00d4aa88;
-    padding: 4px 11px;
-}
-QSlider::groove:horizontal {
-    height: 3px;
-    background: #333;
-    border-radius: 2px;
-}
-QSlider::handle:horizontal {
-    background: #00d4aa;
-    width: 12px; height: 12px;
-    margin: -5px 0;
-    border-radius: 6px;
-}
-QSlider::sub-page:horizontal { background: #00d4aa; border-radius: 2px; }
-QProgressBar {
-    border: 1px solid #333;
-    border-radius: 2px;
-    background: #222;
-    height: 6px;
-    text-align: center;
-    font-size:12pt;
-    color: #666;
-}
-QProgressBar::chunk { background: #00d4aa; border-radius: 2px; }
-QSpinBox, QDoubleSpinBox, QComboBox {
-    background: #222;
-    color: #ccc;
-    border: 1px solid #444;
-    border-radius: 2px;
-    padding: 3px 6px;
-}
-QComboBox::drop-down { border: none; }
-QTextEdit {
-    background: #111;
-    color: #888;
-    border: 1px solid #2a2a2a;
-    font-family: 'Menlo', 'Courier New', monospace;
-    font-size:12pt;
-}
-QLabel#readout {
-    font-family: 'Menlo', 'Courier New', monospace;
-    font-size:26pt;
-    color: #00d4aa;
-}
-QLabel#readout_warn { color: #ffaa44; }
-QLabel#readout_error { color: #ff6666; }
-QLabel#sublabel {
-    font-size:12pt;
-    color: #888;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-}
-QStatusBar { background: #111; color: #888; font-size:12pt; }
-QMenuBar { background: #111; color: #888; border-bottom: 1px solid #222; font-size:13pt; }
-QMenuBar::item:selected { background: #222; color: #ddd; }
-QMenu { background: #1a1a1a; color: #ccc; border: 1px solid #333; font-size:13pt; }
-QMenu::item:selected { background: #252525; color: #fff; }
-QMenu::separator { height: 1px; background: #333; margin: 4px 0; }
-QToolTip {
-    background-color: #2a2a2a;
-    color: #d0d0d0;
-    border: 1px solid #555;
-    padding: 4px 8px;
-    border-radius: 3px;
-    font-size: 11pt;
-    opacity: 230;
-}
-"""
-
-STYLE_LIGHT = """
-QMainWindow, QWidget {
-    background-color: #f5f5f7;
-    color: #1d1d1f;
-    font-family: 'Helvetica Neue', Arial;
-    font-size:13pt;
-}
-QTabWidget::pane {
-    border: 1px solid #d1d1d6;
-    background: #ffffff;
-}
-QTabBar::tab {
-    background: #ebebeb;
-    color: #636366;
-    padding: 8px 20px;
-    border: 1px solid #d1d1d6;
-    border-bottom: none;
-    font-size:13pt;
-    letter-spacing: 1px;
-}
-QTabBar::tab:selected {
-    background: #ffffff;
-    color: #00b899;
-    border-top: 2px solid #00b899;
-}
-QTabBar::tab:hover { color: #1d1d1f; }
-QGroupBox {
-    border: 1px solid #d1d1d6;
-    border-radius: 3px;
-    margin-top: 10px;
-    padding: 8px 6px 6px 6px;
-    font-size:13pt;
-    color: #636366;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-}
-QGroupBox::title {
-    subcontrol-origin: margin;
-    subcontrol-position: top left;
-    padding: 0 6px;
-    left: 8px;
-}
-QPushButton {
-    background: #e5e5ea;
-    color: #1d1d1f;
-    border: 1px solid #c7c7cc;
-    border-radius: 2px;
-    padding: 5px 12px;
-    font-size:13pt;
-}
-QPushButton:hover   { background: #d4d4d9; color: #000; border-color: #aaaaaf; }
-QPushButton:pressed { background: #c4c4c9; border-color: #888; padding-top: 6px; padding-bottom: 4px; }
-QPushButton:focus   { border-color: #00b89988; outline: none; }
-QPushButton:disabled { color: #aaaaaf; border-color: #d1d1d6; background: #ebebeb; }
-
-QPushButton#primary {
-    background: #d8f5f0;
-    color: #008870;
-    border-color: #00b899;
-    font-weight: bold;
-}
-QPushButton#primary:hover   { background: #b3ede5; border-color: #009980; color: #007060; }
-QPushButton#primary:pressed { background: #ccebe6; border-color: #008870; padding-top: 6px; padding-bottom: 4px; }
-QPushButton#primary:focus   { border-color: #00b899; outline: none; }
-QPushButton#primary:disabled { background: #f5f5f7; color: #99ccc6; border-color: #c0ddd9; }
-
-QPushButton#danger {
-    background: #ffecec;
-    color: #cc1111;
-    border-color: #cc2222;
-}
-QPushButton#danger:hover   { background: #ffd9d9; border-color: #bb1111; color: #aa0000; }
-QPushButton#danger:pressed { background: #ffe5e5; border-color: #991111; padding-top: 6px; padding-bottom: 4px; }
-QPushButton#danger:focus   { border-color: #cc2222; outline: none; }
-QPushButton#danger:disabled { background: #f5f5f7; color: #ddaaaa; border-color: #e8d4d4; }
-
-QPushButton#cold_btn {
-    background: #ddeeff;
-    color: #0055aa;
-    border-color: #4488cc;
-    font-weight: bold;
-}
-QPushButton#cold_btn:hover   { background: #cce0ff; border-color: #3377bb; color: #003388; }
-QPushButton#cold_btn:pressed { background: #bbdaff; border-color: #2266aa; padding-top: 6px; padding-bottom: 4px; }
-
-QPushButton#hot_btn {
-    background: #fff0dd;
-    color: #994400;
-    border-color: #cc7700;
-    font-weight: bold;
-}
-QPushButton#hot_btn:hover   { background: #ffe8cc; border-color: #bb6600; color: #772200; }
-QPushButton#hot_btn:pressed { background: #ffdcbb; border-color: #aa5500; padding-top: 6px; padding-bottom: 4px; }
-
-QPushButton[running="true"] {
-    background: #fff3dd;
-    color: #994400;
-    border: 2px solid #cc880088;
-    font-weight: bold;
-    padding: 4px 11px;
-}
-QPushButton[running="true"]#primary {
-    background: #d8f5f0;
-    color: #008870;
-    border: 2px solid #00b89988;
-    padding: 4px 11px;
-}
-QSlider::groove:horizontal {
-    height: 3px;
-    background: #c7c7cc;
-    border-radius: 2px;
-}
-QSlider::handle:horizontal {
-    background: #00b899;
-    width: 12px; height: 12px;
-    margin: -5px 0;
-    border-radius: 6px;
-}
-QSlider::sub-page:horizontal { background: #00b899; border-radius: 2px; }
-QProgressBar {
-    border: 1px solid #d1d1d6;
-    border-radius: 2px;
-    background: #e5e5ea;
-    height: 6px;
-    text-align: center;
-    font-size:12pt;
-    color: #636366;
-}
-QProgressBar::chunk { background: #00b899; border-radius: 2px; }
-QSpinBox, QDoubleSpinBox, QComboBox {
-    background: #ffffff;
-    color: #1d1d1f;
-    border: 1px solid #c7c7cc;
-    border-radius: 2px;
-    padding: 3px 6px;
-}
-QComboBox::drop-down { border: none; }
-QTextEdit {
-    background: #fafafa;
-    color: #3a3a3c;
-    border: 1px solid #d1d1d6;
-    font-family: 'Menlo', 'Courier New', monospace;
-    font-size:12pt;
-}
-QLabel#readout {
-    font-family: 'Menlo', 'Courier New', monospace;
-    font-size:26pt;
-    color: #00b899;
-}
-QLabel#readout_warn { color: #e08000; }
-QLabel#readout_error { color: #cc1111; }
-QLabel#sublabel {
-    font-size:12pt;
-    color: #636366;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-}
-QStatusBar { background: #ececec; color: #636366; font-size:12pt; }
-QMenuBar { background: #ececec; color: #636366; border-bottom: 1px solid #d1d1d6; font-size:13pt; }
-QMenuBar::item:selected { background: #dddde2; color: #1d1d1f; }
-QMenu { background: #f5f5f7; color: #1d1d1f; border: 1px solid #d1d1d6; font-size:13pt; }
-QMenu::item:selected { background: #e5e5ea; color: #000; }
-QMenu::separator { height: 1px; background: #d1d1d6; margin: 4px 0; }
-QToolTip {
-    background-color: #ffffff;
-    color: #1d1d1f;
-    border: 1px solid #c7c7cc;
-    padding: 4px 8px;
-    border-radius: 3px;
-    font-size: 11pt;
-    opacity: 230;
-}
-"""
+# The application stylesheet is generated by ui.theme.build_style()
+# at startup (after DPI scaling) and on every theme switch.
+# See the main() function below for the call site.
 
 # ── Font-size scaling note ────────────────────────────────────────────────────
-# STYLE_DARK / STYLE_LIGHT are NOT scaled at module load time — scaling depends
+# The STYLE constant above is NOT scaled at module load time — scaling depends
 # on the real screen DPI which is only available after QApplication is created.
-# build_style() applies the DPI regex before returning the final stylesheet.
-# See the DPI-aware block in main() below.
-
-
-def build_style(mode: str = "dark") -> str:
-    """Return the DPI-scaled QSS stylesheet for the requested theme.
-
-    Applies the same ``font-size: Npt`` regex scaling as the old inline
-    ``re.sub()`` block in ``main()``.  On macOS (scale=1.0) the string is
-    returned unchanged.
-    """
-    from ui.theme import _DPI_SCALE
-    raw = STYLE_DARK if mode == "dark" else STYLE_LIGHT
-    if _DPI_SCALE == 1.0:
-        return raw
-    return re.sub(
-        r'font-size:\s*(\d+)pt',
-        lambda m: f"font-size:{max(8, int(round(int(m.group(1)) * _DPI_SCALE)))}pt",
-        raw,
-    )
+# The scaling is applied inside main() immediately after app = QApplication()
+# using a regex that catches all "font-size: Npt" patterns regardless of
+# spacing, then stored in a local `_scaled_style` that is passed to
+# app.setStyleSheet().  See the DPI-aware block in main() below.
 
 
 def _style_pt(macos_pt: int) -> str:
@@ -538,7 +176,7 @@ def hline():
 # ── UI widgets and tabs (extracted to their own modules) ──────────────
 from ui.widgets.image_pane    import ImagePane
 from ui.widgets.temp_plot     import TempPlot
-from ui.widgets.status_header import StatusHeader, _ModeToggle
+from ui.widgets.status_header import StatusHeader
 from ui.tabs.acquire_tab      import AcquireTab
 from ui.tabs.camera_tab       import CameraTab
 from ui.tabs.temperature_tab  import TemperatureTab
@@ -548,6 +186,12 @@ from ui.tabs.stage_tab        import StageTab
 from ui.tabs.roi_tab          import RoiTab
 from ui.tabs.autofocus_tab    import AutofocusTab, FocusPlot
 from ui.tabs.log_tab          import LogTab
+from ui.tabs.capture_tab           import CaptureTab
+from ui.tabs.transient_capture_tab import TransientCaptureTab
+from ui.tabs.camera_control_tab    import CameraControlTab
+from ui.tabs.stimulus_tab          import StimulusTab
+from ui.tabs.library_tab           import LibraryTab
+from ui.widgets.bottom_drawer      import BottomDrawer, DrawerToggleBar
 from ai.metrics_service          import MetricsService
 from ai.diagnostic_engine        import DiagnosticEngine
 from ui.widgets.readiness_widget import ReadinessWidget
@@ -555,6 +199,23 @@ from ai.ai_service               import AIService
 from ai.model_runner             import llama_available
 from ai.model_downloader         import ModelDownloader, RECOMMENDED_MODEL, DEFAULT_MODELS_DIR
 from ui.widgets.ai_panel_widget  import AIPanelWidget
+
+
+# ------------------------------------------------------------------ #
+#  Helpers                                                            #
+# ------------------------------------------------------------------ #
+
+class _FlexStack(QStackedWidget):
+    """QStackedWidget that reports a zero minimum-size hint.
+
+    When placed in a QSplitter the splitter uses minimumSizeHint() to
+    determine how much space each child must keep.  Returning (0,0) lets
+    the splitter freely shrink the mode-stack so the bottom drawer can
+    always open to its target height regardless of the current tab's
+    preferred size.
+    """
+    def minimumSizeHint(self):          # noqa: N802
+        return QSize(0, 0)
 
 
 # ------------------------------------------------------------------ #
@@ -612,10 +273,19 @@ class MainWindow(QMainWindow):
             self._open_device_manager)
         root.addWidget(self._safe_banner)
 
-        # Tabs
-        # Mode stack — index 0 = Standard (wizard), index 1 = Advanced (tabs)
-        self._mode_stack = QStackedWidget()
-        root.addWidget(self._mode_stack)
+        # Content splitter: nav widget above, BottomDrawer (Console+Log) below.
+        # BottomDrawer is collapsed to 0 by default; Ctrl+` toggles it.
+        self._content_splitter = QSplitter(Qt.Vertical)
+        self._content_splitter.setHandleWidth(5)
+        self._content_splitter.setOpaqueResize(True)
+        # nav widget added below after adv_widget is built
+        self._content_splitter.setCollapsible(0, False)
+        root.addWidget(self._content_splitter, 1)
+
+        # Always-visible toggle bar below the splitter.
+        # Provides Console / Log buttons + open/close chevron even when drawer == 0 px.
+        self._drawer_toggle_bar = DrawerToggleBar()
+        root.addWidget(self._drawer_toggle_bar)
 
         # ---- Standard mode ----
         # (built after profile manager; added to stack below)
@@ -646,15 +316,8 @@ class MainWindow(QMainWindow):
         self._bias_tab     = BiasTab(hw_service=hw_service)
         self._stage_tab    = StageTab(hw_service=hw_service)
 
-        # Wire "Open Device Manager" signals from hardware tabs
-        self._camera_tab.open_device_manager.connect(self._open_device_manager)
-        self._fpga_tab.open_device_manager.connect(self._open_device_manager)
-        self._bias_tab.open_device_manager.connect(self._open_device_manager)
+        # Stage "Open Device Manager" — standalone, wire here
         self._stage_tab.open_device_manager.connect(self._open_device_manager)
-
-        # Wire "Go to Acquire" from the analysis empty-state button
-        self._analysis_tab.navigate_to_acquire.connect(
-            lambda: self._nav.navigate_to(self._acquire_tab))
 
         self._roi_tab      = RoiTab()
         self._af_tab       = AutofocusTab()
@@ -664,7 +327,6 @@ class MainWindow(QMainWindow):
         self._data_tab     = DataTab(session_mgr)
         self._log_tab      = LogTab()
         self._settings_tab = SettingsTab()
-        self._settings_tab.theme_changed.connect(self.apply_theme)
 
         # ── Metrics service + readiness banner ───────────────────
         self._metrics = MetricsService(hw_service, parent=self)
@@ -708,8 +370,44 @@ class MainWindow(QMainWindow):
         self._transient_tab = TransientTab()                    # ← time-resolved
         self._prober_tab   = ProberTab()                        # ← probe chuck
 
+        # ── Merged tabs ──────────────────────────────────────────────────
+        # Each merged tab wraps multiple individual tabs into one sidebar entry.
+        self._capture_tab           = CaptureTab(self._acquire_tab, self._scan_tab)
+        self._transient_capture_tab = TransientCaptureTab(self._transient_tab, self._movie_tab)
+        self._camera_ctrl_tab       = CameraControlTab(self._camera_tab, self._roi_tab, self._af_tab)
+        self._stimulus_tab          = StimulusTab(self._fpga_tab, self._bias_tab)
+        self._library_tab           = LibraryTab(self._profile_tab, self._recipe_tab)
+        self._autoscan_tab          = AutoScanTab()
+
+        # ── Bottom drawer (Console + Log) ────────────────────────────────
+        self._bottom_drawer = BottomDrawer(self._console_tab, self._log_tab)
+        self._content_splitter.addWidget(adv_widget)          # index 0 — nav
+        self._content_splitter.addWidget(self._bottom_drawer)
+        self._content_splitter.setCollapsible(1, False)  # drag stops at minimum; use toggle bar to close
+        self._bottom_drawer.hide()   # start hidden — splitter reclaims the space
+
+        # Wire DrawerToggleBar ↔ bottom drawer
+        self._drawer_toggle_bar.console_requested.connect(
+            lambda: (self._bottom_drawer.show_console(),
+                     self._drawer_toggle_bar.set_active_tab(0)))
+        self._drawer_toggle_bar.log_requested.connect(
+            lambda: (self._bottom_drawer.show_log(),
+                     self._drawer_toggle_bar.set_active_tab(1)))
+        self._drawer_toggle_bar.toggle_requested.connect(self._toggle_bottom_drawer)
+
+        # Wire "Open Device Manager" from merged hardware tabs → MainWindow
+        self._camera_ctrl_tab.open_device_manager.connect(self._open_device_manager)
+        self._stimulus_tab.open_device_manager.connect(self._open_device_manager)
+
+        # Wire "Go to Acquire" from the analysis empty-state button
+        self._analysis_tab.navigate_to_acquire.connect(
+            lambda: self._nav.navigate_to(self._capture_tab))
+
         # Wire recipe RUN signal → apply recipe to hardware
         self._recipe_tab.recipe_run.connect(self._apply_recipe)
+
+        # Wire Settings tab → theme toggle (Auto / Dark / Light)
+        self._settings_tab.theme_changed.connect(self.apply_theme)
 
         # Wire Settings tab → manual update check
         self._settings_tab.check_for_updates_requested.connect(
@@ -742,41 +440,32 @@ class MainWindow(QMainWindow):
         self._model_downloader.failed.connect(
             self._settings_tab.set_download_failed)
 
-        # ── Register panels with the Bootstrap-style sidebar ─────
+        # ── Register all panels with the sidebar nav ──────────────────
         from ui.sidebar_nav import NavItem as NI
         from ui.icons import NAV_ICONS as _I, GROUP_ICONS as _G
 
-        self._nav.add_section("MEASURE", [
-            NI("Live",        _I["Live"],        self._live_tab,     badge="★"),
-            NI("Acquire",     _I["Acquire"],     self._acquire_tab,  badge="★"),
-            NI("Scan",        _I["Scan"],        self._scan_tab),
-            NI("Movie",       _I["Movie"],       self._movie_tab),
-            NI("Transient",   _I["Transient"],   self._transient_tab),
+        self._nav.add_section("ACQUIRE", [
+            NI("AutoScan",    _I["AutoScan"],          self._autoscan_tab,         badge="★"),
+            NI("Live",        _I["Live"],              self._live_tab,             badge="★"),
+            NI("Capture",     _I["Capture"],           self._capture_tab,          badge="★"),
+            NI("Transient",   _I["Transient"],         self._transient_capture_tab),
         ])
-        self._nav.add_section("ANALYSIS", [
-            NI("Calibration", _I["Calibration"], self._cal_tab),
-            NI("Analysis",    _I["Analysis"],    self._analysis_tab, badge="★"),
-            NI("Compare",     _I["Compare"],     self._compare_tab),
-            NI("3D Surface",  _I["3D Surface"],  self._surface_tab),
+        self._nav.add_section("ANALYZE", [
+            NI("Calibration", _I["Calibration"],       self._cal_tab),
+            NI("Analysis",    _I["Analysis"],          self._analysis_tab,         badge="★"),
+            NI("Sessions",    _I["Sessions"],          self._data_tab),
         ])
         self._nav.add_collapsible("Hardware", _G["Hardware"], [
-            NI("Camera",      _I["Camera"],      self._camera_tab),
-            NI("Temperature", _I["Temperature"], self._temp_tab),
-            NI("FPGA",        _I["FPGA"],        self._fpga_tab),
-            NI("Bias Source", _I["Bias Source"], self._bias_tab),
-            NI("Stage",       _I["Stage"],       self._stage_tab),
-            NI("Prober",      _I["Prober"],      self._prober_tab),
-            NI("ROI",         _I["ROI"],         self._roi_tab),
-            NI("Autofocus",   _I["Autofocus"],   self._af_tab),
+            NI("Camera",      _I["Camera"],            self._camera_ctrl_tab),
+            NI("Stimulus",    _I["Stimulus"],          self._stimulus_tab),
+            NI("Temperature", _I["Temperature"],       self._temp_tab),
+            NI("Stage",       _I["Stage"],             self._stage_tab),
+            NI("Prober",      _I["Prober"],            self._prober_tab),
         ], collapsed=False)
-        self._nav.add_section("SETUP", [
-            NI("Profiles",    _I["Profiles"],    self._profile_tab),
-            NI("Recipes",     _I["Recipes"],     self._recipe_tab),
+        self._nav.add_section("LIBRARY", [
+            NI("Profiles",    _I["Library"],           self._library_tab),
         ])
-        self._nav.add_section("TOOLS", [
-            NI("Data",        _I["Data"],        self._data_tab),
-            NI("Console",     _I["Console"],     self._console_tab),
-            NI("Log",         _I["Log"],         self._log_tab),
+        self._nav.add_section("", [
             NI("Settings",    _I["Settings"],    self._settings_tab),
         ])
         self._nav.finish()
@@ -786,46 +475,26 @@ class MainWindow(QMainWindow):
         # The "Show all…" toggle at the bottom of the Hardware group reveals
         # them if the user wants to browse or re-enable them.
         _hw_cfg = config.get("hardware", {})
-        # Camera is enabled by default; always shown
         # Temperature: shown if at least one TEC is enabled
         if n_tecs == 0:
             self._nav.set_item_visible("Temperature", False)
-        # FPGA: shown if enabled
+        # Stimulus (FPGA+Bias): shown if FPGA is enabled
         if not _hw_cfg.get("fpga", {}).get("enabled", True):
-            self._nav.set_item_visible("FPGA", False)
-        # Bias Source: hidden unless explicitly enabled
-        if not _hw_cfg.get("bias", {}).get("enabled", False):
-            self._nav.set_item_visible("Bias Source", False)
+            self._nav.set_item_visible("Stimulus", False)
         # Stage: hidden unless explicitly enabled
         if not _hw_cfg.get("stage", {}).get("enabled", False):
             self._nav.set_item_visible("Stage", False)
-        # Prober: hidden unless explicitly enabled
-        if not _hw_cfg.get("prober", {}).get("enabled", False):
-            self._nav.set_item_visible("Prober", False)
+        # Prober: always shown (was previously behind "Show more…" toggle)
 
         self._nav.select_first()
-
-        # Build wizard (Standard mode)
-        self._wizard = StandardWizard(self._profile_mgr, hw_service=hw_service)
-
-        # Add both to mode stack — Standard first (index 0)
-        self._mode_stack.addWidget(self._wizard)
-        self._mode_stack.addWidget(adv_widget)
-        self._mode_stack.setCurrentIndex(0)   # default: Standard
-
-        # Connect mode toggle button
-        self._header.connect_mode_toggle(self._on_mode_change)
 
         # Connect demo mode exit button
         self._header.exit_demo_requested.connect(self._deactivate_demo_mode)
 
-        # Restore last-used mode from preferences
-        import config as _cfg
-        saved_mode = _cfg.get_pref("ui.mode", "standard")
-        if saved_mode == "advanced":
-            # Set toggle position without firing the callback yet
-            self._header.set_mode(True)
-            self._mode_stack.setCurrentIndex(1)
+        # AutoScanTab signal wiring
+        self._autoscan_tab.scan_requested.connect(self._on_autoscan_scan_requested)
+        self._autoscan_tab.send_to_analysis.connect(self._on_autoscan_send_to_analysis)
+        self._autoscan_tab.abort_requested.connect(self._on_autoscan_abort_requested)
 
         # Device manager — dialog created eagerly (hidden) so hw_status_changed
         # is wired from app start.  The auto-scan now fires on first open (not
@@ -892,57 +561,37 @@ class MainWindow(QMainWindow):
     def _build_palette_items(self) -> list:
         """Return all PaletteItems for the command palette (Ctrl+K)."""
         return [
-            # MEASURE
-            PaletteItem("Live",       "Measure",   lambda: self._nav.navigate_to(self._live_tab),
+            # ACQUIRE
+            PaletteItem("Live",        "Acquire",  lambda: self._nav.navigate_to(self._live_tab),
                         keywords=["live", "stream", "preview", "camera"]),
-            PaletteItem("Acquire",    "Measure",   lambda: self._nav.navigate_to(self._acquire_tab),
-                        keywords=["acquire", "capture", "run", "start"]),
-            PaletteItem("Scan",       "Measure",   lambda: self._nav.navigate_to(self._scan_tab),
-                        keywords=["scan", "sweep", "map"]),
-            PaletteItem("Movie",      "Measure",   lambda: self._nav.navigate_to(self._movie_tab),
-                        keywords=["movie", "burst", "video"]),
-            PaletteItem("Transient",  "Measure",   lambda: self._nav.navigate_to(self._transient_tab),
-                        keywords=["transient", "time-resolved", "pulsed"]),
-            # ANALYSIS
-            PaletteItem("Calibration","Analysis",  lambda: self._nav.navigate_to(self._cal_tab),
+            PaletteItem("Capture",     "Acquire",  lambda: self._nav.navigate_to(self._capture_tab),
+                        keywords=["capture", "acquire", "scan", "sweep", "map", "run", "start"]),
+            PaletteItem("Transient",   "Acquire",  lambda: self._nav.navigate_to(self._transient_capture_tab),
+                        keywords=["transient", "time-resolved", "pulsed", "movie", "burst"]),
+            # ANALYZE
+            PaletteItem("Calibration", "Analyze",  lambda: self._nav.navigate_to(self._cal_tab),
                         keywords=["calibration", "cal", "reference"]),
-            PaletteItem("Analysis",   "Analysis",  lambda: self._nav.navigate_to(self._analysis_tab),
+            PaletteItem("Analysis",    "Analyze",  lambda: self._nav.navigate_to(self._analysis_tab),
                         keywords=["analysis", "process", "result"]),
-            PaletteItem("Compare",    "Analysis",  lambda: self._nav.navigate_to(self._compare_tab),
-                        keywords=["compare", "comparison", "diff"]),
-            PaletteItem("3D Surface", "Analysis",  lambda: self._nav.navigate_to(self._surface_tab),
-                        keywords=["3d", "surface", "plot", "mesh"]),
+            PaletteItem("Sessions",    "Analyze",  lambda: self._nav.navigate_to(self._data_tab),
+                        keywords=["sessions", "data", "compare", "3d", "surface", "export"]),
             # HARDWARE
-            PaletteItem("Camera",     "Hardware",  lambda: self._nav.navigate_to(self._camera_tab),
-                        keywords=["camera", "sensor", "exposure", "gain"]),
-            PaletteItem("Temperature","Hardware",  lambda: self._nav.navigate_to(self._temp_tab),
+            PaletteItem("Camera",      "Hardware", lambda: self._nav.navigate_to(self._camera_ctrl_tab),
+                        keywords=["camera", "sensor", "exposure", "gain", "roi", "autofocus"]),
+            PaletteItem("Stimulus",    "Hardware", lambda: self._nav.navigate_to(self._stimulus_tab),
+                        keywords=["stimulus", "fpga", "modulation", "lock-in", "bias", "voltage"]),
+            PaletteItem("Temperature", "Hardware", lambda: self._nav.navigate_to(self._temp_tab),
                         keywords=["temperature", "tec", "thermoelectric", "heat"]),
-            PaletteItem("FPGA",       "Hardware",  lambda: self._nav.navigate_to(self._fpga_tab),
-                        keywords=["fpga", "modulation", "lock-in"]),
-            PaletteItem("Bias Source","Hardware",  lambda: self._nav.navigate_to(self._bias_tab),
-                        keywords=["bias", "voltage", "current", "source"]),
-            PaletteItem("Stage",      "Hardware",  lambda: self._nav.navigate_to(self._stage_tab),
+            PaletteItem("Stage",       "Hardware", lambda: self._nav.navigate_to(self._stage_tab),
                         keywords=["stage", "motion", "xy", "position"]),
-            PaletteItem("Prober",     "Hardware",  lambda: self._nav.navigate_to(self._prober_tab),
+            PaletteItem("Prober",      "Hardware", lambda: self._nav.navigate_to(self._prober_tab),
                         keywords=["prober", "probe", "chuck"]),
-            PaletteItem("ROI",        "Hardware",  lambda: self._nav.navigate_to(self._roi_tab),
-                        keywords=["roi", "region", "crop", "area"]),
-            PaletteItem("Autofocus",  "Hardware",  lambda: self._nav.navigate_to(self._af_tab),
-                        keywords=["autofocus", "focus", "af", "z"]),
-            # SETUP
-            PaletteItem("Profiles",   "Setup",     lambda: self._nav.navigate_to(self._profile_tab),
-                        keywords=["profile", "material", "sample"]),
-            PaletteItem("Recipes",    "Setup",     lambda: self._nav.navigate_to(self._recipe_tab),
-                        keywords=["recipe", "preset", "workflow"]),
-            # TOOLS
-            PaletteItem("Data",       "Tools",     lambda: self._nav.navigate_to(self._data_tab),
-                        keywords=["data", "sessions", "export", "files"]),
-            PaletteItem("Console",    "Tools",     lambda: self._nav.navigate_to(self._console_tab),
-                        keywords=["console", "python", "script", "repl"]),
-            PaletteItem("Log",        "Tools",     lambda: self._nav.navigate_to(self._log_tab),
-                        keywords=["log", "events", "history"]),
-            PaletteItem("Settings",   "Tools",     lambda: self._nav.navigate_to(self._settings_tab),
-                        keywords=["settings", "preferences", "config"]),
+            # LIBRARY
+            PaletteItem("Profiles",    "Library",  lambda: self._nav.navigate_to(self._library_tab),
+                        keywords=["library", "profiles", "recipes", "materials", "presets"]),
+            # SETTINGS
+            PaletteItem("Settings",    "Settings", lambda: self._nav.navigate_to(self._settings_tab),
+                        keywords=["settings", "preferences", "config", "theme", "updates"]),
         ]
 
     def _connect_signals(self):
@@ -961,6 +610,12 @@ class MainWindow(QMainWindow):
         signals.acq_progress.connect(self._on_acq_progress)
         signals.acq_complete.connect(self._on_acq_complete)
         signals.acq_saved.connect(self._on_acq_saved)
+        # AutoScan live + result feeds
+        signals.new_live_frame.connect(self._autoscan_tab.on_live_frame)
+        signals.acq_progress.connect(self._autoscan_tab.on_acq_progress)
+        signals.acq_complete.connect(self._autoscan_tab.on_acq_complete)
+        signals.scan_progress.connect(self._autoscan_tab.on_scan_progress)
+        signals.scan_complete.connect(self._autoscan_tab.on_scan_complete)
         signals.log_message.connect(self._on_log)
         signals.error.connect(self._on_error)
         # TEC alarm signals
@@ -1026,6 +681,59 @@ class MainWindow(QMainWindow):
         self._evidence_timer.setInterval(3000)
         self._evidence_timer.timeout.connect(self._refresh_evidence_panel)
         self._evidence_timer.start()
+
+        # Auto OS-theme polling — polls every 5 s while pref == "auto"
+        from ui.theme import detect_system_theme as _dst, active_theme as _at
+        self._last_system_theme = _at()
+        self._auto_theme_timer = QTimer(self)
+        self._auto_theme_timer.setInterval(5000)
+        self._auto_theme_timer.timeout.connect(self._poll_system_theme)
+        if config.get_pref("ui.theme", "auto") == "auto":
+            self._auto_theme_timer.start()
+
+    # ── Theme switching ───────────────────────────────────────────────────────
+
+    def _swap_visual_theme(self, effective: str) -> None:
+        """Core visual swap — applies 'dark' or 'light' with no flicker.
+
+        Does NOT touch pref storage or the auto-polling timer.
+        """
+        from ui.theme import set_theme, build_qt_palette, build_style as _bs
+        app = QApplication.instance()
+        self.setUpdatesEnabled(False)
+        try:
+            set_theme(effective)
+            app.setStyleSheet(_bs(effective))
+            app.setPalette(build_qt_palette())
+            for w in app.allWidgets():
+                if hasattr(w, "_apply_styles"):
+                    w._apply_styles()
+                w.update()
+        finally:
+            self.setUpdatesEnabled(True)
+
+    def apply_theme(self, mode: str) -> None:
+        """Switch theme preference to 'auto', 'dark', or 'light'."""
+        from ui.theme import detect_system_theme
+        if mode == "auto":
+            effective = detect_system_theme()
+            self._last_system_theme = effective
+            self._auto_theme_timer.start()
+        else:
+            self._auto_theme_timer.stop()
+            effective = mode
+        config.set_pref("ui.theme", mode)
+        self._swap_visual_theme(effective)
+
+    def _poll_system_theme(self) -> None:
+        """Called every 5 s while auto mode is active; swaps if OS theme changed."""
+        from ui.theme import detect_system_theme
+        current = detect_system_theme()
+        if current != getattr(self, "_last_system_theme", None):
+            self._last_system_theme = current
+            self._swap_visual_theme(current)
+
+    # ── Camera frames ─────────────────────────────────────────────────────────
 
     def _on_frame(self, frame):
         # Ack immediately so the camera thread can queue the next frame while
@@ -1268,7 +976,7 @@ class MainWindow(QMainWindow):
         act_scan = acq_menu.addAction("Scan Mode")
         act_scan.setShortcut(QKeySequence("Ctrl+Shift+S"))
         act_scan.triggered.connect(
-            lambda: self._nav.navigate_to(self._scan_tab))
+            lambda: self._nav.navigate_to(self._capture_tab))
 
         acq_menu.addSeparator()
 
@@ -1311,12 +1019,12 @@ class MainWindow(QMainWindow):
         act_acquire_view = view_menu.addAction("Acquire")
         act_acquire_view.setShortcut(QKeySequence("Ctrl+1"))
         act_acquire_view.triggered.connect(
-            lambda: self._nav.navigate_to(self._acquire_tab))
+            lambda: self._nav.navigate_to(self._capture_tab))
 
         act_camera_view = view_menu.addAction("Camera")
         act_camera_view.setShortcut(QKeySequence("Ctrl+2"))
         act_camera_view.triggered.connect(
-            lambda: self._nav.navigate_to(self._camera_tab))
+            lambda: self._nav.navigate_to(self._camera_ctrl_tab))
 
         act_temp_view = view_menu.addAction("Temperature")
         act_temp_view.setShortcut(QKeySequence("Ctrl+3"))
@@ -1390,6 +1098,10 @@ class MainWindow(QMainWindow):
         palette_sc = QShortcut(QKeySequence("Ctrl+K"), self)
         palette_sc.activated.connect(lambda: self._cmd_palette.show_palette())
 
+        # ── Bottom drawer toggle (Ctrl+`) ─────────────────────────
+        drawer_sc = QShortcut(QKeySequence("Ctrl+`"), self)
+        drawer_sc.activated.connect(self._toggle_bottom_drawer)
+
     # ── Keyboard shortcut helpers ──────────────────────────────────
 
     def _toggle_scan(self):
@@ -1430,6 +1142,20 @@ class MainWindow(QMainWindow):
         except Exception:
             log.warning("_toggle_scan: unexpected exception in scan gate",
                         exc_info=True)
+
+    def _toggle_bottom_drawer(self) -> None:
+        """Ctrl+` or toggle bar chevron — hide/show the Console+Log panel."""
+        if self._bottom_drawer.isVisible():
+            self._bottom_drawer.hide()
+            self._drawer_toggle_bar.set_open(False)
+        else:
+            self._bottom_drawer.show()
+            self._drawer_toggle_bar.set_open(True)
+            self._drawer_toggle_bar.set_active_tab(self._bottom_drawer.current_tab_index())
+            total = self._content_splitter.height()
+            target = BottomDrawer.HEIGHT_OPEN
+            if total >= target + 100:
+                self._content_splitter.setSizes([total - target, target])
 
     # ── About ──────────────────────────────────────────────────────
 
@@ -1645,8 +1371,8 @@ class MainWindow(QMainWindow):
         except Exception as e:
             log.warning("Recipe: analysis config not applied: %s", e)
 
-        # ── Switch to Acquire tab and start ───────────────────────
-        self._nav.navigate_to(self._acquire_tab)
+        # ── Switch to Capture tab and start ───────────────────────
+        self._nav.navigate_to(self._capture_tab)
         # Trigger acquisition using recipe frame count and delay
         try:
             self._acquire_tab.start_acquisition(
@@ -1656,17 +1382,36 @@ class MainWindow(QMainWindow):
         except Exception as e:
             log.warning("Recipe: could not auto-start acquisition: %s", e)
 
-    def _on_mode_change(self, advanced: bool):
-        """Switch between Standard (wizard) and Advanced (tabs) mode."""
-        self._mode_stack.setCurrentIndex(1 if advanced else 0)
-        # Persist the choice
-        import config as _cfg
-        _cfg.set_pref("ui.mode", "advanced" if advanced else "standard")
-        if not advanced:
-            try:
-                self._wizard._step1.refresh()
-            except Exception as _e:
-                log.debug("Wizard step1 refresh: %s", _e)
+    def _on_autoscan_scan_requested(self, cfg: dict) -> None:
+        """Route an AutoScan scan/preview config to the appropriate engine."""
+        if cfg.get("preview") or cfg.get("scan_area") == "single":
+            # Brief acquisition (preview pass or single-frame mode)
+            n_frames = int(cfg.get("n_frames", 10))
+            self._on_acquire_requested(n_frames, 0.0)
+        else:
+            # Multi-tile grid scan
+            self._scan_tab.apply_config(cfg)
+            self._scan_tab._run()
+
+    def _on_autoscan_abort_requested(self) -> None:
+        """Abort whichever engine AutoScan currently has running."""
+        op = self._autoscan_tab._current_op
+        if op == "preview":
+            self._acquire_tab._abort()
+        elif op == "scan":
+            if getattr(self._scan_tab, "_runner", None):
+                self._scan_tab._runner.abort()
+
+    def _on_autoscan_send_to_analysis(self, result) -> None:
+        """Push AutoScan result to Analysis tab, then switch to Manual mode."""
+        dt_map  = getattr(result, "delta_t",        None) \
+                  or getattr(result, "dt_map",       None)
+        drr_map = getattr(result, "delta_r_over_r",  None) \
+                  or getattr(result, "drr_map",       None)
+        self._analysis_tab.push_result(
+            dt_map=dt_map, drr_map=drr_map,
+            base_image=None, source_label="AutoScan")
+        self._nav.select_item("Analysis")
 
     def _on_profile_applied(self, profile):
         """
@@ -1780,7 +1525,7 @@ class MainWindow(QMainWindow):
                     profile_name   = profile.name if profile else "",
                     ct_value       = profile.ct_value if profile else 0.0,
                     fpga_frequency_hz = (
-                        fpga.get_status().frequency_hz
+                        getattr(fpga.get_status(), "frequency_hz", 0.0)
                         if fpga and hasattr(fpga, "get_status") else 0.0),
                     notes          = notes,
                 )
@@ -2275,32 +2020,6 @@ class MainWindow(QMainWindow):
         """Mark the startup window as complete; enable hotplug toasts."""
         self._startup_done = True
 
-    def apply_theme(self, mode: str) -> None:
-        """Switch the entire app between 'dark' and 'light' themes at runtime.
-
-        Updates PALETTE, re-applies the global QSS stylesheet, and calls
-        ``_apply_styles()`` on every widget that opted in (sidebar, toasts, etc.)
-        to refresh their per-widget overrides.  Wrapped in setUpdatesEnabled to
-        avoid flicker.
-        """
-        from ui.theme import set_theme, build_qt_palette
-        app = QApplication.instance()
-
-        app.setUpdatesEnabled(False)
-        try:
-            set_theme(mode)
-            config.set_pref("ui.theme", mode)
-            app.setStyleSheet(build_style(mode))
-            app.setPalette(build_qt_palette())
-
-            # Let each opted-in widget re-apply its per-widget stylesheet
-            for w in app.allWidgets():
-                if hasattr(w, "_apply_styles"):
-                    w._apply_styles()
-                w.update()
-        finally:
-            app.setUpdatesEnabled(True)
-
     def _restore_layout(self):
         """Restore persisted window geometry and tab splitter sizes."""
         import config as _cfg
@@ -2495,21 +2214,28 @@ if __name__ == "__main__":
     _dpi_scale  = max(0.5, min(1.0, 72.0 / _screen_dpi))
     log.debug("Screen logical DPI=%.1f  →  font scale=%.3f", _screen_dpi, _dpi_scale)
 
-    from ui.theme      import apply_dpi_scale as _apply_dpi_scale, FONT as _FONT_LIVE, \
-                               set_theme as _set_theme
+    from ui.theme import (
+        apply_dpi_scale as _apply_dpi_scale,
+        FONT as _FONT_LIVE,
+        build_style as _build_style,
+        build_qt_palette as _build_qt_palette,
+        set_theme as _set_theme,
+        detect_system_theme as _detect_system_theme,
+    )
     from ui.font_utils import sans_font as _sans_font
     _apply_dpi_scale(_dpi_scale)
 
-    # Apply the saved theme (also swaps PALETTE to the correct variant so any
-    # widget constructed after this call gets the right PALETTE-based colours).
-    _initial_theme = config.get_pref("ui.theme", "dark")
-    _set_theme(_initial_theme)
+    # Resolve the initial effective theme ("auto" defers to OS).
+    _initial_pref      = config.get_pref("ui.theme", "auto")
+    _initial_effective = _detect_system_theme() if _initial_pref == "auto" else _initial_pref
+    _set_theme(_initial_effective)
 
     # Set base application font so all Qt widgets that don't have an explicit
     # QSS font rule inherit the platform-appropriate family (Segoe UI on
     # Windows, Helvetica Neue on macOS) at the correctly-scaled body size.
     app.setFont(_sans_font(_FONT_LIVE["body"]))
-    app.setStyleSheet(build_style(_initial_theme))
+    app.setStyleSheet(_build_style(_initial_effective))
+    app.setPalette(_build_qt_palette(_initial_effective))
 
     # ── Windows: set stable AppUserModelID before any window is created ──
     # Without this, Windows assigns a generic AUMID based on the exe path,
@@ -2717,7 +2443,7 @@ if __name__ == "__main__":
                                         step_y_um=float(meta.get("step_y_um", 100)),
                                         duration_s=0.0, valid=True)
                                     window._scan_tab.update_complete(sr)
-                                    window._nav.navigate_to(window._scan_tab)
+                                    window._nav.navigate_to(window._capture_tab)
                         except Exception as _re:
                             log.debug("Autosave restore: failed to push result to UI — %s",
                                       _re, exc_info=True)

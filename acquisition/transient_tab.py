@@ -85,10 +85,10 @@ class TransientCurve(QWidget):
         W, H = self.width(), self.height()
         PAD = 6
 
-        p.fillRect(0, 0, W, H, QColor(13, 13, 13))
+        p.fillRect(0, 0, W, H, QColor(PALETTE.get('bg', '#242424')))
 
         if self._values is None or len(self._values) < 2:
-            p.setPen(QColor(50, 50, 50))
+            p.setPen(QColor(PALETTE.get('border', '#484848')))
             p.setFont(sans_font(10))
             p.drawText(self.rect(), Qt.AlignCenter, "No data")
             p.end()
@@ -117,7 +117,7 @@ class TransientCurve(QWidget):
         # Zero reference
         if lo < 0 < hi:
             zy = _y(0.0)
-            p.setPen(QPen(QColor(55, 55, 55), 1, Qt.DotLine))
+            p.setPen(QPen(QColor(PALETTE.get('border', '#484848')), 1, Qt.DotLine))
             p.drawLine(PAD, zy, W - PAD, zy)
 
         # Cursor line (selected delay)
@@ -136,7 +136,7 @@ class TransientCurve(QWidget):
             p.drawLine(pts[i-1][0], pts[i-1][1], pts[i][0], pts[i][1])
 
         # X-axis label (first and last delay in ms)
-        p.setPen(QColor(80, 80, 80))
+        p.setPen(QColor(PALETTE.get('textSub', '#6a6a6a')))
         p.setFont(mono_font(8))
         if self._times_s is not None and len(self._times_s) >= 2:
             t0 = self._times_s[0] * 1e3
@@ -145,7 +145,7 @@ class TransientCurve(QWidget):
             p.drawText(W - 64, H - 4, f"{t1:.2f} ms")
 
         # Value labels
-        p.setPen(QColor(80, 80, 80))
+        p.setPen(QColor(PALETTE.get('textSub', '#6a6a6a')))
         p.drawText(PAD + 2, PAD + 10, f"{hi:.3e}")
         p.drawText(PAD + 2, H - 16,   f"{lo:.3e}")
 

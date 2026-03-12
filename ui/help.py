@@ -27,7 +27,7 @@ from PyQt5.QtWidgets import (
     QFrame, QApplication, QSizePolicy, QGraphicsDropShadowEffect)
 from PyQt5.QtCore  import Qt, QPoint, QTimer, QRect, pyqtSignal
 from PyQt5.QtGui   import QColor, QFont, QCursor
-from ui.theme import FONT, scaled_qss
+from ui.theme import FONT, PALETTE, scaled_qss
 
 
 # ------------------------------------------------------------------ #
@@ -616,9 +616,12 @@ class HelpPopover(QWidget):
     Appears near the trigger widget; dismissed by clicking elsewhere.
     """
 
-    _ACCENT = "#00d4aa"
-    _BG     = "#181818"
-    _BORDER = "#2a2a2a"
+    @property
+    def _ACCENT(self): return PALETTE.get('accent',  '#00d4aa')
+    @property
+    def _BG(self):     return PALETTE.get('surface', '#2d2d2d')
+    @property
+    def _BORDER(self): return PALETTE.get('border',  '#484848')
 
     def __init__(self, topic_id: str, anchor: QWidget):
         super().__init__(
@@ -677,14 +680,14 @@ class HelpPopover(QWidget):
             f"font-size:{FONT['heading']}pt; font-weight:bold;")
         title = QLabel(content["title"])
         title.setStyleSheet(
-            scaled_qss("font-size:15pt; font-weight:bold; color:#ddd;"))
+            scaled_qss(f"font-size:15pt; font-weight:bold; color:{PALETTE.get('text','#ebebeb')}; background:transparent;"))
         title.setWordWrap(True)
 
         close_btn = QPushButton("✕")
         close_btn.setFixedSize(20, 20)
         close_btn.setStyleSheet(
-            f"QPushButton{{background:transparent; color:#444; border:none; "
-            f"font-size:{FONT['heading']}pt;}} QPushButton:hover{{color:#888;}}")
+            f"QPushButton{{background:transparent; color:{PALETTE.get('textDim','#999999')}; border:none; "
+            f"font-size:{FONT['heading']}pt;}} QPushButton:hover{{color:{PALETTE.get('text','#ebebeb')};}}")
         close_btn.clicked.connect(self.close)
 
         hdr.addWidget(icon)
@@ -703,12 +706,12 @@ class HelpPopover(QWidget):
             h = QLabel(heading.upper())
             h.setStyleSheet(
                 f"font-size:{FONT['sublabel']}pt; letter-spacing:1.5px; "
-                f"color:{self._ACCENT if accent else '#777'};")
+                f"color:{self._ACCENT if accent else PALETTE.get('textSub','#6a6a6a')}; background:transparent;")
             b = QLabel(body)
             b.setWordWrap(True)
             b.setStyleSheet(
-                f"font-size:{FONT['label']}pt; "
-                f"color:{'#ddd' if accent else '#999'};")
+                f"font-size:{FONT['label']}pt; background:transparent; "
+                f"color:{PALETTE.get('text','#ebebeb') if accent else PALETTE.get('textDim','#999999')};")
             sl.addWidget(h)
             sl.addWidget(b)
             return sl
@@ -738,7 +741,7 @@ class HelpPopover(QWidget):
         if content.get("docs"):
             docs_lbl = QLabel(f"📖  User Guide: {content['docs']}")
             docs_lbl.setStyleSheet(
-                f"font-size:{FONT['label']}pt; color:#666; font-style:italic;")
+                f"font-size:{FONT['label']}pt; color:{PALETTE.get('textDim','#999999')}; font-style:italic; background:transparent;")
             cl.addWidget(docs_lbl)
 
         outer.addWidget(card)
@@ -799,24 +802,30 @@ class HelpButton(QPushButton):
         super().__init__("?", parent)
         self._topic = topic_id
         self.setFixedSize(22, 22)
+        self._apply_styles()
+        self.setCursor(Qt.PointingHandCursor)
+        self.setToolTip(f"Help: {HELP_CONTENT.get(topic_id, {}).get('title', topic_id)}")
+        self.clicked.connect(self._show_help)
+
+    def _apply_styles(self):
+        acc  = PALETTE.get('accent',   '#00d4aa')
+        surf = PALETTE.get('surface2', '#3d3d3d')
+        bdr  = PALETTE.get('border',   '#484848')
         self.setStyleSheet(f"""
             QPushButton {{
-                background:#1a1a1a;
-                color:#00d4aa99;
-                border:1px solid #2a2a2a;
+                background:{surf};
+                color:{acc}99;
+                border:1px solid {bdr};
                 border-radius:11px;
                 font-size:{FONT['label']}pt;
                 font-weight:bold;
             }}
             QPushButton:hover {{
-                color:#00d4aa;
-                border-color:#00d4aa66;
-                background:#0d2a1a;
+                color:{acc};
+                border-color:{acc}66;
+                background:{surf};
             }}
         """)
-        self.setCursor(Qt.PointingHandCursor)
-        self.setToolTip(f"Help: {HELP_CONTENT.get(topic_id, {}).get('title', topic_id)}")
-        self.clicked.connect(self._show_help)
 
     def _show_help(self):
         global _active_popover

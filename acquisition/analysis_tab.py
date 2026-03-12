@@ -20,13 +20,13 @@ import numpy as np
 
 from ui.icons      import set_btn_icon
 from ui.font_utils import sans_font
-from ui.theme      import FONT, scaled_qss
+from ui.theme      import FONT, PALETTE, scaled_qss
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QDoubleSpinBox, QSpinBox, QGroupBox, QGridLayout, QSplitter,
     QSizePolicy, QCheckBox, QTableWidget, QTableWidgetItem,
     QHeaderView, QAbstractItemView, QFileDialog, QMessageBox,
-    QFrame, QComboBox, QStackedWidget)
+    QFrame, QComboBox, QStackedWidget, QToolButton)
 from PyQt5.QtCore  import Qt, pyqtSignal, QTimer
 from PyQt5.QtGui   import QImage, QPixmap, QPainter, QColor, QFont, QPen
 
@@ -42,11 +42,11 @@ from .analysis import (ThermalAnalysisEngine, AnalysisConfig,
 class VerdictBanner(QWidget):
     """Large, colour-coded PASS / WARNING / FAIL indicator."""
 
+    # Only label + fg stored; bg/border are derived from PALETTE at runtime
     STYLES = {
-        VERDICT_PASS:    ("PASS",    "#00d479", "#0d2a1a", "#1a4a2a"),
-        VERDICT_WARNING: ("WARNING", "#ffb300", "#2a1e00", "#4a3800"),
-        VERDICT_FAIL:    ("FAIL",    "#ff3b3b", "#2a0d0d", "#4a1a1a"),
-        "NONE":          ("—",       "#333333", "#111111", "#1a1a1a"),
+        VERDICT_PASS:    ("PASS",    "#00d479"),
+        VERDICT_WARNING: ("WARNING", "#ffb300"),
+        VERDICT_FAIL:    ("FAIL",    "#ff3b3b"),
     }
 
     def __init__(self):
@@ -67,7 +67,7 @@ class VerdictBanner(QWidget):
         self._icon.setAlignment(Qt.AlignCenter)
 
         self._sub = QLabel("Run analysis to see verdict")
-        self._sub.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:#555;")
+        self._sub.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{PALETTE.get('textSub','#6a6a6a')};")
         self._sub.setAlignment(Qt.AlignCenter)
         self._sub.setWordWrap(True)
 
@@ -77,7 +77,16 @@ class VerdictBanner(QWidget):
         self._set("NONE", "")
 
     def _set(self, verdict: str, subtitle: str):
-        _, fg, bg, border = self.STYLES.get(verdict, self.STYLES["NONE"])
+        surf   = PALETTE.get('surface', '#2d2d2d')
+        bdr    = PALETTE.get('border',  '#484848')
+        if verdict == "NONE":
+            fg     = PALETTE.get('textDim', '#999999')
+            bg     = surf
+            border = bdr
+        else:
+            _, fg = self.STYLES.get(verdict, ("—", PALETTE.get('textDim', '#999999')))
+            bg     = surf
+            border = fg + "55"   # semantic colour at ~33 % opacity
         self._outer.setStyleSheet(
             f"background:{bg}; border:1px solid {border}; border-radius:4px;")
         self._icon.setText(verdict if verdict != "NONE" else "—")
@@ -166,9 +175,9 @@ class OverlayCanvas(QWidget):
         from PyQt5.QtWidgets import QMenu
         menu = QMenu(self)
         menu.setStyleSheet(
-            "QMenu { background:#1a1a1a; color:#ccc; border:1px solid #333; }"
-            "QMenu::item:selected { background:#2a2a2a; }"
-            "QMenu::separator { height:1px; background:#333; margin:3px 8px; }")
+            f"QMenu {{ background:{PALETTE.get('surface','#2d2d2d')}; color:{PALETTE.get('text','#ebebeb')}; border:1px solid {PALETTE.get('border','#484848')}; }}"
+            f"QMenu::item:selected {{ background:{PALETTE.get('surface2','#3d3d3d')}; }}"
+            f"QMenu::separator {{ height:1px; background:{PALETTE.get('border','#484848')}; margin:3px 8px; }}")
         act_save = menu.addAction("💾  Save Overlay Image…")
         act_save.setEnabled(self._pixmap is not None)
         act_save.triggered.connect(self.context_save_png)
@@ -192,14 +201,14 @@ class HotspotTable(QTableWidget):
         self.setAlternatingRowColors(True)
         self.setStyleSheet(f"""
             QTableWidget {{
-                background:#141414; alternate-background-color:#181818;
-                gridline-color:#222; border:none;
+                background:{PALETTE.get('bg','#242424')}; alternate-background-color:{PALETTE.get('surface','#2d2d2d')};
+                gridline-color:{PALETTE.get('border2','#3d3d3d')}; border:none;
                 font-family:Menlo,monospace; font-size:{FONT['label']}pt;
             }}
             QHeaderView::section {{
-                background:#1a1a1a; color:#555;
+                background:{PALETTE.get('surface','#2d2d2d')}; color:{PALETTE.get('textSub','#6a6a6a')};
                 padding:3px 6px; border:none;
-                border-bottom:1px solid #2a2a2a;
+                border-bottom:1px solid {PALETTE.get('border','#484848')};
                 font-size:{FONT['body']}pt; letter-spacing:1px;
             }}
         """)
@@ -208,17 +217,21 @@ class HotspotTable(QTableWidget):
         hh.setSectionResizeMode(1, QHeaderView.Stretch)
         self.verticalHeader().setVisible(False)
 
+    # Only fg stored; bg is derived from PALETTE at runtime
     SEVERITY_COLORS = {
-        "fail":    ("#4a1010", "#ff3b3b"),
-        "warning": ("#2a1e00", "#ffb300"),
+        "fail":    "#ff3b3b",
+        "warning": "#ffb300",
     }
 
     def update_hotspots(self, hotspots: list):
         self.setRowCount(0)
+        _surf2 = PALETTE.get('surface2', '#3d3d3d')
+        _dim   = PALETTE.get('textDim',  '#999999')
         for h in hotspots:
             r = self.rowCount()
             self.insertRow(r)
-            bg, fg = self.SEVERITY_COLORS.get(h.severity, ("#1a1a1a", "#888"))
+            fg = self.SEVERITY_COLORS.get(h.severity, _dim)
+            bg = _surf2
 
             def cell(text, align=Qt.AlignCenter):
                 it = QTableWidgetItem(text)
@@ -302,16 +315,16 @@ class AnalysisTab(QWidget):
 
         icon_lbl = QLabel(icon)
         icon_lbl.setAlignment(Qt.AlignCenter)
-        icon_lbl.setStyleSheet(scaled_qss("font-size: 52pt; color: #2a2a2a;"))
+        icon_lbl.setStyleSheet(scaled_qss(f"font-size: 52pt; color: {PALETTE.get('border','#484848')};"))
 
         title_lbl = QLabel(title)
         title_lbl.setAlignment(Qt.AlignCenter)
-        title_lbl.setStyleSheet(f"font-size: {FONT['readoutSm']}pt; font-weight: bold; color: #555;")
+        title_lbl.setStyleSheet(f"font-size: {FONT['readoutSm']}pt; font-weight: bold; color: {PALETTE.get('textSub','#6a6a6a')};")
 
         desc_lbl = QLabel(desc)
         desc_lbl.setAlignment(Qt.AlignCenter)
         desc_lbl.setWordWrap(True)
-        desc_lbl.setStyleSheet(f"font-size: {FONT['label']}pt; color: #444;")
+        desc_lbl.setStyleSheet(f"font-size: {FONT['label']}pt; color: {PALETTE.get('textDim','#999999')};")
         desc_lbl.setMaximumWidth(450)
 
         lay.addStretch()
@@ -325,11 +338,11 @@ class AnalysisTab(QWidget):
             btn.setFixedHeight(36)
             btn.setStyleSheet(f"""
                 QPushButton {{
-                    background: #1a2a20; color: #00d4aa;
-                    border: 1px solid #00d4aa55; border-radius: 5px;
+                    background: {PALETTE.get('surface2','#3d3d3d')}; color: {PALETTE.get('accent','#00d4aa')};
+                    border: 1px solid {PALETTE.get('accent','#00d4aa')}55; border-radius: 5px;
                     font-size: {FONT['label']}pt; font-weight: 600;
                 }}
-                QPushButton:hover {{ background: #1e3028; }}
+                QPushButton:hover {{ background: {PALETTE.get('surface','#2d2d2d')}; }}
             """)
             btn.clicked.connect(btn_callback)
             lay.addSpacing(4)
@@ -342,11 +355,21 @@ class AnalysisTab(QWidget):
     #  Toolbar                                                          #
     # ---------------------------------------------------------------- #
 
+    def _apply_styles(self) -> None:
+        """Re-apply PALETTE-driven styles on theme switch."""
+        if hasattr(self, "_toolbar"):
+            self._toolbar.setStyleSheet(
+                f"background:{PALETTE.get('surface','#2d2d2d')}; "
+                f"border-bottom:1px solid {PALETTE.get('border','#484848')};")
+        # VerdictBanner and other sub-widgets re-render themselves via
+        # their own paintEvent / setStyleSheet when the parent repaints.
+
     def _build_toolbar(self) -> QWidget:
         bar = QWidget()
         bar.setFixedHeight(46)
+        self._toolbar = bar
         bar.setStyleSheet(
-            "background:#151515; border-bottom:1px solid #1e1e1e;")
+            f"background:{PALETTE.get('surface','#2d2d2d')}; border-bottom:1px solid {PALETTE.get('border','#484848')};")
         lay = QHBoxLayout(bar)
         lay.setContentsMargins(12, 0, 12, 0)
         lay.setSpacing(8)
@@ -364,7 +387,7 @@ class AnalysisTab(QWidget):
 
         self._auto_cb    = QCheckBox("Auto-run after acquisition")
         self._auto_cb.setChecked(True)
-        self._auto_cb.setStyleSheet(f"font-size:{FONT['heading']}pt; color:#555;")
+        self._auto_cb.setStyleSheet(f"font-size:{FONT['heading']}pt; color:{PALETTE.get('textSub','#6a6a6a')};")
 
         lay.addWidget(self._run_btn)
         lay.addWidget(self._clear_btn)
@@ -372,7 +395,7 @@ class AnalysisTab(QWidget):
         lay.addStretch()
 
         # Source indicator
-        self._source_lbl = self._badge("No data", "#1a1a1a", "#333")
+        self._source_lbl = self._badge("No data", PALETTE.get('surface2','#3d3d3d'), PALETTE.get('textDim','#999999'))
         lay.addWidget(self._source_lbl)
 
         return bar
@@ -398,7 +421,7 @@ class AnalysisTab(QWidget):
 
         from ui.help import HelpButton, help_label
 
-        # ---- Threshold ----
+        # ── Threshold ────────────────────────────────────────────────────
         th_box = QGroupBox("Detection Threshold")
         tl = QGridLayout(th_box)
         tl.setSpacing(6)
@@ -418,11 +441,7 @@ class AnalysisTab(QWidget):
         tl.addWidget(self._use_dt_cb,          1, 0, 1, 2)
         lay.addWidget(th_box)
 
-        # ---- Pass / Fail rules ----
-        pf_box = QGroupBox("Pass / Fail Rules")
-        pl = QGridLayout(pf_box)
-        pl.setSpacing(5)
-
+        # ── Pass / Fail rules (FAIL only at top level) ───────────────────
         def dbl(val, lo=0.0, hi=500.0, suf=""):
             s = QDoubleSpinBox()
             s.setRange(lo, hi); s.setValue(val)
@@ -436,56 +455,91 @@ class AnalysisTab(QWidget):
             s.setFixedWidth(90)
             return s
 
-        self._fail_count  = sp(1,   lo=0)
-        self._fail_peak   = dbl(10.0, suf=" °C")
-        self._fail_area   = dbl(5.0,  lo=0.0, hi=100.0, suf=" %")
-        self._warn_count  = sp(1,   lo=0)
-        self._warn_peak   = dbl(5.0,  suf=" °C")
-        self._warn_area   = dbl(2.0,  lo=0.0, hi=100.0, suf=" %")
+        self._fail_count = sp(1,   lo=0)
+        self._fail_peak  = dbl(10.0, suf=" °C")
+        self._fail_area  = dbl(5.0,  lo=0.0, hi=100.0, suf=" %")
+        self._warn_count = sp(1,   lo=0)
+        self._warn_peak  = dbl(5.0,  suf=" °C")
+        self._warn_area  = dbl(2.0,  lo=0.0, hi=100.0, suf=" %")
 
-        pf_rows = [
-            ("FAIL if count ≥",  self._fail_count,  "fail_hotspot_count"),
-            ("FAIL if peak ≥",   self._fail_peak,   "fail_peak_k"),
-            ("FAIL if area ≥",   self._fail_area,   "fail_area_fraction"),
-            ("WARN if count ≥",  self._warn_count,  "fail_hotspot_count"),
-            ("WARN if peak ≥",   self._warn_peak,   "warn_peak_k"),
-            ("WARN if area ≥",   self._warn_area,   "fail_area_fraction"),
-        ]
-        for row, (lbl, widget, topic) in enumerate(pf_rows):
+        pf_box = QGroupBox("Pass / Fail Rules")
+        pl = QGridLayout(pf_box)
+        pl.setSpacing(5)
+        for row, (lbl, widget, topic) in enumerate([
+            ("FAIL if count ≥", self._fail_count, "fail_hotspot_count"),
+            ("FAIL if peak ≥",  self._fail_peak,  "fail_peak_k"),
+            ("FAIL if area ≥",  self._fail_area,  "fail_area_fraction"),
+        ]):
             pl.addWidget(help_label(lbl, topic), row, 0)
             pl.addWidget(widget, row, 1)
-
         lay.addWidget(pf_box)
 
-        # ---- Morphology ----
+        # ── Advanced collapsible: Warning rules + Noise Filtering ────────
+        adv_toggle = QToolButton()
+        adv_toggle.setText("▸  Warning rules & noise filter")
+        adv_toggle.setCheckable(True)
+        adv_toggle.setChecked(False)
+        adv_toggle.setToolButtonStyle(Qt.ToolButtonTextOnly)
+        adv_toggle.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        adv_toggle.setStyleSheet(
+            f"QToolButton {{ background:transparent; color:{PALETTE.get('textDim','#999')}; "
+            f"font-size:{FONT['body']}pt; border:none; text-align:left; padding:2px 4px; }}"
+            f"QToolButton:hover {{ color:{PALETTE.get('text','#ebebeb')}; }}")
+        lay.addWidget(adv_toggle)
+
+        adv_body = QWidget()
+        adv_inner = QVBoxLayout(adv_body)
+        adv_inner.setContentsMargins(0, 0, 0, 0)
+        adv_inner.setSpacing(8)
+
+        warn_box = QGroupBox("Warning Rules")
+        wl = QGridLayout(warn_box)
+        wl.setSpacing(5)
+        for row, (lbl, widget, topic) in enumerate([
+            ("WARN if count ≥", self._warn_count, "fail_hotspot_count"),
+            ("WARN if peak ≥",  self._warn_peak,  "warn_peak_k"),
+            ("WARN if area ≥",  self._warn_area,  "fail_area_fraction"),
+        ]):
+            wl.addWidget(help_label(lbl, topic), row, 0)
+            wl.addWidget(widget, row, 1)
+        adv_inner.addWidget(warn_box)
+
         mo_box = QGroupBox("Noise Filtering")
         ml = QGridLayout(mo_box)
         ml.setSpacing(5)
-
-        self._open_radius  = sp(2, lo=0, hi=20)
-        self._close_radius = sp(4, lo=0, hi=20)
+        self._open_radius  = sp(2,  lo=0, hi=20)
+        self._close_radius = sp(4,  lo=0, hi=20)
         self._min_area_px  = sp(20, lo=1, hi=9999)
-
         for row, (lbl, widget) in enumerate([
             ("Open radius (px)",  self._open_radius),
             ("Close radius (px)", self._close_radius),
             ("Min area (px)",     self._min_area_px),
         ]):
             l = QLabel(lbl)
-            l.setStyleSheet(f"font-size:{FONT['label']}pt; color:#555;")
+            l.setStyleSheet(f"font-size:{FONT['label']}pt; color:{PALETTE.get('textSub','#6a6a6a')};")
             ml.addWidget(l, row, 0)
             ml.addWidget(widget, row, 1)
+        adv_inner.addWidget(mo_box)
 
-        lay.addWidget(mo_box)
+        adv_body.setVisible(False)
+        lay.addWidget(adv_body)
 
-        # ---- Presets ----
+        def _on_adv_toggled(checked: bool):
+            adv_toggle.setText(
+                "▾  Warning rules & noise filter" if checked
+                else "▸  Warning rules & noise filter")
+            adv_body.setVisible(checked)
+
+        adv_toggle.toggled.connect(_on_adv_toggled)
+
+        # ── Quick Presets ─────────────────────────────────────────────────
         pre_box = QGroupBox("Quick Presets")
         prlay = QVBoxLayout(pre_box)
         for label, fn in [
-            ("PCB / Trace heating",    self._preset_pcb),
-            ("Semiconductor hotspot",  self._preset_semi),
-            ("EV power module",        self._preset_ev),
-            ("Sensitive (research)",   self._preset_research),
+            ("PCB / Trace heating",   self._preset_pcb),
+            ("Semiconductor hotspot", self._preset_semi),
+            ("EV power module",       self._preset_ev),
+            ("Sensitive (research)",  self._preset_research),
         ]:
             b = QPushButton(label)
             b.setFixedHeight(26)
@@ -550,7 +604,7 @@ class AnalysisTab(QWidget):
             v = QLabel("—")
             v.setAlignment(Qt.AlignRight)
             v.setStyleSheet(
-                f"font-family:Menlo,monospace; font-size:{FONT['body']}pt; color:#aaa;")
+                f"font-family:Menlo,monospace; font-size:{FONT['body']}pt; color:{PALETTE.get('textDim','#999999')};")
             sg.addWidget(v, r, 1)
             self._stat_vals[key] = v
         lay.addWidget(stats_box)
@@ -562,7 +616,7 @@ class AnalysisTab(QWidget):
 
         # Export
         sep = QFrame(); sep.setFrameShape(QFrame.HLine)
-        sep.setStyleSheet("color:#222;")
+        sep.setStyleSheet(f"color:{PALETTE.get('border','#484848')};")
         lay.addWidget(sep)
 
         # Two-row export button layout so no label gets clipped.
@@ -607,7 +661,7 @@ class AnalysisTab(QWidget):
         self._base_img = base_image
         self._source_lbl.setText(source_label)
         self._source_lbl.setStyleSheet(
-            f"background:#1a2a1a; color:#00d4aa; padding:0 10px; "
+            f"background:{PALETTE.get('surface2','#3d3d3d')}; color:{PALETTE.get('accent','#00d4aa')}; padding:0 10px; "
             f"border-radius:3px; font-family:Menlo,monospace; font-size:{FONT['label']}pt;")
         if dt_map is not None or drr_map is not None:
             self._data_stack.setCurrentIndex(1)
@@ -685,7 +739,7 @@ class AnalysisTab(QWidget):
             b.setEnabled(False)
         self._source_lbl.setText("No data")
         self._source_lbl.setStyleSheet(
-            f"background:#1a1a1a; color:#333; padding:0 10px; "
+            f"background:{PALETTE.get('surface2','#3d3d3d')}; color:{PALETTE.get('textDim','#999999')}; padding:0 10px; "
             f"border-radius:3px; font-family:Menlo,monospace; font-size:{FONT['label']}pt;")
 
     # ---------------------------------------------------------------- #
@@ -706,7 +760,7 @@ class AnalysisTab(QWidget):
         colors = {VERDICT_PASS: "#00d479",
                   VERDICT_WARNING: "#ffb300",
                   VERDICT_FAIL: "#ff3b3b"}
-        c = colors.get(r.verdict, "#aaa")
+        c = colors.get(r.verdict, PALETTE.get('textDim', '#999999'))
         for key in ["hotspots", "peak", "area_frac"]:
             self._stat_vals[key].setStyleSheet(
                 f"font-family:Menlo,monospace; font-size:{FONT['body']}pt; color:{c};")

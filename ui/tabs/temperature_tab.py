@@ -73,11 +73,11 @@ class TemperatureTab(QWidget):
         ab_ack.setFixedHeight(26)
         ab_ack.setStyleSheet(f"""
             QPushButton {{
-                background:#550000; color:#ff9999;
+                background:{PALETTE.get('surface','#2d2d2d')}; color:#ff9999;
                 border:1px solid #ff444466; border-radius:3px;
                 font-size:{FONT['label']}pt; padding: 0 10px;
             }}
-            QPushButton:hover {{ background:#660000; color:#ffbbbb; }}
+            QPushButton:hover {{ background:{PALETTE.get('surface2','#3d3d3d')}; color:#ffbbbb; }}
         """)
         ab_lay.addWidget(ab_icon)
         ab_lay.addWidget(ab_msg, 1)
@@ -91,7 +91,7 @@ class TemperatureTab(QWidget):
         warn_banner = QWidget()
         warn_banner.setVisible(False)
         warn_banner.setStyleSheet(
-            "background:#332200; border:1px solid #ff9900; border-radius:3px;")
+            f"background:{PALETTE.get('surface','#2d2d2d')}; border:1px solid #ff990066; border-radius:3px;")
         wb_lay = QHBoxLayout(warn_banner)
         wb_lay.setContentsMargins(10, 4, 10, 4)
         wb_icon = QLabel("⚠")

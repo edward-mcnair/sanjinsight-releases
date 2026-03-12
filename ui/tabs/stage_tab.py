@@ -12,7 +12,8 @@ log = logging.getLogger(__name__)
 
 from PyQt5.QtWidgets import (
     QWidget, QLabel, QPushButton, QDoubleSpinBox, QVBoxLayout,
-    QHBoxLayout, QGridLayout, QGroupBox, QComboBox, QStackedWidget)
+    QHBoxLayout, QGridLayout, QGroupBox, QComboBox, QStackedWidget,
+    QToolButton, QMenu, QAction)
 from PyQt5.QtCore    import Qt, pyqtSignal
 
 from hardware.app_state import app_state
@@ -112,28 +113,54 @@ class StageTab(QWidget):
 
         root.addWidget(jog_box)
 
-        # Home + Stop row
+        # Home + Stop row  — split-button: main click = Home All, arrow = XY / Z
         ctrl_row = QHBoxLayout()
-        home_xyz = QPushButton("Home All")
-        set_btn_icon(home_xyz, "fa5s.home")
-        home_xy  = QPushButton("Home XY")
-        set_btn_icon(home_xy, "fa5s.home")
-        home_z   = QPushButton("Home Z")
-        set_btn_icon(home_z, "fa5s.home")
+
+        home_btn = QToolButton()
+        home_btn.setText("  Home All")
+        home_btn.setPopupMode(QToolButton.MenuButtonPopup)
+        home_btn.setFixedHeight(32)
+        home_btn.setFixedWidth(120)
+        home_btn.setStyleSheet(
+            f"QToolButton {{ background:{PALETTE.get('surface','#2d2d2d')}; "
+            f"color:{PALETTE.get('text','#ebebeb')}; border:1px solid {PALETTE.get('border','#484848')}; "
+            f"border-radius:5px; padding:0 8px; font-size:{FONT['label']}pt; }}"
+            f"QToolButton:hover {{ background:{PALETTE.get('surface2','#3d3d3d')}; }}"
+            f"QToolButton::menu-button {{ border-left:1px solid {PALETTE.get('border','#484848')}; "
+            f"width:18px; border-radius:0 5px 5px 0; }}"
+        )
+        try:
+            import qtawesome as qta
+            home_btn.setIcon(qta.icon("fa5s.home", color=PALETTE.get("text", "#ebebeb")))
+        except Exception:
+            pass
+
+        home_menu = QMenu(home_btn)
+        home_menu.setStyleSheet(
+            f"QMenu {{ background:{PALETTE.get('surface2','#3d3d3d')}; "
+            f"color:{PALETTE.get('text','#ebebeb')}; border:1px solid {PALETTE.get('border','#484848')}; "
+            f"border-radius:4px; }} "
+            f"QMenu::item:selected {{ background:{PALETTE.get('accent','#00d4aa')}22; }}"
+        )
+        act_xy = QAction("Home XY  (X + Y axes)", home_btn)
+        act_z  = QAction("Home Z   (Z axis only)", home_btn)
+        home_menu.addAction(act_xy)
+        home_menu.addAction(act_z)
+        home_btn.setMenu(home_menu)
+
+        home_btn.clicked.connect(lambda: self._home("xyz"))
+        act_xy.triggered.connect(lambda: self._home("xy"))
+        act_z.triggered.connect( lambda: self._home("z"))
+
         stop_btn = QPushButton("STOP")
         set_btn_icon(stop_btn, "fa5s.stop", "#ff6666")
         stop_btn.setObjectName("danger")
-        for b in [home_xyz, home_xy, home_z]:
-            b.setFixedWidth(110)
-            ctrl_row.addWidget(b)
+        stop_btn.clicked.connect(self._stop)
+
+        ctrl_row.addWidget(home_btn)
         ctrl_row.addStretch()
         stop_btn.setFixedWidth(110)
         ctrl_row.addWidget(stop_btn)
-
-        home_xyz.clicked.connect(lambda: self._home("xyz"))
-        home_xy.clicked.connect( lambda: self._home("xy"))
-        home_z.clicked.connect(  lambda: self._home("z"))
-        stop_btn.clicked.connect(self._stop)
         root.addLayout(ctrl_row)
         root.addStretch()
 
@@ -169,11 +196,11 @@ class StageTab(QWidget):
         btn.setFixedHeight(36)
         btn.setStyleSheet(f"""
             QPushButton {{
-                background: #1a2a20; color: #00d4aa;
+                background: {PALETTE.get('surface','#2d2d2d')}; color: #00d4aa;
                 border: 1px solid #00d4aa66; border-radius: 5px;
                 font-size: {FONT['label']}pt; font-weight: 600;
             }}
-            QPushButton:hover {{ background: #1e3028; }}
+            QPushButton:hover {{ background: {PALETTE.get('surface2','#3d3d3d')}; }}
         """)
         btn.clicked.connect(self.open_device_manager)
 

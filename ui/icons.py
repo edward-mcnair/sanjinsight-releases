@@ -1,69 +1,281 @@
 """
-ui/icons.py
+ui/icons.py  —  Central icon registry for SanjINSIGHT.
 
-Central icon name registry for SanjINSIGHT.
-All qtawesome icon names are sourced here — no other file hardcodes them.
+All icon names are Material Design Icons (mdi.*) via qtawesome.
+No other file hardcodes icon names.
 
-Usage:
-    from ui.icons import NAV_ICONS, GROUP_ICONS, set_btn_icon
-    icon_name = NAV_ICONS["Live"]       # → "fa5s.circle"
-    set_btn_icon(self._run_btn, "fa5s.play")
+Usage
+-----
+    from ui.icons import NAV_ICONS, GROUP_ICONS, set_btn_icon, make_icon
+
+    icon_name = NAV_ICONS["Live"]          # → "mdi.circle-medium"
+    set_btn_icon(self._run_btn, IC.PLAY)   # colour from active PALETTE
+    icon = make_icon(IC.SAVE, color="#00d4aa", size=20)
+
+Migration note
+--------------
+Legacy ``fa5s.*`` names passed to ``set_btn_icon`` / ``make_icon`` are
+automatically mapped to their MDI equivalents via ``_FA5_TO_MDI``.
+No call-site changes are required immediately — update them over time.
 """
 from __future__ import annotations
 
-# ── Sidebar navigation items ──────────────────────────────────────────────────
+
+# ── Icon name constants ───────────────────────────────────────────────────────
+# Use these in widget code instead of string literals so IDE completion works
+# and renames are mechanical.
+
+class IC:
+    """MDI icon name constants."""
+    # Acquisition / workflow
+    LIVE          = "mdi.circle-medium"
+    CAPTURE       = "mdi.camera-plus-outline"
+    SCAN_GRID     = "mdi.view-grid-outline"
+    MOVIE         = "mdi.filmstrip"
+    TRANSIENT     = "mdi.waveform"
+    # Analysis
+    CALIBRATION   = "mdi.scale-balance"
+    ANALYSIS      = "mdi.chart-bar"
+    SESSIONS      = "mdi.archive-outline"
+    COMPARE       = "mdi.compare"
+    SURFACE_3D    = "mdi.cube-outline"
+    # Hardware
+    CAMERA        = "mdi.camera"
+    STIMULUS      = "mdi.sine-wave"
+    TEMPERATURE   = "mdi.thermometer"
+    FPGA          = "mdi.chip"
+    BIAS          = "mdi.lightning-bolt"
+    STAGE         = "mdi.arrow-all"
+    PROBER        = "mdi.needle"
+    ROI           = "mdi.crop"
+    AUTOFOCUS     = "mdi.crosshairs-gps"
+    # Setup / library
+    LIBRARY       = "mdi.bookshelf"
+    PROFILES      = "mdi.layers"
+    RECIPES       = "mdi.clipboard-list-outline"
+    # Tools
+    DATA          = "mdi.database"
+    CONSOLE       = "mdi.console"
+    LOG           = "mdi.file-document-outline"
+    SETTINGS      = "mdi.cog-outline"
+    # Hardware group header
+    HARDWARE      = "mdi.server"
+    # AutoScan mode
+    NEW_SCAN      = "mdi.magnify-scan"
+    HISTORY       = "mdi.history"
+    # Actions — playback / control
+    PLAY          = "mdi.play"
+    STOP          = "mdi.stop"
+    PAUSE         = "mdi.pause"
+    FREEZE        = "mdi.snowflake"
+    ABORT         = "mdi.stop-circle-outline"
+    # Actions — file / data
+    SAVE          = "mdi.content-save"
+    SAVE_AS       = "mdi.content-save-edit-outline"
+    EXPORT        = "mdi.export"
+    EXPORT_PDF    = "mdi.file-pdf-box"
+    EXPORT_CSV    = "mdi.file-delimited-outline"
+    EXPORT_IMG    = "mdi.image-outline"
+    OPEN_FOLDER   = "mdi.folder-open-outline"
+    FOLDER        = "mdi.folder-outline"
+    FILE          = "mdi.file-outline"
+    # Actions — edit
+    ADD           = "mdi.plus"
+    DELETE        = "mdi.trash-can-outline"
+    EDIT          = "mdi.pencil"
+    RENAME        = "mdi.pencil-outline"
+    DUPLICATE     = "mdi.content-copy"
+    UNDO          = "mdi.undo"
+    REDO          = "mdi.redo"
+    # Actions — navigation / view
+    REFRESH       = "mdi.refresh"
+    SYNC          = "mdi.sync"
+    HOME          = "mdi.home"
+    ARROW_UP      = "mdi.arrow-up"
+    ARROW_DOWN    = "mdi.arrow-down"
+    ARROW_LEFT    = "mdi.arrow-left"
+    ARROW_RIGHT   = "mdi.arrow-right"
+    # Semantic / status
+    CHECK         = "mdi.check"
+    CLOSE         = "mdi.close"
+    WARNING       = "mdi.alert-outline"
+    ERROR         = "mdi.close-circle-outline"
+    INFO          = "mdi.information-outline"
+    LINK_OFF      = "mdi.link-off"
+    FIRE          = "mdi.fire"
+    # UI elements
+    NOTE          = "mdi.note-text-outline"
+    CHART_LINE    = "mdi.chart-line"
+    CHART_BAR     = "mdi.chart-bar"
+    DATABASE      = "mdi.database"
+    EMAIL         = "mdi.email-outline"
+    SEND          = "mdi.send"
+    STETHOSCOPE   = "mdi.stethoscope"
+    DEVICE_MGR    = "mdi.server"
+
+
+# ── Sidebar navigation icon registry ─────────────────────────────────────────
 # Keys match NavItem label exactly (case-sensitive).
+
 NAV_ICONS: dict[str, str] = {
-    # MEASURE
-    "Live":        "fa5s.circle",
-    "Acquire":     "fa5s.camera",
-    "Scan":        "fa5s.th",
-    "Movie":       "fa5s.film",
-    "Transient":   "fa5s.chart-line",
-    # ANALYSIS
-    "Calibration": "fa5s.balance-scale",
-    "Analysis":    "fa5s.chart-bar",
-    "Compare":     "fa5s.exchange-alt",
-    "3D Surface":  "fa5s.cube",
+    # ACQUIRE
+    "AutoScan":    IC.NEW_SCAN,
+    "Live":        IC.LIVE,
+    "Capture":     IC.CAPTURE,
+    "Transient":   IC.TRANSIENT,
+    # ANALYZE
+    "Calibration": IC.CALIBRATION,
+    "Analysis":    IC.ANALYSIS,
+    "Sessions":    IC.SESSIONS,
     # HARDWARE
-    "Camera":      "fa5s.camera",
-    "Temperature": "fa5s.thermometer-half",
-    "FPGA":        "fa5s.microchip",
-    "Bias Source": "fa5s.bolt",
-    "Stage":       "fa5s.arrows-alt",
-    "Prober":      "fa5s.plug",
-    "ROI":         "fa5s.crop-alt",
-    "Autofocus":   "fa5s.bullseye",
-    # SETUP
-    "Profiles":    "fa5s.layer-group",
-    "Recipes":     "fa5s.clipboard-list",
-    # TOOLS
-    "Data":        "fa5s.database",
-    "Console":     "fa5s.terminal",
-    "Log":         "fa5s.scroll",
-    "Settings":    "fa5s.cog",
+    "Camera":      IC.CAMERA,
+    "Stimulus":    IC.STIMULUS,
+    "Temperature": IC.TEMPERATURE,
+    "Stage":       IC.STAGE,
+    "Prober":      IC.PROBER,
+    # LIBRARY
+    "Library":     IC.LIBRARY,
+    # SETTINGS
+    "Settings":    IC.SETTINGS,
+    # ── Legacy names kept for backward compat during migration ────────────────
+    "Acquire":     IC.CAPTURE,
+    "Scan":        IC.SCAN_GRID,
+    "Movie":       IC.MOVIE,
+    "Compare":     IC.COMPARE,
+    "3D Surface":  IC.SURFACE_3D,
+    "FPGA":        IC.FPGA,
+    "Bias Source": IC.BIAS,
+    "ROI":         IC.ROI,
+    "Autofocus":   IC.AUTOFOCUS,
+    "Profiles":    IC.PROFILES,
+    "Recipes":     IC.RECIPES,
+    "Data":        IC.DATA,
+    "Console":     IC.CONSOLE,
+    "Log":         IC.LOG,
 }
 
 # ── Collapsible group header icons ────────────────────────────────────────────
+
 GROUP_ICONS: dict[str, str] = {
-    "Hardware": "fa5s.server",
+    "Hardware": IC.HARDWARE,
 }
 
-# ── Button icon helper ────────────────────────────────────────────────────────
+# ── Legacy fa5s → MDI migration map ──────────────────────────────────────────
+# set_btn_icon() and make_icon() silently upgrade old names so no call-site
+# changes are required immediately.
 
-def set_btn_icon(btn, icon_name: str, color: str = "#d0d0d0", size: int = 16) -> None:
+_FA5_TO_MDI: dict[str, str] = {
+    "fa5s.circle":        "mdi.circle-medium",
+    "fa5s.camera":        "mdi.camera",
+    "fa5s.th":            "mdi.view-grid-outline",
+    "fa5s.film":          "mdi.filmstrip",
+    "fa5s.chart-line":    "mdi.chart-line",
+    "fa5s.balance-scale": "mdi.scale-balance",
+    "fa5s.chart-bar":     "mdi.chart-bar",
+    "fa5s.exchange-alt":  "mdi.compare",
+    "fa5s.cube":          "mdi.cube-outline",
+    "fa5s.thermometer-half": "mdi.thermometer",
+    "fa5s.microchip":     "mdi.chip",
+    "fa5s.bolt":          "mdi.lightning-bolt",
+    "fa5s.arrows-alt":    "mdi.arrow-all",
+    "fa5s.plug":          "mdi.needle",
+    "fa5s.crop-alt":      "mdi.crop",
+    "fa5s.bullseye":      "mdi.crosshairs-gps",
+    "fa5s.layer-group":   "mdi.layers",
+    "fa5s.clipboard-list":"mdi.clipboard-list-outline",
+    "fa5s.database":      "mdi.database",
+    "fa5s.terminal":      "mdi.console",
+    "fa5s.scroll":        "mdi.file-document-outline",
+    "fa5s.cog":           "mdi.cog-outline",
+    "fa5s.server":        "mdi.server",
+    "fa5s.play":          "mdi.play",
+    "fa5s.stop":          "mdi.stop",
+    "fa5s.snowflake":     "mdi.snowflake",
+    "fa5s.undo":          "mdi.undo",
+    "fa5s.sync-alt":      "mdi.refresh",
+    "fa5s.sync":          "mdi.sync",
+    "fa5s.save":          "mdi.content-save",
+    "fa5s.file-export":   "mdi.export",
+    "fa5s.file-pdf":      "mdi.file-pdf-box",
+    "fa5s.unlink":        "mdi.link-off",
+    "fa5s.arrow-down":    "mdi.arrow-down",
+    "fa5s.arrow-up":      "mdi.arrow-up",
+    "fa5s.home":          "mdi.home",
+    "fa5s.fire":          "mdi.fire",
+    "fa5s.check":         "mdi.check",
+    "fa5s.times":         "mdi.close",
+    "fa5s.trash":         "mdi.trash-can-outline",
+    "fa5s.envelope":      "mdi.email-outline",
+    "fa5s.stethoscope":   "mdi.stethoscope",
+    "fa5s.info-circle":   "mdi.information-outline",
+    "fa5s.paper-plane":   "mdi.send",
+    "fa5s.stop-circle":   "mdi.stop-circle-outline",
+    "fa5s.folder":        "mdi.folder-outline",
+    "fa5s.folder-open":   "mdi.folder-open-outline",
+    "fa5s.pencil-alt":    "mdi.pencil",
+    "fa5s.sticky-note":   "mdi.note-text-outline",
+    "fa5s.image":         "mdi.image-outline",
+    "fa5s.plus":          "mdi.plus",
+    "fa5s.crosshairs":    "mdi.crosshairs-gps",
+    "fa5s.file-alt":      "mdi.file-outline",
+    "fa5s.cube":          "mdi.cube-outline",
+}
+
+
+# ── Icon helpers ──────────────────────────────────────────────────────────────
+
+def make_icon(icon_name: str, color: str | None = None, size: int = 16):
+    """Return a QIcon for the given MDI icon name.
+
+    Parameters
+    ----------
+    icon_name : str
+        MDI name (e.g. ``IC.PLAY``) or legacy ``fa5s.*`` name (auto-upgraded).
+    color : str | None
+        Hex colour string.  Defaults to ``PALETTE["textDim"]``.
+    size : int
+        Pixel size for the icon.
+
+    Returns ``None`` if qtawesome is not installed.
     """
-    Set a qtawesome vector icon on a QPushButton.
+    icon_name = _FA5_TO_MDI.get(icon_name, icon_name)
+    if color is None:
+        try:
+            from ui.theme import PALETTE
+            color = PALETTE.get("textDim", "#8892aa")
+        except Exception:
+            color = "#8892aa"
+    try:
+        import qtawesome as qta
+        return qta.icon(icon_name, color=color, scale_factor=size / 16)
+    except Exception:
+        return None
 
-    Silently no-ops if qtawesome is not installed so the app still runs without it.
+
+def set_btn_icon(
+    btn,
+    icon_name: str,
+    color: str | None = None,
+    size: int = 16,
+) -> None:
+    """Set a qtawesome MDI vector icon on a QPushButton.
+
+    Silently no-ops if qtawesome is not installed.
 
     Parameters
     ----------
     btn       : QPushButton
-    icon_name : str    e.g. "fa5s.play"
-    color     : str    hex color string; defaults to the standard text colour
+    icon_name : str    MDI name (e.g. ``IC.PLAY``) or legacy ``fa5s.*``
+    color     : str | None    hex colour; defaults to ``PALETTE["textDim"]``
     size      : int    icon pixel size (default 16)
     """
+    icon_name = _FA5_TO_MDI.get(icon_name, icon_name)
+    if color is None:
+        try:
+            from ui.theme import PALETTE
+            color = PALETTE.get("textDim", "#8892aa")
+        except Exception:
+            color = "#8892aa"
     try:
         import qtawesome as qta
         from PyQt5.QtCore import QSize

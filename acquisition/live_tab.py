@@ -20,7 +20,7 @@ import numpy as np
 from ui.button_utils import RunningButton, apply_hand_cursor
 from ui.font_utils   import mono_font, sans_font
 from ui.icons import set_btn_icon
-from ui.theme import FONT, scaled_qss
+from ui.theme import FONT, PALETTE, scaled_qss
 
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -64,8 +64,10 @@ class SnrBar(QWidget):
         bar_w   = 14
         bar_x   = pad_l
 
-        # Background
-        p.fillRect(0, 0, W, H, QColor(18, 18, 18))
+        # Background — use PALETTE so it adapts to light/dark theme
+        bg_c  = QColor(PALETTE.get("bg",     "#242424"))
+        dim_c = QColor(PALETTE.get("border", "#484848"))
+        p.fillRect(0, 0, W, H, bg_c)
 
         # Gradient fill (green → yellow → red from top = good)
         grad = QLinearGradient(0, pad_top, 0, pad_top + bar_h)
@@ -75,7 +77,7 @@ class SnrBar(QWidget):
         grad.setColorAt(1.0,  QColor(200, 40,  20))
 
         # Track
-        p.setBrush(QColor(30, 30, 30))
+        p.setBrush(QColor(PALETTE.get("surface", "#2d2d2d")))
         p.setPen(Qt.NoPen)
         p.drawRoundedRect(bar_x, pad_top, bar_w, bar_h, 2, 2)
 
@@ -90,15 +92,15 @@ class SnrBar(QWidget):
         p.drawRoundedRect(bar_x, fill_y, bar_w, fill_h, 2, 2)
 
         # Scale ticks
-        p.setPen(QColor(60, 60, 60))
+        p.setPen(dim_c)
         p.setFont(mono_font(10))
         for db in [40, 20, 0, -20]:
             tf = (db - self._min) / (self._max - self._min)
             ty = int(pad_top + bar_h * (1.0 - tf))
             p.drawLine(bar_x + bar_w + 1, ty, bar_x + bar_w + 4, ty)
-            p.setPen(QColor(80, 80, 80))
+            p.setPen(QColor(PALETTE.get("textSub", "#6a6a6a")))
             p.drawText(bar_x + bar_w + 5, ty + 4, str(db))
-            p.setPen(QColor(60, 60, 60))
+            p.setPen(dim_c)
 
         # Value label — rect form keeps text inside the widget at all heights
         p.setFont(mono_font(11))
@@ -142,10 +144,10 @@ class Histogram(QWidget):
     def paintEvent(self, e):
         p = QPainter(self)
         W, H = self.width(), self.height()
-        p.fillRect(0, 0, W, H, QColor(18, 18, 18))
+        p.fillRect(0, 0, W, H, QColor(PALETTE.get("bg", "#242424")))
 
         if self._bins is None:
-            p.setPen(QColor(40, 40, 40))
+            p.setPen(QColor(PALETTE.get("border", "#484848")))
             p.drawText(self.rect(), Qt.AlignCenter, "No data")
             p.end()
             return
@@ -211,10 +213,10 @@ class TempPlot(QWidget):
         p = QPainter(self)
         W, H = self.width(), self.height()
         PAD = 4
-        p.fillRect(0, 0, W, H, QColor(18, 18, 18))
+        p.fillRect(0, 0, W, H, QColor(PALETTE.get("bg", "#242424")))
 
         if len(self._buf) < 2:
-            p.setPen(QColor(50, 50, 50))
+            p.setPen(QColor(PALETTE.get("border", "#484848")))
             p.setFont(mono_font(9))
             p.drawText(self.rect(), Qt.AlignCenter,
                        "Move cursor\nover image")
@@ -239,7 +241,7 @@ class TempPlot(QWidget):
         # Zero reference line
         if lo < 0.0 < hi:
             zy = _y(0.0)
-            p.setPen(QPen(QColor(55, 55, 55), 1, Qt.DotLine))
+            p.setPen(QPen(QColor(PALETTE.get("border", "#484848")), 1, Qt.DotLine))
             p.drawLine(PAD, zy, W - PAD, zy)
 
         # Sparkline
@@ -554,9 +556,9 @@ class LiveCanvas(QWidget):
         from PyQt5.QtWidgets import QMenu
         menu = QMenu(self)
         menu.setStyleSheet(
-            "QMenu { background:#1a1a1a; color:#ccc; border:1px solid #333; }"
-            "QMenu::item:selected { background:#2a2a2a; }"
-            "QMenu::separator { height:1px; background:#333; margin:3px 8px; }")
+            f"QMenu {{ background:{PALETTE.get('surface','#2d2d2d')}; color:{PALETTE.get('text','#ebebeb')}; border:1px solid {PALETTE.get('border','#484848')}; }}"
+            f"QMenu::item:selected {{ background:{PALETTE.get('surface2','#3d3d3d')}; }}"
+            f"QMenu::separator {{ height:1px; background:{PALETTE.get('border','#484848')}; margin:3px 8px; }}")
         menu.addAction("▶  Start Live",       lambda: self.context_action.emit("start"))
         menu.addAction("■  Stop Live",         lambda: self.context_action.emit("stop"))
         menu.addAction("❄  Freeze / Resume",   lambda: self.context_action.emit("freeze"))
@@ -621,11 +623,19 @@ class LiveTab(QWidget):
     #  Toolbar                                                          #
     # ---------------------------------------------------------------- #
 
+    def _apply_styles(self) -> None:
+        """Re-apply PALETTE-driven styles on theme switch."""
+        if hasattr(self, "_toolbar"):
+            self._toolbar.setStyleSheet(
+                f"background:{PALETTE.get('surface','#2d2d2d')}; "
+                f"border-bottom:1px solid {PALETTE.get('border','#484848')};")
+
     def _build_toolbar(self) -> QWidget:
         bar = QWidget()
         bar.setFixedHeight(46)
+        self._toolbar = bar
         bar.setStyleSheet(
-            "background:#151515; border-bottom:1px solid #1e1e1e;")
+            f"background:{PALETTE.get('surface','#2d2d2d')}; border-bottom:1px solid {PALETTE.get('border','#484848')};")
         lay = QHBoxLayout(bar)
         lay.setContentsMargins(12, 0, 12, 0)
         lay.setSpacing(8)
@@ -657,9 +667,9 @@ class LiveTab(QWidget):
         lay.addSpacing(20)
 
         # Status indicators
-        self._fps_lbl    = self._badge("— fps",   "#333")
-        self._cycle_lbl  = self._badge("cycle —", "#333")
-        self._state_lbl  = self._badge("IDLE",    "#333")
+        self._fps_lbl    = self._badge("— fps",   PALETTE.get('surface2','#3d3d3d'))
+        self._cycle_lbl  = self._badge("cycle —", PALETTE.get('surface2','#3d3d3d'))
+        self._state_lbl  = self._badge("IDLE",    PALETTE.get('surface2','#3d3d3d'))
 
         for l in [self._fps_lbl, self._cycle_lbl, self._state_lbl]:
             lay.addWidget(l)
@@ -691,7 +701,7 @@ class LiveTab(QWidget):
         l = QLabel(text)
         l.setFixedHeight(24)
         l.setStyleSheet(
-            f"background:{color}; color:#888; padding:0 8px; "
+            f"background:{color}; color:{PALETTE.get('textSub','#6a6a6a')}; padding:0 8px; "
             f"border-radius:3px; font-family:Menlo,monospace; font-size:{FONT['label']}pt;")
         return l
 
@@ -770,7 +780,7 @@ class LiveTab(QWidget):
         self._accum.valueChanged.connect(self._accum_slider.setValue)
         self._accum_lbl = QLabel("16 frames")
         self._accum_lbl.setStyleSheet(
-            f"font-family:Menlo,monospace; font-size:{FONT['heading']}pt; color:#555;")
+            f"font-family:Menlo,monospace; font-size:{FONT['heading']}pt; color:{PALETTE.get('textSub','#6a6a6a')};")
         self._accum.valueChanged.connect(
             lambda v: self._accum_lbl.setText(f"{v} frames"))
         dl.addWidget(self._accum_slider)
@@ -854,7 +864,7 @@ class LiveTab(QWidget):
             sl.addWidget(self._sub(lbl), r, 0)
             v = QLabel("—")
             v.setStyleSheet(
-                f"font-family:Menlo,monospace; font-size:{FONT['sublabel']}pt; color:#aaa;")
+                f"font-family:Menlo,monospace; font-size:{FONT['sublabel']}pt; color:{PALETTE.get('textDim','#999999')};")
             v.setAlignment(Qt.AlignRight)
             sl.addWidget(v, r, 1)
             self._stat_vals[key] = v
@@ -869,7 +879,7 @@ class LiveTab(QWidget):
         self._probe_dt  = QLabel("—")
         for l in [self._probe_xy, self._probe_drr, self._probe_dt]:
             l.setStyleSheet(
-                f"font-family:Menlo,monospace; font-size:{FONT['sublabel']}pt; color:#aaa;")
+                f"font-family:Menlo,monospace; font-size:{FONT['sublabel']}pt; color:{PALETTE.get('textDim','#999999')};")
         pl.addWidget(self._sub("Position"), 0, 0)
         pl.addWidget(self._probe_xy,         0, 1)
         pl.addWidget(self._sub("ΔR/R"),     1, 0)
@@ -946,7 +956,7 @@ class LiveTab(QWidget):
         self._btn_runner.set_running(False)
         self._start_btn.setEnabled(True)
         self._stop_btn.setEnabled(False)
-        self._set_state("STOPPED", "#555")
+        self._set_state("STOPPED", PALETTE.get('textSub', '#6a6a6a'))
         # Reset throttle timestamps so the next _start() renders the very
         # first frame immediately instead of waiting for the 333 ms window.
         self._last_canvas_ts = 0.0
@@ -1055,10 +1065,10 @@ class LiveTab(QWidget):
             # call it the first time a run goes "live" (not every 333 ms).
             if not self._badges_active:
                 self._fps_lbl.setStyleSheet(
-                    f"background:#1a2a1a; color:#00d4aa; padding:0 8px; "
+                    f"background:{PALETTE.get('surface2','#3d3d3d')}; color:{PALETTE.get('accent','#00d4aa')}; padding:0 8px; "
                     f"border-radius:3px; font-family:Menlo,monospace; font-size:{FONT['label']}pt;")
                 self._cycle_lbl.setStyleSheet(
-                    f"background:#1a1a2a; color:#6688cc; padding:0 8px; "
+                    f"background:{PALETTE.get('surface2','#3d3d3d')}; color:{PALETTE.get('textDim','#999999')}; padding:0 8px; "
                     f"border-radius:3px; font-family:Menlo,monospace; font-size:{FONT['label']}pt;")
                 self._badges_active = True
 
@@ -1100,7 +1110,7 @@ class LiveTab(QWidget):
     def _set_state(self, text: str, color: str):
         self._state_lbl.setText(text)
         self._state_lbl.setStyleSheet(
-            f"background:#111; color:{color}; padding:0 8px; "
+            f"background:{PALETTE.get('surface2','#3d3d3d')}; color:{color}; padding:0 8px; "
             f"border-radius:3px; font-family:Menlo,monospace; font-size:{FONT['label']}pt; "
             f"border:1px solid {color};")
 

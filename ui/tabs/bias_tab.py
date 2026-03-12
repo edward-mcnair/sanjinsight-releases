@@ -35,7 +35,7 @@ _PORTS = [
 def hline():
     f = QFrame()
     f.setFrameShape(QFrame.HLine)
-    f.setStyleSheet("color: #2a2a2a;")
+    f.setStyleSheet(f"color: {PALETTE.get('border','#484848')};")
     return f
 
 
@@ -300,11 +300,11 @@ class BiasTab(QWidget):
         btn.setFixedHeight(36)
         btn.setStyleSheet(f"""
             QPushButton {{
-                background: #1a2a20; color: #00d4aa;
+                background: {PALETTE.get('surface','#2d2d2d')}; color: #00d4aa;
                 border: 1px solid #00d4aa66; border-radius: 5px;
                 font-size: {FONT['label']}pt; font-weight: 600;
             }}
-            QPushButton:hover {{ background: #1e3028; }}
+            QPushButton:hover {{ background: {PALETTE.get('surface2','#3d3d3d')}; }}
         """)
         btn.clicked.connect(self.open_device_manager)
 

@@ -18,7 +18,7 @@ from PyQt5.QtWidgets import (
     QGroupBox, QComboBox, QTextEdit, QFileDialog)
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from ui.icons import set_btn_icon
-from ui.theme import progress_bar_qss, FONT, scaled_qss
+from ui.theme import progress_bar_qss, FONT, PALETTE, scaled_qss
 
 from hardware.app_state import app_state
 from acquisition        import AcquisitionProgress, AcqState
@@ -174,7 +174,7 @@ class AcquireTab(QWidget):
             "e.g.  Au on Si, 25°C ambient, Vbias=1.5 V, dark room")
         self._notes_edit.setMaximumHeight(70)
         self._notes_edit.setStyleSheet(
-            f"background:#161616; color:#bbb; border:1px solid #2a2a2a; "
+            f"background:{PALETTE.get('bg','#242424')}; color:{PALETTE.get('text','#ebebeb')}; border:1px solid {PALETTE.get('border','#484848')}; "
             f"font-size:{FONT['body']}pt; font-family:Menlo,monospace;")
         nl.addWidget(self._notes_edit)
 
@@ -189,10 +189,10 @@ class AcquireTab(QWidget):
             btn = QPushButton(chip_text)
             btn.setFixedHeight(22)
             btn.setStyleSheet(
-                f"QPushButton {{ background:#1e2a28; color:#00d4aa; "
-                f"border:1px solid #00d4aa44; border-radius:10px; "
+                f"QPushButton {{ background:{PALETTE.get('surface2','#3d3d3d')}; color:{PALETTE.get('accent','#00d4aa')}; "
+                f"border:1px solid {PALETTE.get('accent','#00d4aa')}44; border-radius:10px; "
                 f"font-size:{FONT['sublabel']}pt; padding:0 8px; }}"
-                "QPushButton:hover { background:#254d42; }")
+                f"QPushButton:hover {{ background:{PALETTE.get('surface','#2d2d2d')}; }}")
             btn.clicked.connect(
                 lambda _, t=chip_text: self._insert_notes_chip(t))
             chips_row.addWidget(btn)

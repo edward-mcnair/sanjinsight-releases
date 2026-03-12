@@ -16,7 +16,7 @@ log = logging.getLogger(__name__)
 from PyQt5.QtWidgets import (
     QWidget, QLabel, QPushButton, QSpinBox, QDoubleSpinBox,
     QProgressBar, QVBoxLayout, QHBoxLayout, QGridLayout,
-    QGroupBox, QComboBox, QTextEdit, QSizePolicy)
+    QGroupBox, QComboBox, QTextEdit, QSizePolicy, QToolButton)
 from PyQt5.QtCore    import Qt
 from PyQt5.QtGui     import QPainter, QColor, QPen, QFont, QBrush
 
@@ -65,53 +65,88 @@ class AutofocusTab(QWidget):
             cl.addWidget(lbl_widget, r, 0)
             cl.addWidget(widget,     r, 1)
 
-        self._strategy = QComboBox()
-        for s in ["sweep", "hill_climb"]:
-            self._strategy.addItem(s)
-        row("Strategy", self._strategy, 0, "autofocus")
-
-        self._metric = QComboBox()
-        for m in ["laplacian","tenengrad","normalized","fft","brenner"]:
-            self._metric.addItem(m)
-        row("Focus metric", self._metric, 1)
-
-        self._z_start = self._dspin(-2000, 0,     -500, "μm")
-        self._z_end   = self._dspin(0,     2000,   500, "μm")
-        row("Z start (rel)", self._z_start, 2, "af_sweep_range")
-        row("Z end (rel)",   self._z_end,   3)
-
-        self._coarse = self._dspin(1, 500,  50, "μm")
-        self._fine   = self._dspin(0.1, 50,  5, "μm")
-        row("Coarse step", self._coarse, 4)
-        row("Fine step",   self._fine,   5)
-
-        self._n_avg    = QSpinBox()
-        self._n_avg.setRange(1, 20)
-        self._n_avg.setValue(2)
-        self._n_avg.setFixedWidth(80)
-        row("Avg frames", self._n_avg, 6)
-
-        self._settle = QSpinBox()
-        self._settle.setRange(0, 2000)
-        self._settle.setValue(50)
-        self._settle.setSuffix(" ms")
-        self._settle.setFixedWidth(80)
-        row("Settle delay", self._settle, 7)
-
-        # ── Objective Z-range preset button (row 8) ───────────────────
+        # ── Objective preset (most prominent action — row 0) ──────────
         self._obj_preset_btn = QPushButton("Use Objective Z-Range")
         set_btn_icon(self._obj_preset_btn, "fa5s.crosshairs")
         self._obj_preset_btn.setToolTip(
             "Auto-fill Z start / end / step from the active objective's\n"
             "working distance.  Requires a motorized turret to be connected.")
         self._obj_preset_btn.clicked.connect(self._apply_objective_preset)
-        cl.addWidget(self._obj_preset_btn, 8, 0, 1, 2)
+        cl.addWidget(self._obj_preset_btn, 0, 0, 1, 2)
 
         self._obj_preset_lbl = QLabel("")
         self._obj_preset_lbl.setStyleSheet(
             f"font-size:{FONT['caption']}pt; color:{PALETTE['textDim']}; "
             f"padding-left:2px;")
-        cl.addWidget(self._obj_preset_lbl, 9, 0, 1, 2)
+        cl.addWidget(self._obj_preset_lbl, 1, 0, 1, 2)
+
+        # ── Z range (rows 2-3) ────────────────────────────────────────
+        self._z_start = self._dspin(-2000, 0,    -500, "μm")
+        self._z_end   = self._dspin(0,     2000,  500, "μm")
+        row("Z start (rel)", self._z_start, 2, "af_sweep_range")
+        row("Z end (rel)",   self._z_end,   3)
+
+        # ── Strategy (row 4) ──────────────────────────────────────────
+        self._strategy = QComboBox()
+        for s in ["sweep", "hill_climb"]:
+            self._strategy.addItem(s)
+        row("Strategy", self._strategy, 4, "autofocus")
+
+        # ── Advanced collapsible (row 5) ──────────────────────────────
+        adv_toggle = QToolButton()
+        adv_toggle.setText("▸  Advanced options")
+        adv_toggle.setCheckable(True)
+        adv_toggle.setChecked(False)
+        adv_toggle.setToolButtonStyle(Qt.ToolButtonTextOnly)
+        adv_toggle.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        adv_toggle.setStyleSheet(
+            f"QToolButton {{ background:transparent; color:{PALETTE.get('textDim','#999')}; "
+            f"font-size:{FONT['body']}pt; border:none; text-align:left; padding:2px 4px; }}"
+            f"QToolButton:hover {{ color:{PALETTE.get('text','#ebebeb')}; }}")
+        cl.addWidget(adv_toggle, 5, 0, 1, 2)
+
+        # Advanced body (row 6) — hidden by default
+        adv_body = QWidget()
+        adv_grid = QGridLayout(adv_body)
+        adv_grid.setSpacing(8)
+        adv_grid.setContentsMargins(0, 0, 0, 0)
+
+        def adv_row(label, widget, r):
+            adv_grid.addWidget(self._sub(label), r, 0)
+            adv_grid.addWidget(widget,           r, 1)
+
+        self._metric = QComboBox()
+        for m in ["laplacian", "tenengrad", "normalized", "fft", "brenner"]:
+            self._metric.addItem(m)
+        adv_row("Focus metric", self._metric, 0)
+
+        self._coarse = self._dspin(1,   500,  50, "μm")
+        self._fine   = self._dspin(0.1,  50,   5, "μm")
+        adv_row("Coarse step",  self._coarse, 1)
+        adv_row("Fine step",    self._fine,   2)
+
+        self._n_avg = QSpinBox()
+        self._n_avg.setRange(1, 20)
+        self._n_avg.setValue(2)
+        self._n_avg.setFixedWidth(80)
+        adv_row("Avg frames", self._n_avg, 3)
+
+        self._settle = QSpinBox()
+        self._settle.setRange(0, 2000)
+        self._settle.setValue(50)
+        self._settle.setSuffix(" ms")
+        self._settle.setFixedWidth(80)
+        adv_row("Settle delay", self._settle, 4)
+
+        adv_body.setVisible(False)
+        cl.addWidget(adv_body, 6, 0, 1, 2)
+
+        def _on_af_adv_toggled(checked: bool):
+            adv_toggle.setText(
+                "▾  Advanced options" if checked else "▸  Advanced options")
+            adv_body.setVisible(checked)
+
+        adv_toggle.toggled.connect(_on_af_adv_toggled)
 
         mid.addWidget(cfg_box, 1)
 

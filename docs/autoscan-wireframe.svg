@@ -1,0 +1,578 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1640" height="900" viewBox="0 0 1640 900"
+     font-family="Arial, Helvetica, sans-serif">
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       DEFS — gradients, filters, markers
+       ══════════════════════════════════════════════════════════════════ -->
+  <defs>
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="3" stdDeviation="6" flood-color="#00000020"/>
+    </filter>
+
+    <marker id="arr" markerWidth="10" markerHeight="7"
+            refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#00d4aa"/>
+    </marker>
+
+    <!-- Abstract thermal image gradient (purple → red → yellow) -->
+    <radialGradient id="thermal-hot1" cx="42%" cy="40%" r="30%">
+      <stop offset="0%"   stop-color="#ffff88" stop-opacity="0.95"/>
+      <stop offset="40%"  stop-color="#ff4400" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#220066" stop-opacity="0.0"/>
+    </radialGradient>
+    <radialGradient id="thermal-hot2" cx="68%" cy="58%" r="22%">
+      <stop offset="0%"   stop-color="#ffcc00" stop-opacity="0.9"/>
+      <stop offset="50%"  stop-color="#cc3300" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#220066" stop-opacity="0.0"/>
+    </radialGradient>
+    <linearGradient id="thermal-base" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#1a004d"/>
+      <stop offset="60%"  stop-color="#330066"/>
+      <stop offset="100%" stop-color="#440088"/>
+    </linearGradient>
+
+    <!-- Colorbar gradient (hot → cold, top → bottom) -->
+    <linearGradient id="colorbar" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#ffff88"/>
+      <stop offset="30%"  stop-color="#ff4400"/>
+      <stop offset="65%"  stop-color="#4400cc"/>
+      <stop offset="100%" stop-color="#000066"/>
+    </linearGradient>
+  </defs>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       CANVAS BACKGROUND
+       ══════════════════════════════════════════════════════════════════ -->
+  <rect width="1640" height="900" fill="#e8eaed"/>
+
+  <!-- ── Page header ── -->
+  <text x="820" y="36" text-anchor="middle"
+        font-size="17" font-weight="700" fill="#1a1a1a">
+    SanjINSIGHT  ·  AutoScan  —  UX Wireframe
+  </text>
+  <text x="820" y="56" text-anchor="middle"
+        font-size="11" fill="#777">
+    3-screen flow: New Scan  →  Preview + Findings  →  Results + Next Actions
+  </text>
+
+  <!-- Flow arrows (absolute coordinates, between screens) -->
+  <line x1="416" y1="450" x2="434" y2="450"
+        stroke="#00d4aa" stroke-width="3" marker-end="url(#arr)"/>
+  <text x="425" y="472" text-anchor="middle" font-size="10" fill="#00a888">preview</text>
+
+  <line x1="986" y1="450" x2="1004" y2="450"
+        stroke="#00d4aa" stroke-width="3" marker-end="url(#arr)"/>
+  <text x="995" y="472" text-anchor="middle" font-size="10" fill="#00a888">scan</text>
+
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       SCREEN A  —  NEW SCAN                   x=22, w=390
+       ══════════════════════════════════════════════════════════════════ -->
+  <g id="screen-a" transform="translate(22, 76)">
+
+    <!-- Card shadow + frame -->
+    <rect x="0" y="0" width="390" height="750" rx="7"
+          fill="white" filter="url(#shadow)"/>
+
+    <!-- Title bar -->
+    <rect x="0" y="0" width="390" height="46" rx="7" fill="#1c1c1e"/>
+    <rect x="0" y="34" width="390" height="12" fill="#1c1c1e"/>
+    <text x="195" y="28" text-anchor="middle"
+          font-size="13" font-weight="600" fill="white">New Scan</text>
+    <text x="14" y="28" font-size="10" fill="#666">AutoScan</text>
+
+    <!-- Step indicator -->
+    <circle cx="181" cy="62" r="5" fill="#00d4aa"/>
+    <circle cx="195" cy="62" r="5" fill="#555"/>
+    <circle cx="209" cy="62" r="5" fill="#555"/>
+    <text x="195" y="78" text-anchor="middle" font-size="10" fill="#888">Step 1 of 3</text>
+
+    <!-- ─────────────────────────────────────────────
+         SECTION: Goal
+         ───────────────────────────────────────────── -->
+    <text x="18" y="102" font-size="10" font-weight="700"
+          fill="#888" letter-spacing="1">WHAT ARE YOU LOOKING FOR?</text>
+
+    <!-- Radio: Find Hotspots (selected) -->
+    <circle cx="30" cy="122" r="7" fill="none" stroke="#00d4aa" stroke-width="2"/>
+    <circle cx="30" cy="122" r="3.5" fill="#00d4aa"/>
+    <text x="43" y="126" font-size="13" font-weight="600" fill="#1a1a1a">Find Hotspots</text>
+    <text x="43" y="140" font-size="10" fill="#aaa">Locate thermal anomalies on the device</text>
+
+    <!-- Radio: Map Full Area (unselected) -->
+    <circle cx="30" cy="160" r="7" fill="none" stroke="#bbb" stroke-width="2"/>
+    <text x="43" y="164" font-size="13" fill="#666">Map Full Area</text>
+    <text x="43" y="178" font-size="10" fill="#bbb">Grid scan + stitch  (requires stage)</text>
+
+    <line x1="18" y1="194" x2="372" y2="194" stroke="#eee" stroke-width="1"/>
+
+    <!-- ─────────────────────────────────────────────
+         SECTION: Stimulus / Power
+         ───────────────────────────────────────────── -->
+    <text x="18" y="212" font-size="10" font-weight="700"
+          fill="#888" letter-spacing="1">STIMULUS / POWER STATE</text>
+
+    <!-- Radio row -->
+    <circle cx="30" cy="232" r="7" fill="none" stroke="#00d4aa" stroke-width="2"/>
+    <circle cx="30" cy="232" r="3.5" fill="#00d4aa"/>
+    <text x="43" y="236" font-size="13" fill="#1a1a1a">Off</text>
+
+    <circle cx="93" cy="232" r="7" fill="none" stroke="#bbb" stroke-width="2"/>
+    <text x="106" y="236" font-size="13" fill="#666">On (DC)</text>
+
+    <circle cx="180" cy="232" r="7" fill="none" stroke="#bbb" stroke-width="2"/>
+    <text x="193" y="236" font-size="13" fill="#666">On (Pulsed)</text>
+
+    <!-- Optional power fields (dimmed — appears when On selected) -->
+    <rect x="30" y="246" width="330" height="58" rx="4"
+          fill="#fafafa" stroke="#ddd" stroke-width="1" stroke-dasharray="5,3"/>
+    <text x="42" y="264" font-size="10" fill="#ccc">Voltage (V)</text>
+    <rect x="110" y="254" width="72" height="20" rx="3" fill="#f0f0f0" stroke="#ddd" stroke-width="1"/>
+    <text x="146" y="268" text-anchor="middle" font-size="10" fill="#bbb">optional</text>
+    <text x="195" y="264" font-size="10" fill="#ccc">Current (A)</text>
+    <rect x="258" y="254" width="72" height="20" rx="3" fill="#f0f0f0" stroke="#ddd" stroke-width="1"/>
+    <text x="294" y="268" text-anchor="middle" font-size="10" fill="#bbb">optional</text>
+    <text x="42" y="294" font-size="9" fill="#ccc" font-style="italic">
+      Visible when On is selected — used to estimate thermal load
+    </text>
+
+    <line x1="18" y1="316" x2="372" y2="316" stroke="#eee" stroke-width="1"/>
+
+    <!-- ─────────────────────────────────────────────
+         SECTION: Scan Area
+         ───────────────────────────────────────────── -->
+    <text x="18" y="334" font-size="10" font-weight="700"
+          fill="#888" letter-spacing="1">SCAN AREA</text>
+
+    <circle cx="30" cy="354" r="7" fill="none" stroke="#00d4aa" stroke-width="2"/>
+    <circle cx="30" cy="354" r="3.5" fill="#00d4aa"/>
+    <text x="43" y="358" font-size="13" fill="#1a1a1a">Single frame</text>
+    <text x="145" y="358" font-size="10" fill="#aaa">  (set ROI after preview)</text>
+
+    <circle cx="30" cy="378" r="7" fill="none" stroke="#bbb" stroke-width="2"/>
+    <text x="43" y="382" font-size="13" fill="#666">ROI scan</text>
+    <text x="105" y="382" font-size="10" fill="#bbb">  multi-tile around selected region</text>
+
+    <circle cx="30" cy="402" r="7" fill="none" stroke="#bbb" stroke-width="2"/>
+    <text x="43" y="406" font-size="13" fill="#bbb">Full map scan</text>
+    <!-- Warning tag -->
+    <rect x="158" y="394" width="116" height="16" rx="3" fill="#fff8e6" stroke="#ffaa44" stroke-width="1"/>
+    <text x="216" y="405" text-anchor="middle" font-size="9" fill="#cc8800">⚠  No stage connected</text>
+
+    <line x1="18" y1="422" x2="372" y2="422" stroke="#eee" stroke-width="1"/>
+
+    <!-- ─────────────────────────────────────────────
+         SECTION: Speed / Quality slider
+         ───────────────────────────────────────────── -->
+    <text x="18" y="440" font-size="10" font-weight="700"
+          fill="#888" letter-spacing="1">SPEED / QUALITY</text>
+
+    <text x="18" y="462" font-size="11" fill="#aaa">Fast</text>
+    <!-- Track -->
+    <rect x="52" y="456" width="270" height="4" rx="2" fill="#e0e0e0"/>
+    <!-- Filled portion -->
+    <rect x="52" y="456" width="135" height="4" rx="2" fill="#00d4aa"/>
+    <!-- Thumb -->
+    <circle cx="187" cy="458" r="9" fill="white" stroke="#00d4aa" stroke-width="2"/>
+    <text x="328" y="462" font-size="11" fill="#aaa">Detailed</text>
+    <text x="187" y="478" text-anchor="middle" font-size="10" fill="#888">Balanced  (recommended)</text>
+
+    <line x1="18" y1="494" x2="372" y2="494" stroke="#eee" stroke-width="1"/>
+
+    <!-- ─────────────────────────────────────────────
+         SECTION: Advanced expander (collapsed)
+         ───────────────────────────────────────────── -->
+    <text x="18" y="514" font-size="12" fill="#00a888">▶  Advanced options</text>
+    <text x="172" y="514" font-size="10" fill="#bbb">  surface hint, exposure, frames…</text>
+
+    <!-- ─────────────────────────────────────────────
+         FOOTER
+         ───────────────────────────────────────────── -->
+    <line x1="18" y1="706" x2="372" y2="706" stroke="#eee" stroke-width="1"/>
+
+    <!-- Primary CTA -->
+    <rect x="85" y="716" width="220" height="42" rx="6" fill="#00d4aa"/>
+    <text x="195" y="741" text-anchor="middle"
+          font-size="14" font-weight="700" fill="white">Preview  →</text>
+    <text x="195" y="757" text-anchor="middle"
+          font-size="10" fill="white" fill-opacity="0.7">Captures 3–10 sec of live frames</text>
+
+  </g>
+
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       SCREEN B  —  PREVIEW + FINDINGS         x=438, w=544
+       ══════════════════════════════════════════════════════════════════ -->
+  <g id="screen-b" transform="translate(438, 76)">
+
+    <!-- Card -->
+    <rect x="0" y="0" width="544" height="750" rx="7"
+          fill="white" filter="url(#shadow)"/>
+
+    <!-- Title bar -->
+    <rect x="0" y="0" width="544" height="46" rx="7" fill="#1c1c1e"/>
+    <rect x="0" y="34" width="544" height="12" fill="#1c1c1e"/>
+    <text x="272" y="28" text-anchor="middle"
+          font-size="13" font-weight="600" fill="white">Preview + Findings</text>
+    <text x="14" y="28" font-size="10" fill="#666">AutoScan  ›  New Scan</text>
+    <text x="530" y="28" text-anchor="end" font-size="11" fill="#555">← Back</text>
+
+    <!-- Step indicator -->
+    <circle cx="258" cy="62" r="5" fill="#444"/>
+    <circle cx="272" cy="62" r="5" fill="#00d4aa"/>
+    <circle cx="286" cy="62" r="5" fill="#444"/>
+    <text x="272" y="78" text-anchor="middle" font-size="10" fill="#888">Step 2 of 3</text>
+
+    <!-- ─────────────────────────────────────────────
+         LEFT COLUMN — Live preview image
+         ───────────────────────────────────────────── -->
+
+    <!-- Image area -->
+    <rect x="14" y="88" width="310" height="244" rx="4" fill="#0d0d12"/>
+
+    <!-- Thermal image simulation -->
+    <rect x="14" y="88" width="310" height="244" rx="4" fill="url(#thermal-base)"/>
+    <ellipse cx="145" cy="172" rx="60" ry="50" fill="url(#thermal-hot1)"/>
+    <ellipse cx="235" cy="210" rx="42" ry="34" fill="url(#thermal-hot2)"/>
+
+    <!-- Suggested ROI box (amber dashed) -->
+    <rect x="74" y="122" width="190" height="162" rx="2"
+          fill="none" stroke="#ffaa44" stroke-width="1.5" stroke-dasharray="6,3"/>
+    <rect x="74" y="112" width="86" height="13" rx="2" fill="#ffaa44" fill-opacity="0.85"/>
+    <text x="78" y="122" font-size="9" fill="white" font-weight="600">Suggested ROI</text>
+
+    <!-- Hotspot markers -->
+    <circle cx="145" cy="172" r="14" fill="none" stroke="white" stroke-width="1" stroke-opacity="0.4"/>
+    <circle cx="145" cy="172" r="11" fill="#ff3300" fill-opacity="0.85"/>
+    <text x="145" y="176" text-anchor="middle" font-size="10"
+          fill="white" font-weight="700">1</text>
+
+    <circle cx="234" cy="208" r="10" fill="#ffaa44" fill-opacity="0.85"/>
+    <text x="234" y="212" text-anchor="middle" font-size="9"
+          fill="white" font-weight="700">2</text>
+
+    <circle cx="100" cy="220" r="8" fill="#ffaa44" fill-opacity="0.65"/>
+    <text x="100" y="224" text-anchor="middle" font-size="9"
+          fill="white" font-weight="700">3</text>
+
+    <!-- Image overlay label -->
+    <rect x="14" y="88" width="70" height="16" rx="3" fill="#00d4aa" fill-opacity="0.85"/>
+    <text x="18" y="99" font-size="9" fill="white" font-weight="600">LIVE  ΔR/R</text>
+
+    <!-- Controls below image -->
+    <text x="14" y="346" font-size="10" fill="#888">
+      Pan  ·  Zoom  ·  Colormap: Inferno ▼  ·  Auto-contrast: On
+    </text>
+
+    <!-- Progress bar -->
+    <rect x="14" y="354" width="310" height="4" rx="2" fill="#e8e8e8"/>
+    <rect x="14" y="354" width="310" height="4" rx="2" fill="#00d4aa"/>
+    <text x="14" y="370" font-size="10" fill="#888">
+      Preview complete  ·  12 frames collected  ·  3.4 s
+    </text>
+
+    <!-- ─────────────────────────────────────────────
+         RIGHT COLUMN — Findings panel
+         ───────────────────────────────────────────── -->
+    <rect x="336" y="88" width="194" height="562" rx="4"
+          fill="#fafafa" stroke="#e8e8e8" stroke-width="1"/>
+
+    <text x="348" y="110" font-size="10" font-weight="700"
+          fill="#444" letter-spacing="1">FINDINGS</text>
+
+    <!-- Hotspot count card -->
+    <rect x="348" y="118" width="170" height="58" rx="4"
+          fill="white" stroke="#f0f0f0" stroke-width="1"/>
+    <text x="433" y="140" text-anchor="middle"
+          font-size="26" font-weight="700" fill="#ff3300">3</text>
+    <text x="433" y="156" text-anchor="middle" font-size="10" fill="#888">hotspots detected</text>
+    <text x="433" y="169" text-anchor="middle" font-size="9" fill="#aaa">confidence: high</text>
+
+    <!-- Status pills header -->
+    <text x="348" y="190" font-size="10" font-weight="600" fill="#666">Signal quality</text>
+
+    <!-- SNR — good -->
+    <rect x="348" y="196" width="170" height="22" rx="3"
+          fill="#e6f9f4" stroke="#00c89a" stroke-width="1"/>
+    <text x="354" y="211" font-size="10" fill="#008866">✓  SNR</text>
+    <text x="513" y="211" text-anchor="end" font-size="10" font-weight="600" fill="#008866">Good  (24 dB)</text>
+
+    <!-- Saturation — OK -->
+    <rect x="348" y="222" width="170" height="22" rx="3"
+          fill="#e6f9f4" stroke="#00c89a" stroke-width="1"/>
+    <text x="354" y="237" font-size="10" fill="#008866">✓  Saturation</text>
+    <text x="513" y="237" text-anchor="end" font-size="10" font-weight="600" fill="#008866">OK  (0.3 %)</text>
+
+    <!-- Drift — moderate warning -->
+    <rect x="348" y="248" width="170" height="22" rx="3"
+          fill="#fffbee" stroke="#ffaa44" stroke-width="1"/>
+    <text x="354" y="263" font-size="10" fill="#aa7000">⚠  Drift</text>
+    <text x="513" y="263" text-anchor="end" font-size="10" font-weight="600" fill="#aa7000">Moderate</text>
+
+    <line x1="348" y1="282" x2="512" y2="282" stroke="#e8e8e8" stroke-width="1"/>
+
+    <!-- Scan area selection -->
+    <text x="348" y="300" font-size="10" font-weight="600" fill="#666">Scan area</text>
+
+    <!-- Selected: hottest region -->
+    <circle cx="358" cy="316" r="6" fill="none" stroke="#00d4aa" stroke-width="2"/>
+    <circle cx="358" cy="316" r="3.5" fill="#00d4aa"/>
+    <text x="370" y="320" font-size="11" fill="#1a1a1a">Hottest region</text>
+    <rect x="370" y="324" width="84" height="13" rx="2" fill="#00d4aa" fill-opacity="0.14"/>
+    <text x="412" y="334" text-anchor="middle" font-size="9" fill="#007755">recommended</text>
+
+    <circle cx="358" cy="352" r="6" fill="none" stroke="#bbb" stroke-width="2"/>
+    <text x="370" y="356" font-size="11" fill="#777">Selected ROI</text>
+
+    <circle cx="358" cy="374" r="6" fill="none" stroke="#bbb" stroke-width="2"/>
+    <text x="370" y="378" font-size="11" fill="#777">Full view</text>
+    <text x="370" y="390" font-size="9" fill="#bbb">~3 min 20 sec</text>
+
+    <line x1="348" y1="404" x2="512" y2="404" stroke="#e8e8e8" stroke-width="1"/>
+
+    <!-- Estimated time -->
+    <text x="348" y="422" font-size="10" font-weight="600" fill="#666">Estimated time</text>
+    <text x="512" y="422" text-anchor="end" font-size="15" font-weight="700" fill="#1a1a1a">~45 sec</text>
+
+    <line x1="348" y1="434" x2="512" y2="434" stroke="#e8e8e8" stroke-width="1"/>
+
+    <!-- Quality mini-slider -->
+    <text x="348" y="452" font-size="10" font-weight="600" fill="#666">Quality</text>
+    <text x="348" y="468" font-size="9" fill="#aaa">Fast</text>
+    <rect x="375" y="463" width="96" height="3" rx="2" fill="#e0e0e0"/>
+    <rect x="375" y="463" width="48" height="3" rx="2" fill="#00d4aa"/>
+    <circle cx="423" cy="464.5" r="6" fill="white" stroke="#00d4aa" stroke-width="1.5"/>
+    <text x="477" y="468" font-size="9" fill="#aaa">Detailed</text>
+
+    <!-- Adjust expander -->
+    <text x="348" y="486" font-size="11" fill="#00a888">▶  Adjust…</text>
+    <text x="387" y="486" font-size="10" fill="#bbb">  exposure, gain, frames</text>
+
+    <line x1="348" y1="500" x2="512" y2="500" stroke="#e8e8e8" stroke-width="1"/>
+
+    <!-- Explainability note -->
+    <text x="348" y="516" font-size="9" fill="#bbb" font-style="italic">Auto-selected: Hottest region</text>
+    <text x="348" y="528" font-size="9" fill="#bbb" font-style="italic">Hotspot #1 is 3.1 K above background</text>
+    <text x="348" y="540" font-size="9" fill="#bbb" font-style="italic">with 94 % confidence across 8 frames.</text>
+
+    <!-- ─────────────────────────────────────────────
+         FOOTER
+         ───────────────────────────────────────────── -->
+    <line x1="14" y1="706" x2="530" y2="706" stroke="#eee" stroke-width="1"/>
+
+    <text x="20" y="731" font-size="12" fill="#aaa">← Back</text>
+
+    <rect x="220" y="716" width="310" height="42" rx="6" fill="#00d4aa"/>
+    <text x="375" y="741" text-anchor="middle"
+          font-size="14" font-weight="700" fill="white">Scan  →</text>
+    <text x="375" y="757" text-anchor="middle"
+          font-size="10" fill="white" fill-opacity="0.7">Hottest region  ·  ~45 sec</text>
+
+  </g>
+
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       SCREEN C  —  RESULTS + NEXT ACTIONS     x=1010, w=608
+       ══════════════════════════════════════════════════════════════════ -->
+  <g id="screen-c" transform="translate(1010, 76)">
+
+    <!-- Card -->
+    <rect x="0" y="0" width="608" height="750" rx="7"
+          fill="white" filter="url(#shadow)"/>
+
+    <!-- Title bar -->
+    <rect x="0" y="0" width="608" height="46" rx="7" fill="#1c1c1e"/>
+    <rect x="0" y="34" width="608" height="12" fill="#1c1c1e"/>
+    <text x="304" y="28" text-anchor="middle"
+          font-size="13" font-weight="600" fill="white">Results</text>
+    <text x="14" y="28" font-size="10" fill="#666">AutoScan  ›  Preview  ›  Results</text>
+    <text x="594" y="28" text-anchor="end" font-size="11" fill="#555">← Back</text>
+
+    <!-- Step indicator -->
+    <circle cx="290" cy="62" r="5" fill="#444"/>
+    <circle cx="304" cy="62" r="5" fill="#444"/>
+    <circle cx="318" cy="62" r="5" fill="#00d4aa"/>
+    <text x="304" y="78" text-anchor="middle" font-size="10" fill="#888">Step 3 of 3</text>
+
+    <!-- ─────────────────────────────────────────────
+         LEFT COLUMN — Result image + quality
+         ───────────────────────────────────────────── -->
+
+    <!-- Result image -->
+    <rect x="14" y="88" width="302" height="228" rx="4" fill="#0d0d12"/>
+    <rect x="14" y="88" width="302" height="228" rx="4" fill="url(#thermal-base)"/>
+    <ellipse cx="142" cy="168" rx="58" ry="48" fill="url(#thermal-hot1)"/>
+    <ellipse cx="228" cy="202" rx="40" ry="32" fill="url(#thermal-hot2)"/>
+
+    <!-- Scan area boundary (teal) -->
+    <rect x="54" y="108" width="192" height="168" rx="2"
+          fill="none" stroke="#00d4aa" stroke-width="1.2"
+          stroke-dasharray="5,3" opacity="0.6"/>
+
+    <!-- Hotspot markers on result -->
+    <!-- #1 — danger (highest) -->
+    <circle cx="136" cy="162" r="15" fill="none" stroke="#ff3300" stroke-width="1.5" stroke-opacity="0.5"/>
+    <circle cx="136" cy="162" r="11" fill="#ff3300" fill-opacity="0.9"/>
+    <text x="136" y="166" text-anchor="middle" font-size="10" fill="white" font-weight="700">1</text>
+    <rect x="152" y="148" width="44" height="13" rx="2" fill="#1c1c1e" fill-opacity="0.7"/>
+    <text x="153" y="158" font-size="9" fill="#ff6644">+4.2 K</text>
+
+    <!-- #2 — warning -->
+    <circle cx="226" cy="200" rx="10" fill="#ffaa44" fill-opacity="0.88"/>
+    <text x="226" y="204" text-anchor="middle" font-size="9" fill="white" font-weight="700">2</text>
+    <rect x="238" y="190" width="36" height="13" rx="2" fill="#1c1c1e" fill-opacity="0.7"/>
+    <text x="239" y="200" font-size="9" fill="#ffcc44">+2.8 K</text>
+
+    <!-- #3 — mild -->
+    <circle cx="94" cy="210" r="8" fill="#ffaa44" fill-opacity="0.65"/>
+    <text x="94" y="214" text-anchor="middle" font-size="9" fill="white" font-weight="700">3</text>
+
+    <!-- Image label -->
+    <rect x="14" y="88" width="70" height="16" rx="3" fill="#00d4aa" fill-opacity="0.85"/>
+    <text x="18" y="99" font-size="9" fill="white" font-weight="600">RESULT  ΔR/R</text>
+
+    <!-- Colorbar -->
+    <rect x="322" y="88" width="10" height="228" rx="2" fill="url(#colorbar)"/>
+    <text x="336" y="96" font-size="8" fill="#888">max</text>
+    <text x="336" y="317" font-size="8" fill="#888">min</text>
+
+    <!-- Image controls row -->
+    <text x="14" y="332" font-size="10" fill="#888">
+      Pan  ·  Zoom  ·  Colormap: Inferno ▼  ·  Export…
+    </text>
+
+    <!-- Run quality card -->
+    <rect x="14" y="342" width="320" height="68" rx="4"
+          fill="#fafafa" stroke="#e0e0e0" stroke-width="1"/>
+
+    <text x="24" y="360" font-size="10" font-weight="600" fill="#555">Run Quality</text>
+    <text x="328" y="360" text-anchor="end" font-size="14" font-weight="700" fill="#00a888">87 / 100</text>
+
+    <!-- Quality bar -->
+    <rect x="24" y="366" width="294" height="5" rx="3" fill="#e8e8e8"/>
+    <rect x="24" y="366" width="256" height="5" rx="3" fill="#00d4aa"/>
+
+    <text x="24" y="384" font-size="9" fill="#008866">✓  Good SNR throughout scan</text>
+    <text x="24" y="398" font-size="9" fill="#aa7000">
+      ⚠  Slight saturation near hotspot #1 — consider reducing exposure
+    </text>
+
+    <!-- ─────────────────────────────────────────────
+         RIGHT COLUMN — Hotspot list + next actions
+         ───────────────────────────────────────────── -->
+    <rect x="350" y="88" width="244" height="562" rx="4"
+          fill="#fafafa" stroke="#e8e8e8" stroke-width="1"/>
+
+    <text x="362" y="110" font-size="10" font-weight="700"
+          fill="#444" letter-spacing="1">HOTSPOTS  (3)</text>
+
+    <!-- ── Hotspot 1 card — WARN ── -->
+    <rect x="362" y="118" width="220" height="84" rx="4"
+          fill="white" stroke="#ffdddd" stroke-width="1.5"/>
+    <rect x="362" y="118" width="4" height="84" rx="2" fill="#ff3300"/>
+
+    <circle cx="382" cy="135" r="10" fill="#ff3300"/>
+    <text x="382" y="139" text-anchor="middle" font-size="10"
+          fill="white" font-weight="700">1</text>
+    <text x="397" y="134" font-size="12" font-weight="600" fill="#1a1a1a">Top-left region</text>
+    <rect x="488" y="122" width="40" height="16" rx="3" fill="#ff3300"/>
+    <text x="508" y="133" text-anchor="middle" font-size="9" fill="white" font-weight="700">WARN</text>
+
+    <text x="374" y="152" font-size="10" fill="#666">Peak rise</text>
+    <text x="578" y="152" text-anchor="end" font-size="13" font-weight="700" fill="#ff3300">+4.2 K</text>
+    <text x="374" y="168" font-size="10" fill="#888">Δ background</text>
+    <text x="578" y="168" text-anchor="end" font-size="10" fill="#888">+3.1 K</text>
+    <text x="374" y="184" font-size="10" fill="#888">Area  ·  confidence</text>
+    <text x="578" y="184" text-anchor="end" font-size="10" fill="#888">142 px²  ·  94 %</text>
+
+    <!-- ── Hotspot 2 card — OK ── -->
+    <rect x="362" y="208" width="220" height="72" rx="4"
+          fill="white" stroke="#e8e8e8" stroke-width="1"/>
+    <rect x="362" y="208" width="4" height="72" rx="2" fill="#ffaa44"/>
+
+    <circle cx="382" cy="223" r="10" fill="#ffaa44"/>
+    <text x="382" y="227" text-anchor="middle" font-size="10"
+          fill="white" font-weight="700">2</text>
+    <text x="397" y="222" font-size="12" font-weight="600" fill="#333">Center-right</text>
+    <rect x="494" y="211" width="28" height="16" rx="3"
+          fill="#e8f6ee" stroke="#44aa66" stroke-width="1"/>
+    <text x="508" y="222" text-anchor="middle" font-size="9" fill="#44aa66">OK</text>
+
+    <text x="374" y="240" font-size="10" fill="#666">Peak rise</text>
+    <text x="578" y="240" text-anchor="end" font-size="13" font-weight="700" fill="#cc8800">+2.8 K</text>
+    <text x="374" y="256" font-size="10" fill="#888">Δ background  ·  conf.</text>
+    <text x="578" y="256" text-anchor="end" font-size="10" fill="#888">+1.7 K  ·  81 %</text>
+    <text x="374" y="272" font-size="10" fill="#888">Area</text>
+    <text x="578" y="272" text-anchor="end" font-size="10" fill="#888">88 px²</text>
+
+    <!-- ── Hotspot 3 card — OK ── -->
+    <rect x="362" y="286" width="220" height="58" rx="4"
+          fill="white" stroke="#e8e8e8" stroke-width="1"/>
+    <rect x="362" y="286" width="4" height="58" rx="2" fill="#ffaa44" opacity="0.5"/>
+
+    <circle cx="382" cy="302" r="9" fill="#ffaa44" opacity="0.7"/>
+    <text x="382" y="306" text-anchor="middle" font-size="9"
+          fill="white" font-weight="700">3</text>
+    <text x="397" y="301" font-size="12" font-weight="600" fill="#555">Top-right</text>
+    <rect x="494" y="290" width="28" height="16" rx="3"
+          fill="#e8f6ee" stroke="#44aa66" stroke-width="1"/>
+    <text x="508" y="301" text-anchor="middle" font-size="9" fill="#44aa66">OK</text>
+
+    <text x="374" y="320" font-size="10" fill="#888">Peak rise  ·  confidence</text>
+    <text x="578" y="320" text-anchor="end" font-size="10" fill="#aaa">+1.4 K  ·  67 %</text>
+    <text x="374" y="334" font-size="10" fill="#888">Area</text>
+    <text x="578" y="334" text-anchor="end" font-size="10" fill="#aaa">54 px²</text>
+
+    <line x1="362" y1="356" x2="578" y2="356" stroke="#e8e8e8" stroke-width="1"/>
+
+    <!-- ── Recommended next actions ── -->
+    <text x="362" y="374" font-size="10" font-weight="700"
+          fill="#444" letter-spacing="1">RECOMMENDED NEXT ACTIONS</text>
+
+    <!-- Action 1 — highlighted (pre-selected for Next Scan button) -->
+    <rect x="362" y="382" width="220" height="34" rx="4"
+          fill="#e6f9f4" stroke="#00d4aa" stroke-width="1.5"/>
+    <text x="372" y="402" font-size="11" font-weight="600" fill="#007755">
+      ↙  Zoom scan → hotspot #1
+    </text>
+    <text x="578" y="402" text-anchor="end" font-size="9" fill="#00a888">~25 s</text>
+
+    <!-- Action 2 -->
+    <rect x="362" y="420" width="220" height="30" rx="4"
+          fill="white" stroke="#e0e0e0" stroke-width="1"/>
+    <text x="372" y="439" font-size="11" fill="#555">⚡  Transient @ hotspot #1</text>
+
+    <!-- Action 3 -->
+    <rect x="362" y="456" width="220" height="30" rx="4"
+          fill="white" stroke="#e0e0e0" stroke-width="1"/>
+    <text x="372" y="475" font-size="11" fill="#555">✓  Confirm hotspot #2</text>
+
+    <!-- Action 4 -->
+    <rect x="362" y="492" width="220" height="30" rx="4"
+          fill="white" stroke="#e0e0e0" stroke-width="1"/>
+    <text x="372" y="511" font-size="11" fill="#555">↗  Export results (PNG, CSV, PDF)</text>
+
+    <!-- ─────────────────────────────────────────────
+         FOOTER
+         ───────────────────────────────────────────── -->
+    <line x1="14" y1="706" x2="594" y2="706" stroke="#eee" stroke-width="1"/>
+
+    <text x="20" y="731" font-size="12" fill="#aaa">← Back</text>
+
+    <!-- New Scan (secondary) -->
+    <rect x="280" y="716" width="120" height="38" rx="5"
+          fill="white" stroke="#ddd" stroke-width="1"/>
+    <text x="340" y="739" text-anchor="middle" font-size="12" fill="#666">New Scan</text>
+
+    <!-- Next Scan (primary — pre-filled) -->
+    <rect x="408" y="716" width="186" height="38" rx="5" fill="#00d4aa"/>
+    <text x="501" y="733" text-anchor="middle"
+          font-size="13" font-weight="700" fill="white">Next Scan  →</text>
+    <text x="501" y="748" text-anchor="middle"
+          font-size="9" fill="white" fill-opacity="0.75">Zoom → hotspot #1</text>
+
+  </g>
+
+</svg>

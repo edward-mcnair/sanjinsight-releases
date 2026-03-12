@@ -16,7 +16,7 @@ import numpy as np
 
 from ui.button_utils import RunningButton, apply_hand_cursor
 from ui.font_utils   import sans_font
-from ui.theme import FONT, scaled_qss
+from ui.theme import FONT, PALETTE, scaled_qss
 
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -247,9 +247,9 @@ class ScanMapView(QWidget):
         from PyQt5.QtWidgets import QMenu
         menu = QMenu(self)
         menu.setStyleSheet(
-            "QMenu { background:#1a1a1a; color:#ccc; border:1px solid #333; }"
-            "QMenu::item:selected { background:#2a2a2a; }"
-            "QMenu::separator { height:1px; background:#333; margin:3px 8px; }")
+            f"QMenu {{ background:{PALETTE.get('surface','#2d2d2d')}; color:{PALETTE.get('text','#ebebeb')}; border:1px solid {PALETTE.get('border','#484848')}; }}"
+            f"QMenu::item:selected {{ background:{PALETTE.get('surface2','#3d3d3d')}; }}"
+            f"QMenu::separator {{ height:1px; background:{PALETTE.get('border','#484848')}; margin:3px 8px; }}")
         menu.addAction("🔍  Reset Zoom (fit)", self.reset_zoom)
         menu.addSeparator()
         act_save = menu.addAction("💾  Save Map Image…")
@@ -440,14 +440,14 @@ class ScanTab(QWidget):
         # is floating in the wrong position.  Use explicit styling instead.
         result_tabs.setStyleSheet(f"""
             QTabWidget::pane {{
-                border: 1px solid #2a2a2a;
+                border: 1px solid {PALETTE.get('border','#484848')};
                 border-top: none;
-                background: #111;
+                background: {PALETTE.get('bg','#242424')};
             }}
             QTabBar::tab {{
-                background: #1a1a1a;
-                color: #555;
-                border: 1px solid #2a2a2a;
+                background: {PALETTE.get('surface2','#3d3d3d')};
+                color: {PALETTE.get('textDim','#999999')};
+                border: 1px solid {PALETTE.get('border','#484848')};
                 border-bottom: none;
                 border-radius: 3px 3px 0 0;
                 padding: 4px 20px;
@@ -455,11 +455,11 @@ class ScanTab(QWidget):
                 font-size: {FONT['label']}pt;
             }}
             QTabBar::tab:selected {{
-                background: #111;
-                color: #00d4aa;
-                border-bottom-color: #111;
+                background: {PALETTE.get('bg','#242424')};
+                color: {PALETTE.get('accent','#00d4aa')};
+                border-bottom-color: {PALETTE.get('bg','#242424')};
             }}
-            QTabBar::tab:hover:!selected {{ color: #888; background: #222; }}
+            QTabBar::tab:hover:!selected {{ color: {PALETTE.get('textSub','#6a6a6a')}; background: {PALETTE.get('surface','#2d2d2d')}; }}
         """)
 
         # Live / final ΔR/R
@@ -601,6 +601,15 @@ class ScanTab(QWidget):
 
         for b in [self._save_map_btn, self._save_img_btn, self._report_btn, self._save_prof_btn]:
             b.setEnabled(True)
+
+    def apply_config(self, cfg: dict) -> None:
+        """Pre-fill grid config from an AutoScan config dict."""
+        if "n_cols"    in cfg: self._n_cols.setValue(int(cfg["n_cols"]))
+        if "n_rows"    in cfg: self._n_rows.setValue(int(cfg["n_rows"]))
+        if "step_x_um" in cfg: self._step_x.setValue(float(cfg["step_x_um"]))
+        if "step_y_um" in cfg: self._step_y.setValue(float(cfg["step_y_um"]))
+        if "settle_s"  in cfg: self._settle.setValue(float(cfg["settle_s"]))
+        if "n_frames"  in cfg: self._n_frames.setValue(int(cfg["n_frames"]))
 
     # ---------------------------------------------------------------- #
     #  Run / Abort                                                     #

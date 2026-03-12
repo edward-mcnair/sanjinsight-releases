@@ -27,7 +27,7 @@ from .session_manager import SessionManager
 from .processing      import to_display, apply_colormap, COLORMAP_OPTIONS, COLORMAP_TOOLTIPS, setup_cmap_combo
 import config as cfg_mod
 from ui.icons import set_btn_icon
-from ui.theme import FONT, scaled_qss
+from ui.theme import FONT, PALETTE, scaled_qss
 
 
 # ------------------------------------------------------------------ #
@@ -56,14 +56,14 @@ class NotesDialog(QDialog):
         self.setMinimumWidth(560)
         self.setMinimumHeight(340)
         self.setStyleSheet(
-            f"QDialog  {{ background:#1a1a1a; }}"
-            f"QLabel   {{ color:#aaa; font-size:{FONT['heading']}pt; }}"
-            f"QGroupBox {{ color:#666; font-size:{FONT['body']}pt; border:1px solid #2a2a2a; "
+            f"QDialog  {{ background:{PALETTE.get('bg','#242424')}; }}"
+            f"QLabel   {{ color:{PALETTE.get('text','#ebebeb')}; font-size:{FONT['heading']}pt; }}"
+            f"QGroupBox {{ color:{PALETTE.get('textDim','#999999')}; font-size:{FONT['body']}pt; border:1px solid {PALETTE.get('border','#484848')}; "
             f"            border-radius:3px; margin-top:8px; padding-top:6px; }}"
             f"QGroupBox::title {{ subcontrol-origin:margin; left:8px; }}"
-            f"QPushButton {{ background:#252525; color:#aaa; border:1px solid #333; "
+            f"QPushButton {{ background:{PALETTE.get('surface2','#3d3d3d')}; color:{PALETTE.get('textSub','#6a6a6a')}; border:1px solid {PALETTE.get('border','#484848')}; "
             f"              border-radius:2px; padding:4px 10px; font-size:{FONT['body']}pt; }}"
-            f"QPushButton:hover {{ background:#2e2e2e; color:#fff; }}")
+            f"QPushButton:hover {{ background:{PALETTE.get('surface','#2d2d2d')}; color:{PALETTE.get('text','#ebebeb')}; }}")
 
         lay = QVBoxLayout(self)
         lay.setContentsMargins(16, 14, 16, 14)
@@ -71,21 +71,21 @@ class NotesDialog(QDialog):
 
         # Title
         title = QLabel("Edit Notes")
-        title.setStyleSheet(scaled_qss("font-size:18pt; font-weight:bold; color:#ccc;"))
+        title.setStyleSheet(scaled_qss(f"font-size:18pt; font-weight:bold; color:{PALETTE.get('text','#ebebeb')};"))
         lay.addWidget(title)
 
         hint = QLabel(
             "Describe the sample, conditions, DUT ID, or anything needed "
             "to reproduce this measurement.")
         hint.setWordWrap(True)
-        hint.setStyleSheet(f"font-size:{FONT['body']}pt; color:#555;")
+        hint.setStyleSheet(f"font-size:{FONT['body']}pt; color:{PALETTE.get('textDim','#999999')};")
         lay.addWidget(hint)
 
         # Main text editor
         self._edit = QTextEdit()
         self._edit.setPlainText(initial_text)
         self._edit.setStyleSheet(
-            f"background:#161616; color:#ccc; border:1px solid #2a2a2a; "
+            f"background:{PALETTE.get('bg','#242424')}; color:{PALETTE.get('text','#ebebeb')}; border:1px solid {PALETTE.get('border','#484848')}; "
             f"font-size:{FONT['heading']}pt; font-family:Menlo,monospace;")
         self._edit.setMinimumHeight(120)
         lay.addWidget(self._edit)
@@ -99,17 +99,17 @@ class NotesDialog(QDialog):
             btn = QPushButton(tag)
             btn.setFixedHeight(26)
             btn.setStyleSheet(
-                f"QPushButton {{ background:#1e2a28; color:#00d4aa; "
-                f"border:1px solid #00d4aa33; border-radius:12px; "
+                f"QPushButton {{ background:{PALETTE.get('surface2','#3d3d3d')}; color:{PALETTE.get('accent','#00d4aa')}; "
+                f"border:1px solid {PALETTE.get('accent','#00d4aa')}33; border-radius:12px; "
                 f"font-size:{FONT['label']}pt; padding:0 8px; }}"
-                f"QPushButton:hover {{ background:#254d42; border-color:#00d4aa99; }}")
+                f"QPushButton:hover {{ background:{PALETTE.get('surface','#2d2d2d')}; border-color:{PALETTE.get('accent','#00d4aa')}99; }}")
             btn.clicked.connect(lambda _, t=tag: self._insert(t))
             chips_lay.addWidget(btn, i // cols, i % cols)
         lay.addWidget(chips_box)
 
         # Character count
         self._char_lbl = QLabel()
-        self._char_lbl.setStyleSheet(f"color:#444; font-size:{FONT['label']}pt;")
+        self._char_lbl.setStyleSheet(f"color:{PALETTE.get('textDim','#999999')}; font-size:{FONT['label']}pt;")
         self._edit.textChanged.connect(self._update_char_count)
         self._update_char_count()
         lay.addWidget(self._char_lbl)
@@ -180,7 +180,7 @@ class SessionCard(QFrame):
 
         self._label_lbl = QLabel(meta.label or meta.uid)
         self._label_lbl.setStyleSheet(
-            scaled_qss("font-size:15pt; color:#ccc; font-weight:bold;"))
+            scaled_qss(f"font-size:15pt; color:{PALETTE.get('text','#ebebeb')}; font-weight:bold;"))
         self._label_lbl.setWordWrap(False)
 
         snr_str = f"SNR {meta.snr_db:.1f} dB" if meta.snr_db else "SNR —"
@@ -188,7 +188,7 @@ class SessionCard(QFrame):
         sub = QLabel(
             f"{meta.timestamp_str}   ·   {meta.n_frames} frames   ·   "
             f"{snr_str}   ·   {size_str}")
-        sub.setStyleSheet(f"font-size:{FONT['label']}pt; color:#555;")
+        sub.setStyleSheet(f"font-size:{FONT['label']}pt; color:{PALETTE.get('textDim','#999999')};")
 
         info.addWidget(self._label_lbl)
         info.addWidget(sub)
@@ -203,12 +203,19 @@ class SessionCard(QFrame):
         self._notes_badge.setVisible(bool(meta.notes))
         lay.addWidget(self._notes_badge)
 
+        # A/B compare slot badge — hidden until assigned
+        self._cmp_badge = QLabel()
+        self._cmp_badge.setFixedSize(20, 20)
+        self._cmp_badge.setAlignment(Qt.AlignCenter)
+        self._cmp_badge.setVisible(False)
+        lay.addWidget(self._cmp_badge)
+
         # Delete button
         del_btn = QToolButton()
         del_btn.setText("✕")
         del_btn.setFixedSize(22, 22)
         del_btn.setStyleSheet(
-            scaled_qss("background:transparent; color:#444; border:none; font-size:15pt;"))
+            scaled_qss(f"background:transparent; color:{PALETTE.get('textDim','#999999')}; border:none; font-size:15pt;"))
         del_btn.clicked.connect(lambda: self.deleted.emit(self.uid))
         lay.addWidget(del_btn)
 
@@ -229,20 +236,39 @@ class SessionCard(QFrame):
         """Show or hide the notes badge."""
         self._notes_badge.setVisible(has_notes)
 
+    def set_compare_slot(self, slot):  # slot: str | None
+        """Show 'A' (teal) or 'B' (blue) badge, or hide if slot is None."""
+        if slot is None:
+            self._cmp_badge.setVisible(False)
+            return
+        color = "#00d4aa" if slot == "a" else "#4e73df"
+        letter = slot.upper()
+        self._cmp_badge.setText(letter)
+        self._cmp_badge.setToolTip(f"Assigned to compare slot {letter}")
+        self._cmp_badge.setStyleSheet(
+            f"background:{color}; color:#fff; border-radius:10px; "
+            f"font-size:{FONT['sublabel']}pt; font-weight:700;"
+        )
+        self._cmp_badge.setVisible(True)
+
     def set_selected(self, sel: bool):
         self._selected = sel
         self._apply_style()
 
     def _apply_style(self):
+        acc  = PALETTE.get('accent',   '#00d4aa')
+        surf = PALETTE.get('surface',  '#2d2d2d')
+        surf2 = PALETTE.get('surface2', '#3d3d3d')
+        bdr  = PALETTE.get('border',   '#484848')
         if self._selected:
             self.setStyleSheet(
-                "SessionCard { background:#1e2d2a; border:1px solid #00d4aa; "
-                "border-radius:3px; }")
+                f"SessionCard {{ background:{surf2}; border:1px solid {acc}; "
+                f"border-radius:3px; }}")
         else:
             self.setStyleSheet(
-                "SessionCard { background:#1e1e1e; border:1px solid #2a2a2a; "
-                "border-radius:3px; }"
-                "SessionCard:hover { background:#222; border-color:#333; }")
+                f"SessionCard {{ background:{surf}; border:1px solid {bdr}; "
+                f"border-radius:3px; }}"
+                f"SessionCard:hover {{ background:{surf2}; border-color:{bdr}; }}")
 
     def mousePressEvent(self, e):
         if e.button() == Qt.LeftButton:
@@ -364,7 +390,7 @@ class DataTab(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setStyleSheet("QScrollArea { border:none; background:#181818; }")
+        scroll.setStyleSheet(f"QScrollArea {{ border:none; background:{PALETTE.get('bg','#242424')}; }}")
 
         self._list_widget = QWidget()
         self._list_layout = QVBoxLayout(self._list_widget)
@@ -432,7 +458,7 @@ class DataTab(QWidget):
         self._notes_edit.setPlaceholderText("Click to add notes…")
         self._notes_edit.setFixedHeight(72)
         self._notes_edit.setStyleSheet(
-            f"background:#161616; color:#bbb; border:1px solid #2a2a2a; "
+            f"background:{PALETTE.get('bg','#242424')}; color:{PALETTE.get('text','#ebebeb')}; border:1px solid {PALETTE.get('border','#484848')}; "
             f"font-size:{FONT['body']}pt; font-family:Menlo,monospace;")
         self._notes_edit.focusOutEvent = self._notes_focus_out
         ml.addWidget(self._notes_edit, notes_row, 1)
@@ -746,21 +772,21 @@ class DataTab(QWidget):
         dlg = QDialog(self)
         dlg.setWindowTitle("Export Session")
         dlg.setStyleSheet(scaled_qss(
-            "QDialog { background:#1e1e1e; } "
-            "QLabel  { color:#ccc; font-size:15pt; } "
-            "QCheckBox { color:#ccc; font-size:15pt; } "
-            "QPushButton { background:#2a2a2a; color:#ccc; "
-            "  border:1px solid #444; border-radius:2px; padding:5px 14px; } "
-            "QPushButton:hover { background:#333; color:#fff; }"))
+            f"QDialog {{ background:{PALETTE.get('bg','#242424')}; }} "
+            f"QLabel  {{ color:{PALETTE.get('text','#ebebeb')}; font-size:15pt; }} "
+            f"QCheckBox {{ color:{PALETTE.get('text','#ebebeb')}; font-size:15pt; }} "
+            f"QPushButton {{ background:{PALETTE.get('surface2','#3d3d3d')}; color:{PALETTE.get('textSub','#6a6a6a')}; "
+            f"  border:1px solid {PALETTE.get('border','#484848')}; border-radius:2px; padding:5px 14px; }} "
+            f"QPushButton:hover {{ background:{PALETTE.get('surface','#2d2d2d')}; color:{PALETTE.get('text','#ebebeb')}; }}"))
         v = QVBoxLayout(dlg)
         v.setContentsMargins(20, 16, 20, 16)
         v.setSpacing(8)
 
         title = QLabel("Select export formats")
-        title.setStyleSheet(scaled_qss("font-size:18pt; font-weight:bold; color:#ccc;"))
+        title.setStyleSheet(scaled_qss(f"font-size:18pt; font-weight:bold; color:{PALETTE.get('text','#ebebeb')};"))
         v.addWidget(title)
         sub = QLabel("All selected formats will be written to a single output folder.")
-        sub.setStyleSheet(f"font-size:{FONT['heading']}pt; color:#666;")
+        sub.setStyleSheet(f"font-size:{FONT['heading']}pt; color:{PALETTE.get('textDim','#999999')};")
         v.addWidget(sub)
         v.addSpacing(4)
 
@@ -881,11 +907,26 @@ class DataTab(QWidget):
         if meta is None:
             return
         if slot == "a":
+            # Clear previous A badge if different card
+            if self._compare_a and self._compare_a != self._selected:
+                prev = self._cards.get(self._compare_a)
+                if prev:
+                    prev.set_compare_slot(None)
             self._compare_a = self._selected
             self._cmp_a_lbl.setText(f"A: {meta.label[:30]}")
         else:
+            # Clear previous B badge if different card
+            if self._compare_b and self._compare_b != self._selected:
+                prev = self._cards.get(self._compare_b)
+                if prev:
+                    prev.set_compare_slot(None)
             self._compare_b = self._selected
             self._cmp_b_lbl.setText(f"B: {meta.label[:30]}")
+
+        # Set badge on the newly assigned card (may overwrite if same card gets both)
+        card = self._cards.get(self._selected)
+        if card:
+            card.set_compare_slot(slot)
 
         self._compare_btn.setEnabled(
             bool(self._compare_a and self._compare_b))
@@ -933,5 +974,5 @@ class DataTab(QWidget):
     def _hline(self):
         f = QFrame()
         f.setFrameShape(QFrame.HLine)
-        f.setStyleSheet("color:#2a2a2a;")
+        f.setStyleSheet(f"color:{PALETTE.get('border','#484848')};")
         return f
