@@ -3,6 +3,13 @@
 
 hardware:
 
+  # ── Imaging system type ──────────────────────────────────────────────────────
+  # Controls which imaging modes are available in the UI.
+  #   hybrid   — nose-head with both TR and IR objectives (user rotates to switch)
+  #   tr_only  — thermoreflectance objective only
+  #   ir_only  — infrared USB lens only
+  imaging_system: "hybrid"
+
   tec_meerstetter:
     enabled: true
     driver: "simulated"   # simulated | meerstetter

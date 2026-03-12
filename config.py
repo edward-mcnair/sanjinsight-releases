@@ -74,6 +74,8 @@ CONFIG_PATH = _resolve_config_path()
 
 _DEFAULT_CONFIG: dict = {
     "hardware": {
+        # hybrid | tr_only | ir_only  — governs which imaging modes appear in the UI
+        "imaging_system":  "hybrid",
         "camera":          {"driver": "simulated"},
         "fpga":            {"driver": "simulated"},
         "tec_meerstetter": {"driver": "simulated", "port": "COM3"},

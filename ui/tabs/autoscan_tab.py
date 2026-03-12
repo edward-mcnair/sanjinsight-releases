@@ -28,6 +28,8 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore  import Qt, pyqtSignal, QTimer
 from PyQt5.QtGui   import QImage, QPixmap, QPainter, QColor
 
+import config as _cfg
+
 from ui.theme        import FONT, PALETTE, scaled_qss
 from ui.icons        import IC, set_btn_icon
 from ui.button_utils import apply_hand_cursor, RunningButton
@@ -167,12 +169,16 @@ class _ReadinessPanel(QGroupBox):
                     self._stage_row.set_action_enabled(True, "Home XY")
 
             # ── Calibration ───────────────────────────────────────────
-            cal = getattr(app_state, "active_calibration", None)
+            cal   = getattr(app_state, "active_calibration", None)
+            is_ir = getattr(app_state, "active_modality", "") == "ir_lockin"
             if cal and getattr(cal, "valid", False):
                 self._cal_row.set_status("ok",
+                    "Emissivity calibration loaded ✓" if is_ir else
                     "Calibration loaded — ΔT results available ✓")
             else:
                 self._cal_row.set_status("warn",
+                    "No emissivity calibration — ΔT estimate uses default value"
+                    if is_ir else
                     "No calibration — results shown as ΔR/R only  "
                     "(run via Analyze → Calibration)")
 
@@ -429,6 +435,57 @@ class AutoScanTab(QWidget):
         self._readiness = _ReadinessPanel()
         lay.addWidget(self._readiness)
 
+        # ── Imaging Mode selector ─────────────────────────────────────────────
+        # Availability is driven by hardware.imaging_system in config.yaml:
+        #   hybrid   — both TR and IR objectives present (nose-head rotation)
+        #   tr_only  — thermoreflectance only; IR button is grayed
+        #   ir_only  — IR USB lens only; TR button is grayed
+        _imaging_sys  = _cfg.get("hardware", {}).get("imaging_system", "hybrid")
+        _tr_available = _imaging_sys in ("hybrid", "tr_only")
+        _ir_available = _imaging_sys in ("hybrid", "ir_only")
+
+        mode_grp = _group("Imaging Mode")
+        m_outer  = QVBoxLayout(mode_grp)
+        m_outer.setSpacing(4)
+        m_row = QHBoxLayout()
+        m_row.setSpacing(0)
+
+        self._mode_tr = _seg_btn("  TR")
+        self._mode_ir = _seg_btn("  IR")
+        self._mode_tr.setFixedWidth(72)
+        self._mode_ir.setFixedWidth(72)
+        self._mode_tr.setEnabled(_tr_available)
+        self._mode_ir.setEnabled(_ir_available)
+
+        # Default: TR when available, else IR for ir_only systems
+        if _tr_available:
+            self._mode_tr.setChecked(True)
+            self._modality = "thermoreflectance"
+        else:
+            self._mode_ir.setChecked(True)
+            self._modality = "ir_lockin"
+
+        self._mode_grp = QButtonGroup(self)
+        self._mode_grp.addButton(self._mode_tr, 0)
+        self._mode_grp.addButton(self._mode_ir, 1)
+        self._mode_grp.setExclusive(True)
+        self._mode_grp.idClicked.connect(self._on_modality_changed)
+
+        m_row.addWidget(self._mode_tr)
+        m_row.addWidget(self._mode_ir)
+        m_row.addStretch()
+        m_outer.addLayout(m_row)
+
+        # One-line description — updates on every mode switch
+        self._mode_desc = QLabel(
+            "Infrared  — passive thermal, no stimulus needed"
+            if self._modality == "ir_lockin"
+            else "Thermoreflectance  — stimulus-driven ΔR/R signal"
+        )
+        self._mode_desc.setObjectName("sublabel")
+        m_outer.addWidget(self._mode_desc)
+        lay.addWidget(mode_grp)
+
         # Goal
         goal_grp = _group("Goal")
         g_lay = QHBoxLayout(goal_grp)
@@ -449,7 +506,8 @@ class AutoScanTab(QWidget):
         lay.addWidget(goal_grp)
 
         # Stimulus
-        stim_grp = _group("Stimulus")
+        self._stim_grp_box = _group("Stimulus")
+        stim_grp = self._stim_grp_box
         s_lay = QVBoxLayout(stim_grp)
         seg_row = QHBoxLayout()
         seg_row.setSpacing(0)
@@ -485,6 +543,17 @@ class AutoScanTab(QWidget):
         vc_lay.addStretch()
         self._stim_params.setVisible(False)
         s_lay.addWidget(self._stim_params)
+
+        # Shown only when IR mode is active — explains why stimulus controls are gray
+        self._ir_stim_note = QLabel("Not used  — IR is passive thermal imaging")
+        self._ir_stim_note.setObjectName("sublabel")
+        self._ir_stim_note.setVisible(False)
+        s_lay.addWidget(self._ir_stim_note)
+
+        # Apply correct initial enabled state (ir_only systems start in IR mode)
+        self._stim_grp_box.setEnabled(self._modality == "thermoreflectance")
+        self._ir_stim_note.setVisible(self._modality == "ir_lockin")
+
         lay.addWidget(stim_grp)
 
         # Scan Area
@@ -682,6 +751,31 @@ class AutoScanTab(QWidget):
         self._adv_toggle.setText(("▾" if checked else "▸") + "  Advanced options")
         self._adv_body.setVisible(checked)
 
+    def _on_modality_changed(self, btn_id: int) -> None:
+        """User switched between TR (0) and IR (1) imaging mode."""
+        is_ir = btn_id == 1
+        self._modality = "ir_lockin" if is_ir else "thermoreflectance"
+
+        # Stimulus is driven by FPGA/bias hardware — not used for passive IR
+        self._stim_grp_box.setEnabled(not is_ir)
+        self._ir_stim_note.setVisible(is_ir)
+
+        # Description label below the mode buttons
+        self._mode_desc.setText(
+            "Infrared  — passive thermal imaging, no stimulus needed"
+            if is_ir else
+            "Thermoreflectance  — stimulus-driven ΔR/R signal"
+        )
+
+        # Propagate so the ReadinessPanel calibration row reflects the new mode
+        try:
+            from hardware.app_state import app_state
+            app_state.active_modality = self._modality
+        except Exception:
+            pass
+
+        self._refresh_seg_styles()
+
     def _on_new_scan(self) -> None:
         self._current_op = None
         self._scan_btn.setEnabled(False)
@@ -779,6 +873,7 @@ class AutoScanTab(QWidget):
         stim_map = {0: "off",    1: "dc",  2: "pulsed"}
         return {
             "goal":        "hotspots" if self._goal_find.isChecked() else "map",
+            "modality":    self._modality,
             "stimulus":    stim_map[self._stim_grp.checkedId()],
             "voltage":     self._voltage.value(),
             "current":     self._current.value(),
@@ -792,6 +887,13 @@ class AutoScanTab(QWidget):
     def restore_config(self, cfg: dict) -> None:
         if not cfg:
             return
+        # Modality — respects which buttons are actually enabled on this system
+        if cfg.get("modality") == "ir_lockin" and self._mode_ir.isEnabled():
+            self._mode_ir.setChecked(True)
+            self._on_modality_changed(1)
+        elif self._mode_tr.isEnabled():
+            self._mode_tr.setChecked(True)
+            self._on_modality_changed(0)
         if cfg.get("goal") == "map":
             self._goal_map.setChecked(True)
         else:
@@ -898,4 +1000,8 @@ class AutoScanTab(QWidget):
         self._stim_dc.setStyleSheet(
             base + "QPushButton { border-radius:0; border-left:none; }")
         self._stim_pulsed.setStyleSheet(
+            base + "QPushButton { border-radius:0 4px 4px 0; border-left:none; }")
+        self._mode_tr.setStyleSheet(
+            base + "QPushButton { border-radius:4px 0 0 4px; }")
+        self._mode_ir.setStyleSheet(
             base + "QPushButton { border-radius:0 4px 4px 0; border-left:none; }")
