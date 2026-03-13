@@ -20,19 +20,19 @@ import numpy as np
 from ui.button_utils import RunningButton, apply_hand_cursor
 from ui.font_utils   import mono_font, sans_font
 from ui.icons import set_btn_icon
-from ui.theme import FONT, PALETTE, scaled_qss
+from ui.theme import FONT, PALETTE
 
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QDoubleSpinBox, QSpinBox, QGroupBox, QGridLayout,
-    QComboBox, QCheckBox, QSplitter, QSizePolicy, QFrame,
+    QComboBox, QSplitter, QSizePolicy,
     QFileDialog, QMessageBox, QSlider, QRubberBand)
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QRect, QSize, QPoint
 from PyQt5.QtGui  import (QImage, QPixmap, QPainter, QPen, QColor,
-                           QBrush, QFont, QLinearGradient, QFontMetrics)
+                           QBrush, QFont, QLinearGradient)
 
 from .live       import LiveProcessor, LiveConfig, LiveFrame
-from .processing import to_display, apply_colormap, COLORMAP_OPTIONS, COLORMAP_TOOLTIPS, setup_cmap_combo
+from .processing import to_display, apply_colormap, setup_cmap_combo
 import config as cfg_mod
 
 

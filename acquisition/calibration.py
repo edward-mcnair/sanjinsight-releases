@@ -42,10 +42,10 @@ Usage
 """
 
 from __future__ import annotations
-import os, time
+import time
 import numpy as np
-from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
+from dataclasses import dataclass
+from typing import List, Optional
 
 from ai.instrument_knowledge import CTH_FILTER_MIN
 

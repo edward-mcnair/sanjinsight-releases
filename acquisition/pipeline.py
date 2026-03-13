@@ -19,8 +19,8 @@ import time
 import threading
 import logging
 import numpy as np
-from dataclasses import dataclass, field
-from typing import Optional, Callable, List
+from dataclasses import dataclass
+from typing import Optional, Callable
 from enum import Enum, auto
 
 log = logging.getLogger(__name__)

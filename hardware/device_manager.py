@@ -23,7 +23,7 @@ from __future__ import annotations
 import concurrent.futures
 import logging
 import time, threading, importlib
-from dataclasses   import dataclass, field
+from dataclasses   import dataclass
 from enum          import Enum, auto
 from typing        import List, Optional, Dict, Callable
 
@@ -37,7 +37,7 @@ from .device_registry import (DeviceDescriptor, DEVICE_REGISTRY,
                                 DTYPE_CAMERA, DTYPE_TEC, DTYPE_FPGA,
                                 DTYPE_STAGE, DTYPE_PROBER, DTYPE_TURRET,
                                 DTYPE_BIAS, DTYPE_LDD)
-from .device_scanner  import DiscoveredDevice, ScanReport
+from .device_scanner  import ScanReport
 
 
 # ------------------------------------------------------------------ #

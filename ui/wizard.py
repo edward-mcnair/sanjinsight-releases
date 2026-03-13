@@ -18,18 +18,15 @@ no duplication of logic.
 
 from __future__ import annotations
 import time
-from typing import Optional
 
 import numpy as np
 
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QStackedWidget, QSizePolicy, QScrollArea, QFrame, QComboBox,
-    QProgressBar, QFileDialog, QMessageBox, QGridLayout,
-    QGroupBox, QSpacerItem)
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QSize
-from PyQt5.QtGui  import (QColor, QPainter, QPen, QFont,
-                           QImage, QPixmap, QLinearGradient)
+    QProgressBar, QFileDialog, QMessageBox, QGridLayout, QGroupBox)
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal
+from PyQt5.QtGui  import (QColor, QPainter, QPen, QImage, QPixmap)
 from ui.font_utils import sans_font
 from ui.theme import FONT, PALETTE, scaled_qss
 
@@ -519,7 +516,7 @@ class Step2Focus(QWidget):
         self._feed.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self._feed.setStyleSheet(
             scaled_qss(f"background:{PALETTE.get('bg','#242424')}; border:1px solid {PALETTE.get('border2','#3d3d3d')}; border-radius:4px;"
-                       "color:{PALETTE.get('textSub','#6a6a6a')}; font-size:18pt;"))
+                       f"color:{PALETTE.get('textSub','#6a6a6a')}; font-size:18pt;"))
         self._feed.setText("Camera initialising…")
         content.addWidget(self._feed, 1)
 
@@ -609,7 +606,7 @@ class Step2Focus(QWidget):
             b.setStyleSheet(
                 f"QPushButton{{background:{PALETTE.get('surface','#2d2d2d')}; color:{PALETTE.get('textSub','#6a6a6a')}; border:1px solid {PALETTE.get('border2','#3d3d3d')};"
                 f" border-radius:3px; font-size:{FONT['heading']}pt;}}"
-                "QPushButton:hover{color:#aaa; border-color:{PALETTE.get('textSub','#6a6a6a')};}")
+                f"QPushButton:hover{{color:{PALETTE.get('text','#cccccc')}; border-color:{PALETTE.get('textSub','#6a6a6a')};}}")
             _sign = sign
             b.clicked.connect(lambda _, s=_sign: self._move_z(s, fine=True))
         nudge_lbl = QLabel("0.1 µm nudge")

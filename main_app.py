@@ -25,13 +25,11 @@ import numpy as np
 
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QPushButton,
-    QSpinBox, QDoubleSpinBox, QProgressBar, QVBoxLayout, QHBoxLayout,
-    QGridLayout, QGroupBox, QComboBox, QTextEdit, QTabWidget,
-    QFileDialog, QFrame, QSizePolicy, QSlider, QButtonGroup,
-    QRadioButton, QSplitter, QStatusBar, QAction, QMenuBar,
-    QMessageBox, QStackedWidget, QCheckBox, QScrollArea,
-    QAbstractItemView, QHeaderView, QTableWidget, QTableWidgetItem,
-    QDockWidget)
+    QVBoxLayout, QHBoxLayout, QGridLayout, QGroupBox,
+    QComboBox, QTextEdit, QTabWidget, QFileDialog, QFrame,
+    QSizePolicy, QButtonGroup, QSplitter, QStatusBar,
+    QAction, QMenuBar, QMessageBox, QStackedWidget,
+    QCheckBox, QScrollArea, QDockWidget)
 from PyQt5.QtCore  import Qt, QTimer, pyqtSignal, QObject, QSize
 from PyQt5.QtGui   import (QImage, QPixmap, QFont, QColor, QPainter,
                            QPen, QBrush, QPalette, QIcon)
@@ -41,8 +39,7 @@ from hardware.app_state  import app_state                   # ← thread-safe st
 from acquisition         import (AcquisitionPipeline, AcquisitionResult,
                                 AcquisitionProgress, AcqState,
                                 to_display, apply_colormap, export_result)
-from acquisition.roi        import Roi
-from acquisition.roi_widget import RoiSelector
+from acquisition.roi             import Roi
 from acquisition.session         import Session
 from acquisition.session_manager import SessionManager
 from acquisition.data_tab        import DataTab
@@ -169,13 +166,12 @@ def __getattr__(name: str):
 def hline():
     f = QFrame()
     f.setFrameShape(QFrame.HLine)
-    f.setStyleSheet("color: #2a2a2a;")
+    from ui.theme import PALETTE
+    f.setStyleSheet(f"color: {PALETTE.get('border', '#2a2a2a')};")
     return f
 
 
 # ── UI widgets and tabs (extracted to their own modules) ──────────────
-from ui.widgets.image_pane    import ImagePane
-from ui.widgets.temp_plot     import TempPlot
 from ui.widgets.status_header import StatusHeader
 from ui.tabs.acquire_tab      import AcquireTab
 from ui.tabs.camera_tab       import CameraTab
@@ -725,6 +721,23 @@ class MainWindow(QMainWindow):
 
     # ── Theme switching ───────────────────────────────────────────────────────
 
+    def _restyle_menu_bar(self) -> None:
+        """Apply PALETTE-aware colours to the native menu bar and drop-down menus."""
+        from ui.theme import PALETTE
+        mb = getattr(self, "_menu_bar", self.menuBar())
+        bg   = PALETTE.get("bg",      "#111111")
+        surf = PALETTE.get("surface", "#1e1e1e")
+        txt  = PALETTE.get("text",    "#dddddd")
+        sub  = PALETTE.get("textSub", "#888888")
+        bdr  = PALETTE.get("border",  "#333333")
+        sel  = PALETTE.get("accent",  "#00d4aa")
+        mb.setStyleSheet(
+            f"QMenuBar {{ background:{bg}; color:{sub}; font-size:{_style_pt(12)}; }}"
+            f"QMenuBar::item:selected {{ background:{surf}; color:{txt}; }}"
+            f"QMenu {{ background:{surf}; color:{txt}; border:1px solid {bdr}; }}"
+            f"QMenu::item:selected {{ background:{sel}22; color:{txt}; }}"
+        )
+
     def _swap_visual_theme(self, effective: str) -> None:
         """Core visual swap — applies 'dark' or 'light' with no flicker.
 
@@ -741,6 +754,7 @@ class MainWindow(QMainWindow):
                 if hasattr(w, "_apply_styles"):
                     w._apply_styles()
                 w.update()
+            self._restyle_menu_bar()
         finally:
             self.setUpdatesEnabled(True)
 
@@ -965,11 +979,8 @@ class MainWindow(QMainWindow):
         from PyQt5.QtGui import QKeySequence
 
         mb = self.menuBar()
-        mb.setStyleSheet(
-            f"QMenuBar {{ background:#111; color:#888; font-size:{_style_pt(12)}; }}"
-            "QMenuBar::item:selected { background:#222; color:#fff; }"
-            "QMenu { background:#1a1a1a; color:#ccc; border:1px solid #333; }"
-            "QMenu::item:selected { background:#222; }")
+        self._menu_bar = mb           # kept for _restyle_menu_bar()
+        self._restyle_menu_bar()
 
         # ── File menu ────────────────────────────────────────────
         # "Quit" on macOS (Cmd+Q, auto-merged into the application menu by Qt);

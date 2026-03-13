@@ -9,22 +9,20 @@ Right panel : detail view for the selected session, with tabs for
 Bottom bar  : Compare mode — pick two sessions and diff their ΔR/R maps
 """
 
-import os, time
-import numpy as np
+import os
 
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QScrollArea, QFrame, QGridLayout, QGroupBox, QTextEdit,
     QLineEdit, QFileDialog, QSplitter, QComboBox, QTabWidget,
-    QSizePolicy, QMessageBox, QInputDialog, QToolButton,
+    QMessageBox, QInputDialog, QToolButton,
     QDialog, QDialogButtonBox, QCheckBox, QDoubleSpinBox)
-from PyQt5.QtCore    import Qt, pyqtSignal, QSize
-from PyQt5.QtGui     import (QPixmap, QImage, QFont, QColor,
-                              QPainter, QPen)
+from PyQt5.QtCore    import Qt, pyqtSignal
+from PyQt5.QtGui     import QPixmap, QImage
 
 from .session         import Session, SessionMeta
 from .session_manager import SessionManager
-from .processing      import to_display, apply_colormap, COLORMAP_OPTIONS, COLORMAP_TOOLTIPS, setup_cmap_combo
+from .processing      import to_display, apply_colormap, setup_cmap_combo
 import config as cfg_mod
 from ui.icons import set_btn_icon
 from ui.theme import FONT, PALETTE, scaled_qss

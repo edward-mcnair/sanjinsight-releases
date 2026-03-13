@@ -17,18 +17,17 @@ from ui.icons import set_btn_icon
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QDoubleSpinBox, QSpinBox, QGroupBox, QGridLayout, QProgressBar,
-    QTextEdit, QFileDialog, QSplitter, QFrame, QTabWidget,
+    QFileDialog, QSplitter, QTabWidget,
     QSizePolicy, QToolButton, QScrollArea, QMessageBox, QComboBox)
-from PyQt5.QtCore import Qt, QRect, pyqtSignal
+from PyQt5.QtCore import Qt, QRect
 from PyQt5.QtGui  import (QImage, QPixmap, QPainter, QPen, QColor,
-                           QBrush, QFont, QLinearGradient)
+                           QBrush, QLinearGradient)
 
 from ui.font_utils import mono_font
 from ui.theme import FONT, scaled_qss
 from .calibration        import Calibration, CalibrationResult
 from .calibration_runner import CalibrationRunner, CalibrationProgress
 from .processing         import (to_display, apply_colormap,
-                                 COLORMAP_OPTIONS, COLORMAP_TOOLTIPS,
                                  setup_cmap_combo)
 import config as cfg_mod
 

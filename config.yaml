@@ -148,10 +148,6 @@ hardware:
     # address: "TCPIP::192.168.1.10::INSTR"
     # channel: 1
 
-acquisition:
-  default_frames: 100
-  frame_timeout_ms: 5000
-
 logging:
   level: "INFO"           # DEBUG, INFO, WARNING, ERROR
   log_to_file: true

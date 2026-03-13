@@ -13,7 +13,7 @@ Right  : Verdict banner, summary stats, per-hotspot table,
 """
 
 from __future__ import annotations
-import csv, os, time
+import csv
 from typing import Optional
 
 import numpy as np
@@ -26,9 +26,9 @@ from PyQt5.QtWidgets import (
     QDoubleSpinBox, QSpinBox, QGroupBox, QGridLayout, QSplitter,
     QSizePolicy, QCheckBox, QTableWidget, QTableWidgetItem,
     QHeaderView, QAbstractItemView, QFileDialog, QMessageBox,
-    QFrame, QComboBox, QStackedWidget, QToolButton)
-from PyQt5.QtCore  import Qt, pyqtSignal, QTimer
-from PyQt5.QtGui   import QImage, QPixmap, QPainter, QColor, QFont, QPen
+    QFrame, QStackedWidget, QToolButton)
+from PyQt5.QtCore  import Qt, pyqtSignal
+from PyQt5.QtGui   import QImage, QPixmap, QPainter, QColor
 
 from .analysis import (ThermalAnalysisEngine, AnalysisConfig,
                         AnalysisResult, Hotspot,

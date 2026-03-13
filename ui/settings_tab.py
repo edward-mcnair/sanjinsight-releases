@@ -41,18 +41,19 @@ _BG2     = lambda: PALETTE.get('surface', '#2d2d2d')
 _BORDER  = lambda: PALETTE.get('border',  '#484848')
 _TEXT    = lambda: PALETTE.get('text',    '#ebebeb')
 _MUTED   = lambda: PALETTE.get('textSub', '#6a6a6a')
-_ACCENT  = "#4e73df"
+_ACCENT  = lambda: PALETTE.get("accent",      "#00d4aa")
+_ACCENT_H= lambda: PALETTE.get("accentHover", "#00e8bb")
 _GREEN   = "#00d4aa"
 _AMBER   = "#f5a623"
 _DANGER  = "#ff5555"
 
 def _BTN_PRIMARY(): return f"""
     QPushButton {{
-        background:{_ACCENT}; color:#fff; border:none;
+        background:{_ACCENT()}; color:#fff; border:none;
         border-radius:5px; padding:7px 18px; font-size:{FONT["label"]}pt; font-weight:600;
     }}
-    QPushButton:hover   {{ background:#3a5fc8; }}
-    QPushButton:pressed {{ background:#2e4fa8; }}
+    QPushButton:hover   {{ background:{_ACCENT_H()}; }}
+    QPushButton:pressed {{ background:{_ACCENT()}; }}
     QPushButton:disabled{{ background:{_BG2()}; color:{_MUTED()}; }}
 """
 def _BTN_SECONDARY(): return f"""
@@ -78,7 +79,7 @@ def _CHECK(): return f"""
         border:1px solid {_BORDER()}; background:{_BG2()};
     }}
     QCheckBox::indicator:checked {{
-        background:{_ACCENT}; border-color:{_ACCENT};
+        background:{_ACCENT()}; border-color:{_ACCENT()};
     }}
 """
 
@@ -297,7 +298,7 @@ class SettingsTab(QWidget):
                 font-size: {FONT["label"]}pt;
             }}
             QLineEdit:focus {{
-                border-color: {_ACCENT};
+                border-color: {_ACCENT()};
             }}
         """)
         self._settings_search.setFixedHeight(32)
@@ -427,7 +428,7 @@ class SettingsTab(QWidget):
             f" padding:5px 0; font-size:{FONT['label']}pt;"
             f"}}"
             f"QPushButton:checked {{"
-            f" background:{_ACCENT}; color:#fff; border-color:{_ACCENT};"
+            f" background:{_ACCENT()}; color:#fff; border-color:{_ACCENT()};"
             f"}}"
         )
         self._auto_btn.setStyleSheet(
@@ -652,7 +653,7 @@ class SettingsTab(QWidget):
                     font-size: {FONT["label"]}pt;
                 }}
                 QLineEdit:focus {{
-                    border-color: {_ACCENT};
+                    border-color: {_ACCENT()};
                 }}
             """)
         if hasattr(self, "_settings_filter_status"):
@@ -672,8 +673,8 @@ class SettingsTab(QWidget):
                     padding:6px 14px; font-size:{FONT["sublabel"]}pt;
                 }}
                 QPushButton:checked {{
-                    background:{_ACCENT}22; color:{_TEXT()};
-                    border:1px solid {_ACCENT};
+                    background:{_ACCENT()}22; color:{_TEXT()};
+                    border:1px solid {_ACCENT()};
                 }}
                 QPushButton:hover:!checked {{ background:{_BG()}; color:{_TEXT()}; }}
             """)
@@ -990,12 +991,12 @@ class SettingsTab(QWidget):
                 height:6px; border-radius:3px;
             }}
             QSlider::handle:horizontal {{
-                background:{_ACCENT}; border:none;
+                background:{_ACCENT()}; border:none;
                 width:16px; height:16px; margin:-5px 0;
                 border-radius:8px;
             }}
             QSlider::sub-page:horizontal {{
-                background:{_ACCENT}55; border-radius:3px;
+                background:{_ACCENT()}55; border-radius:3px;
             }}
             QSlider:disabled::handle:horizontal {{ background:{_BORDER()}; }}
             QSlider:disabled::sub-page:horizontal {{ background:{_BG2()}; }}
@@ -1067,8 +1068,8 @@ class SettingsTab(QWidget):
                     padding:6px 14px; font-size:{FONT["sublabel"]}pt;
                 }}
                 QPushButton:checked {{
-                    background:{_ACCENT}22; color:{_TEXT()};
-                    border:1px solid {_ACCENT};
+                    background:{_ACCENT()}22; color:{_TEXT()};
+                    border:1px solid {_ACCENT()};
                 }}
                 QPushButton:hover:!checked {{ background:{_BG()}; color:{_TEXT()}; }}
             """)
@@ -1270,7 +1271,7 @@ class SettingsTab(QWidget):
         # Get key link
         self._cloud_key_link_lbl = QLabel("")
         self._cloud_key_link_lbl.setStyleSheet(
-            f"font-size:{FONT['caption']}pt; color:{_ACCENT};")
+            f"font-size:{FONT['caption']}pt; color:{_ACCENT()};")
         self._cloud_key_link_lbl.setOpenExternalLinks(True)
         lay.addWidget(self._cloud_key_link_lbl)
         self._update_cloud_key_link()
@@ -1340,7 +1341,7 @@ class SettingsTab(QWidget):
         btn_link_row.addSpacing(16)
 
         manual_link = QLabel(
-            f'or &nbsp;<a href="https://ollama.com/download" style="color:{_ACCENT};">'
+            f'or &nbsp;<a href="https://ollama.com/download" style="color:{_ACCENT()};">'
             "download manually ↗</a>")
         manual_link.setOpenExternalLinks(True)
         manual_link.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_MUTED()};")
@@ -1781,7 +1782,7 @@ class SettingsTab(QWidget):
         if url:
             name = CLOUD_PROVIDERS[pid]["name"]
             self._cloud_key_link_lbl.setText(
-                f'<a href="{url}" style="color:{_ACCENT};">'
+                f'<a href="{url}" style="color:{_ACCENT()};">'
                 f'Get a {name} API key ↗</a>')
         else:
             self._cloud_key_link_lbl.setText("")

@@ -59,11 +59,10 @@ from PyQt5.QtWidgets import (
     QDialog, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QFrame, QScrollArea, QSplitter, QGroupBox,
     QGridLayout, QComboBox, QSpinBox, QDoubleSpinBox, QLineEdit,
-    QProgressBar, QTextEdit, QSizePolicy, QTabWidget,
-    QMessageBox, QApplication, QCheckBox,
+    QProgressBar, QTextEdit, QMessageBox, QApplication, QCheckBox,
     QTreeWidget, QTreeWidgetItem, QHeaderView, QAbstractItemView)
-from PyQt5.QtCore    import Qt, QTimer, pyqtSignal, QSize, QModelIndex
-from PyQt5.QtGui     import QColor, QFont, QIcon, QBrush
+from PyQt5.QtCore    import Qt, QTimer, pyqtSignal, QModelIndex
+from PyQt5.QtGui     import QColor, QFont, QBrush
 
 from hardware.device_registry import (
     DEVICE_REGISTRY,

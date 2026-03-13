@@ -8,7 +8,7 @@ single "Stimulus" entry.  Each sub-tab preserves its full existing UI.
 """
 from __future__ import annotations
 
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QTabWidget, QSizePolicy
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QTabWidget
 from PyQt5.QtCore    import pyqtSignal, QSize
 
 from ui.theme import FONT, PALETTE

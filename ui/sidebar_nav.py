@@ -94,9 +94,10 @@ class _SidebarTooltip(QLabel):
 
     def _restyle(self):
         self.setStyleSheet(
-            "QLabel { background:#1a1d28; color:#dde3f2; "
-            "border:1px solid #2e3245; border-radius:5px; "
-            "padding:5px 10px; }")
+            f"QLabel {{ background:{PALETTE.get('surface','#1a1d28')}; "
+            f"color:{PALETTE.get('text','#dde3f2')}; "
+            f"border:1px solid {PALETTE.get('border','#2e3245')}; "
+            "border-radius:5px; padding:5px 10px; }}")
         self.setFont(_sans_font(_FONT["body"]))
 
     def show_tip(self, global_pos: QPoint, text: str):
@@ -440,17 +441,13 @@ class _Sidebar(QWidget):
         root.addWidget(self._logo_hdr)
 
         # Scrollable menu
-        scroll = QScrollArea()
+        self._scroll = QScrollArea()
+        scroll = self._scroll
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setStyleSheet(f"""
-            QScrollArea {{ background:{_BG()}; border:none; }}
-            QScrollBar:vertical {{ background:{_BG()}; width:5px; margin:0; }}
-            QScrollBar::handle:vertical {{ background:#3a3a3a; border-radius:2px; min-height:20px; }}
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height:0; }}
-        """)
+        self._restyle_scroll()
         self._menu_w = QWidget()
         self._menu_w.setStyleSheet(f"background:{_BG()};")
         self._lay = QVBoxLayout(self._menu_w)
@@ -458,6 +455,16 @@ class _Sidebar(QWidget):
         self._lay.setSpacing(0)
         scroll.setWidget(self._menu_w)
         root.addWidget(scroll, 1)
+
+    def _restyle_scroll(self) -> None:
+        """Re-apply PALETTE-aware stylesheet to the scroll area and its bar."""
+        self._scroll.setStyleSheet(
+            f"QScrollArea {{ background:{_BG()}; border:none; }}"
+            f"QScrollBar:vertical {{ background:{_BG()}; width:5px; margin:0; }}"
+            f"QScrollBar::handle:vertical {{ background:{PALETTE.get('border2','#3d3d3d')};"
+            " border-radius:2px; min-height:20px; }}"
+            "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height:0; }"
+        )
 
     # ── Group builders ──────────────────────────────────────────────
 
@@ -621,6 +628,7 @@ class SidebarNav(QWidget):
         s.setStyleSheet(f"background:{_BG()};")
         s._menu_w.setStyleSheet(f"background:{_BG()};")
         s._logo_hdr.setStyleSheet(f"background:{_HDR_BG()};")
+        s._restyle_scroll()
 
         for c in s._containers:
             c.setStyleSheet(f"background:{_BG()};")

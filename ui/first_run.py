@@ -42,7 +42,6 @@ import os
 import sys
 import glob
 import logging
-from typing import Optional
 
 import yaml
 

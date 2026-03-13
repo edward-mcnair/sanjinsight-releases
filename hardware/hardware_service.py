@@ -35,9 +35,6 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
-from typing import Optional
-
 from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot
 
 import config as config_module

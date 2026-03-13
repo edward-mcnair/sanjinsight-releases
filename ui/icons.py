@@ -218,7 +218,6 @@ _FA5_TO_MDI: dict[str, str] = {
     "fa5s.plus":          "mdi.plus",
     "fa5s.crosshairs":    "mdi.crosshairs-gps",
     "fa5s.file-alt":      "mdi.file-outline",
-    "fa5s.cube":          "mdi.cube-outline",
 }
 
 
