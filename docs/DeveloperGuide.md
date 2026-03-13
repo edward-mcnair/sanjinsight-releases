@@ -1,6 +1,6 @@
 # SanjINSIGHT — Developer Guide
 
-**Version**: 1.1.2
+**Version**: 1.2.0
 **Platform**: Windows 10/11 (64-bit); macOS/Linux supported for development
 **Stack**: Python 3.11 · PyQt5 · NumPy · PyInstaller · Inno Setup
 **Repository**: Private source (`edward-mcnair/sanjinsight`) · Public releases (`edward-mcnair/sanjinsight-releases`)
@@ -17,18 +17,20 @@
 6. [User Interface](#6-user-interface)
 7. [AI Assistant & Diagnostics](#7-ai-assistant--diagnostics)
 8. [License System](#8-license-system)
-9. [Configuration & Preferences](#9-configuration--preferences)
-10. [Session Management](#10-session-management)
-11. [Update System](#11-update-system)
-12. [Event Bus & Logging](#12-event-bus--logging)
-13. [Thread Safety Model](#13-thread-safety-model)
-14. [Data Flow Diagrams](#14-data-flow-diagrams)
-15. [Build & Release Pipeline](#15-build--release-pipeline)
-16. [Testing](#16-testing)
-17. [Adding a New Hardware Driver](#17-adding-a-new-hardware-driver)
-18. [Adding a New UI Tab](#18-adding-a-new-ui-tab)
-19. [Key Design Decisions](#19-key-design-decisions)
-20. [Dependency Reference](#20-dependency-reference)
+9. [Auth & RBAC System](#9-auth--rbac-system)
+10. [Operator Shell](#10-operator-shell)
+11. [Configuration & Preferences](#11-configuration--preferences)
+12. [Session Management](#12-session-management)
+13. [Update System](#13-update-system)
+14. [Event Bus & Logging](#14-event-bus--logging)
+15. [Thread Safety Model](#15-thread-safety-model)
+16. [Data Flow Diagrams](#16-data-flow-diagrams)
+17. [Build & Release Pipeline](#17-build--release-pipeline)
+18. [Testing](#18-testing)
+19. [Adding a New Hardware Driver](#19-adding-a-new-hardware-driver)
+20. [Adding a New UI Tab](#20-adding-a-new-ui-tab)
+21. [Key Design Decisions](#21-key-design-decisions)
+22. [Dependency Reference](#22-dependency-reference)
 
 ---
 
@@ -60,6 +62,13 @@ sanjinsight/
 ├── logging_config.py          ← Rotating file + console logging setup
 ├── requirements.txt           ← pip dependencies
 │
+├── auth/                      ← RBAC, user management, session auth (pure Python)
+│   ├── __init__.py            ← Exports UserStore, AuditLogger, Authenticator, AuthSession
+│   ├── models.py              ← UserType, User, AuthSession dataclasses
+│   ├── store.py               ← UserStore (SQLite) + AuditLogger (JSON Lines)
+│   ├── authenticator.py       ← Authenticator(QObject) — bcrypt in QThread, lockout, override
+│   └── user_prefs.py          ← Per-user preference layer (extends config dot-notation API)
+│
 ├── hardware/                  ← All device drivers
 │   ├── app_state.py           ← Thread-safe ApplicationState singleton
 │   ├── hardware_service.py    ← Owns all devices; runs background poll threads
@@ -72,7 +81,7 @@ sanjinsight/
 │   ├── driver_store.py        ← Driver instance cache
 │   ├── hardware_preset_manager.py ← Named hardware config profiles
 │   │
-│   ├── cameras/               ← CameraDriver implementations
+│   ├── cameras/               ← CameraDriver implementations (pypylon, ni_imaqdx, flir_driver, simulated)
 │   ├── tec/                   ← TecDriver implementations
 │   ├── fpga/                  ← FpgaDriver implementations
 │   ├── bias/                  ← BiasDriver implementations
@@ -118,6 +127,17 @@ sanjinsight/
 │   ├── help.py                ← Help viewer
 │   ├── scripting_console.py   ← Python REPL for power users
 │   │
+│   ├── auth/                  ← Auth UI screens
+│   │   ├── admin_setup_wizard.py  ← One-time admin account creation wizard
+│   │   ├── login_screen.py        ← Full-window login (replaces content before MainWindow)
+│   │   ├── supervisor_override_dialog.py ← Temporary engineer access at operator station
+│   │   └── user_management_widget.py     ← Admin-only user CRUD, embedded in SettingsTab
+│   ├── operator/              ← Operator Shell (Technician users only; never imports MainWindow)
+│   │   ├── operator_shell.py      ← OperatorShell(QMainWindow) — top-level operator window
+│   │   ├── recipe_selector_panel.py ← Lists only approved/locked scan profiles
+│   │   ├── scan_work_area.py      ← Live camera view + Part ID field + START SCAN button
+│   │   ├── shift_log_panel.py     ← Today's results log with PASS/FAIL badges
+│   │   └── verdict_overlay.py     ← Full-screen PASS/FAIL/REVIEW result after each scan
 │   ├── tabs/                  ← Hardware control tabs (camera, tec, fpga, bias, stage …)
 │   ├── dialogs/               ← Specialized dialogs (support bundle, etc.)
 │   └── widgets/               ← Reusable widgets (image pane, temp plot, status header …)
@@ -196,6 +216,15 @@ sanjinsight/
 ## 3. Architecture Overview
 
 ```
+                    main_app.py  (startup routing)
+                          │
+              ┌───────────┼────────────────────┐
+              │           │                    │
+              ▼           ▼                    ▼
+     No users?       require_login?      user_type?
+   AdminSetupWizard   LoginScreen     TECHNICIAN → OperatorShell
+                           │          FA/RESEARCHER → MainWindow
+                           ▼
 ┌──────────────────────────────────────────────────────────┐
 │                      main_app.py                         │
 │                    MainWindow (QMainWindow)               │
@@ -215,8 +244,8 @@ sanjinsight/
 │      │               │             │              │        │
 │      ▼               ▼             ▼              ▼        │
 │  CameraDriver   TecDriver    FpgaDriver    StageDriver     │
-│  (Basler/NI/    (Meerstetter/ (NI 9637/    (Thorlabs/     │
-│   simulated)     simulated)   simulated)    simulated)     │
+│  (Basler/FLIR/  (Meerstetter/ (NI 9637/    (Thorlabs/     │
+│   NI/simulated)  simulated)   simulated)    simulated)     │
 └───────────────────────────────────────────────────────────┘
           │                 │
           ▼                 ▼
@@ -238,6 +267,8 @@ sanjinsight/
 - **No global module-level state.** Hardware references live in `ApplicationState`; preferences live in `config`; signals live in `AppSignals`.
 - **Factory pattern for all drivers.** Each device type has an abstract base class and a `factory.py` that reads `config.yaml` and instantiates the correct implementation.
 - **Simulated drivers for every device.** Demo mode or development without hardware is always possible.
+- **Auth is opt-in.** When `auth.require_login` is `false` (default), the startup flow is identical to pre-v1.2.0 — no login screen, no user management visible.
+- **OperatorShell is a complete separate window.** It never imports MainWindow; Technician users cannot reach the full UI even by accident.
 
 ---
 
@@ -353,7 +384,7 @@ class CameraDriver(ABC):
 - `timestamp: float` — `time.monotonic()` at capture
 - `index: int` — frame counter
 
-**Implementations**: `pypylon_driver.py` (Basler), `ni_imaqdx.py` (NI), `directshow.py` (webcam), `simulated.py`.
+**Implementations**: `pypylon_driver.py` (Basler TR), `flir_driver.py` (Microsanj IR Camera via FLIR Spinnaker SDK), `ni_imaqdx.py` (NI), `directshow.py` (webcam), `simulated.py`.
 
 #### TEC (`hardware/tec/base.py — TecDriver`)
 
@@ -793,9 +824,208 @@ if app_state.is_licensed:
 
 ---
 
-## 9. Configuration & Preferences
+## 9. Auth & RBAC System
 
-### 9.1 System Configuration (`config.yaml`)
+The auth system is in the `auth/` package. It is pure Python (no PyQt5 imports) so it can be tested without a display.
+
+### 9.1 User Types (`auth/models.py`)
+
+```python
+class UserType(enum.Enum):
+    TECHNICIAN       = "technician"       # OperatorShell + lab_tech AI
+    FAILURE_ANALYST  = "failure_analyst"  # Full UI + failure_analyst AI
+    RESEARCHER       = "researcher"       # Full UI + new_grad AI
+
+    @property
+    def default_ai_persona(self) -> str: ...
+    @property
+    def uses_operator_shell(self) -> bool: ...  # True only for TECHNICIAN
+    @property
+    def can_edit_recipes(self) -> bool: ...     # False only for TECHNICIAN
+
+@dataclass
+class User:
+    uid:           str
+    username:      str         # COLLATE NOCASE
+    display_name:  str
+    user_type:     UserType
+    is_admin:      bool        # privilege overlay — any type can be admin
+    pw_hash:       str         # bcrypt, work factor 12
+    created_at:    str
+    last_login:    str = ""
+    is_active:     bool = True
+    created_by:    str = ""
+
+@dataclass
+class AuthSession:
+    user:          User
+    login_time:    float
+    last_activity: float
+    session_id:    str
+    supervisor_override_active: bool = False
+
+    def touch(self) -> None: ...
+    def is_expired(self, timeout_s: int) -> bool: ...
+```
+
+**Admin is a privilege overlay, not a separate user type.** Any `UserType` can have `is_admin=True`. The `is_admin` flag adds access to user management and global settings — it does not change the AI persona or UI surface.
+
+### 9.2 UserStore (`auth/store.py`)
+
+SQLite database at `~/.microsanj/users.db`. Schema version tracked via `PRAGMA user_version` for future migration support.
+
+```python
+store = UserStore()
+
+# One-time check at startup
+store.has_users()             # → False on fresh install
+
+# User CRUD
+store.create_user(username="jsmith", display_name="Jane Smith",
+                  user_type=UserType.FAILURE_ANALYST, is_admin=False,
+                  password="secret")
+store.get_by_username("jsmith")  # → User | None
+store.list_users()               # → List[User]
+store.set_admin(uid, True)
+store.set_active(uid, False)     # deactivate (doesn't delete)
+store.update_password(uid, "new_secret")
+store.update_last_login(uid)
+```
+
+### 9.3 AuditLogger (`auth/store.py`)
+
+Appends JSON Lines to `~/.microsanj/audit.log`. 5 MB rotation, 3 backups.
+
+```python
+audit = AuditLogger()
+audit.log(event="login", actor="jsmith", user_type="failure_analyst",
+          detail="success", success=True)
+```
+
+### 9.4 Authenticator (`auth/authenticator.py`)
+
+`Authenticator(QObject)` is the central facade. It owns the current `AuthSession`.
+
+```python
+auth = Authenticator(store, audit)
+
+# Login — bcrypt check runs in QThread; never blocks GUI
+session = auth.authenticate("jsmith", "password")  # → AuthSession | None
+
+# Signals
+auth.session_started.connect(on_login)    # (AuthSession)
+auth.session_ended.connect(on_logout)
+auth.locked.connect(on_lock)
+
+# Supervisor override at operator station
+auth.supervisor_override("rjones", "pw", minimum_role=...)  # → bool
+
+# Inactivity management (call from 30-second QTimer)
+auth.touch()                              # reset inactivity clock
+auth.check_lock_timeout(timeout_s=1800)  # True if session expired
+```
+
+**Lockout:** 5 consecutive failures → 5-minute lockout, countdown shown in LoginScreen.
+
+**LDAP stub:** `_verify_credentials()` is an overridable method; the default implementation uses bcrypt + SQLite. An LDAP implementation drops in without changing any callers.
+
+### 9.5 UserPrefs (`auth/user_prefs.py`)
+
+Per-user preference file: `~/.microsanj/users/{uid}/prefs.json`.
+
+```python
+prefs = UserPrefs.for_session(session)
+
+prefs.get("ui.theme", "auto")         # user file → falls back to config.get_pref()
+prefs.set("ui.theme", "dark")         # writes to user file only
+
+# Users cannot modify hardware.* or auth.* keys (admin-only; raises PermissionError)
+```
+
+### 9.6 Startup Routing (`main_app.py`)
+
+```python
+# ① Create auth objects
+_user_store = UserStore()
+_audit      = AuditLogger()
+_auth       = Authenticator(_user_store, _audit)
+
+# ② First launch: no users → admin setup wizard (one-time)
+if not _user_store.has_users():
+    if AdminSetupWizard(_user_store, _audit).exec_() != QDialog.Accepted:
+        sys.exit(0)
+
+# ③ Login gate (only when require_login is on)
+_auth_session = None
+if config.get_pref("auth.require_login", False):
+    _auth_session = _run_login(_auth, app)
+    if _auth_session is None:
+        sys.exit(0)
+
+# ④ Route by user type
+if _auth_session and _auth_session.user.user_type.uses_operator_shell:
+    _launch_operator_shell(_auth, _auth_session, session_mgr)
+else:
+    window = MainWindow(auth=_auth, auth_session=_auth_session)
+    # ... existing flow unchanged ...
+```
+
+When `auth.require_login` is `false` (the default), steps ③ and ④ are skipped entirely and the application behaves identically to v1.1.x.
+
+### 9.7 Auth-Related Config Keys
+
+Three new keys in `~/.microsanj/preferences.json` (admin-only; not in `config.yaml`):
+
+```python
+config.get_pref("auth.require_login",                False)  # bool
+config.get_pref("auth.lock_timeout_s",               1800)   # int (30 min)
+config.get_pref("auth.supervisor_override_timeout_s", 900)   # int (15 min)
+```
+
+---
+
+## 10. Operator Shell
+
+`OperatorShell(QMainWindow)` in `ui/operator/operator_shell.py` is the complete UI for Technician users. It shares the same `HardwareService` and `ApplicationState` as `MainWindow` but has no code dependencies on it.
+
+### 10.1 Layout
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Logo │ Operator Mode │ Jane Smith [OP] │ 12 scans · 91%    │
+├─────────────────┬────────────────────┬────────────────────  ┤
+│ RecipeSelectorPanel │  ScanWorkArea  │   ShiftLogPanel       │
+│ (320 px fixed)  │  (flexible)        │  (280 px fixed)       │
+└─────────────────┴────────────────────┴───────────────────── ┘
+```
+
+### 10.2 Panels
+
+**`RecipeSelectorPanel`** — Shows only `recipe.locked == True` scan profiles. Emits `recipe_selected(Recipe)`. Empty state message guides operators to ask an engineer to approve profiles.
+
+**`ScanWorkArea`** — Live camera view (same QImage→QPixmap pipeline as MainWindow) + `Part ID` QLineEdit + START SCAN button (56 px tall, green). `returnPressed` on the line edit auto-starts the scan (barcode scanner support). START SCAN is disabled until a recipe is selected AND a non-empty Part ID is entered.
+
+**`ShiftLogPanel`** — Scrollable card list of today's results. Running totals in the header. `Export CSV` button → `QFileDialog`.
+
+**`VerdictOverlay(QDialog)`** — Full-screen modal after each scan. Background color: green (PASS), red (FAIL), amber (REVIEW). Center card shows verdict text (72 pt), part ID, max hotspot temperature vs. limit, and action buttons (Next Part, Flag for Review, View Details).
+
+### 10.3 Verdict Logic
+
+`VerdictOverlay` reads from `AnalysisResult.verdict` and `Recipe.analysis.fail_peak_k`. No new verdict logic is introduced — the overlay is purely a display wrapper over the existing analysis pipeline.
+
+### 10.4 PDF Auto-generation
+
+On `_on_scan_complete(result)`, `OperatorShell` calls the existing `generate_report()` from `acquisition/report.py`. The report is saved to the session directory automatically. Operators never need to click "Export PDF".
+
+### 10.5 Supervisor Override
+
+`SupervisorOverrideDialog` (340 × 280 px) takes engineer credentials and calls `auth.supervisor_override()`. On success, `session.supervisor_override_active = True`. A 15-minute `QTimer` calls `auth.revert_override()` automatically.
+
+---
+
+## 11. Configuration & Preferences
+
+### 11.1 System Configuration (`config.yaml`)
 
 YAML file at the repository root. Defines hardware drivers, polling intervals, and logging:
 
@@ -834,7 +1064,7 @@ polling:
 
 Missing `config.yaml` → app writes a default and runs in simulated mode.
 
-### 9.2 User Preferences (`~/.microsanj/preferences.json`)
+### 11.2 User Preferences (`~/.microsanj/preferences.json`)
 
 Read/written via `config.get_pref()` / `config.set_pref()`:
 
@@ -850,9 +1080,9 @@ config.get_pref("license.key", "")
 
 ---
 
-## 10. Session Management
+## 12. Session Management
 
-### 10.1 Session Structure on Disk
+### 12.1 Session Structure on Disk
 
 ```
 ~/microsanj_sessions/
@@ -865,7 +1095,7 @@ config.get_pref("license.key", "")
         thumbnail.png          ← Small PNG preview for browser
 ```
 
-### 10.2 SessionMeta Fields
+### 12.2 SessionMeta Fields
 
 | Field | Type | Description |
 |---|---|---|
@@ -888,7 +1118,7 @@ config.get_pref("license.key", "")
 | `snr_db` | float | Computed SNR |
 | `schema_version` | int | For migrations |
 
-### 10.3 Loading Sessions
+### 12.3 Loading Sessions
 
 Arrays are lazy-loaded — only read from disk when accessed:
 
@@ -898,15 +1128,15 @@ drr = session.delta_r_over_r    # Loads delta_r_over_r.npy on first access
 session.unload()                 # Frees memory
 ```
 
-### 10.4 Schema Migrations (`acquisition/schema_migrations.py`)
+### 12.4 Schema Migrations (`acquisition/schema_migrations.py`)
 
 When a new field is added to `SessionMeta`, a migration function bumps `schema_version` and fills in the default value for old sessions. Migrations run automatically on `Session.load()`.
 
 ---
 
-## 11. Update System
+## 13. Update System
 
-### 11.1 UpdateChecker (`updater.py`)
+### 13.1 UpdateChecker (`updater.py`)
 
 Checks GitHub Releases for a newer version. Source repo is private; the public `sanjinsight-releases` repo is used for update checking (no auth required).
 
@@ -926,7 +1156,7 @@ Checks GitHub Releases for a newer version. Source repo is private; the public `
 **Callback:**
 
 ```python
-checker = UpdateChecker(current_version="1.1.2", on_update=my_callback)
+checker = UpdateChecker(current_version="1.2.0", on_update=my_callback)
 checker.check_async()    # Non-blocking background thread
 result = checker.check_sync()   # Blocking (used for "Check Now" button)
 ```
@@ -936,9 +1166,9 @@ result = checker.check_sync()   # Blocking (used for "Check Now" button)
 
 ---
 
-## 12. Event Bus & Logging
+## 14. Event Bus & Logging
 
-### 12.1 EventBus (`events/event_bus.py`)
+### 14.1 EventBus (`events/event_bus.py`)
 
 Central dispatcher for application-wide events:
 
@@ -952,7 +1182,7 @@ emit_error("camera", "grab_timeout", "Camera frame grab timed out")
 
 Events are stored in `TimelineStore` (`~/.microsanj/timeline.jsonl`) as newline-delimited JSON for audit trails and debugging.
 
-### 12.2 Python Logging
+### 14.2 Python Logging
 
 Configured in `logging_config.py`. Output goes to:
 - **Console** (INFO and above)
@@ -970,7 +1200,7 @@ log.error("Camera grab failed: %s", exc)
 
 ---
 
-## 13. Thread Safety Model
+## 15. Thread Safety Model
 
 | Mechanism | Used for |
 |---|---|
@@ -988,7 +1218,7 @@ log.error("Camera grab failed: %s", exc)
 
 ---
 
-## 14. Data Flow Diagrams
+## 16. Data Flow Diagrams
 
 ### Hardware Discovery & Startup
 
@@ -1052,9 +1282,9 @@ main_app.MainWindow.__init__()
 
 ---
 
-## 15. Build & Release Pipeline
+## 17. Build & Release Pipeline
 
-### 15.1 GitHub Actions (`.github/workflows/build-installer.yml`)
+### 17.1 GitHub Actions (`.github/workflows/build-installer.yml`)
 
 **Triggers:**
 - `git push origin v1.2.0` — builds + creates GitHub Release on `sanjinsight-releases`
@@ -1070,7 +1300,7 @@ main_app.MainWindow.__init__()
 7. Extract release notes from `CHANGELOG.md`
 8. **Create GitHub Release** on `edward-mcnair/sanjinsight-releases` with `.exe` attached
 
-### 15.2 Release Procedure
+### 17.2 Release Procedure
 
 ```bash
 # 1. Update version
@@ -1091,7 +1321,7 @@ git push origin v1.2.0
 # 6. Verify at https://github.com/edward-mcnair/sanjinsight-releases/releases
 ```
 
-### 15.3 Local Windows Build (manual)
+### 17.3 Local Windows Build (manual)
 
 ```bash
 pip install pyinstaller pillow cairosvg
@@ -1100,7 +1330,7 @@ python installer/gen_version_info.py
 # Then open Inno Setup and compile installer/setup.iss
 ```
 
-### 15.4 CI Test Runner (`.github/workflows/ci.yml`)
+### 17.4 CI Test Runner (`.github/workflows/ci.yml`)
 
 Runs on every push and PR:
 
@@ -1112,7 +1342,7 @@ CI requires `CHANGELOG.md` to have an entry for the current version in `version.
 
 ---
 
-## 16. Testing
+## 18. Testing
 
 ```bash
 # Run all tests
@@ -1139,7 +1369,7 @@ All hardware tests use simulated drivers — no real hardware required to run th
 
 ---
 
-## 17. Adding a New Hardware Driver
+## 19. Adding a New Hardware Driver
 
 Example: adding a new camera driver `acme_cam.py`.
 
@@ -1192,11 +1422,20 @@ class AcmeCameraDriver(CameraDriver):
 
 **Step 2 — Register in the factory:**
 
+The camera factory uses a `_DRIVERS` registry dict rather than `if/elif` chains:
+
 ```python
-# hardware/cameras/factory.py — add to create_camera():
-elif driver_name == "acme":
-    from hardware.cameras.acme_cam import AcmeCameraDriver
-    return AcmeCameraDriver(serial=cfg.get("serial", ""))
+# hardware/cameras/factory.py — add to _DRIVERS dict:
+_DRIVERS = {
+    ...
+    "acme": ("hardware.cameras.acme_cam", "AcmeCameraDriver"),
+}
+```
+
+Add an install hint to `_INSTALL_HINTS` if the driver has external SDK dependencies:
+
+```python
+_INSTALL_HINTS["acme"] = "pip install acme_sdk\nDownload SDK from acme.example.com"
 ```
 
 **Step 3 — Add a simulated version (required for CI):**
@@ -1227,9 +1466,11 @@ KNOWN_DEVICES["acme_cam"] = DeviceDescriptor(
 
 No other changes are needed. The `HardwareService` reads the factory and the rest of the system sees a `CameraDriver` — it doesn't know or care which implementation is active.
 
+**Updating the Hardware Setup Wizard (`ui/first_run.py`):** If you want the new driver to appear in the Camera page dropdown, add a `(display_label, "acme")` tuple to the `_PageCamera` combo loop in `_PageCamera.__init__`, and add an `_update_hints` branch for the key `"acme"`. If the driver has SDK prerequisites, add a notice label following the `_pylon_notice` / `_flir_notice` pattern.
+
 ---
 
-## 18. Adding a New UI Tab
+## 20. Adding a New UI Tab
 
 Example: adding a new "Polarization" tab in Advanced mode.
 
@@ -1277,14 +1518,27 @@ hw_service.some_signal.connect(self._polarization_tab.on_some_event)
 
 No changes to `MainWindow` are required if the tab is self-contained and uses `app_state` for hardware references.
 
+**Auth considerations:** If your tab should only be visible to certain user types or requires admin access:
+
+```python
+# In __init__, check the auth session if provided
+def __init__(self, hw_service, app_state, auth_session=None, parent=None):
+    ...
+    if auth_session and not auth_session.user.is_admin:
+        self._some_admin_button.setVisible(False)
+        self._some_admin_button.setToolTip("Administrator login required")
+```
+
+Tabs should **never block** the user from viewing data — they should hide or disable controls they can't use, not hide the entire tab.
+
 ---
 
-## 19. Key Design Decisions
+## 21. Key Design Decisions
 
 | Decision | Rationale |
 |---|---|
 | **PyQt5 (not PySide6)** | Mature, stable on Windows; PySide6 migration is straightforward when needed |
-| **Factory pattern for all drivers** | Config-driven instantiation without `if/elif` chains in business logic |
+| **Factory pattern for all drivers** | Registry dict in `factory.py`; no `if/elif` chains in business logic; adding a driver requires only two lines |
 | **Simulated driver for every device** | CI tests with no hardware; demo mode for sales/training |
 | **ApplicationState RLock instead of per-driver locks** | Prevents compound-operation races (e.g., replacing camera + pipeline atomically) |
 | **Camera frame back-pressure semaphore** | Prevents Qt event queue overflow at high frame rates |
@@ -1294,10 +1548,18 @@ No changes to `MainWindow` are required if the tab is self-contained and uses `a
 | **Schema migrations on session load** | Old sessions remain valid after adding new metadata fields |
 | **`version.py` as single source of truth** | All version strings, URLs, and repo names derived from one file; CI reads it |
 | **Manual RAG over embedding-based RAG** | No embedding model required; keyword matching is fast and sufficient for a bounded domain |
+| **Auth opt-in via `auth.require_login`** | Backwards-compatible; research labs get zero disruption; corporate ops enable it |
+| **Admin is `is_admin: bool`, not a separate user type** | Any user type can be admin; AI persona and UI surface are unchanged by the admin flag |
+| **UserType → uses_operator_shell** | Single boolean property routes Technicians to OperatorShell; no scattered `if role == "technician"` checks |
+| **OperatorShell is a separate QMainWindow** | Complete hard separation; Technicians never accidentally reach engineer UI |
+| **bcrypt work factor 12 for passwords** | Industry standard; air-gap friendly (no server) |
+| **SQLite for user DB** | Zero server dependency; stdlib `sqlite3`; works air-gapped |
+| **JSON Lines for audit log** | Human-readable, grep-able, append-only; matches existing `timeline.jsonl` pattern |
+| **FLIR driver key stays `"flir"` internally** | User-facing label is "Microsanj IR Camera" via QComboBox userData; `config.yaml` key unchanged for backwards compatibility |
 
 ---
 
-## 20. Dependency Reference
+## 22. Dependency Reference
 
 ```
 PyQt5>=5.15.9          Qt5 GUI framework
@@ -1310,11 +1572,13 @@ pyyaml>=6.0            config.yaml parsing
 pyserial>=3.5          Serial port enumeration and communication
 pyusb>=1.2             USB device enumeration
 cryptography>=42.0     Ed25519 license key validation
-qtawesome>=1.3.0       FontAwesome 5 vector icons for PyQt5
+qtawesome>=1.3.0       FontAwesome 5 / Material Design Icons for PyQt5
 requests>=2.31         HTTP (update checker, cloud AI)
+bcrypt>=4.0            Password hashing for user accounts (work factor 12)
 
-# Optional — hardware SDKs (Windows-only, not in PyPI)
-pypylon                Basler Pylon camera SDK Python wrapper
+# Optional — hardware SDKs (Windows-only unless otherwise noted, not in PyPI)
+pypylon                Basler Pylon camera SDK Python wrapper (Basler TR camera)
+spinnaker_python       FLIR Spinnaker SDK Python wrapper (Microsanj IR camera; distributed with SDK installer)
 pyMeCom                Meerstetter TEC serial protocol
 nifpga                 NI-FPGA Python interface
 pyvisa                 NI-VISA / GPIB / SCPI instrument control
@@ -1327,5 +1591,5 @@ pytest>=7.4            Test runner
 
 ---
 
-*This document was written against SanjINSIGHT v1.1.2 (2026-03-07).
+*This document was written against SanjINSIGHT v1.2.0 (2026-03-13).
 Update it whenever significant architectural changes are made.*

@@ -1,6 +1,6 @@
 # SanjINSIGHT — Quick Start Guide
 
-**Microsanj SanjINSIGHT v1.0.0**
+**Microsanj SanjINSIGHT v1.2.0**
 *Get from first launch to your first thermoreflectance measurement in minutes.*
 
 ---
@@ -26,21 +26,25 @@
 
 ### Step 1 — Run the SanjINSIGHT installer
 
-Download `SanjINSIGHT-Setup-{version}.exe` from the [Releases page](https://github.com/edward-mcnair/sanjinsight/releases) and run it.
+Download `SanjINSIGHT-Setup-{version}.exe` from the [Releases page](https://github.com/edward-mcnair/sanjinsight-releases/releases) and run it.
 
 The installer bundles everything SanjINSIGHT needs to run — Python, all Python packages, and the application itself. No separate Python installation is required.
 
-### Step 2 — Install NI hardware drivers
+### Step 2 — Install camera and hardware drivers
 
-The installer cannot bundle kernel-level hardware drivers. Install these **before** launching SanjINSIGHT for the first time:
+The installer cannot bundle OS-level hardware drivers. Install these **before** launching SanjINSIGHT for the first time:
 
 | Driver | Required for | Where to get it |
 |---|---|---|
 | **NI-RIO** | FPGA (NI 9637) | [ni.com → Drivers → NI-RIO](https://www.ni.com/en/support/downloads/drivers/download.ni-rio.html) |
 | **NI Vision Acquisition Software** | Camera (NI IMAQdx) | [ni.com → Drivers → NI-VAS](https://www.ni.com/en/support/downloads/drivers/download.ni-vision-acquisition-software.html) |
 | **NI-VISA** | Keithley bias source | [ni.com → Drivers → NI-VISA](https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html) |
+| **Basler Pylon 8 SDK** | Basler TR camera | [baslerweb.com/downloads](https://www.baslerweb.com/en-us/downloads/software/) |
+| **FLIR Spinnaker SDK** | Microsanj IR camera | [flir.com/spinnaker-sdk](https://www.flir.com/products/spinnaker-sdk/) — then `pip install spinnaker_python` (wheel ships inside the SDK package) |
 
-> Each NI installer requires a restart. Install them in any order, then restart once after all three are done.
+> **NI drivers** require a restart after each installer. Install all three, then restart once.
+
+> **Camera SDKs** do not require a restart. Install both if you have both cameras. If you only have one camera type, install only the relevant SDK.
 
 > **USB-to-serial adapters (TEC, stage, turret):** Windows 11 usually installs FTDI and Prolific drivers automatically. If a COM port does not appear in Device Manager after plugging in the cable, download the driver manually from [ftdichip.com](https://ftdichip.com/drivers/vcp-drivers/).
 
@@ -65,44 +69,61 @@ The AI Assistant requires a language model file (~2–5 GB). Go to **Settings �
 □ Install NI-RIO drivers + restart
 □ Install NI Vision Acquisition Software + restart
 □ Install NI-VISA
+□ Install Basler Pylon 8 SDK         (Basler TR camera systems only)
+□ Install FLIR Spinnaker SDK +
+    pip install spinnaker_python      (Microsanj IR camera systems only)
 □ Copy FPGA bitfile → C:\Microsanj\firmware\ez500firmware.lvbitx
-□ Launch SanjINSIGHT → complete Hardware Setup Wizard
+□ Launch SanjINSIGHT → complete Admin Setup (first time only)
+□ Complete Hardware Setup Wizard
 □ Settings → AI Assistant → Download Model  (optional)
 ```
 
 ---
 
-## 2. First Launch — Hardware Setup Wizard
+## 2. First Launch
 
-On first launch, the **Hardware Setup Wizard** opens automatically and walks you through connecting each piece of hardware. It runs a background device scan and pre-fills fields where hardware is detected.
+### Admin account setup (one-time)
+
+The very first time SanjINSIGHT starts, the **Admin Setup** screen appears. This creates the administrator account that controls who can use the system and what they can change.
+
+1. Enter a display name, username, and password (confirmed twice).
+2. Click **Create Account**. The account is created and you are logged in automatically.
+3. The Hardware Setup Wizard opens immediately after.
+
+> You only see this screen once, on a fresh installation. After the admin account exists, subsequent launches go straight to the Hardware Setup Wizard (or the login screen if login is required — see Section 4).
+
+### Hardware Setup Wizard
+
+After admin setup, the **Hardware Setup Wizard** opens and walks you through connecting each piece of hardware. It runs a background device scan and pre-fills fields where hardware is detected.
 
 > **Tip:** You can re-open this wizard at any time via **Help → Hardware Setup…** (Ctrl+Shift+H).
-
-### Step-by-step
 
 | Page | What to do |
 |---|---|
 | **Welcome** | Wait a few seconds for the auto-scan to complete. A status message shows how many devices were found. |
-| **TEC Controllers** | Confirm or select the COM port for each TEC (Meerstetter and/or ATEC). The dropdown shows detected ports with a green ✓ badge. Use "simulated" if no TEC is connected. |
-| **Camera** | Choose the driver: **pypylon** (Basler USB3/GigE), **ni_imaqdx** (NI camera), or **simulated**. If auto-scan found a camera, the serial number or camera name is pre-filled. |
+| **TEC Controllers** | Confirm or select the COM port for each TEC (Meerstetter and/or ATEC). Use "simulated" if no TEC is connected. |
+| **Camera** | Choose the driver: **pypylon** (Basler TR camera), **Microsanj IR Camera** (IR thermography camera), **ni_imaqdx** (NI camera), or **simulated**. If auto-scan found a camera, the serial number is pre-filled. |
 | **FPGA** | Choose **ni9637** and browse to the FPGA bitfile (`.lvbitx`). Enter the resource string (e.g. `RIO0`). Use **simulated** for software-only use. |
 | **Finish** | Review your settings and click **Finish**. The configuration is saved to `config.yaml`. |
+
+> **Microsanj IR Camera:** If you select this driver and the Spinnaker SDK is not yet installed, an amber install notice appears with a direct download link. Install the SDK, then click **Test Camera** to verify.
 
 ---
 
 ## 3. Application Layout
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│  Logo  │  ● Cam  ● TEC1  ● TEC2  ● FPGA  ● Bias  ● Stage  │ ■ STOP │
-├──────────────────────────────────────────────────────────────────────┤
-│ Sidebar │                   Main Panel                               │
-│         │  (Live / Acquire / Scan / Calibration / Camera / …)       │
-└──────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  Logo  │  ● Cam  ● TEC1  ● TEC2  ● FPGA  ● Bias  ● Stage  │ [user] │ ■ STOP │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ Sidebar │                      Main Panel                                    │
+│         │  (Live / Acquire / Scan / Calibration / Camera / …)               │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
 - **Status dots** (top bar) — Cyan = connected, Red = disconnected.
 - **■ STOP** — Emergency stop for all hardware. Click once to arm (turns amber), click again to trigger, or press **Ctrl+.** to trigger immediately.
+- **User display** — Shows the logged-in user name. Includes a **Log in** button when no session is active, and a **Log out** button when one is.
 - **Sidebar** — Groups panels by function. Click any item to open it.
 
 ### Left Sidebar Structure
@@ -112,7 +133,7 @@ On first launch, the **Hardware Setup Wizard** opens automatically and walks you
 | **MEASURE** | Live, Acquire, Scan |
 | **ANALYSIS** | Calibration, Analysis, Compare, 3D Surface |
 | **Hardware** *(collapsible ▸)* | Camera, Temperature, FPGA, Bias Source, Stage, ROI, Autofocus |
-| **SETUP** | Profiles, Recipes |
+| **SETUP** | Profiles, Scan Profiles |
 | **TOOLS** | Data, Console, Log, Settings |
 
 > **Tip:** The **Hardware** group is collapsible — click the ▸ arrow to expand or collapse all hardware panels at once.
@@ -184,6 +205,31 @@ The **AI Assistant** is a dockable panel accessible from the sidebar. It shows:
 
 > **First use:** The AI requires a local language model. Go to **Settings → AI Assistant** and click **Download Model** to fetch the model (~2–5 GB). The download runs in the background and shows progress in Settings.
 
+### F — Operator Mode (Technician users)
+
+Operator Mode is a simplified interface for technicians who run repeatably against approved scan profiles. It is presented automatically when a **Technician** account logs in.
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  Logo  │  Operator Mode  │  Jane Smith [OP]  │  12 scans · 91% pass   │
+├──────────────┬─────────────────────────────┬───────────────────────────┤
+│ Scan Profile │      Live Camera View       │  Shift Log                │
+│ (approved    │                             │  ✓ SN-001  09:14  PASS    │
+│  profiles    │  [Part ID / Serial #]       │  ✗ SN-002  09:22  FAIL    │
+│  only)       │                             │  ✓ SN-003  09:31  PASS    │
+│              │  [  ▶  START SCAN  ]        │                           │
+└──────────────┴─────────────────────────────┴───────────────────────────┘
+```
+
+1. Log in as a Technician user (or have the admin create one).
+2. Select a scan profile from the left panel (only profiles approved by an engineer appear).
+3. Scan or type the part serial number in the **Part ID** field.
+4. Click **▶ START SCAN** (or press Enter if a barcode scanner is connected).
+5. A full-screen **PASS / FAIL / REVIEW** result is shown after each scan.
+6. Results are logged automatically to the Shift Log and exported as a PDF report.
+
+> **Supervisors:** If an engineer needs temporary access at an operator station, click the **Supervisor Override** button to enter engineer credentials. Access auto-reverts after 15 minutes.
+
 ---
 
 ## 5. Saving & Exporting Results
@@ -215,6 +261,7 @@ The **AI Assistant** is a dockable panel accessible from the sidebar. It shows:
 | **Ctrl+Shift+H** | Open Hardware Setup wizard |
 | **Ctrl+,** | Open Settings |
 | **Ctrl+.** | Emergency stop (immediate) |
+| **Ctrl+`** | Toggle Console / Log drawer |
 
 ---
 
@@ -223,13 +270,16 @@ The **AI Assistant** is a dockable panel accessible from the sidebar. It shows:
 | Problem | Check |
 |---|---|
 | Status dot stays red | Open **Device Manager** (⚙ icon or Ctrl+D) and click **Reconnect**. Verify driver and port in **Hardware Setup** (Ctrl+Shift+H). |
-| Camera not found | Ensure Pylon or NI Vision is installed and the camera appears in its own companion software. |
+| Basler TR camera not found | Ensure Basler Pylon 8 is installed and the camera appears in the Pylon Viewer. |
+| Microsanj IR camera not found | Ensure the FLIR Spinnaker SDK is installed (`pip install spinnaker_python`). Check USB connection. Run **Test Camera** in the Hardware Setup Wizard. |
 | TEC not stabilising | Increase **Max settle time** in Calibration settings. Check physical TEC connections. |
 | FPGA not found | Confirm NI-RIO drivers are installed and the resource string matches NI MAX (e.g. `RIO0`). |
 | ΔT always shows "—" | Load and apply a calibration file: **Calibration → 📂 Load .cal → ✓ Apply**. |
-| Stage shows "NOT HOMED" | Open the **Stage** panel (Hardware group in sidebar). Click **⌂ Home All** at the bottom of the Stage panel to set the reference position before running automated moves. |
-| FPGA duty cycle warning appears | The duty cycle ≥ 50 % label (amber) warns of DUT overheating risk. Reduce duty cycle in the **FPGA** panel if sample temperature is a concern. At ≥ 80 % the label turns red. |
-| AI Assistant shows no model | Go to **Settings → AI Assistant** and click **Download Model**. A ~2–5 GB file will be downloaded and the button changes to show progress. |
+| Stage shows "NOT HOMED" | Open the **Stage** panel and click **⌂ Home All** to set the reference position. |
+| FPGA duty cycle warning | Duty cycle ≥ 50 % risks DUT overheating (amber). Reduce in the **FPGA** panel. ≥ 80 % turns red. |
+| AI Assistant shows no model | Go to **Settings → AI Assistant** and click **Download Model** (~2–5 GB). |
+| Scan Profile list is empty (Operator Mode) | No profiles have been approved yet. An engineer must open a Scan Profile in the full UI, configure it, and click **Approve & Lock**. |
+| "Administrator login required" tooltip on settings | Click **Log in** in the top bar and enter admin credentials to unlock those controls. |
 | Update badge appears | Click the badge or go to **Help → Check for Updates…** to download the latest installer. |
 
 ---
@@ -238,7 +288,7 @@ The **AI Assistant** is a dockable panel accessible from the sidebar. It shows:
 
 - **Documentation:** [docs.microsanj.com/sanjinsight](https://docs.microsanj.com/sanjinsight)
 - **Support:** [software-support@microsanj.com](mailto:software-support@microsanj.com) — or use **Help → Get Support…** in the application for a pre-filled email with diagnostic data attached
-- **Releases:** [github.com/edward-mcnair/sanjinsight/releases](https://github.com/edward-mcnair/sanjinsight/releases)
+- **Releases:** [github.com/edward-mcnair/sanjinsight-releases/releases](https://github.com/edward-mcnair/sanjinsight-releases/releases)
 
 ---
 

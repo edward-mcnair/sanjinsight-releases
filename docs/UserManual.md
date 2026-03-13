@@ -1,7 +1,7 @@
 # SanjINSIGHT User Manual
 
-**Microsanj SanjINSIGHT v1.0.0**
-**Document revision: 2026-03-02**
+**Microsanj SanjINSIGHT v1.2.0**
+**Document revision: 2026-03-13**
 
 ---
 
@@ -21,11 +21,13 @@
 12. [Saving and Exporting Data](#12-saving-and-exporting-data)
 13. [Device Manager](#13-device-manager)
 14. [Settings](#14-settings)
-15. [Supported Hardware](#15-supported-hardware)
-16. [Configuration File Reference](#16-configuration-file-reference)
-17. [Keyboard Shortcuts](#17-keyboard-shortcuts)
-18. [Troubleshooting](#18-troubleshooting)
-19. [Technical Reference](#19-technical-reference)
+15. [User Accounts & Roles](#15-user-accounts--roles)
+16. [Operator Mode](#16-operator-mode)
+17. [Supported Hardware](#17-supported-hardware)
+18. [Configuration File Reference](#18-configuration-file-reference)
+19. [Keyboard Shortcuts](#19-keyboard-shortcuts)
+20. [Troubleshooting](#20-troubleshooting)
+21. [Technical Reference](#21-technical-reference)
 
 ---
 
@@ -157,7 +159,8 @@ The installer cannot bundle Windows kernel-level hardware drivers. Install these
 | **NI-RIO** | FPGA — NI 9637 | [ni.com → NI-RIO](https://www.ni.com/en/support/downloads/drivers/download.ni-rio.html) |
 | **NI Vision Acquisition Software** | Camera — NI IMAQdx | [ni.com → NI-VAS](https://www.ni.com/en/support/downloads/drivers/download.ni-vision-acquisition-software.html) |
 | **NI-VISA** | Bias source — Keithley (GPIB / USB / LAN) | [ni.com → NI-VISA](https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html) |
-| **Basler Pylon SDK** | Camera — Basler pypylon *(if applicable)* | [baslerweb.com/downloads](https://www.baslerweb.com/en/downloads/software-downloads/) |
+| **Basler Pylon 8 SDK** | Basler TR camera | [baslerweb.com/downloads](https://www.baslerweb.com/en-us/downloads/software/) — includes the USB3 Vision driver and `pypylon` Python bindings |
+| **FLIR Spinnaker SDK** | Microsanj IR camera | [flir.com/spinnaker-sdk](https://www.flir.com/products/spinnaker-sdk/) — then `pip install spinnaker_python` (wheel ships inside the SDK package) |
 
 After installing the NI drivers, open **NI MAX** (Measurement & Automation Explorer) and verify:
 - The camera appears under **Devices and Interfaces** with the correct name (e.g. `cam4`).
@@ -194,10 +197,13 @@ The AI Assistant requires a local language model file (~2–5 GB, downloaded onc
 □ Install NI-RIO drivers + restart
 □ Install NI Vision Acquisition Software + restart
 □ Install NI-VISA
-□ Install Basler Pylon SDK  (Basler camera systems only)
+□ Install Basler Pylon 8 SDK        (Basler TR camera systems only)
+□ Install FLIR Spinnaker SDK +
+    pip install spinnaker_python     (Microsanj IR camera systems only)
 □ Confirm camera + FPGA visible in NI MAX
 □ Copy FPGA bitfile → C:\Microsanj\firmware\ez500firmware.lvbitx
-□ Launch SanjINSIGHT → complete Hardware Setup Wizard
+□ Launch SanjINSIGHT → complete Admin Setup  (first launch only)
+□ Complete Hardware Setup Wizard
 □ Settings → AI Assistant → Download Model  (optional)
 ```
 
@@ -223,11 +229,37 @@ When the wizard opens it immediately starts a background device scan that checks
 
 Detected devices are shown with a **green ✓** badge and have their fields pre-filled. Missing devices show an **amber ⚠** badge.
 
-### 3.2 Page 1 — Welcome
+### 3.2 Admin Setup Wizard (first launch only)
 
-Displays a brief overview of the system. The scan status label updates as each hardware class is checked. Wait for "Scan complete — N devices found" before clicking **Next**, or click through immediately if you prefer to configure manually.
+On the very first launch, before the Hardware Setup Wizard, the **Admin Setup** screen appears. This creates the first administrator account and only needs to be completed once per installation.
 
-### 3.3 Page 2 — TEC Controllers
+The welcome page explains the three user roles and the privileges each one carries:
+
+| Role | UI Surface | Can do | Cannot do |
+|---|---|---|---|
+| **Technician** | Operator Mode | Run approved scan profiles, view PASS/FAIL verdicts | Create/edit profiles, change hardware settings, manage users |
+| **Failure Analyst** | Full UI | Full UI access, create scan profiles, AI assistance | Manage users, change security settings |
+| **Researcher** | Full UI | Full UI access, create scan profiles, AI assistance | Manage users, change security settings |
+
+Any user of any type can be granted **Administrator** privileges as an overlay. Administrators can manage users, change system settings, and approve scan profiles for operator use.
+
+**To complete Admin Setup:**
+
+1. Enter a **Display Name** (shown in the header, e.g. "Jane Smith").
+2. Enter a **Username** (used to log in, case-insensitive).
+3. Enter a **Password** and confirm it. A strength indicator is shown.
+4. Click **Create Account**. The account is created and you are logged in automatically.
+5. The Hardware Setup Wizard opens immediately after.
+
+> You cannot dismiss this screen without creating an account. All fields are required.
+
+### 3.3 Page 1 — Welcome
+
+Displays a brief overview of the system and a **camera SDK prerequisites** notice with direct download links for the Basler Pylon 8 SDK and FLIR Spinnaker SDK. Install both SDKs before clicking Next if you have either camera type.
+
+The scan status label updates as each hardware class is checked. Wait for "Scan complete — N devices found" before clicking **Next**, or click through immediately if you prefer to configure manually.
+
+### 3.4 Page 2 — TEC Controllers
 
 Two TEC controllers are supported independently.
 
@@ -249,19 +281,22 @@ Two TEC controllers are supported independently.
 | Address | 1 (fixed) | |
 | Baud rate | 9600 (fixed) | |
 
-### 3.4 Page 3 — Camera
+### 3.5 Page 3 — Camera
 
 | Field | Options | Notes |
 |---|---|---|
-| Driver | `pypylon` / `ni_imaqdx` / `directshow` / `simulated` | |
-| Serial number | Text field | Basler pypylon only — leave blank for first found |
-| Camera name | Text field | NI IMAQdx only — e.g. `cam4` |
+| Driver | `pypylon` / `Microsanj IR Camera` / `ni_imaqdx` / `directshow` / `simulated` | |
+| Camera Serial # | Text field | Leave blank for first found camera |
+| NI Camera Name | Text field | NI IMAQdx only — e.g. `cam4` |
 
-> **pypylon** — Requires Basler Pylon SDK. Supports acA1920-155um and acA640-750um.
+> **pypylon** — Requires Basler Pylon 8 SDK. Supports the Basler acA1920-155um TR camera. If the SDK is not installed, an amber notice appears with a download link.
+> **Microsanj IR Camera** — Requires the FLIR Spinnaker SDK + `pip install spinnaker_python`. If the SDK is not installed an amber notice appears with a download link and the install command. Click **Test Camera** to verify the SDK is found and to count detected cameras.
 > **ni_imaqdx** — Requires NI Vision Acquisition Software. Camera name is shown in NI MAX.
 > **simulated** — Generates synthetic frames; no hardware needed.
 
-### 3.5 Page 4 — FPGA
+The background device scan auto-selects the correct driver and pre-fills the serial number for both Basler and Microsanj IR cameras when detected.
+
+### 3.6 Page 4 — FPGA
 
 | Field | Options | Notes |
 |---|---|---|
@@ -275,7 +310,7 @@ The resource string is visible in **NI MAX → Devices and Interfaces**. Common 
 - `rio://192.168.1.1/RIO0` — Network CompactRIO
 - `Dev1` — USB-6001 DAQ fallback
 
-### 3.6 Page 5 — Summary & Finish
+### 3.7 Page 5 — Summary & Finish
 
 Review all settings. Click **Finish** to write `config.yaml` and close the wizard. Click **Back** to revise any page. Click **Cancel** to leave the existing `config.yaml` unchanged.
 
@@ -297,6 +332,7 @@ After finishing, hardware drivers are initialised. Status dots in the top bar re
 | Element | Description |
 |---|---|
 | **Logo** | Microsanj branding |
+| **User display** | Shows logged-in user's display name. Includes **Log in** button when no session is active (visible only when an admin account exists), and **Log out** button when a session is active. |
 | **Standard / Advanced toggle** | Switch the main view mode |
 | **Status dots (●)** | Cyan = connected and responding; Red = disconnected or error |
 | **⚙ (Device Manager)** | Open Device Manager dialog |
@@ -341,7 +377,7 @@ The sidebar on the left organises all panels into functional groups. Click any i
 | Panel | Purpose |
 |---|---|
 | **Profiles** | Material / wavelength / C_T coefficient profiles |
-| **Recipes** | Saved acquisition parameter sets |
+| **Scan Profiles** | Saved acquisition parameter sets; supports locking for operator use |
 
 **TOOLS section**
 
@@ -1004,9 +1040,217 @@ Open with **Help → Settings** or **Ctrl+,**.
 
 ---
 
-## 15. Supported Hardware
+## 15. User Accounts & Roles
 
-### 15.1 Cameras
+### 15.1 Overview
+
+SanjINSIGHT includes a role-based access control (RBAC) system that lets administrators control who can use the instrument and what they can change. The auth system is **opt-in** — research labs that don't need user management can leave the default setting (`require_login: false`) and the application behaves exactly as before v1.2.0.
+
+### 15.2 User Types
+
+Three user types map the natural roles in a lab or production environment. Each type determines the UI surface the user sees and the default AI Assistant persona they get.
+
+| User Type | UI Surface | Default AI Persona | Can Edit Scan Profiles? | Can Manage Users? |
+|---|---|---|---|---|
+| **Technician** | Operator Shell | Lab Technician | No | No |
+| **Failure Analyst** | Full UI | Failure Analyst | Yes | No |
+| **Researcher** | Full UI | Researcher | Yes | No |
+| *(any)* **+ Admin** | Full UI + User Management | *(unchanged)* | Yes | Yes |
+
+**Administrator** is a privilege overlay — any user type can be granted admin rights. Admin does not change how the instrument AI talks to the user; it adds access to user management and global settings.
+
+> **Technician users** always land in the Operator Shell after login — a simplified interface designed for repeatably running approved scan profiles. See Section 16 for details.
+
+> **AI persona:** The AI Assistant automatically switches context to match the logged-in user. Failure Analysts get evidence-first diagnostic guidance; Researchers get exploratory explanations. Technicians always get the simplified Lab Technician persona.
+
+### 15.3 Admin Setup (First Launch)
+
+The very first time SanjINSIGHT starts on a new installation, the **Admin Setup Wizard** appears. This one-time screen creates the administrator account that controls who can use the system.
+
+1. Enter a display name, username, and password (confirmed twice). A strength indicator shows password quality.
+2. Click **Create Account**. The account is created and you are logged in automatically.
+3. The Hardware Setup Wizard opens immediately after.
+
+> You only see this screen once, on a fresh installation. After the admin account exists, subsequent launches proceed directly.
+
+### 15.4 Creating and Managing Users
+
+Open **Settings → Users** (admin login required). The Users panel shows a table of all accounts with columns for display name, username, user type, admin flag, last login, and active status.
+
+**Adding a user**
+
+1. Click **+ Add User**.
+2. Select the user type by clicking one of the three profile cards:
+   - 🔧 **Technician** — Runs QA scans per SOP; guided Operator Shell UI
+   - 🔬 **Failure Analyst** — Diagnoses device failures; full UI access
+   - 📚 **Researcher** — Explores and publishes results; full UI access
+3. Optionally check **Grant administrator privileges** (adds user management and global settings access).
+4. Enter a display name, username, and initial password.
+5. Click **Create**. The new user can log in immediately.
+
+**Editing a user:** Select the row and click **Edit** to change display name, user type, or admin flag.
+
+**Deactivating a user:** Click **Deactivate** to disable the account without deleting it. Deactivated accounts cannot log in but their history is preserved.
+
+**Resetting a password:** Click **Reset Password** to set a new temporary password.
+
+### 15.5 Login Gate
+
+By default, SanjINSIGHT does not require login (`auth.require_login = false`). To require login:
+
+1. Open **Settings → Security** (admin login required).
+2. Toggle **Require login on startup** to On.
+3. Set **Lock timeout** (default 30 minutes; 0 = never auto-lock).
+
+Once enabled, the login screen appears on every launch and after the inactivity timeout.
+
+**Session lock:** When a session is locked (timeout or manual lock), the login screen reappears. The user logs back in to resume where they left off.
+
+**No-login mode:** When `require_login` is off, the application still records a "no-login session" in the audit log so that measurement history can be attributed to the system even without named users.
+
+### 15.6 Per-User Preferences
+
+When login is active, each user has their own preference file (`~/.microsanj/users/{uid}/prefs.json`). User preferences override the global defaults but cannot change hardware or security settings.
+
+| Preference | Description |
+|---|---|
+| `ui.theme` | Dark, Light, or Auto (follows OS) |
+| `lab.default_recipe` | Default scan profile loaded at startup |
+| `autoscan.last_objective_mag` | Last-used objective magnification |
+| `ui.sidebar_collapsed` | Whether the Hardware sidebar group is collapsed |
+
+Global settings (hardware config, auth settings, lock timeout) are admin-only and stored in `config.yaml`.
+
+### 15.7 Audit Log
+
+All authentication events are appended to `~/.microsanj/audit.log` as JSON Lines. The log is human-readable and can be grepped or imported into a spreadsheet.
+
+```
+{"ts": 1741872000.0, "ts_str": "2026-03-13 09:00:00", "event": "login",
+ "actor": "jsmith", "user_type": "failure_analyst", "detail": "success", "success": true}
+```
+
+| Event | Description |
+|---|---|
+| `first_admin_created` | Initial admin account created during first-launch wizard |
+| `login` | Successful or failed login attempt |
+| `logout` | User logged out |
+| `locked` | Session locked due to inactivity timeout |
+| `supervisor_override` | Temporary engineer access granted at operator station |
+| `user_created` | New user account created by admin |
+| `user_deactivated` | Account deactivated by admin |
+| `password_reset` | Password reset by admin |
+
+The log rotates at 5 MB and keeps 3 backups.
+
+---
+
+## 16. Operator Mode
+
+### 16.1 Overview
+
+Operator Mode is a simplified interface for technicians who run repeatably against approved scan profiles. It launches automatically when a **Technician** user logs in.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Logo  │  Operator Mode  │  Jane Smith [OP]  │  12 scans · 91% │
+├──────────────┬──────────────────────────┬───────────────────────┤
+│ Scan Profile │    Live Camera View      │  Shift Log            │
+│ (approved    │                          │  ✓ SN-001  09:14 PASS │
+│  profiles    │  [Part ID / Serial #]    │  ✗ SN-002  09:22 FAIL │
+│  only)       │                          │  ✓ SN-003  09:31 PASS │
+│              │  [  ▶  START SCAN  ]     │                       │
+└──────────────┴──────────────────────────┴───────────────────────┘
+```
+
+**The Operator Shell has three zones:**
+- **Left — Scan Profile Selector:** Lists only scan profiles that have been approved and locked by an engineer.
+- **Centre — Scan Work Area:** Live camera view, Part ID / Serial Number field, and the START SCAN button.
+- **Right — Shift Log:** Running log of today's results with PASS/FAIL badges and running totals.
+
+### 16.2 Running a Scan
+
+1. Log in as a Technician user.
+2. Select a scan profile from the left panel. Only profiles with the "Approved for Operators" badge appear.
+3. Scan or type the part serial number in the **Part ID** field. If a USB barcode scanner is connected, scanning the barcode and pressing Enter auto-starts the scan.
+4. Click **▶ START SCAN** (or press Enter if the Part ID field is focused).
+5. A full-screen verdict screen appears after each scan (see Section 16.3).
+6. Results are logged automatically to the Shift Log and exported as a PDF report.
+
+> **START SCAN is disabled** until both a scan profile is selected and a non-empty Part ID is entered.
+
+### 16.3 Verdict Screen
+
+After each scan, a full-screen overlay shows the result:
+
+```
+Background colour: green (PASS) / red (FAIL) / amber (REVIEW)
+
+         ✓  PASS
+         Part: SN-A12346
+         ─────────────────────────────
+         Max hotspot:   4.2 °C   (limit: 20 °C)
+         Hotspots:      0          Scan time: 8.3 s
+         ─────────────────────────────
+   [ Flag for Review ]      [ ▶ Next Part ]
+              [ View Details ]
+```
+
+| Button | Action |
+|---|---|
+| **▶ Next Part** | Dismisses the verdict screen; returns to the Scan Work Area for the next part |
+| **Flag for Review** | Marks the result as "needs engineering review"; adds a flag to the Shift Log entry |
+| **View Details** | Opens the full result viewer (read-only) so the operator can see the thermal map |
+
+**Verdict logic** is defined in the scan profile by the engineer who approved it:
+- **PASS** — No hotspot exceeds the profile's temperature limit
+- **FAIL** — One or more hotspots exceed the limit
+- **REVIEW** — Result is within the limit but above a warning threshold (if configured)
+
+### 16.4 Shift Log
+
+The Shift Log panel on the right side records every scan in the current session. Each entry shows:
+- PASS / FAIL / REVIEW badge
+- Part serial number
+- Time of scan
+- Scan profile name
+
+Running totals ("12 scans · 91% pass") are shown at the top.
+
+Click **Export CSV** to save the shift log as a comma-separated file for quality system reporting.
+
+### 16.5 Approving Scan Profiles for Operator Use
+
+Only engineers and admins can approve scan profiles. In the full UI:
+
+1. Open **Scan Profiles** (Setup section of the sidebar).
+2. Select the profile you want to make available to operators.
+3. Configure and test the profile until it is ready.
+4. Click **Approve & Lock** in the profile editor footer.
+
+Once locked:
+- The profile appears in the Operator Shell's scan profile list.
+- All edit fields in the profile editor are disabled (a teal badge shows "Approved for Operators — Locked by {name}").
+- To modify the profile, click **Unlock** (engineer/admin only), make changes, re-test, and re-approve.
+
+> **If the Scan Profile list is empty in Operator Mode:** No profiles have been approved yet. An engineer must open a Scan Profile in the full UI, configure it, and click **Approve & Lock**.
+
+### 16.6 Supervisor Override
+
+If an engineer needs temporary access at an operator station without logging the technician out:
+
+1. Click the **Supervisor Override** button (accessible from the operator station header).
+2. Enter engineer or admin credentials in the overlay dialog.
+3. If credentials are valid, temporary access is granted.
+4. Access auto-reverts to the logged-in technician after **15 minutes**, or when the engineer clicks **End Override**.
+
+All supervisor override events are logged to the audit log (Section 15.7).
+
+---
+
+## 17. Supported Hardware
+
+### 17.1 Cameras
 
 | Model | Sensor | Connection | Driver | Required SDK |
 |---|---|---|---|---|
@@ -1023,7 +1267,7 @@ Open with **Help → Settings** or **Ctrl+,**.
 > **Pylon SDK download:** [baslerweb.com/downloads](https://www.baslerweb.com/en/downloads/software-downloads/)
 > **NI Vision Acquisition download:** [ni.com/downloads](https://www.ni.com/en/support/downloads/drivers/download.ni-vision-acquisition-software.html)
 
-### 15.2 TEC Controllers
+### 17.2 TEC Controllers
 
 | Model | Manufacturer | Connection | Driver | Baud | Required Package |
 |---|---|---|---|---|---|
@@ -1034,7 +1278,7 @@ Open with **Help → Settings** or **Ctrl+,**.
 
 > The Meerstetter protocol requires the FTDI VCP driver for USB connections. Windows 11 usually installs this automatically. Manual download: [ftdichip.com/drivers/vcp-drivers](https://ftdichip.com/drivers/vcp-drivers/).
 
-### 15.3 FPGA / Signal Generation
+### 17.3 FPGA / Signal Generation
 
 | Model | Manufacturer | Connection | Driver | Required Software |
 |---|---|---|---|---|
@@ -1045,7 +1289,7 @@ Open with **Help → Settings** or **Ctrl+,**.
 > **NI-RIO download:** [ni.com → NI-RIO](https://www.ni.com/en/support/downloads/drivers/download.ni-rio.html)
 > The compiled bitfile (`.lvbitx`) is provided by Microsanj on the instrument USB key. The bitfile must match the NI-RIO version installed on the PC — if you upgrade NI-RIO, request a recompiled bitfile from Microsanj support.
 
-### 15.4 Bias Sources
+### 17.4 Bias Sources
 
 #### Keithley SourceMeters (SCPI command set)
 
@@ -1077,7 +1321,7 @@ Open with **Help → Settings** or **Ctrl+,**.
 
 > **VISA GPIB connections** require either NI-VISA + NI-GPIB-USB-HS adapter, or Keysight IO Libraries Suite + Keysight GPIB adapter. USB and Ethernet VISA instruments work with `pyvisa-py` only (no NI-VISA required).
 
-### 15.5 Motorised Stages
+### 17.5 Motorised Stages
 
 #### Thorlabs (USB, via thorlabs-apt-device)
 
@@ -1107,13 +1351,13 @@ Open with **Help → Settings** or **Ctrl+,**.
 |---|---|---|---|
 | Semi-automatic prober | MPI Corporation | RS-232 (115 200 baud) | `mpi_prober` |
 
-### 15.6 Objective Turret
+### 17.6 Objective Turret
 
 | Controller | Manufacturer | Connection | Driver | Baud |
 |---|---|---|---|---|
 | LINX (Arduino-based) | Olympus / custom | USB-CDC | `olympus_linx` | 115 200 |
 
-### 15.7 SDK and Driver Version Reference
+### 17.7 SDK and Driver Version Reference
 
 | Software | Minimum Version | Recommended | Notes |
 |---|---|---|---|
@@ -1121,13 +1365,14 @@ Open with **Help → Settings** or **Ctrl+,**.
 | NI-RIO | 19.0 (2019) | Latest | Bitfile must match installed version |
 | NI Vision Acquisition Software | 2019 | Latest | Includes NI-IMAQdx |
 | NI-VISA | 19.0 | Latest | Required for GPIB instruments |
-| Basler Pylon SDK | 6.0 | 7.x | pypylon 1.x requires Pylon 6+; pypylon 2.x requires Pylon 7+ |
+| Basler Pylon SDK | 7.x | **8.x** | Pylon 8 recommended; pypylon 3.x ships with it |
+| FLIR Spinnaker SDK | 3.x | **Latest** | Required for Microsanj IR Camera; includes `spinnaker_python` wheel |
 | Thorlabs Kinesis | 1.14 | Latest | Required for Thorlabs USB stages |
 | FTDI VCP Driver | 2.12 | Latest | Auto-installed by Windows Update on most systems |
 
 ---
 
-## 16. Configuration File Reference
+## 18. Configuration File Reference
 
 `config.yaml` is located in the application installation directory. Edit it with a plain-text editor if you need to make changes outside the wizard.
 
@@ -1176,7 +1421,7 @@ logging:
 
 ---
 
-## 17. Keyboard Shortcuts
+## 19. Keyboard Shortcuts
 
 | Shortcut | Action |
 |---|---|
@@ -1196,7 +1441,7 @@ logging:
 
 ---
 
-## 18. Troubleshooting
+## 20. Troubleshooting
 
 ### Status dot stays red after startup
 
@@ -1269,11 +1514,39 @@ logging:
 - Check network connectivity; the updater contacts the GitHub API.
 - Verify the system clock is set correctly (TLS certificate validation).
 
+### Basler TR camera not found
+
+- Ensure Basler Pylon 8 SDK is installed and the camera appears in Pylon Viewer.
+- Verify `pypylon` is installed: `pip install pypylon`.
+- Check USB 3.0 connection; try a different port.
+
+### Microsanj IR camera not found
+
+- Ensure the FLIR Spinnaker SDK is installed and `spinnaker_python` is available: `pip install spinnaker_python`.
+- Run **Test Camera** in the Hardware Setup Wizard (Ctrl+Shift+H → Camera page) to confirm detection.
+- Check USB connection; ensure no other application has exclusive access to the camera.
+
+### Login screen appears even though require_login is off
+
+- This happens only on first launch when no admin account exists yet. Complete the Admin Setup Wizard to create the admin account; subsequent launches will not require login until `require_login` is enabled in Settings → Security.
+
+### Scan Profile list is empty in Operator Mode
+
+- No scan profiles have been approved yet. An engineer must open a Scan Profile in the full UI (Scan Profiles panel in the sidebar), configure and test it, then click **Approve & Lock**. Only locked profiles appear in Operator Mode.
+
+### "Administrator login required" tooltip on a setting
+
+- The setting is admin-only. Click **Log in** in the top-right header, enter admin credentials, and the control will unlock.
+
+### Login locked out for 5 minutes
+
+- After 5 consecutive failed login attempts the account is locked for 5 minutes. Wait for the countdown to expire, then try again with the correct credentials.
+
 ---
 
-## 19. Technical Reference
+## 21. Technical Reference
 
-### 19.1 Acquisition Data Structures
+### 21.1 Acquisition Data Structures
 
 **AcquisitionResult**
 
@@ -1319,7 +1592,7 @@ logging:
 | `timestamp` | float | Unix timestamp |
 | `valid` | bool | True if fit succeeded |
 
-### 19.2 Diagnostic Rules
+### 21.2 Diagnostic Rules
 
 The diagnostic engine evaluates the following rules on every `MetricsService` snapshot. Rules are organised in evaluation order.
 
@@ -1361,7 +1634,7 @@ The diagnostic engine evaluates the following rules on every `MetricsService` sn
 |---|---|---|
 | T1 | Duty cycle thermal risk | FPGA duty cycle ≥ 50 % (warn) or ≥ 80 % (fail) |
 
-### 19.3 LiveConfig Parameters
+### 21.3 LiveConfig Parameters
 
 | Parameter | Range | Default | Description |
 |---|---|---|---|
@@ -1373,7 +1646,7 @@ The diagnostic engine evaluates the following rules on every `MetricsService` sn
 | `roi_x, roi_y` | 0–(W−1), 0–(H−1) | 0, 0 | ROI top-left origin |
 | `roi_w, roi_h` | 0–W, 0–H | 0, 0 | ROI size (0 = full frame) |
 
-### 19.4 File Locations
+### 21.4 File Locations
 
 | Item | Location |
 |---|---|
@@ -1383,8 +1656,11 @@ The diagnostic engine evaluates the following rules on every `MetricsService` sn
 | Application log | `logs\microsanj.log` (if enabled in Settings) |
 | AI model | `%USERPROFILE%\.microsanj\models\` |
 | First-run sentinel | `.first_run_complete` (application directory) |
+| User database | `%USERPROFILE%\.microsanj\users.db` (SQLite) |
+| Audit log | `%USERPROFILE%\.microsanj\audit.log` (JSON Lines, 5 MB rotation) |
+| Per-user preferences | `%USERPROFILE%\.microsanj\users\{uid}\prefs.json` |
 
-### 19.5 Thread Architecture
+### 21.5 Thread Architecture
 
 | Thread | Purpose | Poll rate |
 |---|---|---|
