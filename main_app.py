@@ -56,7 +56,7 @@ from acquisition.recipe_tab      import RecipeTab           # ← measurement re
 from acquisition.movie_tab       import MovieTab            # ← movie-mode burst
 from acquisition.transient_tab   import TransientTab        # ← time-resolved transient
 from ui.tabs.prober_tab          import ProberTab           # ← probe-station chuck
-from ui.autoscan.autoscan_mode   import AutoScanMode
+from ui.tabs.autoscan_tab        import AutoScanTab
 from ui.scripting_console        import ScriptingConsoleTab # ← Python console
 from ui.sidebar_nav              import SidebarNav          # ← grouped sidebar nav
 from hardware.device_manager     import DeviceManager
@@ -305,11 +305,6 @@ class MainWindow(QMainWindow):
             self._open_device_manager)
         root.addWidget(self._safe_banner)
 
-        # Mode toggle bar — switches between AutoScan and Manual mode.
-        # Sits between the safe-mode banner and the content area.
-        # Built lazily after AutoScanMode is ready; reference stored for restyle.
-        self._mode_bar = None   # populated by _build_mode_bar() below
-
         # Content splitter: nav widget above, BottomDrawer (Console+Log) below.
         # BottomDrawer is collapsed to 0 by default; Ctrl+` toggles it.
         self._content_splitter = QSplitter(Qt.Vertical)
@@ -327,10 +322,10 @@ class MainWindow(QMainWindow):
         # ---- Standard mode ----
         # (built after profile manager; added to stack below)
 
-        # ---- Manual mode: sidebar navigation ----
+        # ---- Advanced mode: sidebar navigation ----
         # _SplitterTop has no layout — see class docstring for why this matters.
-        # adv_widget wraps _mode_stack (built below after AutoScanMode is ready).
         self._nav = SidebarNav(app_name="SanjINSIGHT")
+        adv_widget = _SplitterTop(self._nav)
 
         hw = config.get("hardware")
         n_tecs = sum(1 for k in ["tec_meerstetter","tec_atec"]
@@ -410,23 +405,7 @@ class MainWindow(QMainWindow):
         self._camera_ctrl_tab       = CameraControlTab(self._camera_tab, self._roi_tab, self._af_tab)
         self._stimulus_tab          = StimulusTab(self._fpga_tab, self._bias_tab)
         self._library_tab           = LibraryTab(self._profile_tab, self._recipe_tab)
-        # ── AutoScan mode (top-level, index 0 of mode stack) ─────────────
-        self._autoscan_mode = AutoScanMode(
-            profile_mgr=self._profile_mgr,
-            hw_service=hw_service,
-        )
-
-        # ── Mode stack: AutoScan (0) | Manual sidebar (1) ────────────────
-        # _SplitterTop prevents Qt's size-hint floor from preventing collapse.
-        self._mode_stack = QStackedWidget()
-        self._mode_stack.addWidget(self._autoscan_mode)   # index 0 — AutoScan
-        self._mode_stack.addWidget(self._nav)             # index 1 — Manual
-        adv_widget = _SplitterTop(self._mode_stack)
-
-        # ── Mode toggle bar (now that buttons can reference _on_mode_change) ─
-        self._mode_bar = self._build_mode_bar()
-        root.insertWidget(root.indexOf(self._content_splitter),
-                          self._mode_bar)
+        self._autoscan_tab          = AutoScanTab()
 
         # ── Bottom drawer (Console + Log) ────────────────────────────────
         self._bottom_drawer = BottomDrawer(self._console_tab, self._log_tab)
@@ -494,6 +473,7 @@ class MainWindow(QMainWindow):
         from ui.icons import NAV_ICONS as _I, GROUP_ICONS as _G
 
         self._nav.add_section("ACQUIRE", [
+            NI("AutoScan",    _I["AutoScan"],          self._autoscan_tab,         badge="★"),
             NI("Live",        _I["Live"],              self._live_tab,             badge="★"),
             NI("Capture",     _I["Capture"],           self._capture_tab,          badge="★"),
             NI("Transient",   _I["Transient"],         self._transient_capture_tab),
@@ -539,17 +519,10 @@ class MainWindow(QMainWindow):
         # Connect demo mode exit button
         self._header.exit_demo_requested.connect(self._deactivate_demo_mode)
 
-        # AutoScanMode signal wiring
-        self._autoscan_mode.scan_flow.scan_requested.connect(self._on_autoscan_scan_requested)
-        self._autoscan_mode.send_to_analysis.connect(self._on_autoscan_send_to_analysis)
-        self._autoscan_mode.switch_to_manual.connect(lambda: self._on_mode_change(True))
-        self._autoscan_mode.theme_changed.connect(self.apply_theme)
-
-        # Restore saved mode preference (autoscan default)
-        if config.get_pref("ui.mode", "autoscan") == "manual":
-            self._on_mode_change(True)
-        else:
-            self._on_mode_change(False)
+        # AutoScanTab signal wiring
+        self._autoscan_tab.scan_requested.connect(self._on_autoscan_scan_requested)
+        self._autoscan_tab.send_to_analysis.connect(self._on_autoscan_send_to_analysis)
+        self._autoscan_tab.abort_requested.connect(self._on_autoscan_abort_requested)
 
         # Device manager — dialog created eagerly (hidden) so hw_status_changed
         # is wired from app start.  The auto-scan now fires on first open (not
@@ -666,9 +639,11 @@ class MainWindow(QMainWindow):
         signals.acq_complete.connect(self._on_acq_complete)
         signals.acq_saved.connect(self._on_acq_saved)
         # AutoScan live + result feeds
-        signals.new_live_frame.connect(self._autoscan_mode.on_live_frame)
-        signals.acq_complete.connect(self._autoscan_mode.on_acq_complete)
-        signals.scan_complete.connect(self._autoscan_mode.on_scan_complete)
+        signals.new_live_frame.connect(self._autoscan_tab.on_live_frame)
+        signals.acq_progress.connect(self._autoscan_tab.on_acq_progress)
+        signals.acq_complete.connect(self._autoscan_tab.on_acq_complete)
+        signals.scan_progress.connect(self._autoscan_tab.on_scan_progress)
+        signals.scan_complete.connect(self._autoscan_tab.on_scan_complete)
         signals.log_message.connect(self._on_log)
         signals.error.connect(self._on_error)
         # TEC alarm signals
@@ -763,72 +738,6 @@ class MainWindow(QMainWindow):
             f"QMenu::item:selected {{ background:{sel}22; color:{txt}; }}"
         )
 
-    # ── Mode toggle bar ───────────────────────────────────────────────────────
-
-    def _build_mode_bar(self) -> "QWidget":
-        """Build the AutoScan / Manual toggle bar shown below the safe-mode banner."""
-        from ui.theme import PALETTE
-        bar = QWidget()
-        bar.setObjectName("mode_bar")
-        bar.setFixedHeight(34)
-        lay = QHBoxLayout(bar)
-        lay.setContentsMargins(12, 4, 12, 4)
-        lay.setSpacing(0)
-
-        self._mode_auto_btn = QPushButton("★  AutoScan")
-        self._mode_man_btn  = QPushButton("Manual  ▸")
-        for btn in (self._mode_auto_btn, self._mode_man_btn):
-            btn.setCheckable(True)
-            btn.setFixedHeight(26)
-            btn.setFocusPolicy(Qt.NoFocus)
-
-        self._mode_btn_grp = QButtonGroup(self)
-        self._mode_btn_grp.addButton(self._mode_auto_btn, 0)
-        self._mode_btn_grp.addButton(self._mode_man_btn,  1)
-        self._mode_btn_grp.setExclusive(True)
-        self._mode_btn_grp.idClicked.connect(
-            lambda i: self._on_mode_change(bool(i)))
-
-        lay.addWidget(self._mode_auto_btn)
-        lay.addWidget(self._mode_man_btn)
-        lay.addStretch()
-        return bar
-
-    def _restyle_mode_bar(self) -> None:
-        """Apply PALETTE colours to the mode toggle bar."""
-        from ui.theme import PALETTE
-        bar = getattr(self, "_mode_bar", None)
-        if bar is None:
-            return
-        bg  = PALETTE.get("bg",      "#111111")
-        bdr = PALETTE.get("border",  "#333333")
-        acc = PALETTE.get("accent",  "#00d4aa")
-        sub = PALETTE.get("textSub", "#888888")
-        txt = PALETTE.get("text",    "#dddddd")
-        bar.setStyleSheet(
-            f"QWidget#mode_bar {{ background:{bg}; border-bottom:1px solid {bdr}; }}"
-        )
-        for btn in (self._mode_auto_btn, self._mode_man_btn):
-            checked = btn.isChecked()
-            btn.setStyleSheet(
-                f"QPushButton {{"
-                f"  background:{'transparent' if not checked else acc + '22'};"
-                f"  color:{acc if checked else sub};"
-                f"  border:1px solid {'transparent' if not checked else acc + '55'};"
-                f"  border-radius:4px; padding:0 12px;"
-                f"  font-size:{_style_pt(11)};"
-                f"}}"
-                f"QPushButton:hover {{ color:{txt}; }}"
-            )
-
-    def _on_mode_change(self, is_manual: bool) -> None:
-        """Switch between AutoScan (False) and Manual (True) modes."""
-        idx = 1 if is_manual else 0
-        self._mode_stack.setCurrentIndex(idx)
-        config.set_pref("ui.mode", "manual" if is_manual else "autoscan")
-        self._mode_btn_grp.button(idx).setChecked(True)
-        self._restyle_mode_bar()
-
     def _swap_visual_theme(self, effective: str) -> None:
         """Core visual swap — applies 'dark' or 'light' with no flicker.
 
@@ -846,7 +755,6 @@ class MainWindow(QMainWindow):
                     w._apply_styles()
                 w.update()
             self._restyle_menu_bar()
-            self._restyle_mode_bar()
         finally:
             self.setUpdatesEnabled(True)
 
@@ -1535,10 +1443,13 @@ class MainWindow(QMainWindow):
             self._scan_tab._run()
 
     def _on_autoscan_abort_requested(self) -> None:
-        """Abort whichever acquisition/scan engine is currently running."""
-        self._acquire_tab._abort()
-        if getattr(self._scan_tab, "_runner", None):
-            self._scan_tab._runner.abort()
+        """Abort whichever engine AutoScan currently has running."""
+        op = self._autoscan_tab._current_op
+        if op == "preview":
+            self._acquire_tab._abort()
+        elif op == "scan":
+            if getattr(self._scan_tab, "_runner", None):
+                self._scan_tab._runner.abort()
 
     def _on_autoscan_send_to_analysis(self, result) -> None:
         """Push AutoScan result to Analysis tab, then switch to Manual mode."""
@@ -1549,8 +1460,7 @@ class MainWindow(QMainWindow):
         self._analysis_tab.push_result(
             dt_map=dt_map, drr_map=drr_map,
             base_image=None, source_label="AutoScan")
-        self._on_mode_change(True)
-        self._nav.select_by_label("Analysis")
+        self._nav.select_item("Analysis")
 
     def _on_profile_applied(self, profile):
         """
