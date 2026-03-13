@@ -73,6 +73,9 @@ thorlabs-apt-device>=0.3.0    # Thorlabs APT/Kinesis stage controllers (USB)
 #   https://www.ni.com/en/support/downloads/drivers/download.ni-rio.html
 #   pip install nifpga
 
+# ── Authentication ────────────────────────────────────────────────────────────
+bcrypt>=4.0.0                 # Password hashing (work factor 12) for user accounts
+
 # ── Licensing ─────────────────────────────────────────────────────────────────
 cryptography>=42.0.0          # Ed25519 license key validation (ships in installer)
 
