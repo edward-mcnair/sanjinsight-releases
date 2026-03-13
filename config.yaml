@@ -40,7 +40,7 @@ hardware:
 
   camera:
     enabled: true
-    driver: "ni_imaqdx"    # ni_imaqdx | pypylon | directshow | simulated
+    driver: "ni_imaqdx"    # ni_imaqdx | pypylon | directshow | flir | simulated
     # --- NI IMAQdx settings (driver: ni_imaqdx) ---
     # camera_name: Open NI MAX → Devices and Interfaces → NI-IMAQdx Devices
     #              The name displayed there (e.g. "cam0", "cam4") goes here.
@@ -57,6 +57,21 @@ hardware:
     # --- DirectShow settings (driver: directshow) ---
     # device_index: 0       # Run find_camera.py to identify index
     # fourcc: "Y16 "        # Pixel format (Y16 for 16-bit mono)
+    # --- FLIR / Spinnaker settings (driver: flir) ---
+    # For the Microsanj Infrared Camera v1a (FLIR-based uncooled microbolometer,
+    # 4.9 mm fixed FL, OEMCameras.com PCB).  Also works with any Spinnaker-
+    # compatible FLIR camera (Blackfly, Grasshopper, Oryx, Boson, etc.).
+    # Requires: pip install spinnaker_python  +  FLIR Spinnaker SDK
+    #           https://www.flir.com/products/spinnaker-sdk/
+    # serial: ""            # Leave blank for first found FLIR camera
+    #                       # Find serial: printed on camera label, or run
+    #                       #   python -c "import PySpin; sys=PySpin.System.GetInstance(); cl=sys.GetCameras(); [print(c.GetUniqueID()) for c in cl]; cl.Clear(); sys.ReleaseInstance()"
+    # ir_format: "Mono14"   # Pixel format: Mono14 (default) | Mono16 | Mono8
+    #                       # Mono14 preserves the full 14-bit dynamic range of
+    #                       # uncooled microbolometer sensors.
+    # ffc_mode: "auto"      # Flat Field Correction: auto | manual | external
+    #                       # "auto" → camera runs NUC automatically (recommended)
+    #                       # "manual" → call do_ffc() at the start of each run
     # --- Common settings ---
     exposure_us: 5000
     gain: 0.0

@@ -30,6 +30,7 @@ _DRIVERS = {
     "pypylon":     ("hardware.cameras.pypylon_driver",   "PylonDriver"),
     "directshow":  ("hardware.cameras.directshow",       "DirectShowDriver"),
     "simulated":   ("hardware.cameras.simulated",        "SimulatedDriver"),
+    "flir":        ("hardware.cameras.flir_driver",      "FlirDriver"),
 }
 
 # Drivers that only work on Windows
@@ -95,6 +96,12 @@ _INSTALL_HINTS: dict[str, str] = {
     "directshow": (
         "DirectShow is built into Windows — no extra install required.\n"
         "Make sure you are running on Windows and your camera has a WDM driver."
+    ),
+    "flir": (
+        "pip install spinnaker_python\n"
+        "Also install the FLIR Spinnaker SDK (cross-platform):\n"
+        "  https://www.flir.com/products/spinnaker-sdk/\n"
+        "The spinnaker_python wheel is distributed alongside the SDK installer."
     ),
 }
 
