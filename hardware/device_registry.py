@@ -81,6 +81,12 @@ class DeviceDescriptor:
     default_timeout: float = 2.0
     default_ip:      str   = ""
 
+    # Camera-specific (device_type == DTYPE_CAMERA only)
+    # Default camera modality for this hardware model.  Per-installation
+    # overrides are stored in config.yaml (hardware.camera.camera_type or
+    # hardware.cameras[n].camera_type).
+    camera_type:    str   = "tr"   # "tr" | "ir" — default for this model
+
     # Human-readable
     description:    str   = ""
     datasheet_url:  str   = ""
@@ -168,6 +174,7 @@ DEVICE_REGISTRY: dict[str, DeviceDescriptor] = {
         manufacturer   = "Microsanj / FLIR Systems (dist. OEMCameras.com)",
         device_type    = DTYPE_CAMERA,
         connection_type= CONN_USB,
+        camera_type    = "ir",         # always an IR camera
         driver_module  = "hardware.cameras.flir_driver",
         driver_version = "builtin",
         hot_loadable   = False,

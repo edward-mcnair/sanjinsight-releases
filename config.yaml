@@ -38,8 +38,17 @@ hardware:
     temp_max:  85.0
     temp_warning_margin: 5.0
 
+  # ── Camera type ────────────────────────────────────────────────────────────
+  # camera_type identifies whether this camera captures thermoreflectance (tr)
+  # or infrared emission (ir).  The software cannot infer this from the model
+  # name alone — set it here and in Device Manager so the UI shows the
+  # correct modality label and scan options.
+  #   tr  — thermoreflectance camera (Basler, NI IMAQdx, DirectShow, …)
+  #   ir  — infrared / uncooled bolometer camera (FLIR Spinnaker, …)
+
   camera:
     enabled: true
+    camera_type: "tr"          # "tr" | "ir"  — set to match your hardware
     driver: "ni_imaqdx"    # ni_imaqdx | pypylon | directshow | flir | simulated
     # --- NI IMAQdx settings (driver: ni_imaqdx) ---
     # camera_name: Open NI MAX → Devices and Interfaces → NI-IMAQdx Devices
@@ -76,6 +85,28 @@ hardware:
     exposure_us: 5000
     gain: 0.0
     trigger_mode: "Off"
+
+  # ── Multi-camera systems (optional — uncomment and replace 'camera:' above) ─
+  # Use 'cameras:' when two physical cameras are present (e.g. hybrid TR + IR).
+  # The software shows all entries in a dropdown; selecting one switches the
+  # active modality and live feed.  Each entry accepts the same driver settings
+  # as the single-camera 'camera:' section above.
+  #
+  # cameras:
+  #   - label: "Basler acA1920-155um"
+  #     camera_type: "tr"
+  #     driver: "ni_imaqdx"
+  #     camera_name: "cam4"
+  #     width: 1920
+  #     height: 1200
+  #     exposure_us: 5000
+  #     gain: 0.0
+  #     trigger_mode: "Off"
+  #   - label: "Microsanj IR Camera"
+  #     camera_type: "ir"
+  #     driver: "flir"
+  #     exposure_us: 8333
+  #     gain: 0.0
 
   fpga:
     enabled: true

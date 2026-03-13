@@ -190,7 +190,18 @@ class HardwareService(QObject):
         hw = config_module.get("hardware")
 
         # Camera (also creates the AcquisitionPipeline)
-        self._launch(self._run_camera, name="hw.camera")
+        # Support new multi-camera list format: hardware.cameras
+        _cameras_list = hw.get("cameras") if hw else None
+        if _cameras_list and isinstance(_cameras_list, list):
+            for _i, _cam_cfg in enumerate(_cameras_list):
+                if not isinstance(_cam_cfg, dict):
+                    continue
+                _cam_type = str(_cam_cfg.get("camera_type", "tr")).lower()
+                _name = f"hw.camera_{_cam_type}"
+                self._launch(self._run_camera, args=(_cam_cfg,), name=_name)
+        else:
+            # Legacy single-camera format
+            self._launch(self._run_camera, name="hw.camera")
 
         # TEC controllers
         for key in ["tec_meerstetter", "tec_atec"]:
@@ -764,68 +775,88 @@ class HardwareService(QObject):
 
     # ── Camera + pipeline ─────────────────────────────────────────────
 
-    def _run_camera(self):
-        cfg = config_module.get("hardware").get("camera", {})
+    def _run_camera(self, cam_cfg: dict = None):
+        """Camera grab thread.
 
-        # In demo mode, always use the simulated camera driver regardless of
-        # what config.yaml says.  On macOS the camera factory auto-falls back
-        # to "simulated" for Windows-only drivers, but on Windows the factory
-        # would attempt (and fail) to load the real driver, causing the camera
-        # thread to exit immediately and leaving demo mode without a live feed.
+        Parameters
+        ----------
+        cam_cfg : dict, optional
+            Camera config dict.  When None (legacy single-camera mode) the
+            config is read from hardware.camera in config.yaml.
+            When provided (multi-camera list mode) the dict is used directly —
+            camera_type "ir" routes the driver to app_state.ir_cam instead of
+            app_state.cam.
+        """
+        if cam_cfg is None:
+            cam_cfg = config_module.get("hardware", {}).get("camera", {})
+
+        cam_type = str(cam_cfg.get("camera_type", "tr")).lower()
+        is_ir    = cam_type == "ir"
+
+        # In demo mode always use the simulated driver regardless of config.
         if app_state.demo_mode:
-            # Use a compact default resolution for the simulated camera so the
-            # demo doesn't allocate 4+ MB per frame (1920×1200 uint16).
-            # 640×480 is plenty for the live-view display; if the user has a
-            # real camera configured its resolution is preserved via cfg.get().
-            cfg = {
+            cam_cfg = {
                 "driver":      "simulated",
-                "width":       cfg.get("width",       640),
-                "height":      cfg.get("height",      480),
-                "fps":         cfg.get("fps",         30),
-                "exposure_us": cfg.get("exposure_us", 5000),
-                "noise_level": cfg.get("noise_level", 40),
+                "camera_type": cam_type,
+                "width":       cam_cfg.get("width",       640 if not is_ir else 320),
+                "height":      cam_cfg.get("height",      480 if not is_ir else 240),
+                "fps":         cam_cfg.get("fps",         30),
+                "exposure_us": cam_cfg.get("exposure_us", 5000),
+                "noise_level": cam_cfg.get("noise_level", 40),
             }
 
+        # Device key used for status / Connected-Devices header
+        import config as _cfg_mod
+        _imaging_sys = _cfg_mod.get("hardware", {}).get("imaging_system", "tr_only")
+        _cam_key = ("ir_camera" if is_ir
+                    else ("tr_camera" if _imaging_sys == "hybrid" else "camera"))
+
         try:
-            cam = create_camera(cfg)
-            self._connect_with_retry(cam.open, label="camera")
+            cam = create_camera(cam_cfg)
+            self._connect_with_retry(cam.open, label=_cam_key)
             cam.start()
 
-            if _HAS_PIPELINE:
-                pipeline = AcquisitionPipeline(
-                    cam,
-                    fpga=app_state.fpga,
-                    bias=app_state.bias)
-                pipeline.on_progress = lambda p: self.acq_progress.emit(p)
-                pipeline.on_complete = lambda r: self.acq_complete.emit(r)
-                pipeline.on_error    = lambda e: self.error.emit(e)
+            if is_ir:
+                # IR camera goes into the secondary slot — no pipeline
                 with app_state:
-                    app_state.cam      = cam
-                    app_state.pipeline = pipeline
+                    app_state.ir_cam = cam
             else:
-                with app_state:
-                    app_state.cam = cam
+                if _HAS_PIPELINE:
+                    pipeline = AcquisitionPipeline(
+                        cam,
+                        fpga=app_state.fpga,
+                        bias=app_state.bias)
+                    pipeline.on_progress = lambda p: self.acq_progress.emit(p)
+                    pipeline.on_complete = lambda r: self.acq_complete.emit(r)
+                    pipeline.on_error    = lambda e: self.error.emit(e)
+                    with app_state:
+                        app_state.cam      = cam
+                        app_state.pipeline = pipeline
+                else:
+                    with app_state:
+                        app_state.cam = cam
 
             detail = f"{cam.info.model}  {cam.info.width}×{cam.info.height}"
-            # On hybrid systems the TR camera uses a distinct device key so it
-            # appears alongside the IR camera in the Connected Devices list.
-            import config as _cfg_mod
-            _imaging_sys = _cfg_mod.get("hardware", {}).get("imaging_system", "tr_only")
-            _cam_key = "tr_camera" if _imaging_sys == "hybrid" else "camera"
             self.log_message.emit(
-                f"Camera: {cam.info.driver} | {cam.info.model} "
-                f"| {cam.info.width}×{cam.info.height}")
+                f"Camera ({cam_type.upper()}): {cam.info.driver} | "
+                f"{cam.info.model} | {cam.info.width}×{cam.info.height}")
             self.device_connected.emit(_cam_key, True)
             self.startup_status.emit(_cam_key, True, detail)
 
         except Exception as e:
-            self.error.emit(f"Camera: {e}")
-            self.device_connected.emit("camera", False)
-            self.startup_status.emit("camera", False, str(e)[:60])
-            log.error(f"HardwareService camera init: {e}", exc_info=True)
+            self.error.emit(f"Camera ({cam_type.upper()}): {e}")
+            self.device_connected.emit(_cam_key, False)
+            self.startup_status.emit(_cam_key, False, str(e)[:60])
+            log.error("HardwareService camera (%s) init: %s", cam_type, e, exc_info=True)
             return
 
-        # Live-frame grab loop
+        # IR cameras don't need their own grab loop — the TR grab loop reads
+        # app_state.cam (computed property) which returns ir_cam when the user
+        # has selected the IR camera as active.
+        if is_ir:
+            return
+
+        # Live-frame grab loop (TR / primary camera only)
         last_frame_t = time.monotonic()
         try:
             while not self._stop_event.is_set():

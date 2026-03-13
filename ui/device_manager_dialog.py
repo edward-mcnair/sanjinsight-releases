@@ -1029,6 +1029,41 @@ class _DeviceProfilePanel(QWidget):
             self._param_widgets["ip"] = ip_edit
             r += 1
 
+        # ── Camera Type picker (cameras only) ───────────────────────────────────
+        if desc.device_type == DTYPE_CAMERA:
+            from PyQt5.QtWidgets import QRadioButton
+            pg.addWidget(self._sublabel("Camera Type"), r, 0)
+            ct_widget = QWidget()
+            ct_lay    = QHBoxLayout(ct_widget)
+            ct_lay.setContentsMargins(0, 0, 0, 0)
+            ct_lay.setSpacing(12)
+            _tr_radio = QRadioButton("Thermoreflectance (TR)")
+            _ir_radio = QRadioButton("Infrared (IR)")
+            ct_lay.addWidget(_tr_radio)
+            ct_lay.addWidget(_ir_radio)
+            ct_lay.addStretch()
+            pg.addWidget(ct_widget, r, 1)
+            self._param_widgets["camera_type"] = (_tr_radio, _ir_radio)
+            r += 1
+
+            # Read current value: device_params pref → config → "tr"
+            _saved_ct = "tr"
+            try:
+                import config as _cfg_dm
+                _saved_ct = str(
+                    _cfg_dm.get_pref(
+                        f"device_params.{entry.uid}.camera_type",
+                        _cfg_dm.get("hardware", {}).get("camera", {})
+                               .get("camera_type", "tr"),
+                    )
+                ).lower()
+            except Exception:
+                pass
+            if _saved_ct == "ir":
+                _ir_radio.setChecked(True)
+            else:
+                _tr_radio.setChecked(True)
+
         # ── Connection-method note (non-serial, non-Ethernet devices) ──────────
         # Explain to the user why there is no address field to configure.
         if not _needs_port and ct != CONN_ETHERNET:
@@ -1146,12 +1181,27 @@ class _DeviceProfilePanel(QWidget):
         try:
             import config as _cfg
             pref_key = f"device_params.{entry.uid}"
-            _cfg.set_pref(pref_key, {
+            _pref_dict = {
                 "address":    entry.address,
                 "baud_rate":  entry.baud_rate,
                 "ip_address": entry.ip_address,
                 "timeout_s":  entry.timeout_s,
-            })
+            }
+            # Camera type — also write to hardware.camera.camera_type so the
+            # camera_registry and hardware_service pick it up on next start.
+            if "camera_type" in pw:
+                _tr_radio, _ir_radio = pw["camera_type"]
+                _cam_type = "ir" if _ir_radio.isChecked() else "tr"
+                _pref_dict["camera_type"] = _cam_type
+                try:
+                    hw = _cfg.get("hardware") or {}
+                    cam_cfg = hw.get("camera", {})
+                    if isinstance(cam_cfg, dict):
+                        cam_cfg["camera_type"] = _cam_type
+                        _cfg.set("hardware.camera.camera_type", _cam_type)
+                except Exception:
+                    pass
+            _cfg.set_pref(pref_key, _pref_dict)
         except Exception:
             pass
 
