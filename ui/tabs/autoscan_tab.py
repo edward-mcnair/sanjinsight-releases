@@ -422,57 +422,104 @@ class AutoScanTab(QWidget):
         self._readiness = _ReadinessPanel()
         lay.addWidget(self._readiness)
 
-        # ── Imaging Mode selector ─────────────────────────────────────────────
-        # Availability is driven by hardware.imaging_system in config.yaml:
-        #   hybrid   — both TR and IR objectives present (nose-head rotation)
-        #   tr_only  — thermoreflectance only; IR button is grayed
-        #   ir_only  — IR USB lens only; TR button is grayed
+        # ── Camera & Optics ────────────────────────────────────────────────────
+        # imaging_system from config.yaml:
+        #   hybrid   — system has both a TR camera and an IR camera
+        #   tr_only  — thermoreflectance only
+        #   ir_only  — IR camera only (e.g. FLIR uncooled bolt-on)
+        #
+        # Camera selection sets the modality automatically — there is no
+        # separate "TR / IR" toggle.  Once a camera is chosen the modality
+        # badge updates and the objective/magnification row is shown or
+        # hidden accordingly.
         _imaging_sys  = _cfg.get("hardware", {}).get("imaging_system", "hybrid")
         _tr_available = _imaging_sys in ("hybrid", "tr_only")
         _ir_available = _imaging_sys in ("hybrid", "ir_only")
 
-        mode_grp = _group("Imaging Mode")
-        m_outer  = QVBoxLayout(mode_grp)
-        m_outer.setSpacing(4)
-        m_row = QHBoxLayout()
-        m_row.setSpacing(0)
+        # Default modality from system config
+        self._modality = "thermoreflectance" if _tr_available else "ir_lockin"
 
-        self._mode_tr = _seg_btn("  TR")
-        self._mode_ir = _seg_btn("  IR")
-        self._mode_tr.setMinimumWidth(72)   # min not fixed — text can scale up
-        self._mode_ir.setMinimumWidth(72)
-        self._mode_tr.setEnabled(_tr_available)
-        self._mode_ir.setEnabled(_ir_available)
+        cam_grp  = _group("Camera & Optics")
+        c_outer  = QVBoxLayout(cam_grp)
+        c_outer.setSpacing(6)
 
-        # Default: TR when available, else IR for ir_only systems
-        if _tr_available:
-            self._mode_tr.setChecked(True)
-            self._modality = "thermoreflectance"
+        # ── Camera selector (only shown on hybrid systems) ─────────────
+        self._cam_sel_widget = QWidget()
+        cam_sel_row = QHBoxLayout(self._cam_sel_widget)
+        cam_sel_row.setContentsMargins(0, 0, 0, 0)
+        cam_sel_row.setSpacing(0)
+
+        if _imaging_sys == "hybrid":
+            self._cam_tr_btn = _seg_btn("  TR Camera")
+            self._cam_ir_btn = _seg_btn("  IR Camera")
+            self._cam_tr_btn.setMinimumWidth(100)
+            self._cam_ir_btn.setMinimumWidth(100)
+            self._cam_tr_btn.setChecked(True)
+            self._cam_btn_grp = QButtonGroup(self)
+            self._cam_btn_grp.addButton(self._cam_tr_btn, 0)
+            self._cam_btn_grp.addButton(self._cam_ir_btn, 1)
+            self._cam_btn_grp.setExclusive(True)
+            self._cam_btn_grp.idClicked.connect(self._on_camera_selected)
+            cam_sel_row.addWidget(self._cam_tr_btn)
+            cam_sel_row.addWidget(self._cam_ir_btn)
+            cam_sel_row.addStretch()
         else:
-            self._mode_ir.setChecked(True)
-            self._modality = "ir_lockin"
+            self._cam_tr_btn = None
+            self._cam_ir_btn = None
+            self._cam_btn_grp = None
+            # Badge showing the fixed camera type
+            badge_txt = ("TR Camera  — thermoreflectance"
+                         if _tr_available else
+                         "IR Camera  — infrared")
+            cam_badge = QLabel(badge_txt)
+            cam_badge.setObjectName("sublabel")
+            cam_sel_row.addWidget(cam_badge)
+            cam_sel_row.addStretch()
 
-        self._mode_grp = QButtonGroup(self)
-        self._mode_grp.addButton(self._mode_tr, 0)
-        self._mode_grp.addButton(self._mode_ir, 1)
-        self._mode_grp.setExclusive(True)
-        self._mode_grp.idClicked.connect(self._on_modality_changed)
+        c_outer.addWidget(self._cam_sel_widget)
 
-        m_row.addWidget(self._mode_tr)
-        m_row.addWidget(self._mode_ir)
-        m_row.addStretch()
-        m_outer.addLayout(m_row)
+        # ── Modality badge (read-only, always visible) ─────────────────
+        self._modality_badge = QLabel()
+        self._modality_badge.setObjectName("modality_badge")
+        self._update_modality_badge()
+        c_outer.addWidget(self._modality_badge)
 
-        # One-line description — updates on every mode switch
-        self._mode_desc = QLabel(
-            "Infrared  — passive thermal, no stimulus needed"
-            if self._modality == "ir_lockin"
-            else "Thermoreflectance  — stimulus-driven ΔR/R signal"
-        )
-        self._mode_desc.setObjectName("sublabel")
-        self._mode_desc.setWordWrap(True)
-        m_outer.addWidget(self._mode_desc)
-        lay.addWidget(mode_grp)
+        # ── Objective / Magnification (TR only) ────────────────────────
+        self._obj_section = QWidget()
+        obj_outer = QVBoxLayout(self._obj_section)
+        obj_outer.setContentsMargins(0, 0, 0, 0)
+        obj_outer.setSpacing(4)
+
+        obj_lbl_row = QHBoxLayout()
+        obj_lbl_row.setSpacing(0)
+        from ai.instrument_knowledge import OBJECTIVE_SPECS
+        self._obj_specs = list(OBJECTIVE_SPECS)
+
+        self._obj_btns    = []
+        self._obj_btn_grp = QButtonGroup(self)
+        self._obj_btn_grp.setExclusive(True)
+        for i, spec in enumerate(self._obj_specs):
+            b = _seg_btn(f" {spec.magnification}× ")
+            b.setMinimumWidth(46)
+            self._obj_btns.append(b)
+            self._obj_btn_grp.addButton(b, i)
+            obj_lbl_row.addWidget(b)
+        obj_lbl_row.addStretch()
+
+        # Default: 10× (index 1)
+        self._obj_btn_grp.button(1).setChecked(True)
+        self._obj_btn_grp.idClicked.connect(self._on_objective_changed)
+        obj_outer.addLayout(obj_lbl_row)
+
+        self._obj_info_lbl = QLabel()
+        self._obj_info_lbl.setObjectName("sublabel")
+        self._update_obj_info()
+        obj_outer.addWidget(self._obj_info_lbl)
+
+        self._obj_section.setVisible(self._modality == "thermoreflectance")
+        c_outer.addWidget(self._obj_section)
+
+        lay.addWidget(cam_grp)
 
         # Goal
         goal_grp = _group("Goal")
@@ -767,23 +814,22 @@ class AutoScanTab(QWidget):
         self._adv_toggle.setText(("▾" if checked else "▸") + "  Advanced options")
         self._adv_body.setVisible(checked)
 
-    def _on_modality_changed(self, btn_id: int) -> None:
-        """User switched between TR (0) and IR (1) imaging mode."""
+    def _on_camera_selected(self, btn_id: int) -> None:
+        """User switched between TR (0) and IR (1) camera on a hybrid system."""
+        self._modality = "ir_lockin" if btn_id == 1 else "thermoreflectance"
         is_ir = btn_id == 1
-        self._modality = "ir_lockin" if is_ir else "thermoreflectance"
 
-        # Stimulus is driven by FPGA/bias hardware — not used for passive IR
+        # Stimulus is FPGA-driven — irrelevant for passive IR
         self._stim_grp_box.setEnabled(not is_ir)
         self._ir_stim_note.setVisible(is_ir)
 
-        # Description label below the mode buttons
-        self._mode_desc.setText(
-            "Infrared  — passive thermal imaging, no stimulus needed"
-            if is_ir else
-            "Thermoreflectance  — stimulus-driven ΔR/R signal"
-        )
+        # Show/hide objective section — IR lenses are fixed-optic, no choice needed
+        self._obj_section.setVisible(not is_ir)
 
-        # Propagate so the ReadinessPanel calibration row reflects the new mode
+        # Update read-only modality badge
+        self._update_modality_badge()
+
+        # Propagate so ReadinessPanel calibration row reflects the new mode
         try:
             from hardware.app_state import app_state
             app_state.active_modality = self._modality
@@ -791,6 +837,54 @@ class AutoScanTab(QWidget):
             pass
 
         self._refresh_seg_styles()
+
+    def _on_objective_changed(self, idx: int) -> None:
+        """User selected a different objective magnification."""
+        self._update_obj_info()
+        # Move the motorized turret if one is connected
+        if 0 <= idx < len(self._obj_specs):
+            spec = self._obj_specs[idx]
+            try:
+                from hardware.app_state import app_state
+                app_state.active_objective = spec
+                turret = getattr(app_state, "turret", None)
+                if turret is not None:
+                    threading.Thread(
+                        target=turret.move_to,
+                        args=(spec.position,),
+                        daemon=True).start()
+            except Exception:
+                pass
+
+    def _update_modality_badge(self) -> None:
+        is_ir = self._modality == "ir_lockin"
+        self._modality_badge.setText(
+            "Infrared  — passive thermal imaging,  no stimulus required"
+            if is_ir else
+            "Thermoreflectance  — stimulus-driven ΔR/R signal"
+        )
+
+    def _update_obj_info(self) -> None:
+        """Refresh the FOV / pixel-size info label for the selected objective."""
+        try:
+            from hardware.app_state import app_state
+            cam_model = ""
+            if app_state.cam:
+                cam_model = app_state.cam.get_info().model
+        except Exception:
+            cam_model = ""
+
+        idx = self._obj_btn_grp.checkedId()
+        if 0 <= idx < len(self._obj_specs):
+            spec = self._obj_specs[idx]
+            fov  = spec.fov_um(cam_model)
+            px   = spec.px_size_um(cam_model)
+            self._obj_info_lbl.setText(
+                f"FOV  ≈ {fov:.0f} µm × {fov * 0.67:.0f} µm"
+                f"    ·    Pixel  {px:.3f} µm/px"
+            )
+        else:
+            self._obj_info_lbl.setText("")
 
     def _on_new_scan(self) -> None:
         self._current_op = None
@@ -914,29 +1008,41 @@ class AutoScanTab(QWidget):
     def _build_config(self) -> dict:
         area_map = {0: "single", 1: "roi", 2: "full"}
         stim_map = {0: "off",    1: "dc",  2: "pulsed"}
+        idx = self._obj_btn_grp.checkedId()
+        mag = (self._obj_specs[idx].magnification
+               if 0 <= idx < len(self._obj_specs) else 10)
         return {
-            "goal":        "hotspots" if self._goal_find.isChecked() else "map",
-            "modality":    self._modality,
-            "stimulus":    stim_map[self._stim_grp.checkedId()],
-            "voltage":     self._voltage.value(),
-            "current":     self._current.value(),
-            "scan_area":   area_map[self._area_grp.checkedId()],
-            "quality":     self._quality_slider.value(),
-            "exposure_ms": self._exposure.value(),
-            "n_frames":    self._n_frames.value(),
-            "settle_s":    self._settle.value(),
+            "goal":         "hotspots" if self._goal_find.isChecked() else "map",
+            "modality":     self._modality,
+            "magnification": mag,          # 0 for IR (no objective choice)
+            "stimulus":     stim_map[self._stim_grp.checkedId()],
+            "voltage":      self._voltage.value(),
+            "current":      self._current.value(),
+            "scan_area":    area_map[self._area_grp.checkedId()],
+            "quality":      self._quality_slider.value(),
+            "exposure_ms":  self._exposure.value(),
+            "n_frames":     self._n_frames.value(),
+            "settle_s":     self._settle.value(),
         }
 
     def restore_config(self, cfg: dict) -> None:
         if not cfg:
             return
-        # Modality — respects which buttons are actually enabled on this system
-        if cfg.get("modality") == "ir_lockin" and self._mode_ir.isEnabled():
-            self._mode_ir.setChecked(True)
-            self._on_modality_changed(1)
-        elif self._mode_tr.isEnabled():
-            self._mode_tr.setChecked(True)
-            self._on_modality_changed(0)
+        # Camera / modality — only switchable on hybrid systems
+        if self._cam_btn_grp is not None:
+            if cfg.get("modality") == "ir_lockin":
+                self._cam_btn_grp.button(1).setChecked(True)
+                self._on_camera_selected(1)
+            else:
+                self._cam_btn_grp.button(0).setChecked(True)
+                self._on_camera_selected(0)
+        # Objective magnification (TR only)
+        mag = cfg.get("magnification", 10)
+        for i, spec in enumerate(self._obj_specs):
+            if spec.magnification == mag:
+                self._obj_btn_grp.button(i).setChecked(True)
+                self._update_obj_info()
+                break
         if cfg.get("goal") == "map":
             self._goal_map.setChecked(True)
         else:
@@ -972,6 +1078,10 @@ class AutoScanTab(QWidget):
             }}
             QLabel[objectName="sublabel"] {{
                 color:{dim}; font-size:{FONT['sublabel']}pt;
+            }}
+            QLabel[objectName="modality_badge"] {{
+                color:{acc}; font-size:{FONT['sublabel']}pt;
+                font-style:italic;
             }}
             QGroupBox {{
                 color:{dim}; border:1px solid {bdr}; border-radius:6px;
@@ -1055,7 +1165,25 @@ class AutoScanTab(QWidget):
             base + "QPushButton { border-radius:0; border-left:none; }")
         self._stim_pulsed.setStyleSheet(
             base + "QPushButton { border-radius:0 4px 4px 0; border-left:none; }")
-        self._mode_tr.setStyleSheet(
-            base + "QPushButton { border-radius:4px 0 0 4px; }")
-        self._mode_ir.setStyleSheet(
-            base + "QPushButton { border-radius:0 4px 4px 0; border-left:none; }")
+
+        # Camera selector (hybrid only)
+        if self._cam_tr_btn is not None:
+            self._cam_tr_btn.setStyleSheet(
+                base + "QPushButton { border-radius:4px 0 0 4px; }")
+            self._cam_ir_btn.setStyleSheet(
+                base + "QPushButton { border-radius:0 4px 4px 0; border-left:none; }")
+
+        # Objective buttons
+        n = len(self._obj_btns)
+        for i, b in enumerate(self._obj_btns):
+            if i == 0:
+                radius = "4px 0 0 4px"
+                extra  = ""
+            elif i == n - 1:
+                radius = "0 4px 4px 0"
+                extra  = " border-left:none;"
+            else:
+                radius = "0"
+                extra  = " border-left:none;"
+            b.setStyleSheet(
+                base + f"QPushButton {{ border-radius:{radius};{extra} }}")
