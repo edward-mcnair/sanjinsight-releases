@@ -511,8 +511,14 @@ class AutoScanTab(QWidget):
             obj_lbl_row.addWidget(b)
         obj_lbl_row.addStretch()
 
-        # Default: 10× (index 1)
-        self._obj_btn_grp.button(1).setChecked(True)
+        # Default: last-used magnification (persisted), then 10×, then first available
+        _saved_mag = _cfg.get_pref("autoscan.last_objective_mag", 10)
+        _default_idx = 1   # 10× fallback
+        for _i, _s in enumerate(self._obj_specs):
+            if _s.magnification == _saved_mag:
+                _default_idx = _i
+                break
+        self._obj_btn_grp.button(_default_idx).setChecked(True)
         self._obj_btn_grp.idClicked.connect(self._on_objective_changed)
         obj_outer.addLayout(obj_lbl_row)
 
@@ -846,9 +852,13 @@ class AutoScanTab(QWidget):
     def _on_objective_changed(self, idx: int) -> None:
         """User selected a different objective magnification."""
         self._update_obj_info()
-        # Move the motorized turret if one is connected
         if 0 <= idx < len(self._obj_specs):
             spec = self._obj_specs[idx]
+
+            # Persist the choice so manual-nosepiece systems remember it
+            _cfg.set_pref("autoscan.last_objective_mag", spec.magnification)
+
+            # Move the motorized turret if one is connected
             try:
                 from hardware.app_state import app_state
                 app_state.active_objective = spec
@@ -862,46 +872,55 @@ class AutoScanTab(QWidget):
                 pass
 
     def _sync_objective_from_hardware(self) -> None:
-        """Read the turret's current position and select the matching button.
+        """Select the objective button that matches the current hardware state.
 
-        Three sources are tried in priority order:
-          1. app_state.active_objective  — set by turret driver or last click
-          2. turret.get_position()       — live query if objective not cached
-          3. No-op                       — leave the user's last manual choice
+        Sources are tried in priority order:
+          1. app_state.active_objective  — set by turret driver or a previous click
+          2. turret.get_position()       — live query when objective not cached
+          3. autoscan.last_objective_mag — persisted preference (manual nosepiece)
+          4. Silent no-op               — leave whatever is currently selected
 
-        Only updates if a turret is connected; on manual-nosepiece systems
-        the user's selection is preserved.
+        Signals are blocked so the turret is not commanded to move.
         """
+        mag: int | None = None
+
         try:
             from hardware.app_state import app_state
-            obj = getattr(app_state, "active_objective", None)
 
-            # If not cached, ask the turret directly
-            if obj is None:
+            # Source 1: cached objective
+            obj = getattr(app_state, "active_objective", None)
+            if obj is not None:
+                mag = getattr(obj, "magnification", None)
+
+            # Source 2: live turret query
+            if mag is None:
                 turret = getattr(app_state, "turret", None)
                 if turret is not None:
-                    pos = turret.get_position()
-                    obj = turret.get_objective(pos)
-                    if obj is not None:
-                        app_state.active_objective = obj
-
-            if obj is None:
-                return
-
-            mag = getattr(obj, "magnification", None)
-            if mag is None:
-                return
-
-            for i, spec in enumerate(self._obj_specs):
-                if spec.magnification == mag:
-                    # Block signals to avoid triggering a turret move
-                    self._obj_btn_grp.blockSignals(True)
-                    self._obj_btn_grp.button(i).setChecked(True)
-                    self._obj_btn_grp.blockSignals(False)
-                    self._update_obj_info()
-                    break
+                    try:
+                        pos = turret.get_position()
+                        obj = turret.get_objective(pos)
+                        if obj is not None:
+                            app_state.active_objective = obj
+                            mag = getattr(obj, "magnification", None)
+                    except Exception:
+                        pass
         except Exception:
-            pass   # hardware not available — leave current selection intact
+            pass
+
+        # Source 3: persisted user preference (manual nosepiece systems)
+        if mag is None:
+            mag = _cfg.get_pref("autoscan.last_objective_mag", None)
+
+        if mag is None:
+            return   # source 4: leave current selection intact
+
+        for i, spec in enumerate(self._obj_specs):
+            if spec.magnification == mag:
+                self._obj_btn_grp.blockSignals(True)
+                self._obj_btn_grp.button(i).setChecked(True)
+                self._obj_btn_grp.blockSignals(False)
+                self._update_obj_info()
+                break
 
     def _update_modality_badge(self) -> None:
         is_ir = self._modality == "ir_lockin"
