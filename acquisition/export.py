@@ -45,6 +45,101 @@ log = logging.getLogger(__name__)
 
 
 # ------------------------------------------------------------------ #
+#  XMP metadata builder                                               #
+# ------------------------------------------------------------------ #
+
+def _build_xmp_bytes(meta: dict) -> bytes:
+    """
+    Build a minimal XMP packet that embeds Microsanj session metadata.
+
+    The packet is self-contained (no external namespace lookups) and
+    readable by any XMP-aware tool (ImageJ, MATLAB, ExifTool, Lightroom).
+
+    Standard fields used
+    --------------------
+    dc:creator          → operator name (Dublin Core, broadly understood)
+    xmp:CreateDate      → acquisition timestamp
+    Iptc4xmpCore:Source → instrument / imaging_mode
+
+    Custom namespace  http://microsanj.com/xmp/ns/1.0/
+    -------------------------------------------------
+    microsanj:operator, microsanj:deviceId, microsanj:project,
+    microsanj:status,   microsanj:imagingMode, microsanj:wavelengthNm,
+    microsanj:tags      (comma-separated list)
+    """
+    def _esc(s: str) -> str:
+        """XML-escape a value string."""
+        return (str(s)
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace('"', "&quot;"))
+
+    operator      = _esc(str(meta.get("operator",      "") or ""))
+    device_id     = _esc(str(meta.get("device_id",     "") or ""))
+    project       = _esc(str(meta.get("project",       "") or ""))
+    status        = _esc(str(meta.get("status",        "") or ""))
+    imaging_mode  = _esc(str(meta.get("imaging_mode",  "") or ""))
+    timestamp_str = _esc(str(meta.get("timestamp_str", "") or ""))
+    wavelength    = _esc(str(meta.get("wavelength_nm", "") or ""))
+    raw_tags      = meta.get("tags", []) or []
+    tags_str      = _esc(", ".join(str(t) for t in raw_tags))
+    uid           = _esc(str(meta.get("uid",           "") or ""))
+    label         = _esc(str(meta.get("label",         "") or ""))
+    snr           = str(meta.get("snr_db", "") or "")
+    n_frames      = str(meta.get("n_frames", "") or "")
+
+    # Build a flat rdf:Description with all attributes
+    attrs: list[str] = []
+    if operator:
+        attrs.append(f'dc:creator="{operator}"')
+    if timestamp_str:
+        attrs.append(f'xmp:CreateDate="{timestamp_str}"')
+    if imaging_mode:
+        attrs.append(f'Iptc4xmpCore:Source="{imaging_mode}"')
+    if uid:
+        attrs.append(f'microsanj:sessionId="{uid}"')
+    if label:
+        attrs.append(f'microsanj:label="{label}"')
+    if operator:
+        attrs.append(f'microsanj:operator="{operator}"')
+    if device_id:
+        attrs.append(f'microsanj:deviceId="{device_id}"')
+    if project:
+        attrs.append(f'microsanj:project="{project}"')
+    if status:
+        attrs.append(f'microsanj:status="{status}"')
+    if imaging_mode:
+        attrs.append(f'microsanj:imagingMode="{imaging_mode}"')
+    if wavelength:
+        attrs.append(f'microsanj:wavelengthNm="{wavelength}"')
+    if tags_str:
+        attrs.append(f'microsanj:tags="{tags_str}"')
+    if n_frames:
+        attrs.append(f'microsanj:nFrames="{n_frames}"')
+    if snr:
+        attrs.append(f'microsanj:snrDb="{snr}"')
+
+    attr_block = "\n      ".join(attrs)
+    xmp = (
+        '<?xpacket begin="\xef\xbb\xbf" id="W5M0MpCehiHzreSzNTczkc9d"?>\n'
+        '<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Microsanj Thermal Analysis System">\n'
+        ' <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">\n'
+        '  <rdf:Description rdf:about=""\n'
+        '   xmlns:dc="http://purl.org/dc/elements/1.1/"\n'
+        '   xmlns:xmp="http://ns.adobe.com/xap/1.0/"\n'
+        '   xmlns:Iptc4xmpCore="http://iptc.org/std/Iptc4xmpCore/1.0/xmlns/"\n'
+        '   xmlns:microsanj="http://microsanj.com/xmp/ns/1.0/"\n'
+        f'   {attr_block}\n'
+        '  />\n'
+        ' </rdf:RDF>\n'
+        '</x:xmpmeta>\n'
+        '<?xpacket end="w"?>'
+    )
+    return xmp.encode("utf-8")
+
+
+# ------------------------------------------------------------------ #
 #  Export format enum                                                  #
 # ------------------------------------------------------------------ #
 
@@ -225,9 +320,19 @@ class SessionExporter:
                     **{str(k): str(v) for k, v in meta.items()
                        if isinstance(v, (str, int, float, bool))},
                 }
+                # Embed full session metadata as XMP (TIFF tag 700).
+                # This makes operator, device_id, project, tags, etc. visible
+                # to any XMP-aware tool (ImageJ, MATLAB, ExifTool, Lightroom).
+                try:
+                    xmp_bytes  = _build_xmp_bytes(meta)
+                    extratags  = [(700, "B", None, xmp_bytes, True)]
+                except Exception as _xe:
+                    log.debug("XMP build failed — skipping: %s", _xe)
+                    extratags  = []
                 tifffile.imwrite(path, data,
                                  imagej=True,
-                                 metadata=metadata)
+                                 metadata=metadata,
+                                 extratags=extratags)
             else:
                 import cv2
                 cv2.imwrite(path, data)

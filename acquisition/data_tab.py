@@ -157,9 +157,17 @@ class SessionCard(QFrame):
     def __init__(self, meta: SessionMeta, parent=None):
         super().__init__(parent)
         self.uid = meta.uid
-        self.setFixedHeight(80)
         self.setCursor(Qt.PointingHandCursor)
         self._selected = False
+
+        # Determine if this session has lab context to show an extra chips row
+        _has_chips = bool(
+            getattr(meta, "operator",  "") or
+            getattr(meta, "device_id", "") or
+            getattr(meta, "project",   "") or
+            getattr(meta, "tags",      [])
+        )
+        self.setFixedHeight(100 if _has_chips else 80)
         self._apply_style()
 
         lay = QHBoxLayout(self)
@@ -192,6 +200,32 @@ class SessionCard(QFrame):
 
         info.addWidget(self._label_lbl)
         info.addWidget(sub)
+
+        # ── Lab-context chip row ──────────────────────────────────────
+        if _has_chips:
+            chips_w = QWidget()
+            chips_w.setStyleSheet("background:transparent;")
+            chips_lay = QHBoxLayout(chips_w)
+            chips_lay.setContentsMargins(0, 2, 0, 0)
+            chips_lay.setSpacing(4)
+
+            op = getattr(meta, "operator",  "") or ""
+            dev = getattr(meta, "device_id", "") or ""
+            proj = getattr(meta, "project",   "") or ""
+            free_tags = list(getattr(meta, "tags", []) or [])
+
+            if op:
+                chips_lay.addWidget(self._chip(f"👤 {op}", "#4e73df", filled=True))
+            if dev:
+                chips_lay.addWidget(self._chip(dev, "#00d4aa"))
+            if proj:
+                chips_lay.addWidget(self._chip(proj, "#f5a623"))
+            for t in free_tags[:4]:          # show at most 4 free tags
+                chips_lay.addWidget(self._chip(t, PALETTE.get("textDim", "#8892aa")))
+
+            chips_lay.addStretch()
+            info.addWidget(chips_w)
+
         lay.addLayout(info, 1)
 
         # Notes badge — visible only when the session has notes
@@ -218,6 +252,21 @@ class SessionCard(QFrame):
             scaled_qss(f"background:transparent; color:{PALETTE.get('textDim','#999999')}; border:none; font-size:15pt;"))
         del_btn.clicked.connect(lambda: self.deleted.emit(self.uid))
         lay.addWidget(del_btn)
+
+    @staticmethod
+    def _chip(text: str, color: str, filled: bool = False) -> QLabel:
+        """Return a small pill label styled as a tag chip."""
+        lbl = QLabel(text)
+        lbl.setFixedHeight(16)
+        if filled:
+            lbl.setStyleSheet(
+                f"color:#fff; background:{color}; border-radius:7px; "
+                f"padding:0 6px; font-size:{FONT['sublabel']}pt;")
+        else:
+            lbl.setStyleSheet(
+                f"color:{color}; border:1px solid {color}55; border-radius:7px; "
+                f"padding:0 6px; font-size:{FONT['sublabel']}pt; background:transparent;")
+        return lbl
 
     def _load_thumbnail(self, meta: SessionMeta):
         thumb_path = os.path.join(meta.path, "thumbnail.png")
@@ -441,7 +490,11 @@ class DataTab(QWidget):
                 ("Size",      "frame_size"),
                 ("Exposure",  "exposure_us"),
                 ("Duration",  "duration_s"),
-                ("ROI",       "roi")]
+                ("ROI",       "roi"),
+                ("Operator",  "operator"),
+                ("Device ID", "device_id"),
+                ("Project",   "project"),
+                ("Tags",      "tags")]
         for r, (lbl, key) in enumerate(rows):
             ml.addWidget(self._sub(lbl), r, 0)
             val = QLabel("—")
@@ -653,6 +706,14 @@ class DataTab(QWidget):
         self._meta_fields["exposure_us"].setText(f"{meta.exposure_us:.0f} μs")
         self._meta_fields["duration_s"].setText(f"{meta.duration_s:.1f} s")
         self._meta_fields["roi"].setText(roi)
+
+        # Lab-context fields (gracefully absent on old sessions)
+        self._meta_fields["operator"].setText(getattr(meta, "operator", "") or "—")
+        self._meta_fields["device_id"].setText(getattr(meta, "device_id", "") or "—")
+        self._meta_fields["project"].setText(getattr(meta, "project", "") or "—")
+        raw_tags = getattr(meta, "tags", []) or []
+        self._meta_fields["tags"].setText(", ".join(raw_tags) if raw_tags else "—")
+
         # Populate the inline notes editor (block signals to avoid premature save)
         self._notes_edit.blockSignals(True)
         self._notes_edit.setPlainText(meta.notes or "")

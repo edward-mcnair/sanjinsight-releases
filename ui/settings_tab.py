@@ -339,6 +339,9 @@ class SettingsTab(QWidget):
         # ── Appearance ────────────────────────────────────────────────
         lay.addWidget(self._build_appearance_group())
 
+        # ── Lab / Operator ────────────────────────────────────────────
+        lay.addWidget(self._build_lab_group())
+
         # ── Software updates ──────────────────────────────────────────
         lay.addWidget(self._build_updates_group())
 
@@ -433,6 +436,204 @@ class SettingsTab(QWidget):
             base + "QPushButton { border-radius:0; border-left:none; }")
         self._light_btn.setStyleSheet(
             base + "QPushButton { border-radius:0 4px 4px 0; border-left:none; }")
+
+    def _build_lab_group(self) -> QGroupBox:
+        """Lab / Operator settings: active operator, saved list, scan preferences."""
+        grp = _group("Lab / Operator")
+        lay = QVBoxLayout(grp)
+        lay.setSpacing(14)
+
+        # ── Active operator selector ──────────────────────────────────
+        active_row = QHBoxLayout()
+        active_lbl = QLabel("Active operator:")
+        active_lbl.setStyleSheet(
+            f"font-size:{FONT['label']}pt; color:{_MUTED()};")
+        active_row.addWidget(active_lbl)
+
+        self._lab_op_combo = QComboBox()
+        self._lab_op_combo.setEditable(True)
+        self._lab_op_combo.setInsertPolicy(QComboBox.NoInsert)
+        self._lab_op_combo.setMinimumWidth(200)
+        self._lab_op_combo.setStyleSheet(_COMBO())
+        self._lab_op_combo.lineEdit().setPlaceholderText("Type or select name…")
+        self._lab_reload_op_combo()
+
+        self._lab_op_combo.currentTextChanged.connect(self._on_lab_op_text_changed)
+        active_row.addWidget(self._lab_op_combo, 1)
+
+        set_btn = QPushButton("Set")
+        set_btn.setFixedWidth(58)
+        set_btn.setStyleSheet(_BTN_PRIMARY())
+        set_btn.clicked.connect(self._on_lab_set_operator)
+        active_row.addWidget(set_btn)
+        lay.addLayout(active_row)
+
+        lay.addWidget(_body(
+            "The active operator name is stamped onto every new session and "
+            "exported with TIFF metadata so it travels with the image file."))
+
+        lay.addWidget(_sep())
+
+        # ── Saved operator list management ────────────────────────────
+        saved_lbl = QLabel("Saved operators")
+        saved_lbl.setStyleSheet(
+            f"font-size:{FONT['label']}pt; font-weight:700; color:{_TEXT()};")
+        lay.addWidget(saved_lbl)
+
+        self._lab_op_list_w = QWidget()
+        self._lab_op_list_lay = QVBoxLayout(self._lab_op_list_w)
+        self._lab_op_list_lay.setContentsMargins(0, 0, 0, 0)
+        self._lab_op_list_lay.setSpacing(4)
+        self._lab_rebuild_list()
+        lay.addWidget(self._lab_op_list_w)
+
+        # Add operator inline
+        add_row = QHBoxLayout()
+        self._lab_new_edit = QLineEdit()
+        self._lab_new_edit.setPlaceholderText("Add new operator name…")
+        self._lab_new_edit.setFixedHeight(30)
+        self._lab_new_edit.setStyleSheet(f"""
+            QLineEdit {{
+                background:{_BG2()}; color:{_TEXT()}; border:1px solid {_BORDER()};
+                border-radius:4px; padding:4px 8px; font-size:{FONT["label"]}pt;
+            }}
+        """)
+        self._lab_new_edit.returnPressed.connect(self._on_lab_add_operator)
+        add_row.addWidget(self._lab_new_edit, 1)
+        add_new_btn = QPushButton("Add")
+        add_new_btn.setFixedWidth(58)
+        add_new_btn.setStyleSheet(_BTN_SECONDARY())
+        add_new_btn.clicked.connect(self._on_lab_add_operator)
+        add_row.addWidget(add_new_btn)
+        lay.addLayout(add_row)
+
+        lay.addWidget(_sep())
+
+        # ── Scan behaviour preferences ────────────────────────────────
+        self._lab_require_chk = QCheckBox(
+            "Require operator selection before each scan")
+        self._lab_require_chk.setStyleSheet(_CHECK())
+        self._lab_require_chk.setChecked(
+            cfg_mod.get_pref("lab.require_operator", False))
+        self._lab_require_chk.toggled.connect(
+            lambda v: cfg_mod.set_pref("lab.require_operator", v))
+        lay.addWidget(self._lab_require_chk)
+
+        self._lab_confirm_chk = QCheckBox(
+            "Show operator confirmation banner before scanning")
+        self._lab_confirm_chk.setStyleSheet(_CHECK())
+        self._lab_confirm_chk.setChecked(
+            cfg_mod.get_pref("lab.confirm_at_scan", False))
+        self._lab_confirm_chk.toggled.connect(
+            lambda v: cfg_mod.set_pref("lab.confirm_at_scan", v))
+        lay.addWidget(self._lab_confirm_chk)
+
+        return grp
+
+    # ── Lab helpers ────────────────────────────────────────────────────
+
+    def _lab_reload_op_combo(self):
+        """Populate the active-operator combo from saved preferences."""
+        operators = list(cfg_mod.get_pref("lab.operators", []) or [])
+        active    = cfg_mod.get_pref("lab.active_operator", "") or ""
+        self._lab_op_combo.blockSignals(True)
+        self._lab_op_combo.clear()
+        self._lab_op_combo.addItems([""] + operators)
+        if active:
+            idx = self._lab_op_combo.findText(active)
+            if idx >= 0:
+                self._lab_op_combo.setCurrentIndex(idx)
+            else:
+                self._lab_op_combo.setCurrentText(active)
+        self._lab_op_combo.blockSignals(False)
+
+    def _lab_rebuild_list(self):
+        """Rebuild the saved-operators list widget."""
+        for i in reversed(range(self._lab_op_list_lay.count())):
+            item = self._lab_op_list_lay.itemAt(i)
+            if item and item.widget():
+                item.widget().deleteLater()
+
+        operators = list(cfg_mod.get_pref("lab.operators", []) or [])
+        active    = cfg_mod.get_pref("lab.active_operator", "") or ""
+
+        if not operators:
+            empty = QLabel("No saved operators yet.")
+            empty.setStyleSheet(
+                f"font-size:{FONT['sublabel']}pt; color:{_MUTED()};")
+            self._lab_op_list_lay.addWidget(empty)
+            return
+
+        for name in operators:
+            row = QWidget()
+            row_lay = QHBoxLayout(row)
+            row_lay.setContentsMargins(0, 0, 0, 0)
+            row_lay.setSpacing(6)
+            is_active = (name == active)
+            dot = QLabel("●" if is_active else "○")
+            dot.setStyleSheet(
+                f"color:{_GREEN if is_active else _MUTED()}; "
+                f"font-size:{FONT['sublabel']}pt;")
+            dot.setFixedWidth(14)
+            lbl = QLabel(name)
+            lbl.setStyleSheet(
+                f"font-size:{FONT['label']}pt; "
+                f"color:{_TEXT() if is_active else _MUTED()}; "
+                f"font-weight:{'600' if is_active else 'normal'};")
+            rm_btn = QPushButton("✕")
+            rm_btn.setFixedSize(22, 22)
+            rm_btn.setStyleSheet(
+                f"QPushButton {{ background:transparent; color:{_MUTED()}; border:none; "
+                f"font-size:{FONT['label']}pt; }}"
+                f"QPushButton:hover {{ color:#ff5555; }}")
+            rm_btn.clicked.connect(lambda _, n=name: self._on_lab_remove_operator(n))
+            row_lay.addWidget(dot)
+            row_lay.addWidget(lbl, 1)
+            row_lay.addWidget(rm_btn)
+            self._lab_op_list_lay.addWidget(row)
+
+    def _on_lab_set_operator(self):
+        """Set the current combo text as the active operator."""
+        name = self._lab_op_combo.currentText().strip()
+        cfg_mod.set_pref("lab.active_operator", name)
+        if name:
+            operators = list(cfg_mod.get_pref("lab.operators", []) or [])
+            if name not in operators:
+                operators.append(name)
+                cfg_mod.set_pref("lab.operators", operators)
+        self._lab_reload_op_combo()
+        self._lab_rebuild_list()
+
+    def _on_lab_op_text_changed(self, text: str):
+        """Live-update active operator as user types in editable combo."""
+        # Only auto-set if it matches a saved name (avoid saving partial input)
+        operators = list(cfg_mod.get_pref("lab.operators", []) or [])
+        if text in operators or text == "":
+            cfg_mod.set_pref("lab.active_operator", text)
+
+    def _on_lab_add_operator(self):
+        name = self._lab_new_edit.text().strip()
+        if not name:
+            return
+        operators = list(cfg_mod.get_pref("lab.operators", []) or [])
+        if name not in operators:
+            operators.append(name)
+            cfg_mod.set_pref("lab.operators", operators)
+        cfg_mod.set_pref("lab.active_operator", name)
+        self._lab_new_edit.clear()
+        self._lab_reload_op_combo()
+        self._lab_rebuild_list()
+
+    def _on_lab_remove_operator(self, name: str):
+        operators = list(cfg_mod.get_pref("lab.operators", []) or [])
+        if name in operators:
+            operators.remove(name)
+            cfg_mod.set_pref("lab.operators", operators)
+        active = cfg_mod.get_pref("lab.active_operator", "") or ""
+        if active == name:
+            cfg_mod.set_pref("lab.active_operator", "")
+        self._lab_reload_op_combo()
+        self._lab_rebuild_list()
 
     def _apply_styles(self) -> None:
         """Called by MainWindow._swap_visual_theme() after a theme switch."""

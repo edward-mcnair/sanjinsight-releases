@@ -10,6 +10,7 @@ import logging
 import os, shutil
 from typing import List, Optional, Dict
 
+import config as cfg_mod
 from .session import Session, SessionMeta
 
 log = logging.getLogger(__name__)
@@ -63,10 +64,30 @@ class SessionManager:
     #  CRUD                                                             #
     # ---------------------------------------------------------------- #
 
-    def save_result(self, result, label: str = "") -> Session:
-        """Save an AcquisitionResult as a new session. Adds to index."""
+    def save_result(self, result, label: str = "",
+                    operator: str = "",
+                    device_id: str = "",
+                    project: str = "",
+                    status: str = "",
+                    tags: Optional[List[str]] = None) -> Session:
+        """Save an AcquisitionResult as a new session. Adds to index.
+
+        If *operator* is not supplied, the active operator is read from
+        ``config.get_pref("lab.active_operator")`` automatically so every
+        save is stamped without extra call-site plumbing.
+        """
         os.makedirs(self._root, exist_ok=True)
-        session = Session.from_result(result, label=label)
+        # Auto-stamp active operator from preferences when not supplied
+        if not operator:
+            operator = cfg_mod.get_pref("lab.active_operator", "") or ""
+        session = Session.from_result(
+            result, label=label,
+            operator=operator,
+            device_id=device_id,
+            project=project,
+            status=status,
+            tags=tags or [],
+        )
         session.save(self._root)
         self._index[session.meta.uid] = session.meta
         return session

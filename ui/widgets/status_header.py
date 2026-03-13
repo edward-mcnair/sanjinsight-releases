@@ -16,9 +16,11 @@ import logging
 log = logging.getLogger(__name__)
 
 from PyQt5.QtWidgets import (
-    QWidget, QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QFrame, QSizePolicy)
+    QWidget, QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QFrame,
+    QSizePolicy, QLineEdit)
 from PyQt5.QtCore    import Qt, QTimer, pyqtSignal
 
+import config as cfg_mod
 from ui.theme import FONT, PALETTE, scaled_qss, active_theme
 
 
@@ -389,6 +391,311 @@ class ConnectedDevicesButton(QWidget):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+#  _OperatorPopup   — floating operator selector
+# ──────────────────────────────────────────────────────────────────────────────
+
+class _OperatorPopup(QWidget):
+    """
+    Floating dropdown for selecting the active operator.
+
+    Shows saved operators as clickable rows, plus an inline entry field
+    to add a new operator name.  Created with Qt.Popup so it dismisses
+    automatically when the user clicks outside.
+    """
+
+    operator_selected = pyqtSignal(str)   # name selected; "" = clear
+
+    def __init__(self):
+        super().__init__(None, Qt.Popup | Qt.FramelessWindowHint)
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        self.setFixedWidth(240)
+        self._row_widgets: list = []
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        # ── Header ──────────────────────────────────────────────────────
+        self._hdr = QWidget()
+        hdr_lay = QHBoxLayout(self._hdr)
+        hdr_lay.setContentsMargins(14, 10, 14, 10)
+        hdr_lbl = QLabel("Active Operator")
+        hdr_lay.addWidget(hdr_lbl)
+        hdr_lay.addStretch()
+        outer.addWidget(self._hdr)
+
+        # ── Separator ────────────────────────────────────────────────────
+        self._sep1 = QFrame()
+        self._sep1.setFrameShape(QFrame.HLine)
+        self._sep1.setFixedHeight(1)
+        outer.addWidget(self._sep1)
+
+        # ── Operator rows container ───────────────────────────────────────
+        self._rows_w = QWidget()
+        self._rows_lay = QVBoxLayout(self._rows_w)
+        self._rows_lay.setContentsMargins(0, 4, 0, 4)
+        self._rows_lay.setSpacing(0)
+        outer.addWidget(self._rows_w)
+
+        # ── Separator ────────────────────────────────────────────────────
+        self._sep2 = QFrame()
+        self._sep2.setFrameShape(QFrame.HLine)
+        self._sep2.setFixedHeight(1)
+        outer.addWidget(self._sep2)
+
+        # ── New operator entry ────────────────────────────────────────────
+        entry_w = QWidget()
+        entry_lay = QHBoxLayout(entry_w)
+        entry_lay.setContentsMargins(10, 6, 10, 6)
+        entry_lay.setSpacing(6)
+        self._new_edit = QLineEdit()
+        self._new_edit.setPlaceholderText("New operator name…")
+        self._new_edit.setFixedHeight(28)
+        self._new_edit.returnPressed.connect(self._on_add)
+        self._add_btn = QPushButton("Add")
+        self._add_btn.setFixedSize(46, 28)
+        self._add_btn.clicked.connect(self._on_add)
+        entry_lay.addWidget(self._new_edit, 1)
+        entry_lay.addWidget(self._add_btn)
+        outer.addWidget(entry_w)
+
+        self._entry_w = entry_w
+        self._apply_styles()
+
+    # ── Popup lifecycle ───────────────────────────────────────────────
+
+    def show_below(self, anchor: QWidget):
+        pos = anchor.mapToGlobal(anchor.rect().bottomLeft())
+        self.adjustSize()
+        self.move(pos.x(), pos.y() + 4)
+        self.show()
+        self.raise_()
+
+    # ── Data ─────────────────────────────────────────────────────────
+
+    def rebuild(self, operators: list, active: str):
+        """Rebuild operator rows from saved list."""
+        for i in reversed(range(self._rows_lay.count())):
+            item = self._rows_lay.itemAt(i)
+            if item and item.widget():
+                item.widget().deleteLater()
+        self._row_widgets.clear()
+
+        # "No operator" / clear row
+        self._add_row("(No operator)", "", active)
+        for name in (operators or []):
+            self._add_row(name, name, active)
+
+        self.adjustSize()
+
+    def _add_row(self, display: str, value: str, active: str):
+        row = QWidget()
+        row.setCursor(Qt.PointingHandCursor)
+        row.setFixedHeight(34)
+        row.setAttribute(Qt.WA_Hover)
+
+        lay = QHBoxLayout(row)
+        lay.setContentsMargins(14, 0, 14, 0)
+        lay.setSpacing(8)
+
+        check_lbl = QLabel("✓" if value == active else " ")
+        name_lbl  = QLabel(display)
+        lay.addWidget(check_lbl)
+        lay.addWidget(name_lbl, 1)
+
+        row._value     = value
+        row._check_lbl = check_lbl
+        row._name_lbl  = name_lbl
+
+        row.mousePressEvent = lambda e, v=value: (
+            self.operator_selected.emit(v), self.hide()
+        ) if e.button() == Qt.LeftButton else None
+
+        self._rows_lay.addWidget(row)
+        self._row_widgets.append(row)
+        self._style_row(row, value == active)
+
+    # ── Slots ─────────────────────────────────────────────────────────
+
+    def _on_add(self):
+        name = self._new_edit.text().strip()
+        if name:
+            self.operator_selected.emit(name)
+            self._new_edit.clear()
+            self.hide()
+
+    # ── Styling ───────────────────────────────────────────────────────
+
+    def _apply_styles(self):
+        P   = PALETTE
+        bg  = P.get("bg",           "#242424")
+        bg2 = P.get("surface",      "#2d2d2d")
+        bdr = P.get("border",       "#484848")
+        txt = P.get("text",         "#ebebeb")
+        acc = P.get("accent",       "#00d4aa")
+        hov = P.get("surfaceHover", "#404040")
+        sub = P.get("textSub",      "#6a6a6a")
+        dim = P.get("textDim",      "#999999")
+
+        self.setStyleSheet(
+            f"_OperatorPopup {{ background:{bg}; border:1px solid {bdr}; "
+            f"border-radius:8px; }}")
+        self._hdr.setStyleSheet(f"background:{bg2}; border-radius:7px 7px 0 0;")
+        self._hdr.findChild(QLabel).setStyleSheet(
+            f"font-size:{FONT['label']}pt; font-weight:700; "
+            f"color:{txt}; background:transparent;")
+        for sep in (self._sep1, self._sep2):
+            sep.setStyleSheet(f"background:{bdr}; border:none;")
+        self._new_edit.setStyleSheet(
+            f"background:{bg2}; color:{txt}; border:1px solid {bdr}; "
+            f"border-radius:3px; padding:2px 6px; font-size:{FONT['label']}pt;")
+        self._add_btn.setStyleSheet(
+            f"QPushButton {{ background:{acc}22; color:{acc}; border:1px solid {acc}44; "
+            f"border-radius:3px; font-size:{FONT['label']}pt; font-weight:600; }}"
+            f"QPushButton:hover {{ background:{acc}44; }}")
+        for row in self._row_widgets:
+            self._style_row(row, row._value == cfg_mod.get_pref("lab.active_operator", ""))
+
+    def _style_row(self, row, is_active: bool):
+        P   = PALETTE
+        bg  = P.get("bg",           "#242424")
+        acc = P.get("accent",       "#00d4aa")
+        txt = P.get("text",         "#ebebeb")
+        dim = P.get("textDim",      "#999999")
+        hov = P.get("surfaceHover", "#404040")
+        row.setStyleSheet(
+            f"QWidget {{ background:{bg}; }}"
+            f"QWidget:hover {{ background:{hov}; }}")
+        row._check_lbl.setStyleSheet(
+            f"color:{acc if is_active else 'transparent'}; "
+            f"font-size:{FONT['label']}pt; background:transparent;")
+        row._name_lbl.setStyleSheet(
+            f"font-size:{FONT['label']}pt; "
+            f"color:{acc if is_active else txt}; background:transparent; "
+            f"font-weight:{'600' if is_active else 'normal'};")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  OperatorButton
+# ──────────────────────────────────────────────────────────────────────────────
+
+class OperatorButton(QWidget):
+    """
+    Header button: 👤 icon + active operator name + dropdown arrow.
+
+    Click opens _OperatorPopup.  Saves and restores selection via
+    config.get_pref / config.set_pref("lab.*").
+
+    Signals
+    -------
+    operator_changed(str)   Emitted when the active operator changes.
+                            Empty string means "no operator set".
+    """
+
+    operator_changed = pyqtSignal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._popup: _OperatorPopup | None = None
+
+        self.setAttribute(Qt.WA_Hover)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setFixedHeight(30)
+        self.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(10, 0, 10, 0)
+        lay.setSpacing(5)
+
+        self._icon_lbl  = QLabel("👤")
+        self._name_lbl  = QLabel("Operator")
+        self._arrow_lbl = QLabel("▾")
+
+        for lbl in (self._icon_lbl, self._name_lbl, self._arrow_lbl):
+            lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
+
+        lay.addWidget(self._icon_lbl)
+        lay.addWidget(self._name_lbl)
+        lay.addWidget(self._arrow_lbl)
+
+        self._apply_styles()
+
+    # ── Popup ────────────────────────────────────────────────────────
+
+    def _ensure_popup(self) -> _OperatorPopup:
+        if self._popup is None:
+            self._popup = _OperatorPopup()
+            self._popup.operator_selected.connect(self._on_operator_selected)
+        return self._popup
+
+    def mousePressEvent(self, e):
+        if e.button() == Qt.LeftButton:
+            p = self._ensure_popup()
+            if p.isVisible():
+                p.hide()
+            else:
+                operators = cfg_mod.get_pref("lab.operators", []) or []
+                active    = cfg_mod.get_pref("lab.active_operator", "") or ""
+                p.rebuild(operators, active)
+                p._apply_styles()
+                p.show_below(self)
+        super().mousePressEvent(e)
+
+    # ── State ─────────────────────────────────────────────────────────
+
+    def _on_operator_selected(self, name: str):
+        """Persist selection and add new names to the saved list."""
+        cfg_mod.set_pref("lab.active_operator", name)
+        if name:
+            operators = list(cfg_mod.get_pref("lab.operators", []) or [])
+            if name not in operators:
+                operators.append(name)
+                cfg_mod.set_pref("lab.operators", operators)
+        self._refresh()
+        self.operator_changed.emit(name)
+
+    def _refresh(self):
+        active = cfg_mod.get_pref("lab.active_operator", "") or ""
+        self._name_lbl.setText(active if active else "Operator")
+
+    def get_active_operator(self) -> str:
+        """Return the currently active operator name (or empty string)."""
+        return cfg_mod.get_pref("lab.active_operator", "") or ""
+
+    # ── Styling ───────────────────────────────────────────────────────
+
+    def _apply_styles(self):
+        P     = PALETTE
+        surf  = P.get("surface",      "#2d2d2d")
+        bdr   = P.get("border",       "#484848")
+        hover = P.get("surfaceHover", "#404040")
+        txt   = P.get("text",         "#ebebeb")
+        dim   = P.get("textDim",      "#999999")
+
+        self.setStyleSheet(f"""
+            OperatorButton {{
+                background: {surf};
+                border: 1px solid {bdr};
+                border-radius: 5px;
+            }}
+            OperatorButton:hover {{
+                background: {hover};
+            }}
+        """)
+        self._icon_lbl.setStyleSheet(
+            f"font-size:{FONT['body']}pt; background:transparent;")
+        self._name_lbl.setStyleSheet(
+            f"font-size:{FONT['label']}pt; font-weight:600; "
+            f"color:{txt}; background:transparent;")
+        self._arrow_lbl.setStyleSheet(
+            f"font-size:{int(FONT['label'] * 2.4)}pt; color:{dim}; "
+            f"background:transparent; padding-bottom:6px;")
+        self._refresh()
+        if self._popup:
+            self._popup._apply_styles()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 #  StatusHeader
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -480,6 +787,16 @@ class StatusHeader(QWidget):
         self._devices_btn = ConnectedDevicesButton()
         lay.addWidget(self._devices_btn)
 
+        # ── Divider 3 ─────────────────────────────────────────────────
+        self._div3 = QFrame()
+        self._div3.setFrameShape(QFrame.VLine)
+        self._div3.setFixedHeight(28)
+        lay.addWidget(self._div3)
+
+        # ── Operator selector button ───────────────────────────────────
+        self._operator_btn = OperatorButton()
+        lay.addWidget(self._operator_btn)
+
         # ── Demo banner (hidden until activated) ─────────────────────
         # Single unified button: [  Demo Mode  ✕  ]
         self._demo_banner = QPushButton("  Demo Mode  ✕  ")
@@ -558,6 +875,8 @@ class StatusHeader(QWidget):
         # Dividers
         for div in (self._div1, self._div2):
             div.setStyleSheet(f"color:{bdr};")
+        if hasattr(self, "_div3"):
+            self._div3.setStyleSheet(f"color:{bdr};")
 
         # Profile pill default state (overridden by set_profile when a profile is active)
         self._profile_pill_icon.setStyleSheet(
@@ -578,6 +897,10 @@ class StatusHeader(QWidget):
 
         # Connected Devices button
         self._devices_btn._apply_styles()
+
+        # Operator button
+        if hasattr(self, "_operator_btn"):
+            self._operator_btn._apply_styles()
 
         # Readiness dot (if added)
         if hasattr(self, "_readiness_dot"):
@@ -762,6 +1085,12 @@ class StatusHeader(QWidget):
         """Show amber 'connecting' state while device initializes."""
         name = _DEVICE_LABELS.get(which, which.replace("_", " ").title())
         self._devices_btn.set_device(which, name, None, "Connecting…")
+
+    def get_active_operator(self) -> str:
+        """Return the currently active operator name (empty string if none)."""
+        if hasattr(self, "_operator_btn"):
+            return self._operator_btn.get_active_operator()
+        return ""
 
     def add_update_badge(self) -> "UpdateBadge":
         """Add the update-available badge to the header."""

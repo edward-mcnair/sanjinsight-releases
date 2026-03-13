@@ -28,7 +28,7 @@ from __future__ import annotations
 import os, json, time
 import numpy as np
 from dataclasses import dataclass, field, asdict
-from typing import Optional
+from typing import List, Optional
 
 from acquisition.schema_migrations import CURRENT_SCHEMA, migrate
 
@@ -82,6 +82,13 @@ class SessionMeta:
     roi:            Optional[dict] = None
     has_drr:        bool           = False
     path:           str            = ""
+
+    # ── Provenance / Lab context ─────────────────────────────────────
+    operator:   str       = ""       # name of the person who ran the scan
+    device_id:  str       = ""       # DUT / device-under-test identifier
+    project:    str       = ""       # project or lot name
+    status:     str       = ""       # "pending" | "reviewed" | "flagged" | "archived"
+    tags:       List[str] = field(default_factory=list)   # user-defined tag strings
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -154,7 +161,12 @@ class Session:
                     bias_current: float = 0.0,
                     profile_uid: str = "",
                     profile_name: str = "",
-                    ct_value: float = 0.0) -> "Session":
+                    ct_value: float = 0.0,
+                    operator: str = "",
+                    device_id: str = "",
+                    project: str = "",
+                    status: str = "",
+                    tags: Optional[List[str]] = None) -> "Session":
         ts     = time.time()
         ts_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts))
         slug   = label.replace(" ", "_").replace("/", "-") if label else "unnamed"
@@ -195,6 +207,11 @@ class Session:
             notes         = getattr(result, "notes",       ""),
             roi           = roi_dict,
             has_drr       = result.delta_r_over_r is not None,
+            operator      = operator,
+            device_id     = device_id,
+            project       = project,
+            status        = status,
+            tags          = list(tags) if tags else [],
         )
 
         return Session(
