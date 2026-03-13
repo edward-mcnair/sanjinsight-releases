@@ -172,7 +172,8 @@ def hline():
 
 
 # ── UI widgets and tabs (extracted to their own modules) ──────────────
-from ui.widgets.status_header import StatusHeader
+from ui.widgets.status_header       import StatusHeader
+from ui.widgets.camera_context_bar  import CameraContextBar
 from ui.tabs.acquire_tab      import AcquireTab
 from ui.tabs.camera_tab       import CameraTab
 from ui.tabs.temperature_tab  import TemperatureTab
@@ -304,6 +305,12 @@ class MainWindow(QMainWindow):
         self._safe_banner.device_manager_requested.connect(
             self._open_device_manager)
         root.addWidget(self._safe_banner)
+
+        # Global camera context bar — shows active camera selector across all tabs.
+        # Auto-hides itself when only one camera is configured.
+        self._cam_bar = CameraContextBar()
+        self._cam_bar.camera_changed.connect(self._on_camera_bar_changed)
+        root.addWidget(self._cam_bar)
 
         # Content splitter: nav widget above, BottomDrawer (Console+Log) below.
         # BottomDrawer is collapsed to 0 by default; Ctrl+` toggles it.
@@ -935,11 +942,43 @@ class MainWindow(QMainWindow):
         app_state.active_camera_type = cam_type   # also syncs active_modality
         self._header.set_active_device(key)
 
-        # Notify AutoScan tab so it refreshes its camera display
-        if hasattr(self._autoscan_tab, "refresh_active_camera"):
-            self._autoscan_tab.refresh_active_camera()
+        # Refresh the global camera bar and all per-tab selectors.
+        self._refresh_all_camera_selectors()
 
         log.info("Active camera switched to: %s (%s)", key, cam_type)
+
+    def _on_camera_bar_changed(self, cam_type: str) -> None:
+        """
+        Called when the user picks a camera from the global CameraContextBar.
+
+        The bar has already updated app_state.active_camera_type; we just
+        need to sync the header active-device indicator and the per-tab
+        selectors (including AutoScan's modality-specific layout).
+        """
+        key = "tr_camera" if cam_type == "tr" else "ir_camera"
+        self._header.set_active_device(key)
+        self._refresh_all_camera_selectors()
+        log.info("Global camera bar: active camera → %s", cam_type)
+
+    def _refresh_all_camera_selectors(self) -> None:
+        """
+        Rebuild every camera selector in the app from the current registry.
+
+        Called after any camera change (hotplug, device-popup click, bar
+        combo change) to keep all controls in sync with app_state.
+        """
+        # Global bar
+        try:
+            self._cam_bar.refresh()
+        except Exception:
+            log.debug("camera bar refresh failed", exc_info=True)
+
+        # AutoScan has its own per-tab combo with additional modality logic
+        # (shows/hides objective controls, stimulus section, IR note).
+        try:
+            self._autoscan_tab.refresh_active_camera()
+        except Exception:
+            log.debug("autoscan camera refresh failed", exc_info=True)
 
     def _on_device_hotplug(self, key: str, ok: bool):
         """
@@ -957,13 +996,11 @@ class MainWindow(QMainWindow):
         except Exception:
             log.debug("hotplug refresh failed", exc_info=True)
 
-        # Camera connect/disconnect → rebuild the camera selector combo so the
-        # IR entry appears once the IR driver finishes initialising on its thread.
+        # Camera connect/disconnect → rebuild all camera selectors (global bar
+        # + per-tab combos) so the IR entry appears as soon as the IR driver
+        # finishes initialising on its background thread.
         if "camera" in key:
-            try:
-                self._autoscan_tab.refresh_active_camera()
-            except Exception:
-                log.debug("autoscan camera combo refresh failed", exc_info=True)
+            self._refresh_all_camera_selectors()
 
         # Re-evaluate required-device readiness after every hotplug event
         self._update_safe_mode()

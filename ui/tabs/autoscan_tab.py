@@ -24,7 +24,7 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QButtonGroup, QRadioButton, QDoubleSpinBox, QSpinBox,
     QSlider, QScrollArea, QSizePolicy, QFrame, QToolButton,
-    QGroupBox, QSplitter, QProgressBar, QComboBox)
+    QGroupBox, QSplitter, QProgressBar)
 from PyQt5.QtCore  import Qt, pyqtSignal, QTimer
 from PyQt5.QtGui   import QImage, QPixmap, QPainter, QColor
 
@@ -452,22 +452,13 @@ class AutoScanTab(QWidget):
         c_outer = QVBoxLayout(cam_grp)
         c_outer.setSpacing(4)
 
-        # ── Camera selector ────────────────────────────────────────────
-        # Shows every configured camera (connected or not) with [TR]/[IR] tags.
-        # Selecting one sets app_state.active_camera_type and updates modality.
-        self._cam_combo = QComboBox()
-        self._cam_combo.setObjectName("cam_selector_combo")
-        self._cam_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self._cam_combo.setMinimumHeight(28)
-        c_outer.addWidget(self._cam_combo)
-
-        # ── Modality badge (derived from camera type) ──────────────────
+        # ── Modality badge (derived from active camera type) ───────────
+        # Camera switching is handled by the global CameraContextBar in the
+        # app header — this badge just reflects the current modality.
         self._modality_badge = QLabel()
         self._modality_badge.setObjectName("modality_badge")
         c_outer.addWidget(self._modality_badge)
 
-        self._refresh_camera_combo()
-        self._cam_combo.currentIndexChanged.connect(self._on_camera_combo_changed)
         self._update_modality_badge()
 
         # ── Objective / Magnification (TR only) ────────────────────────
@@ -840,60 +831,8 @@ class AutoScanTab(QWidget):
         self._stim_grp_box.setEnabled(not is_ir)
         self._ir_stim_note.setVisible(is_ir)
         self._obj_section.setVisible(not is_ir)
-        self._refresh_camera_combo()
         self._update_modality_badge()
         self._refresh_seg_styles()
-
-    def _refresh_camera_combo(self) -> None:
-        """Rebuild the camera selector QComboBox from the camera registry."""
-        from hardware.camera_registry import get_cameras
-        from hardware.app_state import app_state
-
-        # Block signals while rebuilding so _on_camera_combo_changed doesn't fire.
-        self._cam_combo.blockSignals(True)
-        try:
-            cameras = get_cameras()
-            active_type = getattr(app_state, "active_camera_type", "tr")
-            self._cam_combo.clear()
-
-            if not cameras:
-                self._cam_combo.addItem("No cameras configured")
-                self._cam_combo.setEnabled(False)
-                return
-
-            self._cam_combo.setEnabled(True)
-            active_idx = 0
-            for i, entry in enumerate(cameras):
-                # Text: "Basler acA1920-155um  [TR]  — connected"
-                item_text = (f"{entry.display_label()}"
-                             f"  — {entry.status_suffix()}")
-                self._cam_combo.addItem(item_text)
-                self._cam_combo.setItemData(i, entry.camera_type)
-                if entry.camera_type == active_type:
-                    active_idx = i
-
-            self._cam_combo.setCurrentIndex(active_idx)
-        except Exception:
-            self._cam_combo.clear()
-            self._cam_combo.addItem("Camera unavailable")
-            self._cam_combo.setEnabled(False)
-        finally:
-            self._cam_combo.blockSignals(False)
-
-    def _on_camera_combo_changed(self, index: int) -> None:
-        """User selected a different camera from the dropdown."""
-        cam_type = self._cam_combo.itemData(index)
-        if cam_type not in ("tr", "ir"):
-            return
-        try:
-            from hardware.app_state import app_state
-            app_state.active_camera_type = cam_type
-            # Persist selection
-            _cfg.set_pref("autoscan.selected_camera_type", cam_type)
-        except Exception:
-            pass
-        # Refresh modality and downstream controls (no-recursion: signals blocked in _refresh_camera_combo)
-        self.refresh_active_camera()
 
     def _on_objective_changed(self, idx: int) -> None:
         """User selected a different objective magnification."""
@@ -1185,14 +1124,6 @@ class AutoScanTab(QWidget):
             }}
             QLabel[objectName="sublabel"] {{
                 color:{dim}; font-size:{FONT['sublabel']}pt;
-            }}
-            QComboBox[objectName="cam_selector_combo"] {{
-                color:{text}; font-size:{FONT['body']}pt; font-weight:600;
-                background:{P.get('surface','#2d2d2d')};
-                border:1px solid {bdr}; border-radius:4px; padding:0 6px;
-            }}
-            QComboBox[objectName="cam_selector_combo"]:disabled {{
-                color:{dim};
             }}
             QLabel[objectName="modality_badge"] {{
                 color:{acc}; font-size:{FONT['sublabel']}pt;
