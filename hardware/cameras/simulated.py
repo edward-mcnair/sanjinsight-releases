@@ -287,8 +287,9 @@ class SimulatedDriver(CameraDriver):
     def open(self) -> None:
         with self._lock:
             self._pattern    = self._make_pattern()
-        _model  = ("Simulated TR Camera" if self._camera_type == "tr"
-                   else "Simulated IR Camera")
+        _model  = (self._cfg.get("model")
+                   or ("Simulated TR Camera" if self._camera_type == "tr"
+                       else "Simulated IR Camera"))
         _serial = "SIM-TR-001" if self._camera_type == "tr" else "SIM-IR-001"
         self._info = CameraInfo(
             driver      = "simulated",

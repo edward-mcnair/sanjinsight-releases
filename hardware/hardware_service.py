@@ -246,19 +246,20 @@ class HardwareService(QObject):
         _sim_bias   = {"driver": "simulated", "mode": "voltage", "level": 0.0}
         _sim_stage  = {"driver": "simulated", "speed_xy": 1000.0, "speed_z": 100.0}
 
-        # On hybrid systems demo mode shows both a TR and an IR camera so
-        # the camera-selection UX can be exercised without real hardware.
-        import config as _cfg_mod
-        _imaging_sys = _cfg_mod.get("hardware", {}).get("imaging_system", "tr_only")
-        _is_hybrid = (_imaging_sys == "hybrid")
+        # Demo mode always shows both a TR and an IR camera so users can be
+        # trained on the camera-selection workflow without real hardware.
+        _sim_tr = {"driver": "simulated", "camera_type": "tr",
+                   "model": "Basler acA1920-155um",
+                   "width": 1920, "height": 1200,
+                   "fps": 30, "exposure_us": 5000, "noise_level": 40}
+        _sim_ir = {"driver": "simulated", "camera_type": "ir",
+                   "model": "Microsanj IR Camera",
+                   "width": 320, "height": 240,
+                   "fps": 30, "exposure_us": 8333, "noise_level": 60}
 
-        self._launch(self._run_camera, name="hw.camera")
-        if _is_hybrid:
-            _sim_ir = {"driver": "simulated", "camera_type": "ir",
-                       "width": 320, "height": 240,
-                       "fps": 30, "exposure_us": 5000, "noise_level": 60}
-            self._launch(self._run_demo_ir_camera, args=(_sim_ir,),
-                         name="hw.ir_camera")
+        self._launch(self._run_camera, args=(_sim_tr,), name="hw.camera")
+        self._launch(self._run_demo_ir_camera, args=(_sim_ir,),
+                     name="hw.ir_camera")
 
         self._launch(self._run_demo_fpga,   args=(_sim_fpga,),  name="hw.fpga")
         self._launch(self._run_demo_tec,    args=(_sim_tec, "tec0"), name="hw.tec0")
@@ -798,6 +799,7 @@ class HardwareService(QObject):
             cam_cfg = {
                 "driver":      "simulated",
                 "camera_type": cam_type,
+                "model":       cam_cfg.get("model", ""),   # preserve for realistic names
                 "width":       cam_cfg.get("width",       640 if not is_ir else 320),
                 "height":      cam_cfg.get("height",      480 if not is_ir else 240),
                 "fps":         cam_cfg.get("fps",         30),

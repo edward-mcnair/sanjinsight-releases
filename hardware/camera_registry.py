@@ -193,10 +193,14 @@ def get_cameras() -> List[CameraEntry]:
                 and entry.driver_model):
             entry.label = entry.driver_model
 
-    # ── Demo-mode fallback: synthesise from running drivers ──────────────
-    if not entries and getattr(app_state, "demo_mode", False):
+    # ── Demo-mode supplement: add running cameras not covered by config ──
+    # In demo mode both a TR and IR camera are always started, but the
+    # config may only list one (or none).  Add entries for any camera type
+    # that is running but not already represented.
+    if getattr(app_state, "demo_mode", False):
+        seen_types = {e.camera_type for e in entries}
         for drv, cam_type in ((tr_drv, "tr"), (ir_drv, "ir")):
-            if drv is None:
+            if drv is None or cam_type in seen_types:
                 continue
             model = ""
             try:
