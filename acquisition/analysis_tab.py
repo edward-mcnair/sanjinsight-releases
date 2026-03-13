@@ -51,7 +51,7 @@ class VerdictBanner(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.setFixedHeight(90)      # was 72 — extra room for stacked layout
+        self.setMinimumHeight(90)    # min not fixed — allows growth on high-DPI / large fonts
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
@@ -334,8 +334,8 @@ class AnalysisTab(QWidget):
 
         if btn_text and btn_callback:
             btn = QPushButton(btn_text)
-            btn.setFixedWidth(200)
-            btn.setFixedHeight(36)
+            btn.setMinimumWidth(160)
+            btn.setMinimumHeight(34)
             btn.setStyleSheet(f"""
                 QPushButton {{
                     background: {PALETTE.get('surface2','#3d3d3d')}; color: {PALETTE.get('accent','#00d4aa')};
@@ -366,7 +366,7 @@ class AnalysisTab(QWidget):
 
     def _build_toolbar(self) -> QWidget:
         bar = QWidget()
-        bar.setFixedHeight(46)
+        bar.setMinimumHeight(46)
         self._toolbar = bar
         bar.setStyleSheet(
             f"background:{PALETTE.get('surface','#2d2d2d')}; border-bottom:1px solid {PALETTE.get('border','#484848')};")

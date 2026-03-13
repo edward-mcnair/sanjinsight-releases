@@ -45,10 +45,10 @@ class WizardStepBar(QWidget):
 
     def __init__(self):
         super().__init__()
-        # 44 px was too short: circles reach y=30 and labels run y=34–50,
-        # so the bottom 6 px of every step label was clipped.  60 px gives
-        # 4 px of breathing room below the label baseline.
-        self.setFixedHeight(60)
+        # 60 px was the previous fixed height; use minimum so scaled fonts
+        # never clip the step labels.  64 px gives 4 px breathing room below
+        # the 20-px label rect (cy + r + 4 … + 20) on standard density.
+        self.setMinimumHeight(64)
         self._current = 0
 
     def set_step(self, index: int):
@@ -104,10 +104,10 @@ class WizardStepBar(QWidget):
             text = "✓" if done else str(i + 1)
             p.drawText(cx - r, cy - r, r * 2, r * 2, Qt.AlignCenter, text)
 
-            # Label
+            # Label — 20 px rect gives full descender room at 12pt on any DPI
             p.setPen(text_c if active else acc_c if done else sub_c)
             p.setFont(sans_font(12, bold=active))
-            p.drawText(cx - 50, cy + r + 4, 100, 16, Qt.AlignCenter, label)
+            p.drawText(cx - 50, cy + r + 4, 100, 20, Qt.AlignCenter, label)
 
         p.end()
 
@@ -148,10 +148,8 @@ class _ProfileCard(QFrame):
         top.addWidget(name_lbl, 1)
         root.addLayout(top)
 
-        # Description
-        desc = (profile.description[:90] + "…"
-                if len(profile.description) > 90 else profile.description)
-        desc_lbl = QLabel(desc)
+        # Description — no pre-truncation; setWordWrap lets Qt reflow naturally
+        desc_lbl = QLabel(profile.description)
         desc_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{PALETTE.get('textSub','#6a6a6a')};")
         desc_lbl.setWordWrap(True)
         root.addWidget(desc_lbl)
@@ -211,7 +209,7 @@ class _ProfileRow(QFrame):
         self._profile = profile
         self._selected = False
         self.setCursor(Qt.PointingHandCursor)
-        self.setFixedHeight(52)
+        self.setMinimumHeight(52)    # min not fixed — scaled fonts can push height up
         self._refresh_style()
 
         from profiles.profiles import CATEGORY_ACCENTS
@@ -241,9 +239,10 @@ class _ProfileRow(QFrame):
         wl_lbl.setFixedWidth(60)
         lay.addWidget(wl_lbl)
 
-        desc = (profile.description[:70] + "…"
-                if len(profile.description) > 70 else profile.description)
-        desc_lbl = QLabel(desc)
+        # No pre-truncation — Qt clips naturally at widget boundary;
+        # full text accessible via tooltip for narrow windows.
+        desc_lbl = QLabel(profile.description)
+        desc_lbl.setToolTip(profile.description)
         desc_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{PALETTE.get('textSub','#6a6a6a')};")
         lay.addWidget(desc_lbl, 1)
 
@@ -880,7 +879,7 @@ class _VerdictBig(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.setFixedHeight(80)
+        self.setMinimumHeight(80)    # min not fixed — subtitle text can wrap on narrow layouts
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         self._outer = QWidget()

@@ -43,7 +43,7 @@ def _group(title: str) -> QGroupBox:
 def _seg_btn(label: str) -> QPushButton:
     btn = QPushButton(label)
     btn.setCheckable(True)
-    btn.setFixedHeight(28)
+    btn.setMinimumHeight(28)   # min not fixed — allows growth on high-DPI / large fonts
     return btn
 
 
@@ -73,8 +73,8 @@ class _StatusRow(QWidget):
         self._btn = None
         if action_text:
             self._btn = QPushButton(action_text)
-            self._btn.setFixedHeight(22)
-            self._btn.setFixedWidth(84)
+            self._btn.setFixedHeight(24)       # slightly taller for touch/legibility
+            self._btn.setMinimumWidth(80)      # min not fixed — longer labels can grow
             self._btn.setStyleSheet(scaled_qss(
                 "QPushButton { font-size:9pt; padding:0 4px; }"))
             apply_hand_cursor(self._btn)
@@ -452,8 +452,8 @@ class AutoScanTab(QWidget):
 
         self._mode_tr = _seg_btn("  TR")
         self._mode_ir = _seg_btn("  IR")
-        self._mode_tr.setFixedWidth(72)
-        self._mode_ir.setFixedWidth(72)
+        self._mode_tr.setMinimumWidth(72)   # min not fixed — text can scale up
+        self._mode_ir.setMinimumWidth(72)
         self._mode_tr.setEnabled(_tr_available)
         self._mode_ir.setEnabled(_ir_available)
 
@@ -494,8 +494,8 @@ class AutoScanTab(QWidget):
         self._goal_find = _seg_btn("  Find Hotspots")
         self._goal_map  = _seg_btn("  Map Full Area")
         self._goal_find.setChecked(True)
-        self._goal_find.setFixedWidth(140)
-        self._goal_map.setFixedWidth(140)
+        self._goal_find.setMinimumWidth(120)   # min not fixed — accommodates scaled fonts
+        self._goal_map.setMinimumWidth(120)
         self._goal_grp = QButtonGroup(self)
         self._goal_grp.addButton(self._goal_find, 0)
         self._goal_grp.addButton(self._goal_map,  1)
@@ -518,7 +518,7 @@ class AutoScanTab(QWidget):
         self._stim_off.setChecked(True)
         for b, w in [(self._stim_off, 70), (self._stim_dc, 70),
                      (self._stim_pulsed, 80)]:
-            b.setFixedWidth(w)
+            b.setMinimumWidth(w)    # min not fixed — scaled fonts can push width up
             seg_row.addWidget(b)
         seg_row.addStretch()
         self._stim_grp = QButtonGroup(self)
@@ -613,7 +613,7 @@ class AutoScanTab(QWidget):
 
         def _adv_row(lbl, widget):
             r = QHBoxLayout()
-            l = QLabel(lbl); l.setFixedWidth(130)
+            l = QLabel(lbl); l.setMinimumWidth(120)  # min not fixed — "Frames/position" can scale
             r.addWidget(l); r.addWidget(widget); r.addStretch()
             adv_grid.addLayout(r)
 
