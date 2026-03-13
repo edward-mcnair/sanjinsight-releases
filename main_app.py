@@ -957,6 +957,14 @@ class MainWindow(QMainWindow):
         except Exception:
             log.debug("hotplug refresh failed", exc_info=True)
 
+        # Camera connect/disconnect → rebuild the camera selector combo so the
+        # IR entry appears once the IR driver finishes initialising on its thread.
+        if "camera" in key:
+            try:
+                self._autoscan_tab.refresh_active_camera()
+            except Exception:
+                log.debug("autoscan camera combo refresh failed", exc_info=True)
+
         # Re-evaluate required-device readiness after every hotplug event
         self._update_safe_mode()
 
