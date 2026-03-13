@@ -19,6 +19,114 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.2.0] — 2026-03-13
+
+### Added
+
+#### Role-Based Access Control (RBAC)
+- **Auth foundation** — `auth/` package: `UserStore` (SQLite, `~/.microsanj/users.db`),
+  `AuditLogger` (JSON Lines, `~/.microsanj/audit.log`, 5 MB rotation), `Authenticator`
+  (QObject facade, bcrypt work-factor 12, 5-failure lockout), and `UserPrefs`
+  (per-user `prefs.json` layered over global config).
+- **Three-user taxonomy** — `UserType` enum maps 1:1 to existing AI personas:
+  Technician (→ OperatorShell + `lab_tech` AI), Failure Analyst (→ full UI +
+  `failure_analyst` AI), Researcher (→ full UI + `new_grad` AI). Admin is a
+  boolean privilege overlay on any user type, not a fourth type.
+- **Admin Setup Wizard** (`ui/auth/admin_setup_wizard.py`) — two-page first-launch
+  wizard that creates the first admin account. Welcome page explains the role system
+  with privilege cards (Can ✓ / Cannot ✗ columns) for each user type. Cannot be
+  dismissed without completing setup.
+- **Login Screen** (`ui/auth/login_screen.py`) — full-window login card (logo,
+  username, password, bcrypt in QThread, 5-failure lockout countdown). Activated
+  when admin enables `auth.require_login` in Settings.
+- **Supervisor Override Dialog** (`ui/auth/supervisor_override_dialog.py`) — compact
+  340 × 280 px overlay for temporary engineer access at an operator station; logs
+  `supervisor_override` event; auto-reverts after 15 minutes.
+- **User Management widget** (`ui/auth/user_management_widget.py`) — embedded in
+  Settings tab (admin-only). Table of users with Add / Edit / Deactivate / Reset
+  Password actions. Add User dialog shows three profile cards + admin checkbox
+  — no role dropdowns. AI persona and UI surface derived automatically.
+
+#### Operator Shell
+- **OperatorShell** (`ui/operator/operator_shell.py`) — dedicated `QMainWindow` for
+  Technician users; never imports MainWindow code. Top bar shows shift summary and
+  Lock button. QSplitter body: RecipeSelectorPanel | ScanWorkArea | ShiftLogPanel.
+- **RecipeSelectorPanel** (`ui/operator/recipe_selector_panel.py`) — shows only
+  `locked=True` scan profiles. Search/filter bar. Empty state guides user to ask an
+  engineer to approve a profile.
+- **ScanWorkArea** (`ui/operator/scan_work_area.py`) — Part ID / serial number field
+  with barcode-scanner support (Enter auto-starts scan), live camera view, START SCAN
+  button (56 px, green). Disabled until a profile is selected and a part ID is entered.
+- **ShiftLogPanel** (`ui/operator/shift_log_panel.py`) — scrollable today's result
+  cards (PASS/FAIL badge, part ID, time, profile label), running totals, Export CSV.
+- **VerdictOverlay** (`ui/operator/verdict_overlay.py`) — full-screen modal after
+  each scan: PASS / FAIL / REVIEW at 72 pt with key metrics, Flag for Review,
+  Next Part, and View Details actions. Background colour reflects verdict.
+
+#### Hybrid TR / IR Camera System
+- **System-level camera selection** — `hardware/cameras/` now manages two concurrent
+  camera slots (TR and IR). Camera identity locked at hardware selection; stamped on
+  every session and exported to TIFF XMP metadata.
+- **Global CameraContextBar** — replaces per-tab camera selectors. Shows active
+  camera type (TR / IR), model, and status across the full UI.
+- **Demo mode cameras** — demo mode always presents both a Basler TR and a
+  Microsanj IR camera so the full camera-switching workflow is testable without
+  hardware.
+- **Microsanj IR Camera v1a** — FLIR-based uncooled microbolometer fully integrated:
+  driver (`hardware/cameras/flir_driver.py`), device registry entry, device scanner
+  detection, and first-run wizard support.
+
+#### AutoScan improvements
+- **Camera & Optics selector** — replaces the TR/IR mode toggle buttons with a
+  unified camera and objective selector.
+- **Objective magnification persistence** — last-used objective magnification is saved
+  per-user and restored on next launch (useful for manual nosepiece systems).
+- **Turret auto-sync** — objective buttons auto-update when a motorised turret
+  reports a position change.
+
+#### Settings / UX
+- **Admin Log-in button** — appears in the status header when an admin account exists
+  but no session is active. Clicking opens the Login Screen.
+- **Admin Log-out button** — replaces the Log-in button while a session is active;
+  clears the session and returns the header to its unauthenticated state.
+- **Admin-gated settings** — Lab and Software Update controls are disabled (not
+  hidden) with a tooltip "Administrator login required" when no admin session is
+  active; all controls re-enable on login.
+- **Scan Profile** — "Recipe" renamed to "Scan Profile" throughout the UI
+  (menu, tabs, tooltip, wizard, operator shell). Config key unchanged.
+
+### Changed
+
+- **AI persona display names** — renamed from the previous internal labels to
+  Technician, Failure Analyst, and Researcher to match the RBAC user taxonomy.
+- **Admin Setup Wizard welcome page** — now explains what the admin account controls
+  and what privileges each user type will have, with role cards showing Can ✓ and
+  Cannot ✗ lists side-by-side.
+
+### Fixed
+
+#### Windows 11 / Cross-Platform
+- **Console font on Windows** — `ui/scripting_console.py` hard-coded `Menlo` (macOS
+  only); replaced with a platform-aware `_MONO_CSS_FAMILY` constant (`Consolas` on
+  Windows, `Menlo` on macOS) so box-drawing glyphs in the banner render correctly.
+- **Microsanj IR Camera branding** — first-run wizard and all user-facing strings now
+  say "Microsanj IR Camera" instead of "FLIR"; internal config key (`driver: flir`)
+  and factory lookup are unchanged.
+- **First-run wizard — SDK prerequisites callout** — welcome page now shows a
+  highlighted callout listing Basler pylon 8 (Basler TR camera) and FLIR Spinnaker
+  SDK (Microsanj IR camera) with direct download links before the user reaches the
+  Camera configuration page.
+- **First-run wizard — Microsanj IR Camera driver** — camera page now includes
+  "Microsanj IR Camera" in the driver dropdown; selecting it immediately checks
+  whether the Spinnaker SDK (`PySpin`) is importable and shows an install notice with
+  download link and `pip install spinnaker_python` command if it is not. Test Camera
+  button enumerates PySpin cameras and reports the count.
+- **First-run wizard — auto-detection** — background device scan now auto-selects
+  "Microsanj IR Camera" in the driver combo when a Spinnaker-enumerable device is
+  detected, the same as it does for Basler cameras.
+
+---
+
 ## [1.1.2] — 2026-03-07
 
 ### Fixed
