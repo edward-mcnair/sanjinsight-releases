@@ -32,7 +32,7 @@ from PyQt5.QtCore    import Qt, QSize
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QStackedWidget, QWidget, QFrame, QSizePolicy,
-    QProgressBar,
+    QProgressBar, QScrollArea,
 )
 
 from ui.theme import (
@@ -98,83 +98,157 @@ class _PageWelcome(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setStyleSheet(f"background:{_BG};")
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(48, 36, 48, 24)
-        lay.setSpacing(12)
 
-        # Header
+        # Outer layout wraps a scroll area so the page works at any dialog height
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setStyleSheet(
+            f"QScrollArea {{ background:{_BG}; border:none; }}"
+            f"QScrollBar:vertical {{ width:6px; background:{_BG}; }}"
+            f"QScrollBar::handle:vertical {{ background:#2a3249; border-radius:3px; }}")
+        outer.addWidget(scroll)
+
+        content = QWidget()
+        content.setStyleSheet(f"background:{_BG};")
+        lay = QVBoxLayout(content)
+        lay.setContentsMargins(48, 36, 48, 28)
+        lay.setSpacing(10)
+        scroll.setWidget(content)
+
+        # ── Headline ─────────────────────────────────────────────────────────
         h1 = QLabel("First Launch — Administrator Setup")
         h1.setStyleSheet(_H1_SS)
         lay.addWidget(h1)
 
         h2 = QLabel(
-            "No user accounts exist yet. On the next page you will create the "
-            "<b>administrator account</b> — the person responsible for managing users, "
-            "approving scan profiles, and configuring system security.")
+            "No user accounts exist yet.  You are about to create the "
+            "<b>administrator account</b> — the top-level account that controls "
+            "user management, scan profile approvals, and system security.")
         h2.setStyleSheet(_H2_SS)
         h2.setWordWrap(True)
         lay.addWidget(h2)
 
         lay.addWidget(_hline())
-        lay.addSpacing(4)
 
-        # What the admin can do
-        what_lbl = QLabel("As administrator you can:")
-        what_lbl.setStyleSheet(_BODY_SS)
-        lay.addWidget(what_lbl)
+        # ── Admin account card ────────────────────────────────────────────────
+        acc = PALETTE.get("accent", "#00d4aa")
+        admin_card = QFrame()
+        admin_card.setStyleSheet(
+            f"QFrame {{ background:#0d2220; border:1px solid {acc}44; "
+            f"border-left:3px solid {acc}; border-radius:6px; }}")
+        ac_lay = QVBoxLayout(admin_card)
+        ac_lay.setContentsMargins(14, 12, 14, 12)
+        ac_lay.setSpacing(8)
+
+        admin_title = QLabel("Your account: Administrator")
+        admin_title.setStyleSheet(
+            f"font-size:{FONT.get('body', 11)}pt; font-weight:700; "
+            f"color:{acc}; background:transparent;")
+        ac_lay.addWidget(admin_title)
+
+        admin_desc = QLabel(
+            "The administrator account is unique — it is not assigned to a single "
+            "user type but has access to everything.  There is only one admin account "
+            "per installation.")
+        admin_desc.setStyleSheet(
+            f"font-size:{FONT.get('sublabel', 9)}pt; color:#aaaaaa; background:transparent;")
+        admin_desc.setWordWrap(True)
+        ac_lay.addWidget(admin_desc)
 
         for item in [
             "Add, edit, and deactivate user accounts",
-            "Approve and lock scan profiles for operator use",
-            "Configure login and security settings",
-            "Access all instrument features",
+            "Assign roles (Technician, Failure Analyst, Researcher) to each user",
+            "Approve and lock scan profiles so Technicians can run them",
+            "Enable or disable login enforcement and set session timeouts",
+            "Access every tab and instrument feature",
         ]:
             row = QHBoxLayout()
             row.setSpacing(8)
-            dot = QLabel("✓")
-            dot.setStyleSheet(
-                f"color:{PALETTE.get('accent','#00d4aa')}; "
-                f"font-size:{FONT.get('body', 11)}pt;")
-            dot.setFixedWidth(18)
-            row.addWidget(dot)
+            row.setContentsMargins(0, 0, 0, 0)
+            chk = QLabel("✓")
+            chk.setStyleSheet(
+                f"color:{acc}; font-size:{FONT.get('body', 11)}pt; background:transparent;")
+            chk.setFixedWidth(16)
+            row.addWidget(chk)
             lbl = QLabel(item)
             lbl.setStyleSheet(
-                f"font-size:{FONT.get('body', 11)}pt; color:#cccccc;")
+                f"font-size:{FONT.get('sublabel', 9)}pt; color:#cccccc; background:transparent;")
             row.addWidget(lbl, 1)
-            lay.addLayout(row)
+            ac_lay.addLayout(row)
 
-        lay.addSpacing(8)
+        lay.addWidget(admin_card)
         lay.addWidget(_hline())
-        lay.addSpacing(4)
 
-        # Role overview
-        intro = QLabel("Three user types are built in:")
-        intro.setStyleSheet(_BODY_SS)
-        lay.addWidget(intro)
+        # ── User role overview ────────────────────────────────────────────────
+        roles_hdr = QLabel("User roles you will create")
+        roles_hdr.setStyleSheet(
+            f"font-size:{FONT.get('body', 11)}pt; font-weight:700; color:#dddddd;")
+        lay.addWidget(roles_hdr)
 
-        lay.addLayout(self._role_row(
+        roles_sub = QLabel(
+            "After creating your admin account you can add users from Settings.  "
+            "Each user is assigned one of these three roles:")
+        roles_sub.setStyleSheet(
+            f"font-size:{FONT.get('sublabel', 9)}pt; color:#888888;")
+        roles_sub.setWordWrap(True)
+        lay.addWidget(roles_sub)
+
+        lay.addWidget(self._role_card(
             "Technician",
-            "Runs QA scans from approved scan profiles. Simple guided interface "
-            "with PASS/FAIL verdict. Cannot create or edit profiles.",
+            "Runs approved QA scans and views PASS / FAIL verdicts.",
             "#5b8ff9",
+            can=[
+                "Run scan profiles approved by the admin",
+                "View scan results and PASS/FAIL verdict",
+            ],
+            cannot=[
+                "Create or edit scan profiles",
+                "Access full instrument settings",
+                "Manage users or security settings",
+            ],
+            interface="Guided operator interface",
         ))
-        lay.addLayout(self._role_row(
+        lay.addWidget(self._role_card(
             "Failure Analyst",
-            "Diagnoses device failures. Full instrument access. "
-            "Evidence-first AI guidance.",
+            "Diagnoses device failures using the full instrument interface.",
             "#00d4aa",
+            can=[
+                "Full access to all acquisition and analysis tabs",
+                "Create and edit scan profiles (requires admin approval to deploy)",
+                "Evidence-guided AI assistance",
+            ],
+            cannot=[
+                "Manage user accounts",
+                "Change security / login settings",
+            ],
+            interface="Full instrument interface",
         ))
-        lay.addLayout(self._role_row(
+        lay.addWidget(self._role_card(
             "Researcher",
-            "Explores, learns, and publishes results. Full instrument access. "
-            "Explanatory AI mode.",
+            "Explores experimental parameters and publishes results.",
             "#ffaa44",
+            can=[
+                "Full access to all acquisition and analysis tabs",
+                "Create and edit scan profiles (requires admin approval to deploy)",
+                "Explanatory AI mode for learning and documentation",
+            ],
+            cannot=[
+                "Manage user accounts",
+                "Change security / login settings",
+            ],
+            interface="Full instrument interface",
         ))
 
-        lay.addSpacing(8)
+        # ── Next steps hint ───────────────────────────────────────────────────
+        lay.addSpacing(4)
         next_steps = QLabel(
-            "After setup: open Settings to add user accounts and, optionally, "
-            "enable login enforcement.")
+            "▶  After setup: open Settings → Security to add users and, optionally, "
+            "enable login enforcement so users must authenticate on each launch.")
         next_steps.setStyleSheet(
             f"font-size:{FONT.get('sublabel', 9)}pt; color:#777777; "
             f"background:{_SURFACE}; border:1px solid {_BORDER}; border-radius:5px; "
@@ -185,25 +259,89 @@ class _PageWelcome(QWidget):
         lay.addStretch(1)
 
     @staticmethod
-    def _role_row(title: str, desc: str, color: str) -> QHBoxLayout:
-        h = QHBoxLayout()
-        h.setSpacing(12)
-        dot = QLabel("●")
-        dot.setStyleSheet(f"color:{color}; font-size:10pt;")
-        dot.setFixedWidth(16)
-        dot.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
-        h.addWidget(dot)
-        body = QVBoxLayout()
-        body.setSpacing(1)
+    def _role_card(title: str, desc: str, color: str,
+                   can: list, cannot: list, interface: str) -> QFrame:
+        card = QFrame()
+        card.setStyleSheet(
+            f"QFrame {{ background:#131628; border:1px solid #1e2440; "
+            f"border-left:3px solid {color}; border-radius:6px; }}")
+        c_lay = QVBoxLayout(card)
+        c_lay.setContentsMargins(14, 10, 14, 10)
+        c_lay.setSpacing(6)
+
+        # Title row + interface badge
+        title_row = QHBoxLayout()
+        title_row.setSpacing(8)
         t = QLabel(title)
-        t.setStyleSheet(f"font-size:{FONT.get('body', 11)}pt; font-weight:700; color:#dddddd;")
-        body.addWidget(t)
+        t.setStyleSheet(
+            f"font-size:{FONT.get('body', 11)}pt; font-weight:700; "
+            f"color:{color}; background:transparent;")
+        title_row.addWidget(t)
+
+        badge = QLabel(interface)
+        badge.setStyleSheet(
+            f"font-size:{FONT.get('caption', 8)}pt; color:{color}88; "
+            f"background:{color}18; border:1px solid {color}33; border-radius:3px; "
+            "padding:1px 6px; background:transparent;")
+        badge.setStyleSheet(
+            f"font-size:{FONT.get('caption', 8)}pt; color:{color}; "
+            f"background:{color}18; border:1px solid {color}44; border-radius:3px; "
+            "padding:1px 6px;")
+        title_row.addWidget(badge)
+        title_row.addStretch()
+        c_lay.addLayout(title_row)
+
         d = QLabel(desc)
-        d.setStyleSheet(f"font-size:{FONT.get('sublabel', 9)}pt; color:#888888;")
+        d.setStyleSheet(
+            f"font-size:{FONT.get('sublabel', 9)}pt; color:#888888; background:transparent;")
         d.setWordWrap(True)
-        body.addWidget(d)
-        h.addLayout(body)
-        return h
+        c_lay.addWidget(d)
+
+        # Can / Cannot columns
+        cols = QHBoxLayout()
+        cols.setSpacing(12)
+
+        can_col = QVBoxLayout()
+        can_col.setSpacing(3)
+        for item in can:
+            row = QHBoxLayout()
+            row.setSpacing(6)
+            chk = QLabel("✓")
+            chk.setStyleSheet(
+                f"color:#00aa77; font-size:{FONT.get('sublabel', 9)}pt; background:transparent;")
+            chk.setFixedWidth(14)
+            lbl = QLabel(item)
+            lbl.setStyleSheet(
+                f"font-size:{FONT.get('sublabel', 9)}pt; color:#aaaaaa; background:transparent;")
+            lbl.setWordWrap(True)
+            row.addWidget(chk)
+            row.addWidget(lbl, 1)
+            can_col.addLayout(row)
+        can_col.addStretch()
+
+        cannot_col = QVBoxLayout()
+        cannot_col.setSpacing(3)
+        for item in cannot:
+            row = QHBoxLayout()
+            row.setSpacing(6)
+            chk = QLabel("✗")
+            chk.setStyleSheet(
+                f"color:#884444; font-size:{FONT.get('sublabel', 9)}pt; background:transparent;")
+            chk.setFixedWidth(14)
+            lbl = QLabel(item)
+            lbl.setStyleSheet(
+                f"font-size:{FONT.get('sublabel', 9)}pt; color:#666666; background:transparent;")
+            lbl.setWordWrap(True)
+            row.addWidget(chk)
+            row.addWidget(lbl, 1)
+            cannot_col.addLayout(row)
+        cannot_col.addStretch()
+
+        cols.addLayout(can_col, 1)
+        cols.addLayout(cannot_col, 1)
+        c_lay.addLayout(cols)
+
+        return card
 
 
 # ── Page 2: Create first admin ─────────────────────────────────────────────────
@@ -379,8 +517,8 @@ class AdminSetupWizard(QDialog):
         self._created_user = None   # set after successful creation
 
         self.setWindowTitle("SanjINSIGHT — First Launch Setup")
-        self.setMinimumSize(620, 540)
-        self.resize(660, 580)
+        self.setMinimumSize(640, 580)
+        self.resize(680, 680)
         self.setWindowFlags(
             Qt.Dialog | Qt.WindowTitleHint | Qt.CustomizeWindowHint)
         self.setModal(True)
