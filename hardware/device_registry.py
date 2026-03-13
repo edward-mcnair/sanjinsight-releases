@@ -162,6 +162,30 @@ DEVICE_REGISTRY: dict[str, DeviceDescriptor] = {
                          "Requires GigE Vision compliant network interface.",
     ),
 
+    "microsanj_ir_camera_v1a": DeviceDescriptor(
+        uid            = "microsanj_ir_camera_v1a",
+        display_name   = "Microsanj Infrared Camera v1a",
+        manufacturer   = "Microsanj / FLIR Systems (dist. OEMCameras.com)",
+        device_type    = DTYPE_CAMERA,
+        connection_type= CONN_USB,
+        driver_module  = "hardware.cameras.flir_driver",
+        driver_version = "builtin",
+        hot_loadable   = False,
+        usb_vid        = 0x1E10,     # FLIR Systems USB VID
+        usb_pid        = None,       # PID varies by core revision — match by pattern
+        serial_patterns= ["FLIR", "OEMCameras", "Microsanj IR"],
+        description    = "FLIR-based uncooled microbolometer thermal camera, "
+                         "4.9 mm fixed focal length, compact square OEM housing "
+                         "(dist. OEMCameras.com). "
+                         "IR imaging channel for passive lock-in IR thermography "
+                         "(no stimulus required). 26 VDC supply.",
+        datasheet_url  = "https://www.oemcameras.com/",
+        notes          = "Requires FLIR SDK / Spinnaker for enumeration. "
+                         "Set config key hardware.camera.driver='flir' and "
+                         "hardware.camera.modality='ir_lockin' to activate "
+                         "the IR imaging path in AutoScan.",
+    ),
+
     # ---------------------------------------------------------------- #
     #  TEC Controllers                                                  #
     # ---------------------------------------------------------------- #
