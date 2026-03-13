@@ -308,6 +308,24 @@ def _migrate_prefs() -> None:
 _migrate_prefs()
 
 
+# ── Auth preference key defaults (Phase D) ──────────────────────────────────
+# These keys are written by AdminSetupWizard / Settings → Security (admin only).
+# get_pref() returns the default if the key has never been set — no explicit
+# registration needed; callers always supply a default.
+#
+#   auth.require_login                bool  False    Login gate at startup
+#   auth.lock_timeout_s               int   1800     Inactivity lock (30 min)
+#   auth.supervisor_override_timeout_s int  900      Override revert (15 min)
+
+AUTH_PREF_REQUIRE_LOGIN              = "auth.require_login"
+AUTH_PREF_LOCK_TIMEOUT_S             = "auth.lock_timeout_s"
+AUTH_PREF_SUPERVISOR_OVERRIDE_TIMEOUT_S = "auth.supervisor_override_timeout_s"
+
+AUTH_DEFAULT_REQUIRE_LOGIN           = False
+AUTH_DEFAULT_LOCK_TIMEOUT_S          = 1800
+AUTH_DEFAULT_SUPERVISOR_OVERRIDE_S   = 900
+
+
 def get_pref(key: str, default=None):
     """Read a user preference.  e.g. get_pref('ui.mode', 'standard')"""
     keys = key.split(".")

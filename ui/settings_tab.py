@@ -23,7 +23,7 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QCheckBox, QComboBox, QGroupBox, QFrame, QSizePolicy,
     QScrollArea, QSlider, QLineEdit, QFileDialog, QProgressBar,
-    QButtonGroup, QToolButton,
+    QButtonGroup, QToolButton, QSpinBox,
 )
 
 import config as cfg_mod
@@ -271,8 +271,10 @@ class SettingsTab(QWidget):
     ollama_connect_requested      = pyqtSignal(str)   # model_id
     ollama_disconnect_requested   = pyqtSignal()
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, auth=None, auth_session=None):
         super().__init__(parent)
+        self._auth         = auth
+        self._auth_session = auth_session
         self.setStyleSheet(f"background:{_BG()};")
 
         outer = QVBoxLayout(self)
@@ -342,6 +344,14 @@ class SettingsTab(QWidget):
 
         # ── Lab / Operator ────────────────────────────────────────────
         lay.addWidget(self._build_lab_group())
+
+        # ── Security (admin only) ─────────────────────────────────────
+        is_admin = getattr(
+            getattr(auth_session, "user", None), "is_admin", False
+        ) if auth_session else False
+        if is_admin:
+            lay.addWidget(self._build_security_group())
+            lay.addWidget(self._build_users_group())
 
         # ── Software updates ──────────────────────────────────────────
         lay.addWidget(self._build_updates_group())
@@ -704,6 +714,77 @@ class SettingsTab(QWidget):
         lay.addWidget(self._update_status_lbl)
 
         return card
+
+    def _build_security_group(self) -> QGroupBox:
+        """Security settings — shown only to admins."""
+        grp = _group("Security  (Admin)")
+        lay = QVBoxLayout(grp)
+        lay.setSpacing(14)
+
+        lay.addWidget(_body(
+            "Configure authentication requirements for all users on this instrument."))
+
+        # ── Require Login toggle ──────────────────────────────────────
+        self._sec_require_login_chk = QCheckBox("Require login at startup")
+        self._sec_require_login_chk.setStyleSheet(
+            f"font-size:{FONT['label']}pt; color:{_TEXT()};")
+        current = cfg_mod.get_pref("auth.require_login", False)
+        self._sec_require_login_chk.setChecked(bool(current))
+        self._sec_require_login_chk.stateChanged.connect(
+            lambda s: cfg_mod.set_pref(
+                "auth.require_login", bool(s)))
+        lay.addWidget(self._sec_require_login_chk)
+
+        lay.addWidget(_sep())
+
+        # ── Lock timeout ──────────────────────────────────────────────
+        timeout_row = QHBoxLayout()
+        timeout_lbl = QLabel("Inactivity lock timeout:")
+        timeout_lbl.setStyleSheet(
+            f"font-size:{FONT['label']}pt; color:{_MUTED()};")
+        timeout_row.addWidget(timeout_lbl)
+
+        self._sec_timeout_spin = QSpinBox()
+        self._sec_timeout_spin.setRange(60, 14400)    # 1 min – 4 hrs
+        self._sec_timeout_spin.setSingleStep(60)
+        self._sec_timeout_spin.setSuffix(" s")
+        self._sec_timeout_spin.setFixedWidth(90)
+        self._sec_timeout_spin.setStyleSheet(_COMBO())
+        self._sec_timeout_spin.setValue(
+            int(cfg_mod.get_pref("auth.lock_timeout_s", 1800)))
+        self._sec_timeout_spin.valueChanged.connect(
+            lambda v: cfg_mod.set_pref("auth.lock_timeout_s", v))
+        timeout_row.addWidget(self._sec_timeout_spin)
+        timeout_row.addStretch(1)
+        lay.addLayout(timeout_row)
+
+        return grp
+
+    def _build_users_group(self) -> QGroupBox:
+        """User management — shown only to admins."""
+        grp = _group("User Management  (Admin)")
+        lay = QVBoxLayout(grp)
+        lay.setSpacing(8)
+
+        try:
+            from ui.auth.user_management_widget import UserManagementWidget
+            store = getattr(
+                getattr(self, "_auth", None), "_store", None)
+            audit = getattr(
+                getattr(self, "_auth", None), "_audit", None)
+            if store is not None and audit is not None:
+                widget = UserManagementWidget(
+                    store, audit,
+                    current_session=self._auth_session,
+                    parent=self,
+                )
+            else:
+                widget = UserManagementWidget(parent=self)
+            lay.addWidget(widget)
+        except Exception as exc:
+            lay.addWidget(_body(f"User management unavailable: {exc}"))
+
+        return grp
 
     def _build_updates_group(self) -> QGroupBox:
         g = _group("Software Updates")

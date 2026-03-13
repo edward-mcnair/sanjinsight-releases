@@ -136,20 +136,12 @@ class _TopBar(QWidget):
         lay.addStretch(1)
 
         # ── User info ──────────────────────────────────────────────────────
-        if auth_session is not None:
-            user = auth_session.user
-            badge = _user_badge(user)
-            user_lbl = QLabel(f"{user.display_name}  {badge}")
-            user_lbl.setStyleSheet(
-                f"font-size:{FONT.get('body', 11)}pt; color:#cccccc; "
-                "background:transparent;")
-            lay.addWidget(user_lbl)
-        else:
-            user_lbl = QLabel("Guest")
-            user_lbl.setStyleSheet(
-                f"font-size:{FONT.get('body', 11)}pt; color:#666666; "
-                "background:transparent;")
-            lay.addWidget(user_lbl)
+        self._user_lbl = QLabel()
+        self._user_lbl.setStyleSheet(
+            f"font-size:{FONT.get('body', 11)}pt; color:#cccccc; "
+            "background:transparent;")
+        self._set_user_label(auth_session)
+        lay.addWidget(self._user_lbl)
 
         # ── Shift summary (updated dynamically) ───────────────────────────
         self._shift_lbl = QLabel("0 scans this shift")
@@ -168,6 +160,24 @@ class _TopBar(QWidget):
             "QPushButton:hover { background:#2a3249; color:#cccccc; }")
         lock_btn.clicked.connect(self.lock_clicked)
         lay.addWidget(lock_btn)
+
+    def _set_user_label(self, session) -> None:
+        if session is not None:
+            user  = session.user
+            badge = _user_badge(user)
+            self._user_lbl.setText(f"{user.display_name}  {badge}")
+            self._user_lbl.setStyleSheet(
+                f"font-size:{FONT.get('body', 11)}pt; color:#cccccc; "
+                "background:transparent;")
+        else:
+            self._user_lbl.setText("Guest")
+            self._user_lbl.setStyleSheet(
+                f"font-size:{FONT.get('body', 11)}pt; color:#666666; "
+                "background:transparent;")
+
+    def update_user(self, session) -> None:
+        """Update the user name label after re-login."""
+        self._set_user_label(session)
 
     def update_shift(self, n_scans: int, n_pass: int) -> None:
         if n_scans == 0:
@@ -285,6 +295,13 @@ class OperatorShell(QMainWindow):
             hw_service.acquisition_progress.connect(self._on_acq_progress)
         except Exception as exc:
             log.debug("OperatorShell: no acquisition_progress signal: %s", exc)
+
+    # ── Public API ─────────────────────────────────────────────────────────────
+
+    def set_auth_session(self, session) -> None:
+        """Update the auth session (called after re-login from lock screen)."""
+        self._auth_session = session
+        self._top_bar.update_user(session)
 
     # ── Inactivity ─────────────────────────────────────────────────────────────
 

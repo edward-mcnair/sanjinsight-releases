@@ -256,8 +256,10 @@ class _SplitterTop(QWidget):
 # ------------------------------------------------------------------ #
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, auth=None, auth_session=None):
         super().__init__()
+        self._auth         = auth
+        self._auth_session = auth_session
         self.setWindowTitle(f"{APP_VENDOR} {APP_NAME}  {version_string()}")
 
         # Fit the window within the available screen (respects macOS menu bar + dock)
@@ -361,7 +363,8 @@ class MainWindow(QMainWindow):
         self._profile_tab  = ProfileTab(self._profile_mgr)
         self._data_tab     = DataTab(session_mgr)
         self._log_tab      = LogTab()
-        self._settings_tab = SettingsTab()
+        self._settings_tab = SettingsTab(
+            auth=self._auth, auth_session=self._auth_session)
 
         # ── Metrics service + readiness banner ───────────────────
         self._metrics = MetricsService(hw_service, parent=self)
@@ -2242,6 +2245,74 @@ class MainWindow(QMainWindow):
 
 
 # ------------------------------------------------------------------ #
+#  Auth helper — OperatorShell launch                                 #
+# ------------------------------------------------------------------ #
+
+def _launch_operator_shell(auth, auth_session, session_mgr, app):
+    """
+    Instantiate and run the OperatorShell for Technician users.
+
+    Called from the startup routing block when the logged-in user is a
+    Technician.  Blocks until the operator shell exits, then returns so
+    the caller can sys.exit(0).
+
+    Parameters
+    ----------
+    auth         : Authenticator
+    auth_session : AuthSession
+    session_mgr  : SessionManager
+    app          : QApplication
+    """
+    from ui.operator.operator_shell import OperatorShell
+
+    shell = OperatorShell(
+        auth=auth,
+        auth_session=auth_session,
+        session_mgr=session_mgr,
+    )
+    shell.show()
+
+    # 30-second inactivity lock timer
+    _lock_timer = QTimer()
+    _lock_timer.setInterval(30_000)
+
+    def _check_lock():
+        if auth is None:
+            return
+        timeout = int(config.get_pref("auth.lock_timeout_s", 1800))
+        if auth.check_lock_timeout(timeout):
+            log.info("OperatorShell: inactivity lock triggered")
+            shell.hide()
+            # Re-show login screen
+            from ui.auth.login_screen import LoginScreen
+            from PyQt5.QtCore import QEventLoop as _QEL
+            ls = LoginScreen(auth)
+            ls.resize(app.primaryScreen().availableSize())
+            _el = _QEL()
+            ls.login_success.connect(
+                lambda sess: (
+                    setattr(ls, "_sess", sess),
+                    _el.quit(),
+                ) and None
+            )
+            ls.show()
+            _el.exec_()
+            new_sess = getattr(ls, "_sess", None)
+            ls.hide()
+            if new_sess is not None:
+                shell.set_auth_session(new_sess)
+                shell.show()
+            else:
+                shell.close()
+
+    _lock_timer.timeout.connect(_check_lock)
+    _lock_timer.start()
+
+    app.exec_()
+    _lock_timer.stop()
+
+
+# ------------------------------------------------------------------ #
 #  Entry point                                                        #
 # ------------------------------------------------------------------ #
 
@@ -2432,6 +2503,57 @@ if __name__ == "__main__":
     except Exception as _e:
         log.debug("QMetaType QTextCursor registration skipped: %s", _e)
 
+    # ── Auth startup (Phase D) ────────────────────────────────────────
+    _auth         = None
+    _auth_session = None
+    try:
+        from auth.store         import UserStore, AuditLogger
+        from auth.authenticator import Authenticator
+        _user_store = UserStore()
+        _audit_log  = AuditLogger()
+        _auth       = Authenticator(_user_store, _audit_log)
+
+        # ① One-time admin setup if no users exist
+        if not _user_store.has_users():
+            from ui.auth.admin_setup_wizard import AdminSetupWizard
+            from PyQt5.QtWidgets import QDialog as _QDialog
+            wiz = AdminSetupWizard(_user_store, _audit_log)
+            if wiz.exec_() != _QDialog.Accepted:
+                _sys.exit(0)
+
+        # ② Login gate (only when admin has enabled require_login)
+        if config.get_pref("auth.require_login", False):
+            from ui.auth.login_screen import LoginScreen
+            from PyQt5.QtCore import QEventLoop as _QEventLoop
+
+            _login_screen = LoginScreen(_auth)
+            _login_screen.resize(app.primaryScreen().availableSize())
+
+            _loop = _QEventLoop()
+            _login_screen.login_success.connect(
+                lambda sess: (
+                    setattr(_login_screen, "_accepted_session", sess),
+                    _loop.quit(),
+                ) and None
+            )
+            _login_screen.show()
+            _loop.exec_()
+            _auth_session = getattr(_login_screen, "_accepted_session", None)
+            _login_screen.hide()
+            if _auth_session is None:
+                _sys.exit(0)
+
+        # ③ Route Technicians to OperatorShell
+        if (_auth_session is not None
+                and _auth_session.user.user_type.uses_operator_shell):
+            _launch_operator_shell(_auth, _auth_session, session_mgr, app)
+            _sys.exit(0)
+
+    except Exception as _auth_err:
+        log.warning("Auth startup skipped (non-fatal): %s", _auth_err)
+        _auth         = None
+        _auth_session = None
+
     # ── First-run wizard (Windows + real hardware only) ───────────────
     if not _FORCE_DEMO:
         _config_path = config._path if hasattr(config, "_path") else os.path.join(
@@ -2445,7 +2567,7 @@ if __name__ == "__main__":
         except Exception as _fre:
             log.warning(f"First-run wizard error (non-fatal): {_fre}")
 
-    window = MainWindow()
+    window = MainWindow(auth=_auth, auth_session=_auth_session)
     if _icon_path:
         window.setWindowIcon(_app_icon)   # title-bar / taskbar icon
 
@@ -2584,5 +2706,39 @@ if __name__ == "__main__":
     except Exception as _ce:
         log.debug("Autosave recovery: unexpected error (startup continues) — %s",
                   _ce, exc_info=True)
+
+    # ── Inactivity lock timer (auth mode only) ────────────────────────
+    if _auth is not None and _auth_session is not None:
+        _mw_lock_timer = QTimer()
+        _mw_lock_timer.setInterval(30_000)
+
+        def _mw_check_lock():
+            timeout = int(config.get_pref("auth.lock_timeout_s", 1800))
+            if _auth.check_lock_timeout(timeout):
+                log.info("MainWindow: inactivity lock triggered")
+                window.hide()
+                from ui.auth.login_screen import LoginScreen
+                from PyQt5.QtCore import QEventLoop as _QEL2
+                ls2 = LoginScreen(_auth)
+                ls2.resize(app.primaryScreen().availableSize())
+                _el2 = _QEL2()
+                ls2.login_success.connect(
+                    lambda sess: (
+                        setattr(ls2, "_sess", sess),
+                        _el2.quit(),
+                    ) and None
+                )
+                ls2.show()
+                _el2.exec_()
+                new_sess2 = getattr(ls2, "_sess", None)
+                ls2.hide()
+                if new_sess2 is not None:
+                    window._auth_session = new_sess2
+                    window.show()
+                else:
+                    window.close()
+
+        _mw_lock_timer.timeout.connect(_mw_check_lock)
+        _mw_lock_timer.start()
 
     _sys.exit(app.exec_())

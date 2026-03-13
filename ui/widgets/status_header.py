@@ -715,6 +715,33 @@ class OperatorButton(QWidget):
         """Return the currently active operator name (or empty string)."""
         return cfg_mod.get_pref("lab.active_operator", "") or ""
 
+    def update_from_session(self, session) -> None:
+        """Show the logged-in user name + role badge, or fall back to pref.
+
+        Displays e.g. "Jane Smith  [TECH]" / "R. Wilson  [ANALYST]" /
+        "Admin  [ADMIN]".  When *session* is None the widget reverts to
+        the legacy pref-based operator name.
+        """
+        if session is None:
+            self._refresh()
+            return
+        user = getattr(session, "user", None)
+        if user is None:
+            self._refresh()
+            return
+        name    = getattr(user, "display_name", "") or ""
+        is_admin = getattr(user, "is_admin", False)
+        user_type = getattr(user, "user_type", None)
+        ut_val  = getattr(user_type, "value", "") if user_type else ""
+        badge   = {
+            "technician":      "[TECH]",
+            "failure_analyst": "[ANALYST]",
+            "researcher":      "[RES]",
+        }.get(ut_val, "[USER]")
+        if is_admin:
+            badge = "[ADMIN]"
+        self._name_lbl.setText(f"{name}  {badge}" if name else badge)
+
     # ── Styling ───────────────────────────────────────────────────────
 
     def _apply_styles(self):

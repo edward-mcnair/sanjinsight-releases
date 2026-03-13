@@ -103,6 +103,12 @@ class Recipe:
     tec:          RecipeTec         = field(default_factory=RecipeTec)
     notes:        str = ""
 
+    # ── Operator workflow (Phase D) ─────────────────────────────────────
+    locked:      bool = False   # True = operator-executable, editing disabled
+    approved_by: str  = ""      # display_name of approving engineer/admin
+    approved_at: str  = ""      # ISO timestamp of lock action
+    scan_type:   str  = "autoscan"  # "autoscan" | "single" | "transient"
+
     def to_dict(self) -> dict:
         return asdict(self)
 
@@ -121,6 +127,10 @@ class Recipe:
         r.version      = d.get("version",       1)
         r.profile_name = d.get("profile_name", "")
         r.notes        = d.get("notes",         "")
+        r.locked       = bool(d.get("locked",      False))
+        r.approved_by  = d.get("approved_by",  "")
+        r.approved_at  = d.get("approved_at",  "")
+        r.scan_type    = d.get("scan_type",    "autoscan")
         r.camera       = RecipeCamera(**_filter(RecipeCamera,      d.get("camera",      {})))
         r.acquisition  = RecipeAcquisition(**_filter(RecipeAcquisition, d.get("acquisition", {})))
         r.analysis     = RecipeAnalysis(**_filter(RecipeAnalysis,  d.get("analysis",   {})))
@@ -236,7 +246,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QColor, QFont
 from ui.icons import set_btn_icon
-from ui.theme import FONT, scaled_qss
+from ui.theme import FONT, PALETTE, scaled_qss
 
 
 class RecipeTab(QWidget):
@@ -254,9 +264,10 @@ class RecipeTab(QWidget):
 
     def __init__(self, app_state=None, parent=None):
         super().__init__(parent)
-        self._app_state = app_state
-        self._store     = RecipeStore()
-        self._current:  Optional[Recipe] = None
+        self._app_state    = app_state
+        self._store        = RecipeStore()
+        self._current:     Optional[Recipe] = None
+        self._auth_session = None   # set by main_app after login
         self._build()
         self._refresh_list()
 
@@ -400,6 +411,18 @@ class RecipeTab(QWidget):
         notes_lay.addWidget(self._notes_edit)
         right_lay.addWidget(notes_box)
 
+        # ── Lock banner (hidden until recipe is locked) ────────────────
+        self._lock_banner = QLabel()
+        self._lock_banner.setAlignment(Qt.AlignCenter)
+        self._lock_banner.setFixedHeight(26)
+        self._lock_banner.setStyleSheet(
+            f"background:{PALETTE.get('accent','#00d4aa')}22; "
+            f"color:{PALETTE.get('accent','#00d4aa')}; "
+            "border:1px solid #00d4aa55; border-radius:4px; "
+            f"font-size:{FONT.get('sublabel', 9)}pt; font-weight:600;")
+        self._lock_banner.setVisible(False)
+        right_lay.addWidget(self._lock_banner)
+
         # Save / Capture buttons
         footer = QHBoxLayout()
         right_lay.addLayout(footer)
@@ -411,12 +434,20 @@ class RecipeTab(QWidget):
         self._cap_btn.setToolTip(
             "Read current camera / analysis / profile settings from the app "
             "and populate this recipe automatically.")
+        self._lock_btn = QPushButton("Approve && Lock")
+        set_btn_icon(self._lock_btn, "fa5s.lock")
+        self._lock_btn.setToolTip(
+            "Lock this recipe so operators can run it. "
+            "Locked recipes cannot be edited without unlocking first.")
         for b in [self._save_btn, self._cap_btn]:
             b.setFixedHeight(28)
             footer.addWidget(b)
         footer.addStretch(1)
+        self._lock_btn.setFixedHeight(28)
+        footer.addWidget(self._lock_btn)
         self._save_btn.clicked.connect(self._on_save)
         self._cap_btn.clicked.connect(self._on_capture)
+        self._lock_btn.clicked.connect(self._on_lock_toggle)
 
         right_lay.addStretch(1)
         splitter.addWidget(right)
@@ -435,13 +466,27 @@ class RecipeTab(QWidget):
         )
 
     def _set_editor_enabled(self, enabled: bool):
+        locked = bool(self._current and self._current.locked)
+        can_edit = enabled and not locked
         for w in [self._label_edit, self._desc_edit, self._prof_edit,
                   self._exposure_spin, self._gain_spin, self._frames_spin,
                   self._delay_spin, self._modality_combo,
                   self._thresh_spin, self._fail_hs_spin, self._fail_peak_spin,
-                  self._notes_edit, self._save_btn, self._cap_btn,
-                  self._run_btn, self._delete_btn]:
+                  self._notes_edit, self._save_btn, self._cap_btn]:
+            w.setEnabled(can_edit)
+        # Delete and Run stay enabled (can still run or delete a locked recipe)
+        for w in [self._run_btn, self._delete_btn]:
             w.setEnabled(enabled)
+        # Lock button — enabled if a recipe is selected and user can edit recipes
+        can_lock = enabled and self._can_edit_recipes()
+        self._lock_btn.setEnabled(can_lock)
+        if enabled:
+            if locked:
+                self._lock_btn.setText("Unlock Recipe")
+                set_btn_icon(self._lock_btn, "fa5s.unlock")
+            else:
+                self._lock_btn.setText("Approve && Lock")
+                set_btn_icon(self._lock_btn, "fa5s.lock")
 
     # ── List operations ─────────────────────────────────────────────
 
@@ -486,6 +531,14 @@ class RecipeTab(QWidget):
         self._fail_hs_spin.setValue(r.analysis.fail_hotspot_count)
         self._fail_peak_spin.setValue(r.analysis.fail_peak_k)
         self._notes_edit.setPlainText(r.notes)
+        # Lock banner
+        if r.locked:
+            by = r.approved_by or "unknown"
+            self._lock_banner.setText(
+                f"  Approved for Operators — Locked by {by}")
+            self._lock_banner.setVisible(True)
+        else:
+            self._lock_banner.setVisible(False)
 
     def _editor_to_recipe(self) -> Recipe:
         r = self._current or Recipe()
@@ -502,6 +555,20 @@ class RecipeTab(QWidget):
         r.analysis.fail_peak_k            = self._fail_peak_spin.value()
         r.notes = self._notes_edit.toPlainText()
         return r
+
+    # ── Auth helpers ─────────────────────────────────────────────────
+
+    def set_auth_session(self, session) -> None:
+        """Called by main_app on login / logout so the lock button is gated."""
+        self._auth_session = session
+        if self._current is not None:
+            self._set_editor_enabled(True)
+
+    def _can_edit_recipes(self) -> bool:
+        """True when no auth is active (legacy mode) or user can edit recipes."""
+        if self._auth_session is None:
+            return True   # no-auth mode — everyone can edit
+        return getattr(self._auth_session.user, "can_access_full_ui", True)
 
     # ── Buttons ─────────────────────────────────────────────────────
 
@@ -544,6 +611,41 @@ class RecipeTab(QWidget):
             self._current = None
             self._set_editor_enabled(False)
             self._refresh_list()
+
+    def _on_lock_toggle(self):
+        """Approve & Lock / Unlock the current recipe."""
+        if self._current is None:
+            return
+        recipe = self._current
+        if recipe.locked:
+            ans = QMessageBox.question(
+                self, "Unlock Recipe",
+                f"Unlock '{recipe.label}'?\n\n"
+                "This will remove operator approval and allow editing.",
+                QMessageBox.Yes | QMessageBox.Cancel,
+            )
+            if ans != QMessageBox.Yes:
+                return
+            recipe.locked      = False
+            recipe.approved_by = ""
+            recipe.approved_at = ""
+        else:
+            # Require at least one save before locking
+            if not recipe.uid:
+                QMessageBox.warning(
+                    self, "Approve & Lock",
+                    "Please save the recipe before locking it.")
+                return
+            approver = ""
+            if self._auth_session is not None:
+                approver = self._auth_session.user.display_name
+            recipe.locked      = True
+            recipe.approved_by = approver
+            recipe.approved_at = time.strftime("%Y-%m-%dT%H:%M:%S")
+        self._store.save(recipe)
+        self._populate_editor(recipe)
+        self._set_editor_enabled(True)
+        self._refresh_list()
 
     def _on_capture(self):
         """Read current app settings and populate the editor."""

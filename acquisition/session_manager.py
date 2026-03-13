@@ -69,17 +69,23 @@ class SessionManager:
                     device_id: str = "",
                     project: str = "",
                     status: str = "",
-                    tags: Optional[List[str]] = None) -> Session:
+                    tags: Optional[List[str]] = None,
+                    auth_session=None) -> Session:
         """Save an AcquisitionResult as a new session. Adds to index.
 
-        If *operator* is not supplied, the active operator is read from
-        ``config.get_pref("lab.active_operator")`` automatically so every
-        save is stamped without extra call-site plumbing.
+        If *operator* is not supplied, it is resolved in priority order:
+          1. ``auth_session.user.display_name`` (when auth is active)
+          2. ``config.get_pref("lab.active_operator")`` (legacy fallback)
+        Callers that pass ``operator=`` explicitly are unaffected.
         """
         os.makedirs(self._root, exist_ok=True)
-        # Auto-stamp active operator from preferences when not supplied
+        # Auto-stamp operator — auth session takes priority over pref
         if not operator:
-            operator = cfg_mod.get_pref("lab.active_operator", "") or ""
+            if auth_session is not None:
+                operator = getattr(
+                    getattr(auth_session, "user", None), "display_name", "") or ""
+            if not operator:
+                operator = cfg_mod.get_pref("lab.active_operator", "") or ""
         session = Session.from_result(
             result, label=label,
             operator=operator,
