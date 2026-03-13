@@ -355,12 +355,16 @@ class SettingsTab(QWidget):
         lay.addWidget(self._users_group)
 
         # Show immediately if already logged in as admin at construction time
-        if getattr(getattr(auth_session, "user", None), "is_admin", False):
+        _is_admin_now = getattr(getattr(auth_session, "user", None), "is_admin", False)
+        if _is_admin_now:
             self._security_group.setVisible(True)
             self._users_group.setVisible(True)
 
         # ── Software updates ──────────────────────────────────────────
         lay.addWidget(self._build_updates_group())
+
+        # Apply initial admin gate (both lab and updates widgets now exist)
+        self._apply_admin_gate(_is_admin_now)
 
         # ── AI Assistant (local) ──────────────────────────────────────
         lay.addWidget(self._build_ai_group())
@@ -517,11 +521,11 @@ class SettingsTab(QWidget):
         """)
         self._lab_new_edit.returnPressed.connect(self._on_lab_add_operator)
         add_row.addWidget(self._lab_new_edit, 1)
-        add_new_btn = QPushButton("Add")
-        add_new_btn.setFixedWidth(58)
-        add_new_btn.setStyleSheet(_BTN_SECONDARY())
-        add_new_btn.clicked.connect(self._on_lab_add_operator)
-        add_row.addWidget(add_new_btn)
+        self._lab_add_btn = QPushButton("Add")
+        self._lab_add_btn.setFixedWidth(58)
+        self._lab_add_btn.setStyleSheet(_BTN_SECONDARY())
+        self._lab_add_btn.clicked.connect(self._on_lab_add_operator)
+        add_row.addWidget(self._lab_add_btn)
         lay.addLayout(add_row)
 
         lay.addWidget(_sep())
@@ -544,6 +548,15 @@ class SettingsTab(QWidget):
         self._lab_confirm_chk.toggled.connect(
             lambda v: cfg_mod.set_pref("lab.confirm_at_scan", v))
         lay.addWidget(self._lab_confirm_chk)
+
+        # Collect admin-gated widgets (Active operator selector is NOT gated)
+        self._lab_admin_widgets = [
+            self._lab_op_list_w,
+            self._lab_new_edit,
+            self._lab_add_btn,
+            self._lab_require_chk,
+            self._lab_confirm_chk,
+        ]
 
         return grp
 
@@ -868,6 +881,15 @@ class SettingsTab(QWidget):
         lay.addWidget(releases_btn)
 
         self._update_freq_enabled()
+
+        # Collect admin-gated widgets (View All Releases link is NOT gated)
+        self._upd_admin_widgets = [
+            self._auto_check,
+            self._freq_combo,
+            self._channel_combo,
+            self._check_btn,
+        ]
+
         return g
 
     def _build_ai_group(self) -> QGroupBox:
@@ -2286,7 +2308,7 @@ class SettingsTab(QWidget):
     # ── Settings search / filter ───────────────────────────────────────
 
     def set_auth_session(self, session) -> None:
-        """Update the active auth session — shows/hides admin-only groups."""
+        """Update the active auth session — shows/hides and enables/disables admin controls."""
         self._auth_session = session
         is_admin = getattr(
             getattr(session, "user", None), "is_admin", False
@@ -2295,6 +2317,18 @@ class SettingsTab(QWidget):
             self._security_group.setVisible(is_admin)
         if hasattr(self, "_users_group"):
             self._users_group.setVisible(is_admin)
+        self._apply_admin_gate(is_admin)
+
+    def _apply_admin_gate(self, is_admin: bool) -> None:
+        """Enable or disable admin-only settings widgets; show tooltip when locked."""
+        _tip = "" if is_admin else "Administrator login required"
+        gated = (
+            getattr(self, "_lab_admin_widgets", [])
+            + getattr(self, "_upd_admin_widgets", [])
+        )
+        for w in gated:
+            w.setEnabled(is_admin)
+            w.setToolTip(_tip)
 
     def _filter_settings(self, text: str) -> None:
         """Show/hide QGroupBox sections based on search text."""
