@@ -9,9 +9,9 @@ Persona selection persists in user preferences as "ai.persona".
 
 Personas
 --------
-lab_tech          Numbered steps and checklists for routine operation.
-failure_analyst   Evidence-first root-cause diagnosis for engineers.
-new_grad          Guided explanations with context for researchers.
+lab_tech          Numbered steps and checklists for routine operation.       → Technician
+failure_analyst   Evidence-first root-cause diagnosis for engineers.         → Failure Analyst
+new_grad          Guided explanations with context for researchers.           → Researcher
 """
 
 from __future__ import annotations
@@ -52,7 +52,7 @@ PERSONAS: dict[str, Persona] = {
 
     "failure_analyst": Persona(
         id="failure_analyst",
-        display_name="Failure Analysis",
+        display_name="Failure Analyst",
         description="Evidence-first root cause and diagnosis. Best for troubleshooting.",
         system_prompt=(
             "You are the SanjINSIGHT instrument assistant for a failure analysis engineer. "
@@ -65,10 +65,10 @@ PERSONAS: dict[str, Persona] = {
 
     "new_grad": Persona(
         id="new_grad",
-        display_name="Research",
+        display_name="Researcher",
         description="Guided explanations with context. Best for researchers and students.",
         system_prompt=(
-            "You are the SanjINSIGHT instrument assistant helping a graduate student. "
+            "You are the SanjINSIGHT instrument assistant helping a researcher. "
             "Explain what is happening and why it matters before suggesting actions. "
             "Define technical terms when you use them. "
             "Walk through each step with a brief reason why. "
