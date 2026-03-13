@@ -483,6 +483,7 @@ class AutoScanTab(QWidget):
             else "Thermoreflectance  — stimulus-driven ΔR/R signal"
         )
         self._mode_desc.setObjectName("sublabel")
+        self._mode_desc.setWordWrap(True)
         m_outer.addWidget(self._mode_desc)
         lay.addWidget(mode_grp)
 
@@ -547,6 +548,7 @@ class AutoScanTab(QWidget):
         # Shown only when IR mode is active — explains why stimulus controls are gray
         self._ir_stim_note = QLabel("Not used  — IR is passive thermal imaging")
         self._ir_stim_note.setObjectName("sublabel")
+        self._ir_stim_note.setWordWrap(True)
         self._ir_stim_note.setVisible(False)
         s_lay.addWidget(self._ir_stim_note)
 

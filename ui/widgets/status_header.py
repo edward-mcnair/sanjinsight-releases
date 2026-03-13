@@ -453,7 +453,8 @@ class _OperatorPopup(QWidget):
         self._new_edit.setFixedHeight(28)
         self._new_edit.returnPressed.connect(self._on_add)
         self._add_btn = QPushButton("Add")
-        self._add_btn.setFixedSize(46, 28)
+        self._add_btn.setFixedHeight(28)
+        self._add_btn.setMinimumWidth(54)
         self._add_btn.clicked.connect(self._on_add)
         entry_lay.addWidget(self._new_edit, 1)
         entry_lay.addWidget(self._add_btn)
@@ -465,9 +466,11 @@ class _OperatorPopup(QWidget):
     # ── Popup lifecycle ───────────────────────────────────────────────
 
     def show_below(self, anchor: QWidget):
-        pos = anchor.mapToGlobal(anchor.rect().bottomLeft())
+        # Right-align popup with anchor's right edge so it never falls off-screen
+        anchor_bottom_right = anchor.mapToGlobal(anchor.rect().bottomRight())
         self.adjustSize()
-        self.move(pos.x(), pos.y() + 4)
+        x = anchor_bottom_right.x() - self.width()
+        self.move(x, anchor_bottom_right.y() + 4)
         self.show()
         self.raise_()
 
