@@ -1181,6 +1181,11 @@ class StatusHeader(QWidget):
             return self._operator_btn.get_active_operator()
         return ""
 
+    def update_from_session(self, session) -> None:
+        """Show the logged-in user's name + role badge in the operator slot."""
+        if hasattr(self, "_operator_btn"):
+            self._operator_btn.update_from_session(session)
+
     def add_update_badge(self) -> "UpdateBadge":
         """Add the update-available badge to the header."""
         from ui.update_dialog import UpdateBadge

@@ -344,8 +344,9 @@ class AdminSetupWizard(QDialog):
 
     def __init__(self, user_store, audit_logger, parent=None):
         super().__init__(parent)
-        self._store   = user_store
-        self._auditor = audit_logger
+        self._store        = user_store
+        self._auditor      = audit_logger
+        self._created_user = None   # set after successful creation
 
         self.setWindowTitle("SanjINSIGHT — First Launch Setup")
         self.setMinimumSize(620, 540)
@@ -458,6 +459,7 @@ class AdminSetupWizard(QDialog):
                 actor = vals["username"],
                 role  = "researcher",
             )
+            self._created_user = self._store.get_by_username(vals["username"])
             log.info("AdminSetupWizard: first admin '%s' created", vals["username"])
         except Exception as exc:
             self._page_create_admin._error_lbl.setText(f"Error: {exc}")
@@ -466,6 +468,10 @@ class AdminSetupWizard(QDialog):
             return
 
         self.accept()
+
+    def created_user(self):
+        """Return the User that was just created, or None."""
+        return self._created_user
 
     # ── Close guard — cannot dismiss without creating an account ──────────────
 

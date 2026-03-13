@@ -272,6 +272,26 @@ class Authenticator(QObject):
         self._session = session
         return session
 
+    def authenticate_user(self, user: User) -> AuthSession:
+        """Create a session directly from a User object (no password check).
+
+        Used after AdminSetupWizard to auto-login the newly-created admin
+        without requiring them to re-enter their credentials.
+        """
+        session = self._create_session(user)
+        self._store.update_last_login(user.uid)
+        self._auditor.log(
+            "login",
+            actor   = user.username,
+            uid     = user.uid,
+            role    = user.user_type.value,
+            detail  = "auto-login after account creation",
+            success = True,
+        )
+        self.session_started.emit(session)
+        log.info("authenticate_user: auto-session for %s", user.username)
+        return session
+
     # ── Public: lock / unlock / logout ────────────────────────────────────
 
     def lock(self) -> None:

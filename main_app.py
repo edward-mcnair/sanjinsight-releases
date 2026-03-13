@@ -275,6 +275,9 @@ class MainWindow(QMainWindow):
                                                thread_name_prefix="msanj_worker")
         self._build_ui()
         self._connect_signals()
+        # Show logged-in user name in the operator slot when auth is active
+        if self._auth_session is not None:
+            self._header.update_from_session(self._auth_session)
 
     def _submit(self, fn, *args, done_cb=None, **kwargs) -> Future:
         """Submit work to the bounded thread pool.
@@ -2520,6 +2523,11 @@ if __name__ == "__main__":
             wiz = AdminSetupWizard(_user_store, _audit_log)
             if wiz.exec_() != _QDialog.Accepted:
                 _sys.exit(0)
+            # Auto-login the newly created admin so their name appears in the
+            # header immediately and the Security group is visible in Settings.
+            _created_user = wiz.created_user()   # AdminSetupWizard exposes this
+            if _created_user is not None:
+                _auth_session = _auth.authenticate_user(_created_user)
 
         # ② Login gate (only when admin has enabled require_login)
         if config.get_pref("auth.require_login", False):
