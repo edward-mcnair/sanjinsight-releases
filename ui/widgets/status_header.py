@@ -780,7 +780,8 @@ class OperatorButton(QWidget):
 # ──────────────────────────────────────────────────────────────────────────────
 
 class StatusHeader(QWidget):
-    exit_demo_requested = pyqtSignal()
+    exit_demo_requested  = pyqtSignal()
+    admin_login_requested = pyqtSignal()   # emitted when "Log in" btn clicked
 
     # Paths to the two logo variants (resolved relative to this file)
     _ASSETS = os.path.join(os.path.dirname(__file__), "..", "..", "assets")
@@ -876,6 +877,16 @@ class StatusHeader(QWidget):
         # ── Operator selector button ───────────────────────────────────
         self._operator_btn = OperatorButton()
         lay.addWidget(self._operator_btn)
+
+        # ── Admin "Log in" button (visible only when auth users exist + no session)
+        self._login_btn = QPushButton("🔐  Log in")
+        self._login_btn.setFixedHeight(28)
+        self._login_btn.setToolTip(
+            "Log in to access administrator features\n"
+            "(User Management, Security settings, Scan Profile approval)")
+        self._login_btn.setVisible(False)
+        self._login_btn.clicked.connect(self.admin_login_requested)
+        lay.addWidget(self._login_btn)
 
         # ── Demo banner (hidden until activated) ─────────────────────
         # Single unified button: [  Demo Mode  ✕  ]
@@ -981,6 +992,15 @@ class StatusHeader(QWidget):
         # Operator button
         if hasattr(self, "_operator_btn"):
             self._operator_btn._apply_styles()
+
+        # Log-in button
+        if hasattr(self, "_login_btn"):
+            acc = P.get("accent", "#00d4aa")
+            self._login_btn.setStyleSheet(
+                f"QPushButton {{ background:{acc}18; color:{acc}; "
+                f"border:1px solid {acc}55; border-radius:4px; "
+                f"font-size:{FONT.get('label', 10)}pt; padding:0 10px; }}"
+                f"QPushButton:hover {{ background:{acc}33; }}")
 
         # Readiness dot (if added)
         if hasattr(self, "_readiness_dot"):
@@ -1182,9 +1202,17 @@ class StatusHeader(QWidget):
         return ""
 
     def update_from_session(self, session) -> None:
-        """Show the logged-in user's name + role badge in the operator slot."""
+        """Show the logged-in user's name + role badge; hide the Log in button."""
         if hasattr(self, "_operator_btn"):
             self._operator_btn.update_from_session(session)
+        if hasattr(self, "_login_btn"):
+            # Hide the button once someone is logged in
+            self._login_btn.setVisible(session is None)
+
+    def set_auth_users_exist(self, exists: bool) -> None:
+        """Show the Log-in button when auth users exist and no session is active."""
+        if hasattr(self, "_login_btn"):
+            self._login_btn.setVisible(exists)
 
     def add_update_badge(self) -> "UpdateBadge":
         """Add the update-available badge to the header."""

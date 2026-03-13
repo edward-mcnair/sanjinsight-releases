@@ -532,6 +532,15 @@ class MainWindow(QMainWindow):
         # Connect demo mode exit button
         self._header.exit_demo_requested.connect(self._deactivate_demo_mode)
 
+        # Admin "Log in" button — shows when auth users exist + no session
+        self._header.admin_login_requested.connect(self._on_admin_login)
+        if self._auth is not None:
+            try:
+                self._header.set_auth_users_exist(
+                    self._auth._store.has_users())
+            except Exception:
+                pass
+
         # AutoScanTab signal wiring
         self._autoscan_tab.scan_requested.connect(self._on_autoscan_scan_requested)
         self._autoscan_tab.send_to_analysis.connect(self._on_autoscan_send_to_analysis)
@@ -1898,6 +1907,36 @@ class MainWindow(QMainWindow):
         _threading.Thread(
             target=_switch_to_demo, daemon=True, name="hw.demo_switch"
         ).start()
+
+    def _on_admin_login(self) -> None:
+        """Open the LoginScreen so an admin can authenticate in no-login mode."""
+        if self._auth is None:
+            return
+        from ui.auth.login_screen import LoginScreen
+        from PyQt5.QtCore import QEventLoop as _QEL
+
+        ls = LoginScreen(self._auth, parent=self)
+        ls.setWindowTitle("SanjINSIGHT — Log In")
+        ls.setWindowFlags(Qt.Dialog | Qt.WindowTitleHint | Qt.CustomizeWindowHint)
+        ls.resize(460, 520)
+
+        _el = _QEL()
+        ls.login_success.connect(
+            lambda sess: (
+                setattr(ls, "_sess", sess),
+                _el.quit(),
+            ) and None
+        )
+        ls.show()
+        _el.exec_()
+        session = getattr(ls, "_sess", None)
+        ls.hide()
+
+        if session is not None:
+            self._auth_session = session
+            self._header.update_from_session(session)
+            self._settings_tab.set_auth_session(session)
+            log.info("Admin login: %s", session.user.username)
 
     def _deactivate_demo_mode(self):
         """Exit demo mode and open the Device Manager to scan for real hardware.

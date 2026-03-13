@@ -1,10 +1,10 @@
 """
 ui/tabs/library_tab.py
 
-LibraryTab — unified Library tab for Profiles and Recipes.
+LibraryTab — unified Library tab for Material Profiles and Scan Profiles.
 
-Combines ProfileTab (material profiles) and RecipeTab (acquisition presets)
-into a single "Library" sidebar entry.
+Combines ProfileTab (material/calibration profiles) and RecipeTab
+(acquisition scan profiles) into a single "Library" sidebar entry.
 """
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from ui.icons import IC, make_icon
 
 
 class LibraryTab(QWidget):
-    """Library: Material Profiles + Acquisition Recipes as sub-tabs."""
+    """Library: Material Profiles + Scan Profiles as sub-tabs."""
 
     # Pass-through signals
     profile_applied = pyqtSignal(object)   # MaterialProfile
@@ -34,8 +34,8 @@ class LibraryTab(QWidget):
         self._tabs = QTabWidget()
         self._tabs.setDocumentMode(True)
         self._tabs.setStyleSheet(_inner_tab_qss())
-        self._tabs.addTab(profile_tab, "  Profiles")
-        self._tabs.addTab(recipe_tab,  "  Recipes")
+        self._tabs.addTab(profile_tab, "  Material Profiles")
+        self._tabs.addTab(recipe_tab,  "  Scan Profiles")
         self._apply_tab_icons()
 
         root.addWidget(self._tabs, 1)

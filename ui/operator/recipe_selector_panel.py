@@ -160,7 +160,7 @@ class RecipeSelectorPanel(QWidget):
         root.setSpacing(8)
 
         # ── Header ─────────────────────────────────────────────────────────
-        hdr = QLabel("Select Recipe")
+        hdr = QLabel("Select Scan Profile")
         hdr.setStyleSheet(
             f"font-size:{FONT.get('body', 11)}pt; font-weight:700; "
             f"color:{PALETTE.get('text','#ebebeb')}; background:transparent;")
@@ -168,7 +168,7 @@ class RecipeSelectorPanel(QWidget):
 
         # ── Search box ─────────────────────────────────────────────────────
         self._search = QLineEdit()
-        self._search.setPlaceholderText("🔍  Search recipes…")
+        self._search.setPlaceholderText("🔍  Search scan profiles…")
         self._search.setFixedHeight(32)
         self._search.setStyleSheet(
             f"QLineEdit {{ background:#13172a; color:{PALETTE.get('text','#ebebeb')}; "
@@ -204,8 +204,8 @@ class RecipeSelectorPanel(QWidget):
 
         # ── Empty-state label ──────────────────────────────────────────────
         self._empty_lbl = QLabel(
-            "No approved recipes.\n\n"
-            "Ask your engineer to approve a recipe\n"
+            "No approved scan profiles.\n\n"
+            "Ask your engineer to approve a scan profile\n"
             "from the Library tab.")
         self._empty_lbl.setAlignment(Qt.AlignCenter)
         self._empty_lbl.setWordWrap(True)
@@ -299,12 +299,12 @@ class RecipeSelectorPanel(QWidget):
         if visible_count == 0:
             if not has_any_approved:
                 self._empty_lbl.setText(
-                    "No approved recipes.\n\n"
-                    "Ask your engineer to approve a recipe\n"
+                    "No approved scan profiles.\n\n"
+                    "Ask your engineer to approve a scan profile\n"
                     "from the Library tab.")
             elif query:
                 self._empty_lbl.setText(
-                    f"No recipes matching\n\"{text.strip()}\"")
+                    f"No scan profiles matching\n\"{text.strip()}\"")
             self._empty_lbl.setVisible(True)
         else:
             self._empty_lbl.setVisible(False)

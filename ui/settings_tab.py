@@ -345,13 +345,19 @@ class SettingsTab(QWidget):
         # ── Lab / Operator ────────────────────────────────────────────
         lay.addWidget(self._build_lab_group())
 
-        # ── Security (admin only) ─────────────────────────────────────
-        is_admin = getattr(
-            getattr(auth_session, "user", None), "is_admin", False
-        ) if auth_session else False
-        if is_admin:
-            lay.addWidget(self._build_security_group())
-            lay.addWidget(self._build_users_group())
+        # ── Security + User Management (admin only — hidden until login) ─
+        self._security_group = self._build_security_group()
+        self._security_group.setVisible(False)
+        lay.addWidget(self._security_group)
+
+        self._users_group = self._build_users_group()
+        self._users_group.setVisible(False)
+        lay.addWidget(self._users_group)
+
+        # Show immediately if already logged in as admin at construction time
+        if getattr(getattr(auth_session, "user", None), "is_admin", False):
+            self._security_group.setVisible(True)
+            self._users_group.setVisible(True)
 
         # ── Software updates ──────────────────────────────────────────
         lay.addWidget(self._build_updates_group())
@@ -2278,6 +2284,17 @@ class SettingsTab(QWidget):
         dlg.exec_()
 
     # ── Settings search / filter ───────────────────────────────────────
+
+    def set_auth_session(self, session) -> None:
+        """Update the active auth session — shows/hides admin-only groups."""
+        self._auth_session = session
+        is_admin = getattr(
+            getattr(session, "user", None), "is_admin", False
+        ) if session else False
+        if hasattr(self, "_security_group"):
+            self._security_group.setVisible(is_admin)
+        if hasattr(self, "_users_group"):
+            self._users_group.setVisible(is_admin)
 
     def _filter_settings(self, text: str) -> None:
         """Show/hide QGroupBox sections based on search text."""

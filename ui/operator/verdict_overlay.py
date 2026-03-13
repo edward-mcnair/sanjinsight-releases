@@ -214,7 +214,7 @@ class VerdictOverlay(QDialog):
         ))
         recipe_label = getattr(recipe, "label", "")
         col2.addWidget(self._metric_row(
-            "Recipe",
+            "Scan Profile",
             recipe_label or "—",
             "",
             accent_hex,

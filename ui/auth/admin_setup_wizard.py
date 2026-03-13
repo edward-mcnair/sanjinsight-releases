@@ -103,13 +103,14 @@ class _PageWelcome(QWidget):
         lay.setSpacing(12)
 
         # Header
-        h1 = QLabel("Welcome to SanjINSIGHT")
+        h1 = QLabel("First Launch — Administrator Setup")
         h1.setStyleSheet(_H1_SS)
         lay.addWidget(h1)
 
         h2 = QLabel(
-            "SanjINSIGHT supports multiple users with different roles. "
-            "Before you get started, create the first administrator account.")
+            "No user accounts exist yet. On the next page you will create the "
+            "<b>administrator account</b> — the person responsible for managing users, "
+            "approving scan profiles, and configuring system security.")
         h2.setStyleSheet(_H2_SS)
         h2.setWordWrap(True)
         lay.addWidget(h2)
@@ -117,40 +118,69 @@ class _PageWelcome(QWidget):
         lay.addWidget(_hline())
         lay.addSpacing(4)
 
+        # What the admin can do
+        what_lbl = QLabel("As administrator you can:")
+        what_lbl.setStyleSheet(_BODY_SS)
+        lay.addWidget(what_lbl)
+
+        for item in [
+            "Add, edit, and deactivate user accounts",
+            "Approve and lock scan profiles for operator use",
+            "Configure login and security settings",
+            "Access all instrument features",
+        ]:
+            row = QHBoxLayout()
+            row.setSpacing(8)
+            dot = QLabel("✓")
+            dot.setStyleSheet(
+                f"color:{PALETTE.get('accent','#00d4aa')}; "
+                f"font-size:{FONT.get('body', 11)}pt;")
+            dot.setFixedWidth(18)
+            row.addWidget(dot)
+            lbl = QLabel(item)
+            lbl.setStyleSheet(
+                f"font-size:{FONT.get('body', 11)}pt; color:#cccccc;")
+            row.addWidget(lbl, 1)
+            lay.addLayout(row)
+
+        lay.addSpacing(8)
+        lay.addWidget(_hline())
+        lay.addSpacing(4)
+
         # Role overview
-        intro = QLabel("Three user roles are built in:")
+        intro = QLabel("Three user types are built in:")
         intro.setStyleSheet(_BODY_SS)
         lay.addWidget(intro)
 
         lay.addLayout(self._role_row(
             "Technician",
-            "Runs QA scans from approved recipes. Guided one-screen interface "
-            "with PASS/FAIL verdict. Cannot create or edit recipes.",
+            "Runs QA scans from approved scan profiles. Simple guided interface "
+            "with PASS/FAIL verdict. Cannot create or edit profiles.",
             "#5b8ff9",
         ))
         lay.addLayout(self._role_row(
             "Failure Analyst",
-            "Diagnoses device failures using the full instrument. Full UI access. "
+            "Diagnoses device failures. Full instrument access. "
             "Evidence-first AI guidance.",
             "#00d4aa",
         ))
         lay.addLayout(self._role_row(
             "Researcher",
-            "Explores, learns, and publishes results. Full UI access. "
+            "Explores, learns, and publishes results. Full instrument access. "
             "Explanatory AI mode.",
             "#ffaa44",
         ))
 
         lay.addSpacing(8)
-        admin_note = QLabel(
-            "Administrator is a privilege overlay — any user type can be granted "
-            "admin access. Admins manage accounts, global settings, and recipe approvals.")
-        admin_note.setStyleSheet(
+        next_steps = QLabel(
+            "After setup: open Settings to add user accounts and, optionally, "
+            "enable login enforcement.")
+        next_steps.setStyleSheet(
             f"font-size:{FONT.get('sublabel', 9)}pt; color:#777777; "
             f"background:{_SURFACE}; border:1px solid {_BORDER}; border-radius:5px; "
             "padding:10px;")
-        admin_note.setWordWrap(True)
-        lay.addWidget(admin_note)
+        next_steps.setWordWrap(True)
+        lay.addWidget(next_steps)
 
         lay.addStretch(1)
 

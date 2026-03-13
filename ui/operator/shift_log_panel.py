@@ -244,7 +244,7 @@ class ShiftLogPanel(QWidget):
         try:
             with open(path, "w", newline="", encoding="utf-8") as fh:
                 writer = csv.writer(fh)
-                writer.writerow(["Timestamp", "Verdict", "Part ID", "Recipe"])
+                writer.writerow(["Timestamp", "Verdict", "Part ID", "Scan Profile"])
                 for card in self._cards:
                     writer.writerow(card.to_csv_row())
             log.info("ShiftLogPanel: exported %d rows to %s", len(self._cards), path)
