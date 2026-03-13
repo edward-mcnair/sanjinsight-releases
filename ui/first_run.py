@@ -329,7 +329,7 @@ class _PageWelcome(_PageBase):
         body = QLabel(
             "You will be asked about:\n\n"
             "  ①  TEC controllers   — Meerstetter TEC-1089 and ATEC-302\n"
-            "  ②  Camera            — Basler TR camera or FLIR IR camera\n"
+            "  ②  Camera            — Basler TR camera or Microsanj IR camera\n"
             "  ③  FPGA              — NI 9637 via NI-RIO\n\n"
             "Your answers are saved to  config.yaml  and can be changed at any "
             "time from  Settings → Hardware Setup.")
@@ -345,7 +345,7 @@ class _PageWelcome(_PageBase):
             "  🔷 &nbsp;<b>Basler TR camera</b> — install "
             '<a href="https://www.baslerweb.com/en-us/downloads/software/">Basler pylon 8</a>'
             " (includes the USB3 Vision driver + pypylon Python bindings)<br>"
-            "  🔶 &nbsp;<b>FLIR IR camera</b> — install "
+            "  🔶 &nbsp;<b>Microsanj IR camera</b> — install "
             '<a href="https://www.flir.com/products/spinnaker-sdk/">FLIR Spinnaker SDK</a>'
             " (includes the PySpin Python wheel — see SDK download page)<br>"
             "<br>"
@@ -728,8 +728,9 @@ class _PageCamera(_PageBase):
         cam_cfg = cfg.get("camera", {})
         super().__init__(
             "Camera",
-            "Choose the camera driver and connection details. "
-            "The Basler acA1920-155um uses the  pypylon  driver.",
+            "Choose the camera driver.  "
+            "Use  pypylon  for the Basler TR camera, or  "
+            "Microsanj IR Camera  for the Microsanj thermal imager.",
             parent)
 
         g = QGroupBox("Camera")
@@ -741,10 +742,18 @@ class _PageCamera(_PageBase):
         fl.setSpacing(10)
 
         self._drv = QComboBox()
-        self._drv.addItems(["pypylon", "flir", "ni_imaqdx", "directshow", "simulated"])
-        self._drv.setCurrentText(cam_cfg.get("driver", "simulated"))
+        for _display, _key in [
+            ("pypylon",             "pypylon"),
+            ("Microsanj IR Camera", "flir"),
+            ("ni_imaqdx",           "ni_imaqdx"),
+            ("directshow",          "directshow"),
+            ("simulated",           "simulated"),
+        ]:
+            self._drv.addItem(_display, _key)
+        self._set_driver_key(cam_cfg.get("driver", "simulated"))
         self._drv.setStyleSheet(_INPUT_SS)
-        self._drv.currentTextChanged.connect(self._update_hints)
+        self._drv.currentIndexChanged.connect(
+            lambda: self._update_hints(self._drv.currentData()))
         fl.addRow(_lbl("Driver:"), self._drv)
 
         self._cam_name = QLineEdit(cam_cfg.get("camera_name", "cam4"))
@@ -756,7 +765,7 @@ class _PageCamera(_PageBase):
         self._serial.setPlaceholderText("Leave blank for first found camera")
         self._serial.setStyleSheet(_INPUT_SS)
         self._serial.setFixedHeight(34)
-        fl.addRow(_lbl("Basler Serial #:"), self._serial)
+        fl.addRow(_lbl("Camera Serial #:"), self._serial)
 
         self._hint = QLabel("")
         self._hint.setStyleSheet(_LABEL_HINT)
@@ -789,15 +798,14 @@ class _PageCamera(_PageBase):
         # FLIR Spinnaker SDK install notice (shown when flir driver is selected
         # and spinnaker_python / PySpin is not importable)
         self._flir_notice = QLabel(
-            '⚠  FLIR Spinnaker SDK is not installed on this machine.<br>'
-            'The Spinnaker SDK provides the USB3/GigE driver that Windows '
-            'needs for FLIR cameras.  Download it from FLIR, then install '
-            'the matching spinnaker_python wheel:<br>'
+            '⚠  Spinnaker SDK is not installed — required for the Microsanj IR Camera.<br>'
+            'The Spinnaker SDK provides the USB3 driver Windows needs to see the camera.  '
+            'Download and install it from FLIR, then install the matching Python wheel:<br>'
             '<a href="https://www.flir.com/products/spinnaker-sdk/">'
             'flir.com — Spinnaker SDK download ↗</a>'
             '&nbsp;&nbsp;|&nbsp;&nbsp;'
             '<code>pip install spinnaker_python</code>'
-            '&nbsp;(wheel is inside the SDK package)'
+            '&nbsp;(wheel ships inside the SDK package)'
         )
         self._flir_notice.setOpenExternalLinks(True)
         self._flir_notice.setWordWrap(True)
@@ -833,7 +841,14 @@ class _PageCamera(_PageBase):
 
         self._content.addWidget(g)
         self._content.addStretch(1)
-        self._update_hints(self._drv.currentText())
+        self._update_hints(self._drv.currentData())
+
+    def _set_driver_key(self, key: str) -> None:
+        """Select the combo item whose userData matches *key* (e.g. "flir")."""
+        for i in range(self._drv.count()):
+            if self._drv.itemData(i) == key:
+                self._drv.setCurrentIndex(i)
+                return
 
     def _update_hints(self, driver: str):
         hints = {
@@ -843,9 +858,9 @@ class _PageCamera(_PageBase):
                 "Click  Test Camera  to check if the pylon SDK is installed."
             ),
             "flir": (
-                "Uses FLIR Spinnaker SDK + spinnaker_python (PySpin).  "
-                "Targets FLIR thermal / IR cameras including the Microsanj IR camera.  "
-                "Click  Test Camera  to check if the Spinnaker SDK is installed."
+                "Microsanj IR Camera — uses the FLIR Spinnaker SDK (PySpin) internally.  "
+                "Install the Spinnaker SDK from flir.com, then  pip install spinnaker_python.  "
+                "Click  Test Camera  to verify the SDK is installed."
             ),
             "ni_imaqdx":  "Uses NI IMAQdx. Install NI Vision Acquisition Software; "
                           "camera name comes from NI MAX (auto-detected if connected).",
@@ -895,7 +910,7 @@ class _PageCamera(_PageBase):
 
     def _test_camera(self):
         """Quick enumeration test using the currently selected driver."""
-        driver = self._drv.currentText()
+        driver = self._drv.currentData() or self._drv.currentText()
         ok_ss   = _SS_BADGE_OK
         warn_ss = _SS_BADGE_WARN
         err_ss  = f"font-size:{FONT['caption']}pt; color:{PALETTE['danger']};"
@@ -947,18 +962,18 @@ class _PageCamera(_PageBase):
                 system.ReleaseInstance()
                 if count > 0:
                     self._cam_test_lbl.setText(
-                        f"✓  Spinnaker SDK found — {count} FLIR camera(s) detected")
+                        f"✓  SDK ready — {count} Microsanj IR camera(s) detected")
                     self._cam_test_lbl.setStyleSheet(ok_ss)
                 else:
                     self._cam_test_lbl.setText(
-                        "⚠  Spinnaker SDK found but no cameras detected — "
+                        "⚠  Spinnaker SDK installed but no camera detected — "
                         "check USB cable / power")
                     self._cam_test_lbl.setStyleSheet(warn_ss)
             except ImportError:
                 if hasattr(self, "_flir_notice"):
                     self._flir_notice.setVisible(True)
                 self._cam_test_lbl.setText(
-                    "⊗  FLIR Spinnaker SDK not found — see download link above")
+                    "⊗  Spinnaker SDK not found — see install instructions above")
                 self._cam_test_lbl.setStyleSheet(err_ss)
             except Exception as e:
                 self._cam_test_lbl.setText(f"⊗  {str(e)[:80]}")
@@ -995,8 +1010,9 @@ class _PageCamera(_PageBase):
 
         if not cam_devs:
             self._detection_label.setText(
-                "⚠  No camera detected — check USB/GigE connection and pylon SDK installation.\n"
-                "    Install Basler pylon 8 from baslerweb.com, then: pip install pypylon")
+                "⚠  No camera detected — check USB/GigE connection and SDK installation.\n"
+                "    Basler TR: install pylon 8 from baslerweb.com, then: pip install pypylon\n"
+                "    Microsanj IR: install Spinnaker SDK from flir.com, then: pip install spinnaker_python")
             self._detection_label.setStyleSheet(_SS_BADGE_WARN)
             self._detection_label.setVisible(True)
             return 0
@@ -1009,7 +1025,7 @@ class _PageCamera(_PageBase):
 
         if "pypylon" in module or (
                 not module and "basler" in cam.description.lower()):
-            self._drv.setCurrentText("pypylon")
+            self._set_driver_key("pypylon")
             if cam.serial_number:
                 self._serial.setText(cam.serial_number)
             label = (cam.descriptor.display_name
@@ -1017,8 +1033,16 @@ class _PageCamera(_PageBase):
             if cam.serial_number:
                 label += f"  (s/n {cam.serial_number})"
 
+        elif "flir" in module or "spinnaker" in cam.description.lower():
+            self._set_driver_key("flir")
+            if cam.serial_number:
+                self._serial.setText(cam.serial_number)
+            label = "Microsanj IR Camera"
+            if cam.serial_number:
+                label += f"  (s/n {cam.serial_number})"
+
         elif "ni_imaqdx" in module or "imaqdx" in cam.description.lower():
-            self._drv.setCurrentText("ni_imaqdx")
+            self._set_driver_key("ni_imaqdx")
             # For NI IMAQdx, the address field holds the NI MAX camera name
             if cam.address:
                 self._cam_name.setText(cam.address)
@@ -1040,12 +1064,12 @@ class _PageCamera(_PageBase):
         self._detection_label.setText(f"✓  Detected: {label}")
         self._detection_label.setStyleSheet(_SS_BADGE_OK)
         self._detection_label.setVisible(True)
-        self._update_hints(self._drv.currentText())
+        self._update_hints(self._drv.currentData())
         return len(cam_devs)
 
     def values(self) -> dict:
         return {
-            "camera.driver":      self._drv.currentText(),
+            "camera.driver":      self._drv.currentData() or self._drv.currentText(),
             "camera.camera_name": self._cam_name.text().strip(),
             "camera.serial":      self._serial.text().strip(),
         }
