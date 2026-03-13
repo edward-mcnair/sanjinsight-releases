@@ -781,7 +781,8 @@ class OperatorButton(QWidget):
 
 class StatusHeader(QWidget):
     exit_demo_requested  = pyqtSignal()
-    admin_login_requested = pyqtSignal()   # emitted when "Log in" btn clicked
+    admin_login_requested  = pyqtSignal()   # emitted when "Log in" btn clicked
+    admin_logout_requested = pyqtSignal()   # emitted when "Log out" btn clicked
 
     # Paths to the two logo variants (resolved relative to this file)
     _ASSETS = os.path.join(os.path.dirname(__file__), "..", "..", "assets")
@@ -888,6 +889,14 @@ class StatusHeader(QWidget):
         self._login_btn.clicked.connect(self.admin_login_requested)
         lay.addWidget(self._login_btn)
 
+        # ── Admin "Log out" button (visible only when a session is active)
+        self._logout_btn = QPushButton("🔓  Log out")
+        self._logout_btn.setFixedHeight(28)
+        self._logout_btn.setToolTip("Log out and return to unauthenticated mode")
+        self._logout_btn.setVisible(False)
+        self._logout_btn.clicked.connect(self.admin_logout_requested)
+        lay.addWidget(self._logout_btn)
+
         # ── Demo banner (hidden until activated) ─────────────────────
         # Single unified button: [  Demo Mode  ✕  ]
         self._demo_banner = QPushButton("  Demo Mode  ✕  ")
@@ -993,14 +1002,18 @@ class StatusHeader(QWidget):
         if hasattr(self, "_operator_btn"):
             self._operator_btn._apply_styles()
 
-        # Log-in button
+        # Log-in / Log-out buttons
+        acc = P.get("accent", "#00d4aa")
+        _btn_qss = (
+            f"QPushButton {{ background:{acc}18; color:{acc}; "
+            f"border:1px solid {acc}55; border-radius:4px; "
+            f"font-size:{FONT.get('label', 10)}pt; padding:0 10px; }}"
+            f"QPushButton:hover {{ background:{acc}33; }}"
+        )
         if hasattr(self, "_login_btn"):
-            acc = P.get("accent", "#00d4aa")
-            self._login_btn.setStyleSheet(
-                f"QPushButton {{ background:{acc}18; color:{acc}; "
-                f"border:1px solid {acc}55; border-radius:4px; "
-                f"font-size:{FONT.get('label', 10)}pt; padding:0 10px; }}"
-                f"QPushButton:hover {{ background:{acc}33; }}")
+            self._login_btn.setStyleSheet(_btn_qss)
+        if hasattr(self, "_logout_btn"):
+            self._logout_btn.setStyleSheet(_btn_qss)
 
         # Readiness dot (if added)
         if hasattr(self, "_readiness_dot"):
@@ -1202,17 +1215,20 @@ class StatusHeader(QWidget):
         return ""
 
     def update_from_session(self, session) -> None:
-        """Show the logged-in user's name + role badge; hide the Log in button."""
+        """Show the logged-in user's name + role badge; swap Log in ↔ Log out."""
         if hasattr(self, "_operator_btn"):
             self._operator_btn.update_from_session(session)
+        logged_in = session is not None
         if hasattr(self, "_login_btn"):
-            # Hide the button once someone is logged in
-            self._login_btn.setVisible(session is None)
+            self._login_btn.setVisible(not logged_in)
+        if hasattr(self, "_logout_btn"):
+            self._logout_btn.setVisible(logged_in)
 
     def set_auth_users_exist(self, exists: bool) -> None:
         """Show the Log-in button when auth users exist and no session is active."""
         if hasattr(self, "_login_btn"):
             self._login_btn.setVisible(exists)
+        # Log-out button only appears after an actual session is established
 
     def add_update_badge(self) -> "UpdateBadge":
         """Add the update-available badge to the header."""

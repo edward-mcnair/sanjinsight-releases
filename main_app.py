@@ -532,8 +532,9 @@ class MainWindow(QMainWindow):
         # Connect demo mode exit button
         self._header.exit_demo_requested.connect(self._deactivate_demo_mode)
 
-        # Admin "Log in" button — shows when auth users exist + no session
+        # Admin "Log in" / "Log out" buttons
         self._header.admin_login_requested.connect(self._on_admin_login)
+        self._header.admin_logout_requested.connect(self._on_admin_logout)
         if self._auth is not None:
             try:
                 self._header.set_auth_users_exist(
@@ -1937,6 +1938,24 @@ class MainWindow(QMainWindow):
             self._header.update_from_session(session)
             self._settings_tab.set_auth_session(session)
             log.info("Admin login: %s", session.user.username)
+
+    def _on_admin_logout(self) -> None:
+        """Clear the active auth session and revert the header to unauthenticated state."""
+        if self._auth_session is not None and self._auth is not None:
+            try:
+                self._auth.logout()
+            except Exception:
+                pass
+        self._auth_session = None
+        self._header.update_from_session(None)
+        # Re-show the Log-in button so the admin can re-authenticate
+        if self._auth is not None:
+            try:
+                self._header.set_auth_users_exist(self._auth._store.has_users())
+            except Exception:
+                pass
+        self._settings_tab.set_auth_session(None)
+        log.info("Admin logged out")
 
     def _deactivate_demo_mode(self):
         """Exit demo mode and open the Device Manager to scan for real hardware.
