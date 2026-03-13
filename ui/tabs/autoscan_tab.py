@@ -385,6 +385,11 @@ class AutoScanTab(QWidget):
 
         self._apply_styles()
 
+    def showEvent(self, event) -> None:
+        """Sync objective buttons to the turret's current position on show."""
+        super().showEvent(event)
+        self._sync_objective_from_hardware()
+
     # ── Page 0: Configure + Preview ──────────────────────────────────────────
 
     def _build_configure_page(self) -> QWidget:
@@ -855,6 +860,48 @@ class AutoScanTab(QWidget):
                         daemon=True).start()
             except Exception:
                 pass
+
+    def _sync_objective_from_hardware(self) -> None:
+        """Read the turret's current position and select the matching button.
+
+        Three sources are tried in priority order:
+          1. app_state.active_objective  — set by turret driver or last click
+          2. turret.get_position()       — live query if objective not cached
+          3. No-op                       — leave the user's last manual choice
+
+        Only updates if a turret is connected; on manual-nosepiece systems
+        the user's selection is preserved.
+        """
+        try:
+            from hardware.app_state import app_state
+            obj = getattr(app_state, "active_objective", None)
+
+            # If not cached, ask the turret directly
+            if obj is None:
+                turret = getattr(app_state, "turret", None)
+                if turret is not None:
+                    pos = turret.get_position()
+                    obj = turret.get_objective(pos)
+                    if obj is not None:
+                        app_state.active_objective = obj
+
+            if obj is None:
+                return
+
+            mag = getattr(obj, "magnification", None)
+            if mag is None:
+                return
+
+            for i, spec in enumerate(self._obj_specs):
+                if spec.magnification == mag:
+                    # Block signals to avoid triggering a turret move
+                    self._obj_btn_grp.blockSignals(True)
+                    self._obj_btn_grp.button(i).setChecked(True)
+                    self._obj_btn_grp.blockSignals(False)
+                    self._update_obj_info()
+                    break
+        except Exception:
+            pass   # hardware not available — leave current selection intact
 
     def _update_modality_badge(self) -> None:
         is_ir = self._modality == "ir_lockin"
