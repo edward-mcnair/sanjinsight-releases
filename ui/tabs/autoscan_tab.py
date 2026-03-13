@@ -814,13 +814,14 @@ class AutoScanTab(QWidget):
     # ── Public API (called by main_app) ───────────────────────────────────────
 
     def on_live_frame(self, frame) -> None:
-        """Display a live frame in the preview panel (page 0 only).
+        """Display a live frame in the preview panel.
 
-        ``frame`` is a CameraFrame with ``data: uint16 (H, W)``.
+        Only updates if we are in preview/idle state (not showing a completed
+        scan result).  ``frame`` is a CameraFrame with ``data: uint16 (H, W)``.
         Normalise to 0-255 and show as grayscale so the user can verify
         focus and exposure before scanning.
         """
-        if self._stack.currentIndex() != 0:
+        if self._current_op not in (None, "preview"):
             return
         try:
             data = getattr(frame, "data", None)
@@ -852,7 +853,7 @@ class AutoScanTab(QWidget):
 
     def on_acq_complete(self, result) -> None:
         """Brief preview acquisition finished — enable Scan button."""
-        if self._stack.currentIndex() != 0 or self._current_op != "preview":
+        if self._current_op != "preview":
             return
         self._current_op = None
         self._preview_runner.set_running(False)
