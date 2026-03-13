@@ -654,6 +654,9 @@ class MainWindow(QMainWindow):
         # Device hotplug → refresh HW indicators in acquisition tabs
         hw_service.device_connected.connect(self._on_device_hotplug)
 
+        # Camera selection from Connected Devices dropdown
+        self._header.connect_camera_selection(self._on_camera_selected)
+
         # ── AI service signals ────────────────────────────────────
         self._ai_service.status_changed.connect(self._on_ai_status)
         self._ai_service.response_token.connect(self._ai_panel.on_token)
@@ -789,9 +792,16 @@ class MainWindow(QMainWindow):
         self._camera_tab.update_frame(frame)
         self._acquire_tab.update_live(frame)
         self._roi_tab.update_frame(frame.data)
-        self._header.set_connected("camera", True)
+        # Use the typed camera key so the right row lights up in the device list
+        cam = app_state.cam
+        if cam is not None:
+            cam_key = ("tr_camera" if getattr(cam.info, "camera_type", "tr") == "tr"
+                       and app_state.ir_cam is not None else "camera")
+            if getattr(cam.info, "camera_type", "tr") == "ir":
+                cam_key = "ir_camera"
+            self._header.set_connected(cam_key, True)
         self._status.showMessage(
-            f"Camera: {app_state.cam.info.model if app_state.cam else ''}  |  "
+            f"Camera: {cam.info.model if cam else ''}  |  "
             f"Frame {frame.frame_index}  |  "
             f"Exp {frame.exposure_us:.0f}μs")
 
@@ -901,6 +911,35 @@ class MainWindow(QMainWindow):
                       optional_devices_missing=_rdns.optional_missing)
         except Exception as _me:
             log.debug("Manifest event (scan) failed: %s", _me)
+
+    def _on_camera_selected(self, key: str) -> None:
+        """
+        Called when the user clicks a camera row in the Connected Devices dropdown.
+
+        Sets the active camera in app_state, updates the Active indicator in the
+        header, and notifies AutoScan so it can refresh its modality display.
+        """
+        if key in ("tr_camera", "camera"):
+            cam_type = "tr"
+        elif key == "ir_camera":
+            cam_type = "ir"
+        else:
+            return
+
+        # Guard: only switch if the target camera is actually connected
+        target = app_state.cam if cam_type == "tr" else app_state.ir_cam
+        if target is None:
+            log.warning("Camera selection: %s not connected", key)
+            return
+
+        app_state.active_camera_type = cam_type   # also syncs active_modality
+        self._header.set_active_device(key)
+
+        # Notify AutoScan tab so it refreshes its camera display
+        if hasattr(self._autoscan_tab, "refresh_active_camera"):
+            self._autoscan_tab.refresh_active_camera()
+
+        log.info("Active camera switched to: %s (%s)", key, cam_type)
 
     def _on_device_hotplug(self, key: str, ok: bool):
         """

@@ -39,6 +39,7 @@ class CameraInfo:
     height:      int   = 0
     bit_depth:   int   = 12
     max_fps:     float = 0.0
+    camera_type: str   = "tr"   # "tr" (thermoreflectance) | "ir" (infrared)
 
 
 class CameraDriver(ABC):

@@ -229,20 +229,49 @@ class HardwareService(QObject):
         app_state.demo_mode = True
 
         # Simulated configs — realistic defaults
-        _sim_camera = {"driver": "simulated", "width": 1920, "height": 1200,
-                       "fps": 30, "exposure_us": 5000, "noise_level": 40}
         _sim_fpga   = {"driver": "simulated", "initial_freq_hz": 1000.0,
                        "initial_duty": 0.5}
         _sim_tec    = {"driver": "simulated", "initial_temp": 25.0, "noise": 0.02}
         _sim_bias   = {"driver": "simulated", "mode": "voltage", "level": 0.0}
         _sim_stage  = {"driver": "simulated", "speed_xy": 1000.0, "speed_z": 100.0}
 
-        self._launch(self._run_camera,                    name="hw.camera")
+        # On hybrid systems demo mode shows both a TR and an IR camera so
+        # the camera-selection UX can be exercised without real hardware.
+        import config as _cfg_mod
+        _imaging_sys = _cfg_mod.get("hardware", {}).get("imaging_system", "tr_only")
+        _is_hybrid = (_imaging_sys == "hybrid")
+
+        self._launch(self._run_camera, name="hw.camera")
+        if _is_hybrid:
+            _sim_ir = {"driver": "simulated", "camera_type": "ir",
+                       "width": 320, "height": 240,
+                       "fps": 30, "exposure_us": 5000, "noise_level": 60}
+            self._launch(self._run_demo_ir_camera, args=(_sim_ir,),
+                         name="hw.ir_camera")
+
         self._launch(self._run_demo_fpga,   args=(_sim_fpga,),  name="hw.fpga")
         self._launch(self._run_demo_tec,    args=(_sim_tec, "tec0"), name="hw.tec0")
         self._launch(self._run_demo_tec,    args=(_sim_tec, "tec1"), name="hw.tec1")
         self._launch(self._run_demo_bias,   args=(_sim_bias,),  name="hw.bias")
         self._launch(self._run_demo_stage,  args=(_sim_stage,), name="hw.stage")
+
+    def _run_demo_ir_camera(self, cfg: dict):
+        """IR camera demo thread — creates a second simulated camera for hybrid demo mode."""
+        from hardware.cameras.simulated import SimulatedDriver
+        try:
+            ir_cam = SimulatedDriver(cfg)
+            ir_cam.open()
+            ir_cam.start()
+            app_state.ir_cam = ir_cam
+            detail = f"{ir_cam.info.model}  {ir_cam.info.width}×{ir_cam.info.height}"
+            self.log_message.emit(
+                f"IR Camera: simulated | {ir_cam.info.model} "
+                f"| {ir_cam.info.width}×{ir_cam.info.height}")
+            self.device_connected.emit("ir_camera", True)
+            self.startup_status.emit("ir_camera", True, detail)
+        except Exception as e:
+            self.startup_status.emit("ir_camera", False, str(e)[:60])
+            log.error("HardwareService IR camera demo init: %s", e, exc_info=True)
 
     def _run_demo_fpga(self, cfg: dict):
         """FPGA demo thread — uses simulated driver, overrides config."""
@@ -778,11 +807,16 @@ class HardwareService(QObject):
                     app_state.cam = cam
 
             detail = f"{cam.info.model}  {cam.info.width}×{cam.info.height}"
+            # On hybrid systems the TR camera uses a distinct device key so it
+            # appears alongside the IR camera in the Connected Devices list.
+            import config as _cfg_mod
+            _imaging_sys = _cfg_mod.get("hardware", {}).get("imaging_system", "tr_only")
+            _cam_key = "tr_camera" if _imaging_sys == "hybrid" else "camera"
             self.log_message.emit(
                 f"Camera: {cam.info.driver} | {cam.info.model} "
                 f"| {cam.info.width}×{cam.info.height}")
-            self.device_connected.emit("camera", True)
-            self.startup_status.emit("camera", True, detail)
+            self.device_connected.emit(_cam_key, True)
+            self.startup_status.emit(_cam_key, True, detail)
 
         except Exception as e:
             self.error.emit(f"Camera: {e}")
@@ -825,7 +859,11 @@ class HardwareService(QObject):
                     if (time.monotonic() - last_frame_t
                             > self._CAMERA_RECONNECT_TIMEOUT_S):
                         log.warning("Camera: %s — triggering reconnect", e)
-                        self.device_connected.emit("camera", False)
+                        import config as _cfg_mod
+                        _is_hybrid = _cfg_mod.get("hardware", {}).get(
+                            "imaging_system", "tr_only") == "hybrid"
+                        self.device_connected.emit(
+                            "tr_camera" if _is_hybrid else "camera", False)
                         self.error.emit(
                             "Camera: no frames received — reconnecting"
                             " automatically…")

@@ -50,7 +50,9 @@ class ApplicationState:
         self._lock = threading.RLock()
 
         # ── Hardware drivers ────────────────────────────────────────
-        self._cam      = None    # CameraDriver         | None
+        self._cam      = None    # CameraDriver (TR)    | None — primary / TR camera
+        self._ir_cam   = None    # CameraDriver (IR)    | None — secondary IR camera (hybrid only)
+        self._active_camera_type: str = "tr"   # "tr" | "ir" — drives computed cam property
         self._fpga     = None    # FpgaDriver           | None
         self._bias     = None    # BiasDriver           | None
         self._stage    = None    # StageDriver          | None — microscope scan stage
@@ -127,12 +129,48 @@ class ApplicationState:
 
     @property
     def cam(self):
+        """Active camera driver.
+
+        On single-camera systems returns the primary (TR) camera.
+        On hybrid systems returns tr_cam or ir_cam based on active_camera_type.
+        The hardware grab loop re-reads this every iteration, so switching
+        active_camera_type automatically redirects frame acquisition.
+        """
+        if self._ir_cam is not None:
+            return self._cam if self._active_camera_type == "tr" else self._ir_cam
         return self._cam
 
     @cam.setter
     def cam(self, value):
+        """Set the primary (TR) camera. Backward-compatible with all existing callers."""
         with self._lock:
             self._cam = value
+
+    @property
+    def ir_cam(self):
+        """Secondary IR camera driver (None on non-hybrid systems)."""
+        return self._ir_cam
+
+    @ir_cam.setter
+    def ir_cam(self, value):
+        with self._lock:
+            self._ir_cam = value
+
+    @property
+    def active_camera_type(self) -> str:
+        """Currently selected camera type: 'tr' or 'ir'."""
+        return self._active_camera_type
+
+    @active_camera_type.setter
+    def active_camera_type(self, value: str) -> None:
+        if value not in ("tr", "ir"):
+            raise ValueError(f"active_camera_type must be 'tr' or 'ir', got {value!r}")
+        with self._lock:
+            self._active_camera_type = value
+            # Keep active_modality in sync
+            self._active_modality = (
+                "thermoreflectance" if value == "tr" else "ir_lockin"
+            )
 
     @property
     def fpga(self):
@@ -304,8 +342,8 @@ class ApplicationState:
     # ── Convenience helpers ──────────────────────────────────────────
 
     def require_cam(self):
-        """Return camera driver or raise RuntimeError if not connected."""
-        c = self._cam
+        """Return active camera driver or raise RuntimeError if not connected."""
+        c = self.cam   # computed property — returns active camera
         if c is None:
             raise RuntimeError("Camera not connected.")
         return c
@@ -336,7 +374,9 @@ class ApplicationState:
         with self._lock:
             obj = self._active_objective
             return {
-                "cam":      type(self._cam).__name__      if self._cam      else None,
+                "cam":         type(self._cam).__name__    if self._cam    else None,
+                "ir_cam":      type(self._ir_cam).__name__ if self._ir_cam else None,
+                "active_camera_type": self._active_camera_type,
                 "fpga":     type(self._fpga).__name__     if self._fpga     else None,
                 "bias":     type(self._bias).__name__     if self._bias     else None,
                 "ldd":      type(self._ldd).__name__      if self._ldd      else None,

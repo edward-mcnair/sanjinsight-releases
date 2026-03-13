@@ -27,6 +27,8 @@ from ui.theme import FONT, PALETTE, scaled_qss, active_theme
 # ── Device label lookup ───────────────────────────────────────────────────────
 _DEVICE_LABELS: dict[str, str] = {
     "camera":          "Camera",
+    "tr_camera":       "TR Camera",
+    "ir_camera":       "IR Camera",
     "tec0":            "TEC 1",
     "tec1":            "TEC 2",
     "tec2":            "TEC 2",
@@ -36,6 +38,9 @@ _DEVICE_LABELS: dict[str, str] = {
     "bias":            "Bias Source",
     "stage":           "Stage",
 }
+
+# Camera keys are selectable — clicking one makes it the active scan camera
+_CAMERA_KEYS: frozenset = frozenset({"camera", "tr_camera", "ir_camera"})
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -122,7 +127,7 @@ class _DevicesPopup(QWidget):
     # ── Data ─────────────────────────────────────────────────────────────
 
     def update_devices(self, devices: dict):
-        """Rebuild device rows from devices dict: key → {name, ok, tooltip}."""
+        """Rebuild device rows from devices dict: key → {name, ok, tooltip, is_active}."""
         # Clear old rows
         for i in reversed(range(self._rows_lay.count())):
             item = self._rows_lay.itemAt(i)
@@ -131,7 +136,9 @@ class _DevicesPopup(QWidget):
         self._row_widgets.clear()
 
         for key, info in devices.items():
-            row = self._make_row(key, info["name"], info["ok"], info.get("tooltip", ""))
+            row = self._make_row(
+                key, info["name"], info["ok"],
+                info.get("tooltip", ""), info.get("is_active", False))
             self._rows_lay.addWidget(row)
             self._row_widgets[key] = row
 
@@ -141,7 +148,8 @@ class _DevicesPopup(QWidget):
         self._apply_styles()
         self.adjustSize()
 
-    def _make_row(self, key: str, name: str, ok, tooltip: str) -> QWidget:
+    def _make_row(self, key: str, name: str, ok, tooltip: str,
+                  is_active: bool = False) -> QWidget:
         row = QWidget()
         row.setCursor(Qt.PointingHandCursor)
         row.setFixedHeight(34)
@@ -151,9 +159,8 @@ class _DevicesPopup(QWidget):
         lay.setContentsMargins(14, 0, 14, 0)
         lay.setSpacing(10)
 
-        dot  = QLabel("●")
-        name_lbl   = QLabel(name)
-        status_lbl = QLabel()
+        dot      = QLabel("●")
+        name_lbl = QLabel(name)
 
         if ok is True:
             dot_color  = "#00d4aa"
@@ -165,25 +172,38 @@ class _DevicesPopup(QWidget):
             dot_color  = "#ff9900"
             status_txt = "Connecting…"
 
-        status_lbl.setText(status_txt)
+        # Camera rows show an "Active" pill instead of "Connected" when selected
+        if key in _CAMERA_KEYS and is_active:
+            active_lbl = QLabel("Active")
+            active_lbl.setObjectName("camera_active_pill")
+            lay.addWidget(dot)
+            lay.addWidget(name_lbl, 1)
+            lay.addWidget(active_lbl)
+        else:
+            status_lbl = QLabel(status_txt)
+            lay.addWidget(dot)
+            lay.addWidget(name_lbl, 1)
+            lay.addWidget(status_lbl)
+            row._status_lbl = status_lbl
 
-        lay.addWidget(dot)
-        lay.addWidget(name_lbl, 1)
-        lay.addWidget(status_lbl)
-
-        row._dot_lbl    = dot
-        row._name_lbl   = name_lbl
-        row._status_lbl = status_lbl
-        row._dot_color  = dot_color
-        row._key        = key
+        row._dot_lbl  = dot
+        row._name_lbl = name_lbl
+        row._dot_color = dot_color
+        row._key       = key
+        row._is_active = is_active
 
         if tooltip:
             row.setToolTip(tooltip)
 
-        # Click detection via mouse press
-        row.mousePressEvent = lambda e, k=key: (
-            self.device_clicked.emit(k), self.hide()
-        ) if e.button() == Qt.LeftButton else None
+        # Click: camera rows activate the camera; all rows close popup
+        if key in _CAMERA_KEYS:
+            row.mousePressEvent = lambda e, k=key: (
+                self.device_clicked.emit(k), self.hide()
+            ) if e.button() == Qt.LeftButton else None
+        else:
+            row.mousePressEvent = lambda e, k=key: (
+                self.device_clicked.emit(k), self.hide()
+            ) if e.button() == Qt.LeftButton else None
 
         return row
 
@@ -245,6 +265,7 @@ class _DevicesPopup(QWidget):
             f"font-size:{FONT['label']}pt; color:{acc}; background:transparent;")
 
     def _style_row(self, row, bg, bg2, hov, txt, sub):
+        acc = PALETTE.get("accent", "#00d4aa")
         row.setStyleSheet(
             f"QWidget {{ background:{bg}; }}"
             f"QWidget:hover {{ background:{bg2}; }}")
@@ -252,8 +273,17 @@ class _DevicesPopup(QWidget):
             f"color:{row._dot_color}; font-size:{FONT['label']}pt; background:transparent;")
         row._name_lbl.setStyleSheet(
             f"font-size:{FONT['label']}pt; color:{txt}; background:transparent;")
-        row._status_lbl.setStyleSheet(
-            f"font-size:{FONT['caption']}pt; color:{sub}; background:transparent;")
+        if getattr(row, "_is_active", False):
+            # Active camera pill — teal badge, no status label
+            pill = row.findChild(QLabel, "camera_active_pill")
+            if pill:
+                pill.setStyleSheet(
+                    f"color:{acc}; font-size:{FONT['caption']}pt; "
+                    f"font-weight:700; background:transparent;")
+        else:
+            if hasattr(row, "_status_lbl"):
+                row._status_lbl.setStyleSheet(
+                    f"font-size:{FONT['caption']}pt; color:{sub}; background:transparent;")
 
     def _on_manage(self):
         self.hide()
@@ -324,10 +354,30 @@ class ConnectedDevicesButton(QWidget):
 
     def set_device(self, key: str, name: str, ok, tooltip: str = ""):
         """Register or update a device's connection status."""
-        self._devices[key] = {"name": name, "ok": ok, "tooltip": tooltip}
+        existing = self._devices.get(key, {})
+        self._devices[key] = {
+            "name":      name,
+            "ok":        ok,
+            "tooltip":   tooltip,
+            "is_active": existing.get("is_active", False),
+        }
         self._refresh()
         if self._popup and self._popup.isVisible():
             self._popup.update_devices(self._devices)
+
+    def set_active_device(self, key: str) -> None:
+        """Mark *key* as the active camera; clear the flag on all other camera keys."""
+        changed = False
+        for k in list(self._devices):
+            was = self._devices[k].get("is_active", False)
+            should = (k == key) and (k in _CAMERA_KEYS)
+            if was != should:
+                self._devices[k]["is_active"] = should
+                changed = True
+        if changed:
+            self._refresh()
+            if self._popup and self._popup.isVisible():
+                self._popup.update_devices(self._devices)
 
     def _overall_status(self):
         defined = [d["ok"] for d in self._devices.values() if d["ok"] is not None]
@@ -1068,6 +1118,15 @@ class StatusHeader(QWidget):
     def add_device_manager_button(self, callback):
         """Wire the 'Manage devices…' dropdown footer to the Device Manager."""
         self._devices_btn.manage_requested.connect(callback)
+
+    def connect_camera_selection(self, callback) -> None:
+        """Wire camera-row clicks in the dropdown to *callback(key: str)*."""
+        self._devices_btn.device_clicked.connect(
+            lambda k: callback(k) if k in _CAMERA_KEYS else None)
+
+    def set_active_device(self, key: str) -> None:
+        """Mark *key* as the active camera in the dropdown (shows 'Active' pill)."""
+        self._devices_btn.set_active_device(key)
 
     def set_hw_btn_status(self, connected: bool):
         """Legacy API — overall status is now derived from individual device states."""

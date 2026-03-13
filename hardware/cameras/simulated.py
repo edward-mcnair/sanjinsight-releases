@@ -75,6 +75,7 @@ class SimulatedDriver(CameraDriver):
         self._noise       = cfg.get("noise_level", 50)
         self._exposure_us = float(cfg.get("exposure_us", 5000))
         self._gain_db     = float(cfg.get("gain", 0.0))
+        self._camera_type = cfg.get("camera_type", "tr")   # "tr" | "ir"
         self._frame_idx   = 0
         self._running     = False
         self._last_grab   = 0.0
@@ -286,14 +287,18 @@ class SimulatedDriver(CameraDriver):
     def open(self) -> None:
         with self._lock:
             self._pattern    = self._make_pattern()
+        _model  = ("Simulated TR Camera" if self._camera_type == "tr"
+                   else "Simulated IR Camera")
+        _serial = "SIM-TR-001" if self._camera_type == "tr" else "SIM-IR-001"
         self._info = CameraInfo(
-            driver    = "simulated",
-            model     = "Simulated Camera",
-            serial    = "SIM-00001",
-            width     = self._W,
-            height    = self._H,
-            bit_depth = 12,
-            max_fps   = float(self._fps),
+            driver      = "simulated",
+            model       = _model,
+            serial      = _serial,
+            width       = self._W,
+            height      = self._H,
+            bit_depth   = 12,
+            max_fps     = float(self._fps),
+            camera_type = self._camera_type,
         )
         self._open = True
         log.info("[SIM] Camera open (%dx%d @ %.0ffps)", self._W, self._H, self._fps)

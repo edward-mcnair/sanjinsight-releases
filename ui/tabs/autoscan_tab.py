@@ -386,8 +386,9 @@ class AutoScanTab(QWidget):
         self._apply_styles()
 
     def showEvent(self, event) -> None:
-        """Sync objective buttons to the turret's current position on show."""
+        """Sync camera display and objective buttons on show."""
         super().showEvent(event)
+        self.refresh_active_camera()
         self._sync_objective_from_hardware()
 
     # ── Page 0: Configure + Preview ──────────────────────────────────────────
@@ -428,66 +429,31 @@ class AutoScanTab(QWidget):
         lay.addWidget(self._readiness)
 
         # ── Camera & Optics ────────────────────────────────────────────────────
-        # imaging_system from config.yaml:
-        #   hybrid   — system has both a TR camera and an IR camera
-        #   tr_only  — thermoreflectance only
-        #   ir_only  — IR camera only (e.g. FLIR uncooled bolt-on)
-        #
-        # Camera selection sets the modality automatically — there is no
-        # separate "TR / IR" toggle.  Once a camera is chosen the modality
-        # badge updates and the objective/magnification row is shown or
-        # hidden accordingly.
-        _imaging_sys  = _cfg.get("hardware", {}).get("imaging_system", "hybrid")
-        _tr_available = _imaging_sys in ("hybrid", "tr_only")
-        _ir_available = _imaging_sys in ("hybrid", "ir_only")
+        # The active camera is selected from the Connected Devices dropdown in
+        # the header — the camera driver itself carries its type (TR or IR).
+        # This section is read-only: it shows which camera is active and what
+        # modality that implies.  No toggle lives here.
+        _imaging_sys = _cfg.get("hardware", {}).get("imaging_system", "hybrid")
 
-        # Default modality from system config
-        self._modality = "thermoreflectance" if _tr_available else "ir_lockin"
+        # Derive modality from live app_state at build time; refreshed on show
+        self._modality = self._read_modality_from_app_state(_imaging_sys)
 
-        cam_grp  = _group("Camera & Optics")
-        c_outer  = QVBoxLayout(cam_grp)
-        c_outer.setSpacing(6)
+        cam_grp = _group("Camera & Optics")
+        c_outer = QVBoxLayout(cam_grp)
+        c_outer.setSpacing(4)
 
-        # ── Camera selector (only shown on hybrid systems) ─────────────
-        self._cam_sel_widget = QWidget()
-        cam_sel_row = QHBoxLayout(self._cam_sel_widget)
-        cam_sel_row.setContentsMargins(0, 0, 0, 0)
-        cam_sel_row.setSpacing(0)
+        # ── Active camera name (read-only) ─────────────────────────────
+        self._cam_name_lbl = QLabel()
+        self._cam_name_lbl.setObjectName("cam_name_lbl")
+        c_outer.addWidget(self._cam_name_lbl)
 
-        if _imaging_sys == "hybrid":
-            self._cam_tr_btn = _seg_btn("  TR Camera")
-            self._cam_ir_btn = _seg_btn("  IR Camera")
-            self._cam_tr_btn.setMinimumWidth(100)
-            self._cam_ir_btn.setMinimumWidth(100)
-            self._cam_tr_btn.setChecked(True)
-            self._cam_btn_grp = QButtonGroup(self)
-            self._cam_btn_grp.addButton(self._cam_tr_btn, 0)
-            self._cam_btn_grp.addButton(self._cam_ir_btn, 1)
-            self._cam_btn_grp.setExclusive(True)
-            self._cam_btn_grp.idClicked.connect(self._on_camera_selected)
-            cam_sel_row.addWidget(self._cam_tr_btn)
-            cam_sel_row.addWidget(self._cam_ir_btn)
-            cam_sel_row.addStretch()
-        else:
-            self._cam_tr_btn = None
-            self._cam_ir_btn = None
-            self._cam_btn_grp = None
-            # Badge showing the fixed camera type
-            badge_txt = ("TR Camera  — thermoreflectance"
-                         if _tr_available else
-                         "IR Camera  — infrared")
-            cam_badge = QLabel(badge_txt)
-            cam_badge.setObjectName("sublabel")
-            cam_sel_row.addWidget(cam_badge)
-            cam_sel_row.addStretch()
-
-        c_outer.addWidget(self._cam_sel_widget)
-
-        # ── Modality badge (read-only, always visible) ─────────────────
+        # ── Modality badge (derived from camera type) ──────────────────
         self._modality_badge = QLabel()
         self._modality_badge.setObjectName("modality_badge")
-        self._update_modality_badge()
         c_outer.addWidget(self._modality_badge)
+
+        self._refresh_camera_name_label()
+        self._update_modality_badge()
 
         # ── Objective / Magnification (TR only) ────────────────────────
         self._obj_section = QWidget()
@@ -825,29 +791,58 @@ class AutoScanTab(QWidget):
         self._adv_toggle.setText(("▾" if checked else "▸") + "  Advanced options")
         self._adv_body.setVisible(checked)
 
-    def _on_camera_selected(self, btn_id: int) -> None:
-        """User switched between TR (0) and IR (1) camera on a hybrid system."""
-        self._modality = "ir_lockin" if btn_id == 1 else "thermoreflectance"
-        is_ir = btn_id == 1
+    # ── Camera-selection helpers (called by main_app on device selection) ────────
 
-        # Stimulus is FPGA-driven — irrelevant for passive IR
-        self._stim_grp_box.setEnabled(not is_ir)
-        self._ir_stim_note.setVisible(is_ir)
-
-        # Show/hide objective section — IR lenses are fixed-optic, no choice needed
-        self._obj_section.setVisible(not is_ir)
-
-        # Update read-only modality badge
-        self._update_modality_badge()
-
-        # Propagate so ReadinessPanel calibration row reflects the new mode
+    @staticmethod
+    def _read_modality_from_app_state(imaging_sys: str) -> str:
+        """Derive current modality from live app_state, falling back to config default."""
         try:
             from hardware.app_state import app_state
-            app_state.active_modality = self._modality
+            cam_type = getattr(app_state, "active_camera_type", None)
+            if cam_type == "ir":
+                return "ir_lockin"
+            if cam_type == "tr":
+                return "thermoreflectance"
+        except Exception:
+            pass
+        # Fallback: derive from static config
+        return "ir_lockin" if imaging_sys == "ir_only" else "thermoreflectance"
+
+    def refresh_active_camera(self) -> None:
+        """
+        Sync the Camera & Optics section to the current active camera in app_state.
+        Called by main_app whenever the user selects a different camera, and by
+        showEvent so the display is always current.
+        """
+        try:
+            from hardware.app_state import app_state
+            _imaging_sys = _cfg.get("hardware", {}).get("imaging_system", "hybrid")
+            self._modality = self._read_modality_from_app_state(_imaging_sys)
         except Exception:
             pass
 
+        is_ir = self._modality == "ir_lockin"
+        self._stim_grp_box.setEnabled(not is_ir)
+        self._ir_stim_note.setVisible(is_ir)
+        self._obj_section.setVisible(not is_ir)
+        self._refresh_camera_name_label()
+        self._update_modality_badge()
         self._refresh_seg_styles()
+
+    def _refresh_camera_name_label(self) -> None:
+        """Update the active-camera name line in the Camera & Optics group."""
+        try:
+            from hardware.app_state import app_state
+            cam = app_state.cam
+            if cam is not None:
+                model = getattr(cam.info, "model", "")
+                self._cam_name_lbl.setText(model)
+                self._cam_name_lbl.setVisible(True)
+                return
+        except Exception:
+            pass
+        self._cam_name_lbl.setText("No camera selected")
+        self._cam_name_lbl.setVisible(True)
 
     def _on_objective_changed(self, idx: int) -> None:
         """User selected a different objective magnification."""
@@ -1094,14 +1089,9 @@ class AutoScanTab(QWidget):
     def restore_config(self, cfg: dict) -> None:
         if not cfg:
             return
-        # Camera / modality — only switchable on hybrid systems
-        if self._cam_btn_grp is not None:
-            if cfg.get("modality") == "ir_lockin":
-                self._cam_btn_grp.button(1).setChecked(True)
-                self._on_camera_selected(1)
-            else:
-                self._cam_btn_grp.button(0).setChecked(True)
-                self._on_camera_selected(0)
+        # Camera / modality is now driven by hardware selection, not stored config.
+        # Refresh from live app_state so the display is current.
+        self.refresh_active_camera()
         # Objective magnification (TR only)
         mag = cfg.get("magnification", 10)
         for i, spec in enumerate(self._obj_specs):
@@ -1144,6 +1134,9 @@ class AutoScanTab(QWidget):
             }}
             QLabel[objectName="sublabel"] {{
                 color:{dim}; font-size:{FONT['sublabel']}pt;
+            }}
+            QLabel[objectName="cam_name_lbl"] {{
+                color:{text}; font-size:{FONT['body']}pt; font-weight:600;
             }}
             QLabel[objectName="modality_badge"] {{
                 color:{acc}; font-size:{FONT['sublabel']}pt;
@@ -1231,13 +1224,6 @@ class AutoScanTab(QWidget):
             base + "QPushButton { border-radius:0; border-left:none; }")
         self._stim_pulsed.setStyleSheet(
             base + "QPushButton { border-radius:0 4px 4px 0; border-left:none; }")
-
-        # Camera selector (hybrid only)
-        if self._cam_tr_btn is not None:
-            self._cam_tr_btn.setStyleSheet(
-                base + "QPushButton { border-radius:4px 0 0 4px; }")
-            self._cam_ir_btn.setStyleSheet(
-                base + "QPushButton { border-radius:0 4px 4px 0; border-left:none; }")
 
         # Objective buttons
         n = len(self._obj_btns)
