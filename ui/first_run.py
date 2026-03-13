@@ -329,13 +329,34 @@ class _PageWelcome(_PageBase):
         body = QLabel(
             "You will be asked about:\n\n"
             "  ①  TEC controllers   — Meerstetter TEC-1089 and ATEC-302\n"
-            "  ②  Camera            — Basler acA1920-155um\n"
+            "  ②  Camera            — Basler TR camera or FLIR IR camera\n"
             "  ③  FPGA              — NI 9637 via NI-RIO\n\n"
             "Your answers are saved to  config.yaml  and can be changed at any "
             "time from  Settings → Hardware Setup.")
         body.setStyleSheet(f"font-size:{FONT['body']}pt; color:{PALETTE.get('text','#ebebeb')}; line-height:1.6;")
         body.setWordWrap(True)
         self._content.addWidget(body)
+
+        # ── SDK pre-requisites callout ─────────────────────────────────────────
+        prereq = QLabel(
+            "<b>Camera SDKs must be installed before your cameras will work.</b><br>"
+            "These are OS-level drivers — install them before clicking Next:<br>"
+            "<br>"
+            "  🔷 &nbsp;<b>Basler TR camera</b> — install "
+            '<a href="https://www.baslerweb.com/en-us/downloads/software/">Basler pylon 8</a>'
+            " (includes the USB3 Vision driver + pypylon Python bindings)<br>"
+            "  🔶 &nbsp;<b>FLIR IR camera</b> — install "
+            '<a href="https://www.flir.com/products/spinnaker-sdk/">FLIR Spinnaker SDK</a>'
+            " (includes the PySpin Python wheel — see SDK download page)<br>"
+            "<br>"
+            "If neither camera is connected, leave the Camera driver set to  simulated.")
+        prereq.setOpenExternalLinks(True)
+        prereq.setWordWrap(True)
+        prereq.setStyleSheet(
+            f"font-size:{FONT['sublabel']}pt; color:{PALETTE.get('text','#ebebeb')}; "
+            "background:#0d1f2d; border:1px solid #1e4a6a; border-left:3px solid #4e9cd4; "
+            "border-radius:4px; padding:10px;")
+        self._content.addWidget(prereq)
         self._content.addStretch(1)
 
         tip = QLabel(
@@ -720,7 +741,7 @@ class _PageCamera(_PageBase):
         fl.setSpacing(10)
 
         self._drv = QComboBox()
-        self._drv.addItems(["pypylon", "ni_imaqdx", "directshow", "simulated"])
+        self._drv.addItems(["pypylon", "flir", "ni_imaqdx", "directshow", "simulated"])
         self._drv.setCurrentText(cam_cfg.get("driver", "simulated"))
         self._drv.setStyleSheet(_INPUT_SS)
         self._drv.currentTextChanged.connect(self._update_hints)
@@ -765,6 +786,28 @@ class _PageCamera(_PageBase):
         self._pylon_notice.setVisible(False)
         fl.addRow(self._pylon_notice)
 
+        # FLIR Spinnaker SDK install notice (shown when flir driver is selected
+        # and spinnaker_python / PySpin is not importable)
+        self._flir_notice = QLabel(
+            '⚠  FLIR Spinnaker SDK is not installed on this machine.<br>'
+            'The Spinnaker SDK provides the USB3/GigE driver that Windows '
+            'needs for FLIR cameras.  Download it from FLIR, then install '
+            'the matching spinnaker_python wheel:<br>'
+            '<a href="https://www.flir.com/products/spinnaker-sdk/">'
+            'flir.com — Spinnaker SDK download ↗</a>'
+            '&nbsp;&nbsp;|&nbsp;&nbsp;'
+            '<code>pip install spinnaker_python</code>'
+            '&nbsp;(wheel is inside the SDK package)'
+        )
+        self._flir_notice.setOpenExternalLinks(True)
+        self._flir_notice.setWordWrap(True)
+        self._flir_notice.setStyleSheet(
+            f"font-size:{FONT['caption']}pt; color:{PALETTE['warning']}; "
+            "background:#1a1500; border:1px solid #4a3800; border-radius:4px; "
+            "padding:8px;")
+        self._flir_notice.setVisible(False)
+        fl.addRow(self._flir_notice)
+
         # Detection badge — hidden until apply_scan() runs
         self._detection_label = QLabel("")
         self._detection_label.setStyleSheet(_SS_BADGE_OK)
@@ -799,6 +842,11 @@ class _PageCamera(_PageBase):
                 "Supports USB3 Vision and GigE cameras.  "
                 "Click  Test Camera  to check if the pylon SDK is installed."
             ),
+            "flir": (
+                "Uses FLIR Spinnaker SDK + spinnaker_python (PySpin).  "
+                "Targets FLIR thermal / IR cameras including the Microsanj IR camera.  "
+                "Click  Test Camera  to check if the Spinnaker SDK is installed."
+            ),
             "ni_imaqdx":  "Uses NI IMAQdx. Install NI Vision Acquisition Software; "
                           "camera name comes from NI MAX (auto-detected if connected).",
             "directshow": "Generic Windows DirectShow camera (development/fallback only).",
@@ -806,12 +854,20 @@ class _PageCamera(_PageBase):
         }
         self._hint.setText(hints.get(driver, ""))
 
-        # Auto-check pypylon availability when the driver is selected
+        # Auto-check SDK availability and show the appropriate notice
         if driver == "pypylon":
             self._check_pylon_available()
+            if hasattr(self, "_flir_notice"):
+                self._flir_notice.setVisible(False)
+        elif driver == "flir":
+            self._check_flir_available()
+            if hasattr(self, "_pylon_notice"):
+                self._pylon_notice.setVisible(False)
         else:
             if hasattr(self, "_pylon_notice"):
                 self._pylon_notice.setVisible(False)
+            if hasattr(self, "_flir_notice"):
+                self._flir_notice.setVisible(False)
 
     def _check_pylon_available(self) -> bool:
         """Return True if pypylon is importable; show/hide the notice accordingly."""
@@ -823,6 +879,18 @@ class _PageCamera(_PageBase):
         except ImportError:
             if hasattr(self, "_pylon_notice"):
                 self._pylon_notice.setVisible(True)
+            return False
+
+    def _check_flir_available(self) -> bool:
+        """Return True if PySpin (spinnaker_python) is importable; show/hide notice."""
+        try:
+            import PySpin  # noqa: F401
+            if hasattr(self, "_flir_notice"):
+                self._flir_notice.setVisible(False)
+            return True
+        except ImportError:
+            if hasattr(self, "_flir_notice"):
+                self._flir_notice.setVisible(True)
             return False
 
     def _test_camera(self):
@@ -861,6 +929,36 @@ class _PageCamera(_PageBase):
                     self._pylon_notice.setVisible(True)
                 self._cam_test_lbl.setText(
                     "⊗  Basler pylon SDK not found — see download link above")
+                self._cam_test_lbl.setStyleSheet(err_ss)
+            except Exception as e:
+                self._cam_test_lbl.setText(f"⊗  {str(e)[:80]}")
+                self._cam_test_lbl.setStyleSheet(err_ss)
+            return
+
+        if driver == "flir":
+            try:
+                import PySpin
+                if hasattr(self, "_flir_notice"):
+                    self._flir_notice.setVisible(False)
+                system = PySpin.System.GetInstance()
+                cam_list = system.GetCameras()
+                count = cam_list.GetSize()
+                cam_list.Clear()
+                system.ReleaseInstance()
+                if count > 0:
+                    self._cam_test_lbl.setText(
+                        f"✓  Spinnaker SDK found — {count} FLIR camera(s) detected")
+                    self._cam_test_lbl.setStyleSheet(ok_ss)
+                else:
+                    self._cam_test_lbl.setText(
+                        "⚠  Spinnaker SDK found but no cameras detected — "
+                        "check USB cable / power")
+                    self._cam_test_lbl.setStyleSheet(warn_ss)
+            except ImportError:
+                if hasattr(self, "_flir_notice"):
+                    self._flir_notice.setVisible(True)
+                self._cam_test_lbl.setText(
+                    "⊗  FLIR Spinnaker SDK not found — see download link above")
                 self._cam_test_lbl.setStyleSheet(err_ss)
             except Exception as e:
                 self._cam_test_lbl.setText(f"⊗  {str(e)[:80]}")

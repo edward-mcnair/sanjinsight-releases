@@ -68,6 +68,10 @@ from PyQt5.QtGui import (
 
 log = logging.getLogger(__name__)
 
+# Consolas is built into Windows since Vista and supports Unicode box-drawing;
+# Menlo is the macOS monospace default.
+_MONO_CSS_FAMILY = "Consolas,monospace" if sys.platform == "win32" else "Menlo,monospace"
+
 _BANNER = textwrap.dedent("""
     ╔══════════════════════════════════════════════════════════════╗
     ║       Microsanj Python Scripting Console                     ║
@@ -182,7 +186,7 @@ class ScriptingConsoleTab(QWidget):
 
         title_lbl = QLabel("Python Console")
         title_lbl.setStyleSheet(
-            f"color:#ccc; font-size:{FONT['heading']}pt; font-weight:600; font-family:Menlo,monospace;")
+            f"color:#ccc; font-size:{FONT['heading']}pt; font-weight:600; font-family:{_MONO_CSS_FAMILY};")
         toolbar.addWidget(title_lbl)
         toolbar.addStretch(1)
 
@@ -272,7 +276,7 @@ class ScriptingConsoleTab(QWidget):
         # ─ Namespace info ─
         ns_lbl = QLabel(
             "Namespace: app · cam · fpga · bias · stage · tecs · pipeline · np · log")
-        ns_lbl.setStyleSheet(f"color:#555; font-size:{FONT['label']}pt; font-family:Menlo,monospace;"
+        ns_lbl.setStyleSheet(f"color:#555; font-size:{FONT['label']}pt; font-family:{_MONO_CSS_FAMILY};"
                              " padding:2px 4px;")
         root.addWidget(ns_lbl)
 
