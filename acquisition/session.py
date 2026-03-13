@@ -90,6 +90,10 @@ class SessionMeta:
     status:     str       = ""       # "pending" | "reviewed" | "flagged" | "archived"
     tags:       List[str] = field(default_factory=list)   # user-defined tag strings
 
+    # ── Hardware identity (v2) ────────────────────────────────────────
+    camera_id:  str        = ""    # e.g. "TR-Andor-iStar-SN12345"
+    notes_log:  List[dict] = field(default_factory=list)  # NoteEntry dicts
+
     def to_dict(self) -> dict:
         d = asdict(self)
         d.pop("path", None)
@@ -166,7 +170,9 @@ class Session:
                     device_id: str = "",
                     project: str = "",
                     status: str = "",
-                    tags: Optional[List[str]] = None) -> "Session":
+                    tags: Optional[List[str]] = None,
+                    camera_id: str = "",
+                    notes_log: Optional[List[dict]] = None) -> "Session":
         ts     = time.time()
         ts_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts))
         slug   = label.replace(" ", "_").replace("/", "-") if label else "unnamed"
@@ -212,6 +218,8 @@ class Session:
             project       = project,
             status        = status,
             tags          = list(tags) if tags else [],
+            camera_id     = camera_id,
+            notes_log     = list(notes_log) if notes_log else [],
         )
 
         return Session(

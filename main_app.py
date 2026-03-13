@@ -1460,7 +1460,7 @@ class MainWindow(QMainWindow):
         self._analysis_tab.push_result(
             dt_map=dt_map, drr_map=drr_map,
             base_image=None, source_label="AutoScan")
-        self._nav.select_item("Analysis")
+        self._nav.select_by_label("Analysis")
 
     def _on_profile_applied(self, profile):
         """

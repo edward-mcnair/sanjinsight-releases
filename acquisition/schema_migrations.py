@@ -23,7 +23,7 @@ import logging
 
 log = logging.getLogger(__name__)
 
-CURRENT_SCHEMA: int = 1
+CURRENT_SCHEMA: int = 2
 
 
 def migrate(data: dict, from_version: int) -> dict:
@@ -47,9 +47,8 @@ def migrate(data: dict, from_version: int) -> dict:
     """
     if from_version < 1:
         data = _v0_to_v1(data)
-    # Future migrations:
-    # if from_version < 2:
-    #     data = _v1_to_v2(data)
+    if from_version < 2:
+        data = _v1_to_v2(data)
     return data
 
 
@@ -67,4 +66,20 @@ def _v0_to_v1(data: dict) -> dict:
     log.info("Migrating session schema v0 → v1")
     data = dict(data)           # never mutate the caller's dict
     data.setdefault("schema_version", 1)
+    return data
+
+
+def _v1_to_v2(data: dict) -> dict:
+    """v1 → v2: Add camera_id and notes_log fields.
+
+    Adds the hardware identity field (camera_id) and the structured
+    notes log (notes_log) introduced in ResultMetadata.  Old sessions
+    carry an empty camera_id and an empty notes_log; the flat ``notes``
+    string from v1 is preserved as-is for backward display.
+    """
+    log.info("Migrating session schema v1 → v2")
+    data = dict(data)
+    data.setdefault("camera_id", "")
+    data.setdefault("notes_log", [])
+    data["schema_version"] = 2
     return data

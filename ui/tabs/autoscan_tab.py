@@ -1,18 +1,18 @@
 """
 ui/tabs/autoscan_tab.py
 
-AutoScanTab — guided two-page scan workflow, first item under ACQUIRE.
+AutoScanTab — single-screen guided scan workflow under ACQUIRE.
 
-Page 0  Configure & Preview
-    Left  : _ReadinessPanel (stage homing · calibration · camera)
-            + settings form (Goal / Stimulus / Scan Area / Speed / Advanced)
-            + [  Preview  ]  button at bottom
-    Right : _LiveImageView  (live thermal preview)
-            + status label
-            + [  Scan →  ]  button (disabled until preview completes)
-
-Page 1  Results
-    ResultsScreen (reused from ui/autoscan/results_screen.py)
+Layout (QSplitter Horizontal)
+    Left   : _ReadinessPanel (stage · calibration · camera)
+             + settings form (Imaging Mode / Goal / Stimulus / Scan Area / Speed / Advanced)
+             + [  Preview  ]  button at bottom
+    Right  : _LiveImageView  — live thermal preview / result image
+             + thin progress bar
+             + status label
+             + [  Scan →  ]  [Abort]
+             + MetadataStrip  (Tags + Notes — hidden until scan completes)
+             + result action bar  (New Scan | Send to Analysis — hidden until scan completes)
 """
 
 from __future__ import annotations
@@ -24,15 +24,16 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QButtonGroup, QRadioButton, QDoubleSpinBox, QSpinBox,
     QSlider, QScrollArea, QSizePolicy, QFrame, QToolButton,
-    QGroupBox, QStackedWidget, QSplitter, QProgressBar)
+    QGroupBox, QSplitter, QProgressBar)
 from PyQt5.QtCore  import Qt, pyqtSignal, QTimer
 from PyQt5.QtGui   import QImage, QPixmap, QPainter, QColor
 
 import config as _cfg
 
-from ui.theme        import FONT, PALETTE, scaled_qss
-from ui.icons        import IC, set_btn_icon
-from ui.button_utils import apply_hand_cursor, RunningButton
+from ui.theme                   import FONT, PALETTE, scaled_qss
+from ui.icons                   import IC, set_btn_icon
+from ui.button_utils            import apply_hand_cursor, RunningButton
+from ui.widgets.metadata_strip  import MetadataStrip
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -374,27 +375,13 @@ class AutoScanTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        from ui.autoscan.results_screen import ResultsScreen
-        self._results     = ResultsScreen()
         self._last_result = None
         self._current_op: str | None = None  # "preview" | "scan" | None
-
-        self._stack = QStackedWidget()
-        self._stack.addWidget(self._build_configure_page())  # 0
-        self._stack.addWidget(self._results)                  # 1
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
-        root.addWidget(self._stack)
-
-        # Results page wiring
-        self._results.back_clicked.connect(lambda: self._stack.setCurrentIndex(0))
-        self._results.new_scan_clicked.connect(self._on_new_scan)
-        self._results.send_to_analysis.connect(self.send_to_analysis)
-        self._results.switch_to_manual.connect(
-            lambda: self.send_to_analysis.emit(self._last_result)
-            if self._last_result else None)
+        root.addWidget(self._build_configure_page())
 
         self._apply_styles()
 
@@ -655,7 +642,7 @@ class AutoScanTab(QWidget):
 
         return container
 
-    # ── Right panel (live preview image) ──────────────────────────────────────
+    # ── Right panel (live preview image + post-scan annotation) ───────────────
 
     def _build_right(self) -> QWidget:
         container = QWidget()
@@ -704,6 +691,33 @@ class AutoScanTab(QWidget):
         btn_row.addWidget(self._scan_btn, 1)
         btn_row.addWidget(self._abort_btn)
         lay.addLayout(btn_row)
+
+        # ── Post-scan: MetadataStrip (tags + notes) ───────────────────
+        self._meta_strip = MetadataStrip()
+        lay.addWidget(self._meta_strip)
+
+        # ── Post-scan: result action bar ──────────────────────────────
+        self._result_actions = QWidget()
+        ra_lay = QHBoxLayout(self._result_actions)
+        ra_lay.setContentsMargins(0, 4, 0, 0)
+        ra_lay.setSpacing(8)
+
+        self._new_scan_btn = QPushButton("New Scan")
+        self._new_scan_btn.setFixedHeight(34)
+        apply_hand_cursor(self._new_scan_btn)
+        self._new_scan_btn.clicked.connect(self._on_new_scan)
+
+        self._send_analysis_btn = QPushButton("Send to Analysis →")
+        self._send_analysis_btn.setObjectName("primary")
+        self._send_analysis_btn.setFixedHeight(34)
+        apply_hand_cursor(self._send_analysis_btn)
+        self._send_analysis_btn.clicked.connect(self._on_send_to_analysis)
+
+        ra_lay.addWidget(self._new_scan_btn)
+        ra_lay.addStretch()
+        ra_lay.addWidget(self._send_analysis_btn)
+        self._result_actions.setVisible(False)
+        lay.addWidget(self._result_actions)
 
         return container
 
@@ -780,6 +794,7 @@ class AutoScanTab(QWidget):
 
     def _on_new_scan(self) -> None:
         self._current_op = None
+        self._last_result = None
         self._scan_btn.setEnabled(False)
         self._scan_runner.set_running(False)
         self._preview_btn.setEnabled(True)
@@ -789,7 +804,12 @@ class AutoScanTab(QWidget):
         self._status_lbl.setText("Configure settings and click Preview →")
         self._live_view._pixmap_src = None
         self._live_view.update()
-        self._stack.setCurrentIndex(0)
+        self._meta_strip.reset()
+        self._result_actions.setVisible(False)
+
+    def _on_send_to_analysis(self) -> None:
+        if self._last_result is not None:
+            self.send_to_analysis.emit(self._last_result)
 
     # ── Public API (called by main_app) ───────────────────────────────────────
 
@@ -857,7 +877,7 @@ class AutoScanTab(QWidget):
             self._status_lbl.setText(msg)
 
     def on_scan_complete(self, result) -> None:
-        """Full scan finished — switch to Results page."""
+        """Full scan finished — show result inline and reveal annotation strip."""
         if self._current_op != "scan":
             return
         self._current_op = None
@@ -865,8 +885,28 @@ class AutoScanTab(QWidget):
         self._abort_btn.setEnabled(False)
         self._progress.setVisible(False)
         self._last_result = result
-        self._results.set_result(result)
-        self._stack.setCurrentIndex(1)
+
+        # Display result image inline in the live view
+        try:
+            drr = getattr(result, "delta_r_over_r",
+                  getattr(result, "drr_map", None))
+            if drr is not None:
+                arr = drr.astype(np.float32)
+                limit = float(np.percentile(np.abs(arr), 99.5)) or 1e-9
+                normed = np.clip(arr / limit, -1.0, 1.0)
+                r = (np.clip( normed, 0, 1) * 255).astype(np.uint8)
+                b = (np.clip(-normed, 0, 1) * 255).astype(np.uint8)
+                g = np.zeros_like(r)
+                h, w = r.shape[:2]
+                rgb = np.stack([r, g, b], axis=-1)
+                qi  = QImage(rgb.tobytes(), w, h, w * 3, QImage.Format_RGB888)
+                self._live_view.set_frame(QPixmap.fromImage(qi))
+        except Exception:
+            pass
+
+        self._status_lbl.setText("Scan complete  — add tags and notes below")
+        self._meta_strip.show_strip()
+        self._result_actions.setVisible(True)
 
     # ── Config helpers ────────────────────────────────────────────────────────
 
@@ -974,8 +1014,19 @@ class AutoScanTab(QWidget):
             QToolButton:hover {{ color:{text}; }}
         """))
         self._refresh_seg_styles()
-        if hasattr(self, "_results"):
-            self._results._apply_styles()
+        if hasattr(self, "_meta_strip"):
+            self._meta_strip._apply_styles()
+        if hasattr(self, "_new_scan_btn"):
+            P = PALETTE
+            surf = P.get("surface2", "#333333")
+            bdr  = P.get("border",   "#484848")
+            txt  = P.get("text",     "#ebebeb")
+            self._new_scan_btn.setStyleSheet(scaled_qss(
+                f"QPushButton {{ background:{surf}; color:{txt}; "
+                f"border:1px solid {bdr}; border-radius:4px; "
+                f"font-size:{FONT['body']}pt; padding:0 12px; }}"
+                f"QPushButton:hover {{ border-color:{P.get('accent','#00d4aa')}; }}"
+            ))
 
     def _refresh_seg_styles(self) -> None:
         P    = PALETTE
