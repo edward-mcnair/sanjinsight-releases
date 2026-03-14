@@ -37,6 +37,8 @@ Thread safety
 while streaming.  All node-map writes are serialised with ``_node_lock``.
 """
 
+import os
+import sys
 import time
 import threading
 import logging
@@ -46,6 +48,72 @@ from typing import Optional
 from .base import CameraDriver, CameraFrame, CameraInfo
 
 log = logging.getLogger(__name__)
+
+
+def _ensure_pyspin_importable() -> bool:
+    """
+    Make PySpin importable when running as a frozen PyInstaller bundle.
+
+    PySpin cannot be distributed via PyPI (FLIR requires a signed licence
+    agreement), so it cannot be bundled inside the installer.  Instead we
+    search the Spinnaker SDK's standard Windows installation directories at
+    runtime and add the first matching path to sys.path.
+
+    Returns True if ``import PySpin`` succeeds after this call; False if the
+    Spinnaker SDK / Python bindings are not installed on this machine.
+    """
+    # Fast path — already importable (dev environment or custom sys.path)
+    try:
+        import PySpin  # noqa: F401
+        return True
+    except ImportError:
+        pass
+
+    if sys.platform != "win32":
+        return False   # macOS / Linux: user must manage their own venv
+
+    py_tag = f"python{sys.version_info.major}{sys.version_info.minor}"
+
+    # Candidate root directories — env vars first, then well-known paths
+    program_files_roots = list(filter(None, [
+        os.environ.get("ProgramFiles"),
+        os.environ.get("ProgramFiles(x86)"),
+        r"C:\Program Files",
+        r"C:\Program Files (x86)",
+    ]))
+
+    candidates: list[str] = []
+    for pf in dict.fromkeys(program_files_roots):   # deduplicate, preserve order
+        for vendor in ("Teledyne", "FLIR Systems", "FLIR"):
+            sdk_root = os.path.join(pf, vendor, "Spinnaker")
+            if not os.path.isdir(sdk_root):
+                continue
+            # Newer SDKs put bindings in a Python-version-specific sub-folder
+            candidates.append(os.path.join(sdk_root, "python", py_tag))
+            candidates.append(os.path.join(sdk_root, "python"))
+            candidates.append(sdk_root)
+
+    for path in candidates:
+        if not os.path.isdir(path):
+            continue
+        # Confirm there is actually something PySpin-like here before
+        # polluting sys.path
+        has_pyspin = any(
+            os.path.exists(os.path.join(path, name))
+            for name in ("PySpin.pyd", "PySpin.py", "PySpin")
+        )
+        if not has_pyspin:
+            continue
+        if path not in sys.path:
+            sys.path.insert(0, path)
+        try:
+            import PySpin  # noqa: F401
+            log.info("FlirDriver: PySpin found via Spinnaker SDK at %s", path)
+            return True
+        except ImportError:
+            sys.path.remove(path)
+
+    return False
 
 
 class FlirDriver(CameraDriver):
@@ -91,14 +159,13 @@ class FlirDriver(CameraDriver):
         RuntimeError
             Camera not found, SDK not installed, or hardware fault.
         """
-        try:
-            import PySpin  # noqa: F401 — confirm SDK present
-        except ImportError:
+        if not _ensure_pyspin_importable():
             raise RuntimeError(
-                "PySpin (Spinnaker SDK) not installed.\n"
-                "Run:  pip install spinnaker_python\n"
-                "Also install the FLIR Spinnaker SDK from:\n"
-                "  https://www.flir.com/products/spinnaker-sdk/"
+                "PySpin (FLIR Spinnaker SDK) not found.\n"
+                "Install the Spinnaker SDK from:\n"
+                "  https://www.flir.com/products/spinnaker-sdk/\n"
+                "The Python bindings (PySpin) are included in the SDK installer.\n"
+                "Select 'Install Python bindings' during the SDK setup."
             )
 
         import PySpin

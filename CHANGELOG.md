@@ -10,6 +10,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.2.5] — 2026-03-14
+
+### Fixed
+
+- **Microsanj IR Camera not found on installed builds** — PySpin (FLIR Spinnaker SDK Python bindings) cannot be distributed via PyPI and therefore cannot be bundled in the installer. Added runtime path discovery in `FlirDriver`: on Windows the driver now searches the Spinnaker SDK's standard installation directories (`C:\Program Files\Teledyne\Spinnaker\python`, `C:\Program Files\FLIR Systems\Spinnaker\python`, and version-specific sub-folders) and adds the first matching path to `sys.path` automatically. Users only need to install the Spinnaker SDK with the "Install Python bindings" option checked — no manual `pip install` step required.
+
+---
+
 ## [1.2.4] — 2026-03-13
 
 ### Changed

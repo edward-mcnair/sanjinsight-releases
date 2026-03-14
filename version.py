@@ -17,8 +17,8 @@ Versioning scheme: Semantic Versioning  MAJOR.MINOR.PATCH
 """
 
 # ── Version number ────────────────────────────────────────────────────────────
-__version__    = "1.2.4"
-VERSION_TUPLE  = (1, 2, 4)          # for numeric comparisons
+__version__    = "1.2.5"
+VERSION_TUPLE  = (1, 2, 5)          # for numeric comparisons
 BUILD_DATE     = "2026-03-13"       # set by CI/CD on release; update manually otherwise
 
 # ── Application identity ──────────────────────────────────────────────────────
