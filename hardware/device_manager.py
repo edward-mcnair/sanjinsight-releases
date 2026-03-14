@@ -315,7 +315,21 @@ class DeviceManager:
                     "at once using the step-by-step wizard."
                 )
 
+            # Pre-flight: check driver dependencies before touching hardware.
+            # This surfaces "pypylon not bundled" style issues with a clear
+            # user message instead of a raw ImportError traceback.
             driver_obj = self._instantiate_driver(entry)
+            if hasattr(driver_obj, "preflight"):
+                pf_ok, pf_issues = driver_obj.__class__.preflight()
+                if not pf_ok:
+                    bullet_list = "\n".join(f"  • {i}" for i in pf_issues)
+                    raise RuntimeError(
+                        f"Cannot connect to {desc.display_name} — "
+                        f"driver pre-flight failed:\n\n{bullet_list}"
+                    )
+                if pf_issues:
+                    for issue in pf_issues:
+                        log.warning("[%s] pre-flight warning: %s", uid, issue)
 
             # Enforce a hard timeout on connect() so the UI is never frozen.
             log.info("[%s] Connecting %s on %s …",

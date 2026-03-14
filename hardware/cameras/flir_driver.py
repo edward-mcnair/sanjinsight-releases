@@ -61,6 +61,19 @@ class FlirDriver(CameraDriver):
         cam.do_ffc()        — execute Flat Field Correction on demand
     """
 
+    @classmethod
+    def preflight(cls) -> tuple:
+        issues = []
+        try:
+            import flirpy  # noqa: F401
+        except ImportError:
+            issues.append(
+                "flirpy not found — Microsanj IR Camera support is not bundled.\n"
+                "Try reinstalling SanjINSIGHT.  If the problem persists, "
+                "contact Microsanj support."
+            )
+        return (len(issues) == 0, issues)
+
     def __init__(self, cfg: dict):
         super().__init__(cfg)
         self._boson      : object           = None   # flirpy.camera.boson.Boson

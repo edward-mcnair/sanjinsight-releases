@@ -185,6 +185,33 @@ class CameraDriver(ABC):
         """Return (min_db, max_db). Override for tighter limits."""
         return (0.0, 24.0)
 
+    # ---------------------------------------------------------------- #
+    #  Pre-flight validation                                           #
+    # ---------------------------------------------------------------- #
+
+    @classmethod
+    def preflight(cls) -> tuple:
+        """
+        Check whether this driver's dependencies are satisfied
+        **before** attempting to open hardware.
+
+        Returns
+        -------
+        (ok: bool, issues: list[str])
+            ok     — True if connect() is safe to call.
+            issues — Human-readable list of problems found (empty when ok).
+
+        Subclasses should override this to verify required Python packages
+        are importable and any other prerequisites are met.  The default
+        implementation always returns (True, []) so unimplemented drivers
+        are not blocked.
+
+        Called by DeviceManager._connect_worker() before instantiating
+        the driver.  Any issue returned here is shown to the user as a
+        clear, actionable message rather than a raw Python traceback.
+        """
+        return (True, [])
+
     def __repr__(self):
         return (f"<{self.__class__.__name__} "
                 f"model={self._info.model!r} open={self._open}>")

@@ -244,6 +244,78 @@ jobs:
           Write-Host "[OK] Bundle OK — $count files"
         shell: pwsh
 
+      # ── 9b. Camera SDK bundle smoke test ─────────────────────────────────
+      # Verify that pypylon and flirpy were actually picked up by PyInstaller
+      # and are present in the frozen bundle.  A missing package here means
+      # the installer would silently ship without camera support.
+      #
+      # Strategy: look for each package's top-level directory (or .pyd file)
+      # inside dist/SanjINSIGHT/.  PyInstaller copies pure-Python packages as
+      # directories and extension modules as .pyd files.
+      #
+      # We also do a quick "python -c import" check against the CI environment
+      # to confirm the packages are importable at all — catches cases where pip
+      # installed a broken wheel.
+      - name: Camera SDK bundle smoke test
+        shell: python
+        run: |
+          import os
+          import sys
+          import importlib
+
+          bundle_dir = os.path.join("dist", "SanjINSIGHT")
+          results = {}
+
+          # ── 1. Check importability in CI Python environment ────────────────
+          for pkg, friendly in [("pypylon.pylon", "Basler (pypylon)"),
+                                 ("flirpy",        "Microsanj IR (flirpy)")]:
+              try:
+                  importlib.import_module(pkg)
+                  results[friendly] = "importable"
+              except ImportError as exc:
+                  results[friendly] = f"NOT importable — {exc}"
+
+          # ── 2. Check presence in PyInstaller bundle ────────────────────────
+          bundle_hits = {}
+          for root, dirs, files in os.walk(bundle_dir):
+              for name in dirs + files:
+                  nl = name.lower()
+                  if "pypylon" in nl:
+                      bundle_hits.setdefault("pypylon", []).append(
+                          os.path.relpath(os.path.join(root, name), bundle_dir))
+                  if "flirpy" in nl:
+                      bundle_hits.setdefault("flirpy", []).append(
+                          os.path.relpath(os.path.join(root, name), bundle_dir))
+
+          # ── 3. Report ──────────────────────────────────────────────────────
+          print("\n─── Camera SDK Smoke Test ───────────────────────────────────")
+          failures = []
+
+          for pkg, friendly in [("pypylon", "Basler (pypylon)"),
+                                 ("flirpy",  "Microsanj IR (flirpy)")]:
+              in_env    = results.get(friendly, "not checked")
+              in_bundle = bundle_hits.get(pkg, [])
+
+              if in_bundle:
+                  print(f"[OK ]  {friendly}")
+                  print(f"       env:    {in_env}")
+                  print(f"       bundle: {in_bundle[0]}"
+                        + (f" (+{len(in_bundle)-1} more)" if len(in_bundle) > 1 else ""))
+              else:
+                  print(f"[WARN] {friendly} NOT found in bundle")
+                  print(f"       env: {in_env}")
+                  print( "       The installer will ship without this camera's support.")
+                  print( "       Ensure step 4c installed the package successfully.")
+                  # Not a hard failure — optional deps are expected to be missing
+                  # on some runners.  A warning is sufficient.
+
+          print("─────────────────────────────────────────────────────────────\n")
+
+          # Hard-fail only if the bundle itself is missing entirely
+          if not os.path.isdir(bundle_dir):
+              print(f"ERROR: Bundle directory '{bundle_dir}' not found!", file=sys.stderr)
+              sys.exit(1)
+
       # ── 10. Install Inno Setup ────────────────────────────────────────────
       - name: Install Inno Setup 6
         run: choco install innosetup --yes --no-progress

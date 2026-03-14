@@ -27,6 +27,19 @@ class PylonDriver(CameraDriver):
     Full attribute control — no workarounds needed.
     """
 
+    @classmethod
+    def preflight(cls) -> tuple:
+        issues = []
+        try:
+            import pypylon.pylon  # noqa: F401
+        except ImportError:
+            issues.append(
+                "pypylon not found — Basler camera support is not bundled.\n"
+                "Try reinstalling SanjINSIGHT.  If the problem persists, "
+                "contact Microsanj support."
+            )
+        return (len(issues) == 0, issues)
+
     def __init__(self, cfg: dict):
         super().__init__(cfg)
         self._cam    = None

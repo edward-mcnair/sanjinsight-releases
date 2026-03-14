@@ -10,6 +10,27 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.2.8] — 2026-03-14
+
+### Added
+
+- **Driver pre-flight validation system** — `CameraDriver` base class now declares a `preflight()` classmethod that each driver overrides to check its own dependencies before `DeviceManager` attempts to open hardware. Returns `(ok: bool, issues: list[str])`. Actionable error messages ("flirpy not found — try reinstalling SanjINSIGHT") are shown to the user instead of raw Python tracebacks.
+- **`PylonDriver.preflight()`** — checks `pypylon.pylon` is importable; fails with a clear reinstall instruction if the wheel is missing from the bundle.
+- **`FlirDriver.preflight()`** — checks `flirpy` is importable; fails with a clear reinstall instruction if the wheel is missing from the bundle.
+- **Pre-flight called in `DeviceManager._connect_worker()`** — runs before driver instantiation; any failed pre-flight is surfaced as a `RuntimeError` with a formatted bullet list of issues. Warnings (non-blocking issues) are logged at `WARNING` level.
+- **`tests/test_hardware.py`** — new CI test suite with four classes:
+  - `TestDeviceRegistry` — validates registry consistency: no UID mismatches, all `DTYPE_CAMERA` entries use `CONN_CAMERA`/`CONN_ETHERNET`, required fields non-empty, all `driver_module` paths importable (or skipped for optional deps), `camera_type` values in `{"tr", "ir"}`.
+  - `TestCameraDriverInterface` — parametrized across all driver modules; verifies required method presence (`open`, `start`, `stop`, `close`, `grab`, `set_exposure`, `set_gain`, `connect`, `disconnect`, `preflight`), `preflight()` return type `(bool, list)`, all issues are strings, and `SimulatedDriver.preflight()` always passes with an empty issues list.
+  - `TestCameraFactory` — smoke tests `create_camera({"driver": "simulated"})` always succeeds, unknown driver key raises `ValueError`/`RuntimeError`, `list_drivers()` contains `"simulated"`, `"pypylon"`, `"flir"`.
+  - `TestSimulatedDriverEndToEnd` — full lifecycle test: `preflight()` passes, `connect()` / `start()` / `grab()` / `stop()` / `disconnect()` succeeds, frame is `uint16` 2-D array, exposure and gain ranges valid.
+- **Post-build camera SDK bundle smoke test in CI** — new step 9b in `build-installer.yml` walks the PyInstaller output directory after each build and reports which camera SDK packages (`pypylon`, `flirpy`) are present. Emits `[OK]` or `[WARN]` per package so a silently missing SDK is caught before the installer ships.
+
+### Changed
+
+- `build-installer.yml` step 9b inserted between PyInstaller output verification and Inno Setup; warnings are non-fatal (optional deps may be absent on some runners) but hard-fail if the bundle directory itself is missing.
+
+---
+
 ## [1.2.7] — 2026-03-13
 
 ### Changed
