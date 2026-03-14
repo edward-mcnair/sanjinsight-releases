@@ -359,10 +359,59 @@ hardware/<type>/
 
 **To add a new implementation of an existing device type**, follow section 17.
 
+#### Pre-flight Validation (all driver types)
+
+Every base class declares a `preflight()` classmethod that each concrete driver overrides to verify its own dependencies *before* `DeviceManager` attempts to open hardware:
+
+```python
+@classmethod
+def preflight(cls) -> tuple[bool, list[str]]:
+    """
+    Check that all runtime dependencies for this driver are available.
+
+    Returns
+    -------
+    ok : bool
+        True if the driver can be used; False if a hard dependency is missing.
+    issues : list[str]
+        Actionable human-readable strings shown to the user in the Device
+        Manager dialog.  May be non-empty even when ok=True (warnings).
+    """
+    return (True, [])   # base-class default — always passes
+```
+
+`DeviceManager._connect_worker()` calls `preflight()` immediately after driver instantiation, before calling `connect()` or `open()`. Hard failures (`ok=False`) are surfaced as a formatted bullet list in the Device Manager error dialog. Non-blocking issues (`ok=True` with a non-empty list) are logged at `WARNING` level.
+
+**Why `preflight()` exists:**
+- Optional hardware SDKs (pypylon, nifpga, pyMeCom, …) cannot be bundled into the installer for every target system. Rather than a bare `ImportError` traceback, the user sees "pypylon not found — try reinstalling SanjINSIGHT" with a direct action.
+- All imports of optional packages are deferred to `open()` / `connect()` or to `preflight()` itself — never at module level — so the driver module can be safely imported even when its SDK is absent.
+
+**Pre-flight coverage by driver:**
+
+| Driver | Hard failure trigger | Warning trigger |
+|---|---|---|
+| `PylonDriver` | `pypylon.pylon` not importable | — |
+| `FlirDriver` | `flirpy` not importable | — |
+| `NiImaqdxDriver` | not Windows, or `niimaqdx.dll` not found | `ImaqdxAttr.exe` missing (exposure/gain unavailable) |
+| `DirectShowDriver` | not Windows, or `cv2` not importable | — |
+| `MeerstetterDriver` | `mecom` not importable | — |
+| `MeerstetterLdd1121` | `mecom` not importable | — |
+| `KeithleyDriver` | `pyvisa` not importable | — |
+| `VisaGenericDriver` | `pyvisa` not importable | — |
+| `RigolDP832Driver` | `pydp832` / `dp832` not importable | — |
+| `Ni9637Driver` | `nifpga` not importable | — |
+| `ThorlabsDriver` | `thorlabs_apt_device` not importable | — |
+| `MpiProberDriver` | `serial` (pyserial) not importable | — |
+| `OlympusLinxTurret` | `serial` (pyserial) not importable | — |
+| All simulated drivers | — (always pass) | — |
+
 #### Camera (`hardware/cameras/base.py — CameraDriver`)
 
 ```python
 class CameraDriver(ABC):
+    @classmethod
+    def preflight(cls) -> tuple[bool, list[str]]: ...  # see Pre-flight Validation above
+
     def open(self) -> None: ...
     def start(self) -> None: ...
     def stop(self) -> None: ...
@@ -384,7 +433,7 @@ class CameraDriver(ABC):
 - `timestamp: float` — `time.monotonic()` at capture
 - `index: int` — frame counter
 
-**Implementations**: `pypylon_driver.py` (Basler TR), `flir_driver.py` (Microsanj IR Camera via FLIR Spinnaker SDK), `ni_imaqdx.py` (NI), `directshow.py` (webcam), `simulated.py`.
+**Implementations**: `pypylon_driver.py` (Basler TR), `flir_driver.py` (Microsanj IR Camera via flirpy), `ni_imaqdx.py` (NI IMAQdx), `directshow.py` (OpenCV/DirectShow), `simulated.py`.
 
 #### TEC (`hardware/tec/base.py — TecDriver`)
 
@@ -488,6 +537,19 @@ ABSENT → DISCOVERED → CONNECTING → CONNECTED
 ```
 
 Connection timeout: 12 seconds (configurable in `config.yaml`).
+
+**Connection sequence inside `_connect_worker()`:**
+
+```
+1. Instantiate driver class (no I/O yet)
+2. Call driver.preflight()
+   → ok=False  → raise RuntimeError with formatted issue list → ERROR state
+   → ok=True, issues non-empty → log.warning() each issue, continue
+3. Call driver.connect() / driver.open()
+4. Start poll loop → CONNECTED
+```
+
+The pre-flight step ensures optional SDK dependencies are checked and reported as actionable user messages *before* any hardware I/O is attempted. See section 4.3 for the full driver coverage table.
 
 ---
 
@@ -1381,12 +1443,28 @@ from hardware.cameras.base import CameraDriver, CameraFrame
 import time, numpy as np
 
 class AcmeCameraDriver(CameraDriver):
+
+    # ── Pre-flight (REQUIRED) ──────────────────────────────────────────────
+    @classmethod
+    def preflight(cls) -> tuple:
+        """Check runtime dependencies before DeviceManager attempts to open hardware."""
+        issues = []
+        try:
+            import acme_sdk   # noqa: F401
+        except ImportError:
+            issues.append(
+                "acme_sdk not found — ACME camera support is unavailable.\n"
+                "Download and install the ACME SDK from acme.example.com."
+            )
+        return (len(issues) == 0, issues)
+
+    # ── Lifecycle ─────────────────────────────────────────────────────────
     def __init__(self, serial: str):
         self._serial = serial
         self._sdk = None
 
     def open(self):
-        import acme_sdk
+        import acme_sdk        # deferred import — never at module level
         self._sdk = acme_sdk.open(self._serial)
 
     def start(self):
@@ -1419,6 +1497,8 @@ class AcmeCameraDriver(CameraDriver):
     @property
     def bit_depth(self) -> int: return 12
 ```
+
+> **Important:** Never `import acme_sdk` at module level. Deferred imports inside `open()` and `preflight()` ensure the module can be safely imported on systems where the SDK is absent. `preflight()` catches the missing package with a clear message; `open()` only runs after preflight has passed.
 
 **Step 2 — Register in the factory:**
 
@@ -1540,6 +1620,7 @@ Tabs should **never block** the user from viewing data — they should hide or d
 | **PyQt5 (not PySide6)** | Mature, stable on Windows; PySide6 migration is straightforward when needed |
 | **Factory pattern for all drivers** | Registry dict in `factory.py`; no `if/elif` chains in business logic; adding a driver requires only two lines |
 | **Simulated driver for every device** | CI tests with no hardware; demo mode for sales/training |
+| **`preflight()` classmethod on every driver** | SDK availability is checked and reported as an actionable message *before* any hardware I/O; deferred imports keep module loading safe on systems without optional SDKs |
 | **ApplicationState RLock instead of per-driver locks** | Prevents compound-operation races (e.g., replacing camera + pipeline atomically) |
 | **Camera frame back-pressure semaphore** | Prevents Qt event queue overflow at high frame rates |
 | **Ed25519 for license keys (not HMAC)** | Asymmetric: private key never in app; public key cannot forge keys |
@@ -1582,6 +1663,8 @@ spinnaker_python       FLIR Spinnaker SDK Python wrapper (Microsanj IR camera; d
 pyMeCom                Meerstetter TEC serial protocol
 nifpga                 NI-FPGA Python interface
 pyvisa                 NI-VISA / GPIB / SCPI instrument control
+thorlabs_apt_device    Thorlabs APT/Kinesis stage control
+pydp832 / dp832        Rigol DP832 programmable power supply
 
 # Dev / build only
 pyinstaller>=6.0       Standalone bundle builder
@@ -1591,5 +1674,5 @@ pytest>=7.4            Test runner
 
 ---
 
-*This document was written against SanjINSIGHT v1.2.0 (2026-03-13).
+*This document was last updated for SanjINSIGHT v1.2.9 (2026-03-14).
 Update it whenever significant architectural changes are made.*

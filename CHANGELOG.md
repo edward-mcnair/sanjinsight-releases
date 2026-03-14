@@ -8,6 +8,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **DeveloperGuide.md updated for v1.2.x** — Section 4.3 now documents the pre-flight validation system (`preflight()` classmethod) with a full driver coverage table; Section 4.5 adds the `_connect_worker()` connection sequence showing where pre-flight fits; Section 19 adds `preflight()` as a required step (with example) when adding a new driver; Section 21 adds a design-decision entry; Section 22 adds `thorlabs_apt_device` and `pydp832/dp832` to the optional dependency list. Document footer updated to v1.2.9.
+- **UserManual.md updated for v1.2.x** — Microsanj IR Camera (FLIR Boson) documentation corrected throughout: references to the FLIR Spinnaker SDK replaced with `flirpy` (bundled with installer, no manual install required). Added troubleshooting entries for NI IMAQdx cameras and for the pre-flight dependency error dialog. Document header updated to v1.2.9.
+
 ---
 
 ## [1.2.9] — 2026-03-14

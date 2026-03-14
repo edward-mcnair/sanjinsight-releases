@@ -1,7 +1,7 @@
 # SanjINSIGHT User Manual
 
-**Microsanj SanjINSIGHT v1.2.0**
-**Document revision: 2026-03-13**
+**Microsanj SanjINSIGHT v1.2.9**
+**Document revision: 2026-03-14**
 
 ---
 
@@ -160,7 +160,7 @@ The installer cannot bundle Windows kernel-level hardware drivers. Install these
 | **NI Vision Acquisition Software** | Camera — NI IMAQdx | [ni.com → NI-VAS](https://www.ni.com/en/support/downloads/drivers/download.ni-vision-acquisition-software.html) |
 | **NI-VISA** | Bias source — Keithley (GPIB / USB / LAN) | [ni.com → NI-VISA](https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html) |
 | **Basler Pylon 8 SDK** | Basler TR camera | [baslerweb.com/downloads](https://www.baslerweb.com/en-us/downloads/software/) — includes the USB3 Vision driver and `pypylon` Python bindings |
-| **FLIR Spinnaker SDK** | Microsanj IR camera | [flir.com/spinnaker-sdk](https://www.flir.com/products/spinnaker-sdk/) — then `pip install spinnaker_python` (wheel ships inside the SDK package) |
+| *(none)* | Microsanj IR Camera (FLIR Boson) | The `flirpy` library is bundled with the SanjINSIGHT installer — no manual download required. Connect the camera via USB before launching. |
 
 After installing the NI drivers, open **NI MAX** (Measurement & Automation Explorer) and verify:
 - The camera appears under **Devices and Interfaces** with the correct name (e.g. `cam4`).
@@ -198,8 +198,7 @@ The AI Assistant requires a local language model file (~2–5 GB, downloaded onc
 □ Install NI Vision Acquisition Software + restart
 □ Install NI-VISA
 □ Install Basler Pylon 8 SDK        (Basler TR camera systems only)
-□ Install FLIR Spinnaker SDK +
-    pip install spinnaker_python     (Microsanj IR camera systems only)
+□ (Microsanj IR Camera: no external SDK needed — flirpy is bundled)
 □ Confirm camera + FPGA visible in NI MAX
 □ Copy FPGA bitfile → C:\Microsanj\firmware\ez500firmware.lvbitx
 □ Launch SanjINSIGHT → complete Admin Setup  (first launch only)
@@ -255,7 +254,7 @@ Any user of any type can be granted **Administrator** privileges as an overlay. 
 
 ### 3.3 Page 1 — Welcome
 
-Displays a brief overview of the system and a **camera SDK prerequisites** notice with direct download links for the Basler Pylon 8 SDK and FLIR Spinnaker SDK. Install both SDKs before clicking Next if you have either camera type.
+Displays a brief overview of the system and a **camera SDK prerequisites** notice. For Basler TR cameras, install the Basler Pylon 8 SDK before clicking Next. The Microsanj IR Camera (FLIR Boson) requires no external SDK — `flirpy` is bundled with the installer.
 
 The scan status label updates as each hardware class is checked. Wait for "Scan complete — N devices found" before clicking **Next**, or click through immediately if you prefer to configure manually.
 
@@ -290,7 +289,7 @@ Two TEC controllers are supported independently.
 | NI Camera Name | Text field | NI IMAQdx only — e.g. `cam4` |
 
 > **pypylon** — Requires Basler Pylon 8 SDK. Supports the Basler acA1920-155um TR camera. If the SDK is not installed, an amber notice appears with a download link.
-> **Microsanj IR Camera** — Requires the FLIR Spinnaker SDK + `pip install spinnaker_python`. If the SDK is not installed an amber notice appears with a download link and the install command. Click **Test Camera** to verify the SDK is found and to count detected cameras.
+> **Microsanj IR Camera** — Uses `flirpy`, which is bundled with the SanjINSIGHT installer. No external SDK needed. Click **Test Camera** to verify the camera is detected.
 > **ni_imaqdx** — Requires NI Vision Acquisition Software. Camera name is shown in NI MAX.
 > **simulated** — Generates synthetic frames; no hardware needed.
 
@@ -1366,7 +1365,7 @@ All supervisor override events are logged to the audit log (Section 15.7).
 | NI Vision Acquisition Software | 2019 | Latest | Includes NI-IMAQdx |
 | NI-VISA | 19.0 | Latest | Required for GPIB instruments |
 | Basler Pylon SDK | 7.x | **8.x** | Pylon 8 recommended; pypylon 3.x ships with it |
-| FLIR Spinnaker SDK | 3.x | **Latest** | Required for Microsanj IR Camera; includes `spinnaker_python` wheel |
+| `flirpy` | 0.2 | **Latest** | Bundled with SanjINSIGHT installer; controls the Microsanj IR Camera (FLIR Boson) via USB. No manual install required. |
 | Thorlabs Kinesis | 1.14 | Latest | Required for Thorlabs USB stages |
 | FTDI VCP Driver | 2.12 | Latest | Auto-installed by Windows Update on most systems |
 
@@ -1522,9 +1521,21 @@ logging:
 
 ### Microsanj IR camera not found
 
-- Ensure the FLIR Spinnaker SDK is installed and `spinnaker_python` is available: `pip install spinnaker_python`.
-- Run **Test Camera** in the Hardware Setup Wizard (Ctrl+Shift+H → Camera page) to confirm detection.
-- Check USB connection; ensure no other application has exclusive access to the camera.
+- The `flirpy` library is bundled with SanjINSIGHT — no external SDK installation is required.
+- If the Device Manager shows "flirpy not found", the installer package may be corrupt: re-run `SanjINSIGHT-Setup.exe` to reinstall.
+- Check the USB connection; the camera enumerates as a UVC device. Ensure no other application (e.g. a video conference app) has exclusive access to the camera.
+- Run **Test Camera** in the Hardware Setup Wizard (Ctrl+Shift+H → Camera page) to confirm the camera is detected by the driver.
+
+### NI IMAQdx camera not found
+
+- Ensure **NI Vision Acquisition Software** is installed: [ni.com → NI-VAS](https://www.ni.com/en/support/downloads/drivers/download.ni-vision-acquisition-software.html).
+- Open **NI MAX** and verify the camera appears under **Devices and Interfaces** with the expected name (e.g. `cam4`).
+- The device name in `config.yaml` (`hardware.camera.camera_name`) must match the NI MAX name exactly.
+- If the Device Manager error says "niimaqdx.dll not found", NI Vision Acquisition Software is not installed or has been partially uninstalled.
+
+### Device Manager shows an error with a bullet-point message
+
+Starting from v1.2.8, SanjINSIGHT validates all required software dependencies before attempting to connect any device. The error dialog shows an actionable message explaining exactly what is missing (e.g. "nifpga not found — install NI-RIO") along with installation instructions. Follow the instructions in the error dialog, then click **Reconnect** in the Device Manager to retry.
 
 ### Login screen appears even though require_login is off
 
