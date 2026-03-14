@@ -1,44 +1,37 @@
 """
 hardware/cameras/flir_driver.py
 
-Camera driver for FLIR thermal cameras via the Spinnaker SDK (PySpin).
+Camera driver for the FLIR Boson thermal camera via flirpy.
 
-Targets the Microsanj Infrared Camera v1a — a FLIR-based uncooled
-microbolometer thermal camera (4.9 mm fixed FL, OEMCameras.com PCB,
-26 VDC supply) used for passive lock-in IR thermography.  Also
-compatible with any other FLIR / Spinnaker-enumerable camera.
+Targets the Microsanj Infrared Camera v1a — a FLIR Boson-based uncooled
+microbolometer (320×256 or 640×512, ~30 Hz) mounted in an OEMCameras.com
+nosepiece housing for passive lock-in IR thermography.
 
-Installation
-------------
-  1. Download and install the FLIR Spinnaker SDK:
-       https://www.flir.com/products/spinnaker-sdk/
-  2. Install the Python bindings that match your Python version and OS:
-       pip install spinnaker_python
-     (The wheel is distributed by FLIR alongside the SDK installer.)
+The Boson connects as two USB devices simultaneously:
+  • USB CDC (serial) — camera control commands  (handled by flirpy)
+  • USB UVC (webcam) — 16-bit radiometric video stream (handled by flirpy)
+
+Installation (end-user)
+-----------------------
+  Nothing extra — flirpy is bundled inside the SanjINSIGHT installer.
 
 Config keys  (under hardware.camera in config.yaml)
 ---------------------------------------------------
-  driver:         "flir"
-  serial:         ""          Leave blank → first enumerated camera
-  exposure_us:    5000        Integration time in microseconds
-  gain:           0.0         Analog gain in dB
-  trigger_mode:   "Off"       "Off" | "Software" | "Hardware"
-  ffc_mode:       "auto"      Flat Field Correction: "auto" | "manual" | "external"
-  ir_format:      "Mono14"    Pixel format passed to PixelFormat node.
-                              Mono14 (14-bit) is standard for uncooled IR cores.
-                              Other options: "Mono16", "Mono8"
-  width:          0           Sensor width in pixels (0 = camera maximum)
-  height:         0           Sensor height in pixels (0 = camera maximum)
+  driver:       "flir"
+  serial_port:  ""        Leave blank → first Boson CDC port auto-detected
+  gain_mode:    "high"    "high" | "low"  (Boson has two fixed gain modes,
+                          not a continuous dB value)
+  ffc_mode:     "auto"    "auto" | "manual"
+  width:        0         Expected frame width  (0 = accept whatever camera sends)
+  height:       0         Expected frame height (0 = accept whatever camera sends)
 
 Thread safety
 -------------
 ``grab()`` is called from a background acquisition thread.
-``set_exposure()`` / ``set_gain()`` may be called from the GUI thread
-while streaming.  All node-map writes are serialised with ``_node_lock``.
+``do_ffc()`` / ``set_gain()`` may be called from the GUI thread.
+All Boson serial commands are serialised with ``_cmd_lock``.
 """
 
-import os
-import sys
 import time
 import threading
 import logging
@@ -50,100 +43,32 @@ from .base import CameraDriver, CameraFrame, CameraInfo
 log = logging.getLogger(__name__)
 
 
-def _ensure_pyspin_importable() -> bool:
-    """
-    Make PySpin importable when running as a frozen PyInstaller bundle.
-
-    PySpin cannot be distributed via PyPI (FLIR requires a signed licence
-    agreement), so it cannot be bundled inside the installer.  Instead we
-    search the Spinnaker SDK's standard Windows installation directories at
-    runtime and add the first matching path to sys.path.
-
-    Returns True if ``import PySpin`` succeeds after this call; False if the
-    Spinnaker SDK / Python bindings are not installed on this machine.
-    """
-    # Fast path — already importable (dev environment or custom sys.path)
-    try:
-        import PySpin  # noqa: F401
-        return True
-    except ImportError:
-        pass
-
-    if sys.platform != "win32":
-        return False   # macOS / Linux: user must manage their own venv
-
-    py_tag = f"python{sys.version_info.major}{sys.version_info.minor}"
-
-    # Candidate root directories — env vars first, then well-known paths
-    program_files_roots = list(filter(None, [
-        os.environ.get("ProgramFiles"),
-        os.environ.get("ProgramFiles(x86)"),
-        r"C:\Program Files",
-        r"C:\Program Files (x86)",
-    ]))
-
-    candidates: list[str] = []
-    for pf in dict.fromkeys(program_files_roots):   # deduplicate, preserve order
-        for vendor in ("Teledyne", "FLIR Systems", "FLIR"):
-            sdk_root = os.path.join(pf, vendor, "Spinnaker")
-            if not os.path.isdir(sdk_root):
-                continue
-            # Newer SDKs put bindings in a Python-version-specific sub-folder
-            candidates.append(os.path.join(sdk_root, "python", py_tag))
-            candidates.append(os.path.join(sdk_root, "python"))
-            candidates.append(sdk_root)
-
-    for path in candidates:
-        if not os.path.isdir(path):
-            continue
-        # Confirm there is actually something PySpin-like here before
-        # polluting sys.path
-        has_pyspin = any(
-            os.path.exists(os.path.join(path, name))
-            for name in ("PySpin.pyd", "PySpin.py", "PySpin")
-        )
-        if not has_pyspin:
-            continue
-        if path not in sys.path:
-            sys.path.insert(0, path)
-        try:
-            import PySpin  # noqa: F401
-            log.info("FlirDriver: PySpin found via Spinnaker SDK at %s", path)
-            return True
-        except ImportError:
-            sys.path.remove(path)
-
-    return False
-
-
 class FlirDriver(CameraDriver):
     """
-    FLIR thermal camera driver via the official Spinnaker SDK (PySpin).
+    FLIR Boson thermal camera driver via flirpy.
 
     Lifecycle::
 
         cam = FlirDriver(cfg)
-        cam.open()          # enumerate, select, init, configure
-        cam.start()         # BeginAcquisition (continuous)
-        frame = cam.grab()  # CameraFrame or None on timeout
-        cam.stop()          # EndAcquisition
-        cam.close()         # DeInit + release system
+        cam.open()          # detect serial port, open UVC stream
+        cam.start()         # begin frame acquisition
+        frame = cam.grab()  # CameraFrame (16-bit radiometric) or None on timeout
+        cam.stop()          # pause acquisition
+        cam.close()         # release Boson serial + UVC
 
     Extra API (beyond base class):
 
-        cam.trigger_software()  — fire a SW trigger pulse
-        cam.do_ffc()            — execute Flat Field Correction on demand
+        cam.do_ffc()        — execute Flat Field Correction on demand
     """
 
     def __init__(self, cfg: dict):
         super().__init__(cfg)
-        self._cam       : object = None   # PySpin.Camera
-        self._system    : object = None   # PySpin.System
-        self._cam_list  : object = None   # PySpin.CameraList
-        self._serial    : str    = cfg.get("serial", "")
-        self._frame_idx : int    = 0
-        # Serialise node-map writes called from GUI vs. grab thread
-        self._node_lock : threading.Lock = threading.Lock()
+        self._boson      : object           = None   # flirpy.camera.boson.Boson
+        self._serial_port: str              = cfg.get("serial_port", "")
+        self._frame_idx  : int              = 0
+        self._streaming  : bool             = False
+        # Serialise Boson serial-command calls from multiple threads
+        self._cmd_lock   : threading.Lock   = threading.Lock()
 
     # ------------------------------------------------------------------ #
     #  Lifecycle                                                           #
@@ -151,215 +76,109 @@ class FlirDriver(CameraDriver):
 
     def open(self) -> None:
         """
-        Enumerate FLIR / Spinnaker cameras, open by serial (or first found),
-        configure pixel format, resolution, exposure, gain, trigger and FFC.
+        Detect and open the FLIR Boson.
 
         Raises
         ------
         RuntimeError
-            Camera not found, SDK not installed, or hardware fault.
+            flirpy not available, no Boson found, or hardware fault.
         """
-        if not _ensure_pyspin_importable():
-            raise RuntimeError(
-                "PySpin (FLIR Spinnaker SDK) not found.\n"
-                "Install the Spinnaker SDK from:\n"
-                "  https://www.flir.com/products/spinnaker-sdk/\n"
-                "The Python bindings (PySpin) are included in the SDK installer.\n"
-                "Select 'Install Python bindings' during the SDK setup."
-            )
-
-        import PySpin
-
-        # ------------------------------------------------------------------
-        # Obtain system singleton and camera list
-        # ------------------------------------------------------------------
-        self._system   = PySpin.System.GetInstance()
-        self._cam_list = self._system.GetCameras()
-
-        n_cams = self._cam_list.GetSize()
-        if n_cams == 0:
-            self._cam_list.Clear()
-            self._system.ReleaseInstance()
-            self._system   = None
-            self._cam_list = None
-            raise RuntimeError(
-                "No FLIR / Spinnaker cameras found. "
-                "Check USB connection and Spinnaker SDK installation."
-            )
-
-        log.debug("FlirDriver: %d Spinnaker camera(s) found", n_cams)
-
-        # ------------------------------------------------------------------
-        # Select camera — by serial if supplied, otherwise first
-        # ------------------------------------------------------------------
-        cam = None
-        if self._serial:
-            for c in self._cam_list:
-                try:
-                    if c.GetUniqueID() == self._serial:
-                        cam = c
-                        break
-                except Exception:
-                    continue
-            if cam is None:
-                found = [c.GetUniqueID() for c in self._cam_list]
-                self._cam_list.Clear()
-                self._system.ReleaseInstance()
-                raise RuntimeError(
-                    f"FLIR camera serial '{self._serial}' not found. "
-                    f"Available: {found}"
-                )
-        else:
-            cam = self._cam_list.GetByIndex(0)
-
-        self._cam = cam
-        self._cam.Init()
-        nm = self._cam.GetNodeMap()
-
-        # ------------------------------------------------------------------
-        # Pixel format
-        # ------------------------------------------------------------------
-        pf_req = self._cfg.get("ir_format", "Mono14")
-        _set_enum(nm, "PixelFormat", pf_req, fallback="Mono14")
-
-        # ------------------------------------------------------------------
-        # Resolution  (0 = sensor maximum)
-        # ------------------------------------------------------------------
-        w_req = int(self._cfg.get("width",  0))
-        h_req = int(self._cfg.get("height", 0))
-        _set_int_clamped(nm, "OffsetX", 0)   # reset offsets first
-        _set_int_clamped(nm, "OffsetY", 0)
-        _set_int_max_if_zero(nm, "Width",  w_req)
-        _set_int_max_if_zero(nm, "Height", h_req)
-
-        actual_w = _get_int(nm, "Width")
-        actual_h = _get_int(nm, "Height")
-
-        # ------------------------------------------------------------------
-        # Exposure
-        # ------------------------------------------------------------------
-        exp_us = float(self._cfg.get("exposure_us", 5000.0))
-        _set_exposure(nm, exp_us)
-
-        # ------------------------------------------------------------------
-        # Gain
-        # ------------------------------------------------------------------
-        gain_db = float(self._cfg.get("gain", 0.0))
-        _set_gain(nm, gain_db)
-
-        # ------------------------------------------------------------------
-        # Trigger
-        # ------------------------------------------------------------------
-        trig = self._cfg.get("trigger_mode", "Off")
-        _set_enum(nm, "TriggerMode", "Off")          # disable before reconfigure
-        if trig.lower() not in ("", "off"):
-            src = "Software" if trig.lower() == "software" else "Line0"
-            _set_enum(nm, "TriggerSource", src)
-            _set_enum(nm, "TriggerMode", "On")
-
-        # ------------------------------------------------------------------
-        # Flat Field Correction (NUC / shutter correction)
-        # Not all cameras expose this via GenICam — failure is non-fatal.
-        # ------------------------------------------------------------------
-        ffc_map = {"auto": "Auto", "manual": "Manual", "external": "External"}
-        ffc_val = ffc_map.get(self._cfg.get("ffc_mode", "auto").lower(), "Auto")
         try:
-            _set_enum(nm, "FFCMode", ffc_val)
-        except Exception:
-            log.debug("FlirDriver: FFCMode node not available on this model — skipped")
+            from flirpy.camera.boson import Boson
+        except ImportError as exc:
+            raise RuntimeError(
+                "flirpy not found — cannot open Microsanj IR Camera.\n"
+                "This should be bundled with SanjINSIGHT. "
+                "Try reinstalling the application."
+            ) from exc
+
+        port = self._serial_port or None   # None → flirpy auto-detects
+
+        try:
+            self._boson = Boson(port=port)
+        except Exception as exc:
+            raise RuntimeError(
+                f"Could not open FLIR Boson: {exc}\n"
+                "Check that the camera is connected via USB and that no other "
+                "application (e.g. FLIR ResearchIR) has it open."
+            ) from exc
 
         # ------------------------------------------------------------------
-        # Frame rate — if the camera supports runtime control, apply it
+        # Read camera identity
         # ------------------------------------------------------------------
         try:
-            _set_bool(nm, "AcquisitionFrameRateEnable", False)  # free-running
+            model  = self._boson.get_camera_part_number()
         except Exception:
-            pass
+            model  = "FLIR Boson"
+
+        try:
+            serial = self._boson.get_camera_serial()
+        except Exception:
+            serial = ""
+
+        # Boson is always 16-bit radiometric
+        try:
+            width, height = self._boson.get_camera_video_standard()
+        except Exception:
+            width, height = 0, 0
+
+        # Override from config if auto-detect failed
+        w_cfg = int(self._cfg.get("width",  0))
+        h_cfg = int(self._cfg.get("height", 0))
+        if w_cfg:
+            width  = w_cfg
+        if h_cfg:
+            height = h_cfg
+
+        # ------------------------------------------------------------------
+        # Apply initial settings
+        # ------------------------------------------------------------------
+        self._apply_gain_mode(self._cfg.get("gain_mode", "high"))
+        self._apply_ffc_mode(self._cfg.get("ffc_mode", "auto"))
 
         # ------------------------------------------------------------------
         # Populate CameraInfo
         # ------------------------------------------------------------------
-        try:
-            model = self._cam.TLDevice.DeviceModelName.GetValue()
-        except Exception:
-            model = self._cfg.get("model", "FLIR IR Camera")
-
-        try:
-            serial = self._cam.TLDevice.DeviceSerialNumber.GetValue()
-        except Exception:
-            serial = self._serial or ""
-
-        try:
-            max_fps = float(self._cam.AcquisitionFrameRate.GetValue())
-        except Exception:
-            max_fps = 0.0
-
-        # Derive bit depth from the active pixel format
-        pf_active = ""
-        try:
-            pf_active = self._cam.PixelFormat.GetCurrentEntry().GetSymbolic()
-        except Exception:
-            pass
-        bd = 14 if "14" in pf_active else (16 if "16" in pf_active else 8)
-
         self._info = CameraInfo(
             driver    = "flir",
             model     = model,
             serial    = serial,
-            width     = actual_w,
-            height    = actual_h,
-            bit_depth = bd,
-            max_fps   = max_fps,
+            width     = width  or 320,
+            height    = height or 256,
+            bit_depth = 16,
+            max_fps   = 30.0,
         )
         self._frame_idx = 0
         self._open      = True
         log.info(
-            "FlirDriver: opened  %s  serial=%s  %d×%d  %d-bit  %.1f fps",
-            model, serial, actual_w, actual_h, bd, max_fps,
+            "FlirDriver: opened  %s  serial=%s  %d×%d  16-bit  ~30 fps",
+            model, serial, self._info.width, self._info.height,
         )
 
     def start(self) -> None:
-        """Begin continuous free-running acquisition."""
-        if self._cam is None:
+        """Begin frame acquisition (Boson streams continuously; just mark ready)."""
+        if self._boson is None:
             return
-        import PySpin
-        self._cam.AcquisitionMode.SetValue(PySpin.AcquisitionMode_Continuous)
-        self._cam.BeginAcquisition()
-        log.debug("FlirDriver: BeginAcquisition")
+        self._streaming = True
+        log.debug("FlirDriver: streaming started")
 
     def stop(self) -> None:
-        """Stop streaming; camera stays open and configured."""
-        if self._cam is None:
-            return
-        try:
-            self._cam.EndAcquisition()
-            log.debug("FlirDriver: EndAcquisition")
-        except Exception as exc:
-            log.debug("FlirDriver: stop() — %s", exc)
+        """Pause acquisition (does not close the serial or UVC connection)."""
+        self._streaming = False
+        log.debug("FlirDriver: streaming stopped")
 
     def close(self) -> None:
-        """Stop streaming, deinit camera, release Spinnaker system."""
+        """Close the Boson serial and UVC connections."""
         if not self._open:
             return
-        self.stop()
-        try:
-            self._cam.DeInit()
-        except Exception as exc:
-            log.debug("FlirDriver: DeInit — %s", exc)
-        if self._cam_list is not None:
+        self._streaming = False
+        if self._boson is not None:
             try:
-                self._cam_list.Clear()
-            except Exception:
-                pass
-        if self._system is not None:
-            try:
-                self._system.ReleaseInstance()
-            except Exception:
-                pass
-        self._cam      = None
-        self._cam_list = None
-        self._system   = None
-        self._open     = False
+                self._boson.close()
+            except Exception as exc:
+                log.debug("FlirDriver: close() — %s", exc)
+            self._boson = None
+        self._open = False
         log.info("FlirDriver: closed")
 
     # ------------------------------------------------------------------ #
@@ -368,64 +187,46 @@ class FlirDriver(CameraDriver):
 
     def grab(self, timeout_ms: int = 2000) -> Optional[CameraFrame]:
         """
-        Retrieve the next complete frame from the camera buffer.
+        Retrieve the next frame from the Boson UVC stream.
 
         Returns ``None`` on timeout or hardware error (never raises).
-        Safe to call from a background thread concurrently with
-        ``set_exposure()`` / ``set_gain()`` on the GUI thread.
+        Safe to call from a background thread.
         """
-        if self._cam is None:
+        if self._boson is None or not self._streaming:
             return None
 
-        import PySpin
+        deadline = time.time() + timeout_ms / 1000.0
+        arr = None
 
-        try:
-            image_result = self._cam.GetNextImage(timeout_ms)
-        except PySpin.SpinnakerException as exc:
-            msg = str(exc).lower()
-            if "timeout" in msg or "-1011" in msg:
-                log.debug("FlirDriver: grab timeout (%d ms)", timeout_ms)
-            else:
-                log.warning("FlirDriver: grab error: %s", exc)
+        while time.time() < deadline:
+            try:
+                arr = self._boson.grab()
+                if arr is not None:
+                    break
+            except Exception as exc:
+                log.debug("FlirDriver: grab error: %s", exc)
+                return None
+            time.sleep(0.005)
+
+        if arr is None:
+            log.debug("FlirDriver: grab timeout (%d ms)", timeout_ms)
             return None
 
-        if image_result.IsIncomplete():
-            log.debug(
-                "FlirDriver: incomplete frame (status %d) — discarded",
-                image_result.GetImageStatus(),
-            )
-            image_result.Release()
-            return None
+        # Boson always delivers uint16 radiometric data
+        if arr.dtype != np.uint16:
+            arr = arr.astype(np.uint16)
 
-        try:
-            # GetNDArray() returns uint16 for Mono14 / Mono16 pixel formats.
-            # For Mono8 it returns uint8; we scale up to keep the pipeline uniform.
-            arr = image_result.GetNDArray()
-            idx = image_result.GetFrameID()
-            ts  = time.time()
-        except Exception as exc:
-            log.warning("FlirDriver: frame data error: %s", exc)
-            image_result.Release()
-            return None
-        finally:
-            image_result.Release()
+        # Collapse spurious channel dim (H, W, 1) → (H, W)
+        if arr.ndim == 3 and arr.shape[2] == 1:
+            arr = arr[:, :, 0]
 
-        # Normalise to uint16  —  8-bit → left-align into the upper 8 bits
-        if arr.dtype == np.uint8:
-            data = arr.astype(np.uint16) << 8
-        else:
-            data = arr.astype(np.uint16)
-
-        # Collapse spurious channel dimension  (H, W, 1) → (H, W)
-        if data.ndim == 3 and data.shape[2] == 1:
-            data = data[:, :, 0]
-
+        self._frame_idx += 1
         return CameraFrame(
-            data        = data,
-            frame_index = int(idx),
-            exposure_us = self._cfg.get("exposure_us", 0.0),
-            gain_db     = self._cfg.get("gain", 0.0),
-            timestamp   = ts,
+            data        = arr,
+            frame_index = self._frame_idx,
+            exposure_us = 0.0,   # microbolometers don't have a settable exposure
+            gain_db     = 0.0,
+            timestamp   = time.time(),
         )
 
     # ------------------------------------------------------------------ #
@@ -433,308 +234,99 @@ class FlirDriver(CameraDriver):
     # ------------------------------------------------------------------ #
 
     def set_exposure(self, microseconds: float) -> None:
-        """
-        Set integration time in microseconds.
-
-        Disables auto-exposure, then writes ExposureTime.
-        Thread-safe: serialised with ``_node_lock``.
-        """
-        self._cfg["exposure_us"] = microseconds
-        with self._node_lock:
-            if self._cam and self._open:
-                try:
-                    _set_exposure(self._cam.GetNodeMap(), microseconds)
-                    log.debug("FlirDriver: exposure → %.0f µs", microseconds)
-                except Exception as exc:
-                    log.warning("FlirDriver: set_exposure failed: %s", exc)
+        """No-op: FLIR Boson microbolometers do not have a settable exposure time."""
+        log.debug(
+            "FlirDriver: set_exposure ignored — Boson microbolometer "
+            "does not support exposure control"
+        )
 
     def get_exposure(self) -> float:
-        """Live readback from ExposureTime node."""
-        if self._cam and self._open:
-            try:
-                return float(self._cam.ExposureTime.GetValue())
-            except Exception:
-                pass
-        return self._cfg.get("exposure_us", 0.0)
+        """Returns 0 — Boson does not expose an integration time register."""
+        return 0.0
 
     def set_gain(self, db: float) -> None:
         """
-        Set analog gain in dB.
+        Switch Boson gain mode.
 
-        Disables auto-gain, then writes Gain node.
-        Thread-safe: serialised with ``_node_lock``.
+        The Boson has two fixed gain modes (High / Low), not a continuous
+        dB scale.  Values ≥ 1 dB → High gain; values < 1 dB → Low gain.
         """
+        mode = "high" if db >= 1.0 else "low"
         self._cfg["gain"] = db
-        with self._node_lock:
-            if self._cam and self._open:
-                try:
-                    _set_gain(self._cam.GetNodeMap(), db)
-                    log.debug("FlirDriver: gain → %.1f dB", db)
-                except Exception as exc:
-                    log.warning("FlirDriver: set_gain failed: %s", exc)
+        self._apply_gain_mode(mode)
 
     def get_gain(self) -> float:
-        """Live readback from Gain node."""
-        if self._cam and self._open:
-            try:
-                return float(self._cam.Gain.GetValue())
-            except Exception:
-                pass
-        return self._cfg.get("gain", 0.0)
+        """Returns 1.0 for High gain, 0.0 for Low gain."""
+        return 1.0 if self._cfg.get("gain_mode", "high") == "high" else 0.0
 
     def set_trigger(self, mode: str) -> None:
-        """
-        Set trigger mode.
-
-        Parameters
-        ----------
-        mode : str
-            ``"Off"``      — free-running continuous acquisition
-            ``"Software"`` — trigger each frame via ``trigger_software()``
-            ``"Hardware"`` — trigger from external Line0 signal
-        """
-        if not (self._cam and self._open):
-            return
-        with self._node_lock:
-            try:
-                nm = self._cam.GetNodeMap()
-                _set_enum(nm, "TriggerMode", "Off")
-                if mode.lower() not in ("", "off"):
-                    src = "Software" if mode.lower() == "software" else "Line0"
-                    _set_enum(nm, "TriggerSource", src)
-                    _set_enum(nm, "TriggerMode", "On")
-                log.debug("FlirDriver: trigger mode → %s", mode)
-            except Exception as exc:
-                log.warning("FlirDriver: set_trigger failed: %s", exc)
+        """No-op: Boson trigger is handled via the stimulus sync signal, not SDK."""
+        log.debug("FlirDriver: set_trigger('%s') — Boson trigger is hardware-only", mode)
 
     def set_fps(self, fps: float) -> None:
-        """Adjust target frame rate (if camera supports runtime control)."""
-        if not (self._cam and self._open):
-            return
-        try:
-            nm = self._cam.GetNodeMap()
-            _set_bool(nm, "AcquisitionFrameRateEnable", True)
-            _set_float(nm, "AcquisitionFrameRate", fps)
-            self._info.max_fps = fps
-            log.debug("FlirDriver: frame rate → %.1f fps", fps)
-        except Exception as exc:
-            log.debug("FlirDriver: set_fps: %s", exc)
+        """No-op: Boson frame rate is fixed by the hardware revision."""
+        log.debug("FlirDriver: set_fps ignored — Boson frame rate is not software-adjustable")
+
+    def exposure_range(self) -> tuple:
+        """Boson has no settable exposure; returns (0, 0)."""
+        return (0.0, 0.0)
+
+    def gain_range(self) -> tuple:
+        """Boson gain is binary (Low=0 / High=1)."""
+        return (0.0, 1.0)
 
     # ------------------------------------------------------------------ #
     #  Thermal-camera-specific extras                                      #
     # ------------------------------------------------------------------ #
 
-    def trigger_software(self) -> None:
-        """
-        Execute a single software trigger pulse.
-
-        Only meaningful when ``trigger_mode`` is ``"Software"``.
-        """
-        if self._cam and self._open:
-            try:
-                self._cam.TriggerSoftware.Execute()
-                log.debug("FlirDriver: software trigger fired")
-            except Exception as exc:
-                log.warning("FlirDriver: trigger_software failed: %s", exc)
-
     def do_ffc(self) -> None:
         """
-        Execute an on-demand Flat Field Correction (NUC / shutter correction).
+        Execute an on-demand Flat Field Correction (Non-Uniformity Correction).
 
-        FFC corrects pixel-to-pixel non-uniformity and is typically performed:
-        - On startup (done automatically if ``ffc_mode`` is ``"auto"``)
-        - After large temperature changes in the scene or ambient environment
-        - Before each calibration sequence
+        FFC closes the internal shutter briefly to calibrate pixel offsets.
+        Perform before each calibration sequence or after large ambient
+        temperature changes.
         """
-        if not (self._cam and self._open):
+        if self._boson is None or not self._open:
             return
-        with self._node_lock:
+        with self._cmd_lock:
             try:
-                nm = self._cam.GetNodeMap()
-                # Try GenICam command nodes in order of vendor preference
-                for cmd in ("CorrectImageEx", "FlatFieldCorrection", "DoFFC"):
-                    try:
-                        _execute_command(nm, cmd)
-                        log.debug("FlirDriver: FFC executed via '%s'", cmd)
-                        return
-                    except Exception:
-                        continue
-                log.warning("FlirDriver: no FFC command node found on this camera")
+                self._boson.do_ffc()
+                log.debug("FlirDriver: FFC executed")
             except Exception as exc:
                 log.warning("FlirDriver: do_ffc failed: %s", exc)
 
     # ------------------------------------------------------------------ #
-    #  Introspection                                                       #
+    #  Private helpers                                                     #
     # ------------------------------------------------------------------ #
 
-    def exposure_range(self) -> tuple:
-        """Return ``(min_µs, max_µs)`` from the camera node-map."""
-        if self._cam and self._open:
+    def _apply_gain_mode(self, mode: str) -> None:
+        """Set High or Low gain mode on the Boson."""
+        if self._boson is None:
+            return
+        with self._cmd_lock:
             try:
-                import PySpin
-                node = self._cam.GetNodeMap().GetNode("ExposureTime")
-                n = PySpin.CFloatPtr(node)
-                if PySpin.IsAvailable(n) and PySpin.IsReadable(n):
-                    return (n.GetMin(), n.GetMax())
-            except Exception:
-                pass
-        return (50.0, 200_000.0)
+                from flirpy.camera.boson import Boson
+                if mode.lower() == "high":
+                    self._boson.set_gain_mode(Boson.GAIN_MODE_HIGH)
+                else:
+                    self._boson.set_gain_mode(Boson.GAIN_MODE_LOW)
+                self._cfg["gain_mode"] = mode.lower()
+                log.debug("FlirDriver: gain mode → %s", mode)
+            except Exception as exc:
+                log.debug("FlirDriver: set_gain_mode failed: %s", exc)
 
-    def gain_range(self) -> tuple:
-        """Return ``(min_dB, max_dB)`` from the camera node-map."""
-        if self._cam and self._open:
+    def _apply_ffc_mode(self, mode: str) -> None:
+        """Configure automatic or manual FFC scheduling."""
+        if self._boson is None:
+            return
+        with self._cmd_lock:
             try:
-                import PySpin
-                node = self._cam.GetNodeMap().GetNode("Gain")
-                n = PySpin.CFloatPtr(node)
-                if PySpin.IsAvailable(n) and PySpin.IsReadable(n):
-                    return (n.GetMin(), n.GetMax())
-            except Exception:
-                pass
-        return (0.0, 24.0)
-
-
-# =========================================================================== #
-#  Private node-map helpers                                                    #
-#                                                                              #
-#  All helpers gracefully no-op when a node is unavailable so that the driver  #
-#  works across different FLIR camera families (Tau 2, Boson, Blackfly, etc.)  #
-#  that may not expose every GenICam feature node.                             #
-# =========================================================================== #
-
-def _available(node) -> bool:
-    """Return True if *node* is non-null and available."""
-    import PySpin
-    return (node is not None
-            and not node.IsNULL()
-            and PySpin.IsAvailable(node))
-
-
-def _set_enum(nm, node_name: str, value: str, fallback: str = None) -> None:
-    """
-    Set an enumeration node to *value* by symbolic name.
-
-    If *value* is not a valid entry and *fallback* is provided, attempt
-    *fallback* instead.  Silently skips unavailable or read-only nodes.
-    """
-    import PySpin
-    node = nm.GetNode(node_name)
-    if not _available(node):
-        return
-    enum_node = PySpin.CEnumerationPtr(node)
-    if not (PySpin.IsAvailable(enum_node) and PySpin.IsWritable(enum_node)):
-        return
-    entry = enum_node.GetEntryByName(value)
-    if PySpin.IsAvailable(entry) and PySpin.IsReadable(entry):
-        enum_node.SetIntValue(entry.GetValue())
-    elif fallback is not None and fallback != value:
-        _set_enum(nm, node_name, fallback)
-
-
-def _get_int(nm, node_name: str, default: int = 0) -> int:
-    """Return integer node value, or *default* if unavailable."""
-    import PySpin
-    node = nm.GetNode(node_name)
-    if not _available(node):
-        return default
-    n = PySpin.CIntegerPtr(node)
-    if PySpin.IsAvailable(n) and PySpin.IsReadable(n):
-        return int(n.GetValue())
-    return default
-
-
-def _set_int_clamped(nm, node_name: str, value: int) -> None:
-    """Set integer node to *value*, clamped to [min, max] and aligned to increment."""
-    import PySpin
-    node = nm.GetNode(node_name)
-    if not _available(node):
-        return
-    n = PySpin.CIntegerPtr(node)
-    if not (PySpin.IsAvailable(n) and PySpin.IsWritable(n)):
-        return
-    lo  = int(n.GetMin())
-    hi  = int(n.GetMax())
-    inc = int(n.GetInc()) or 1
-    val = max(lo, min(hi, value))
-    val = lo + ((val - lo) // inc) * inc   # align to increment
-    n.SetValue(val)
-
-
-def _set_int_max_if_zero(nm, node_name: str, value: int) -> None:
-    """Set integer node to *value*, or to its hardware maximum when *value* == 0."""
-    import PySpin
-    node = nm.GetNode(node_name)
-    if not _available(node):
-        return
-    n = PySpin.CIntegerPtr(node)
-    if not (PySpin.IsAvailable(n) and PySpin.IsWritable(n)):
-        return
-    lo  = int(n.GetMin())
-    hi  = int(n.GetMax())
-    inc = int(n.GetInc()) or 1
-    target = hi if value == 0 else value
-    target = max(lo, min(hi, target))
-    target = lo + ((target - lo) // inc) * inc
-    n.SetValue(target)
-
-
-def _set_exposure(nm, microseconds: float) -> None:
-    """Disable auto-exposure then write ExposureTime to *microseconds*."""
-    import PySpin
-    _set_enum(nm, "ExposureAuto", "Off")
-    node = nm.GetNode("ExposureTime")
-    if not _available(node):
-        return
-    n = PySpin.CFloatPtr(node)
-    if PySpin.IsAvailable(n) and PySpin.IsWritable(n):
-        val = max(n.GetMin(), min(n.GetMax(), float(microseconds)))
-        n.SetValue(val)
-
-
-def _set_gain(nm, db: float) -> None:
-    """Disable auto-gain then write Gain to *db*."""
-    import PySpin
-    _set_enum(nm, "GainAuto", "Off")
-    node = nm.GetNode("Gain")
-    if not _available(node):
-        return
-    n = PySpin.CFloatPtr(node)
-    if PySpin.IsAvailable(n) and PySpin.IsWritable(n):
-        val = max(n.GetMin(), min(n.GetMax(), float(db)))
-        n.SetValue(val)
-
-
-def _set_bool(nm, node_name: str, value: bool) -> None:
-    """Write a boolean node."""
-    import PySpin
-    node = nm.GetNode(node_name)
-    if not _available(node):
-        return
-    n = PySpin.CBooleanPtr(node)
-    if PySpin.IsAvailable(n) and PySpin.IsWritable(n):
-        n.SetValue(value)
-
-
-def _set_float(nm, node_name: str, value: float) -> None:
-    """Write a float node, clamped to its [min, max] range."""
-    import PySpin
-    node = nm.GetNode(node_name)
-    if not _available(node):
-        return
-    n = PySpin.CFloatPtr(node)
-    if PySpin.IsAvailable(n) and PySpin.IsWritable(n):
-        val = max(n.GetMin(), min(n.GetMax(), float(value)))
-        n.SetValue(val)
-
-
-def _execute_command(nm, command_name: str) -> None:
-    """Execute a GenICam command node (e.g. FFC, software trigger)."""
-    import PySpin
-    node = nm.GetNode(command_name)
-    if not _available(node):
-        raise RuntimeError(f"Command node '{command_name}' not available")
-    cmd = PySpin.CCommandPtr(node)
-    if PySpin.IsAvailable(cmd) and PySpin.IsWritable(cmd):
-        cmd.Execute()
-    else:
-        raise RuntimeError(f"Command node '{command_name}' is not executable")
+                from flirpy.camera.boson import Boson
+                ffc_val = (Boson.FFC_MODE_AUTO
+                           if mode.lower() == "auto"
+                           else Boson.FFC_MODE_MANUAL)
+                self._boson.set_ffc_mode(ffc_val)
+                log.debug("FlirDriver: FFC mode → %s", mode)
+            except Exception as exc:
+                log.debug("FlirDriver: set_ffc_mode failed: %s", exc)

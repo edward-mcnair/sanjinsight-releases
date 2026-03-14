@@ -98,6 +98,9 @@ jobs:
           python -m pip install pypylon \
             && echo "[OK] pypylon installed — Basler TR camera support bundled" \
             || echo "[SKIP] pypylon unavailable — Basler camera will not be bundled"
+          python -m pip install flirpy \
+            && echo "[OK] flirpy installed — Microsanj IR (FLIR Boson) support bundled" \
+            || echo "[SKIP] flirpy unavailable — Microsanj IR camera will not be bundled"
 
       # ── 5. Read version from version.py ───────────────────────────────────
       - name: Read version

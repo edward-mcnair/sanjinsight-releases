@@ -10,6 +10,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.2.7] — 2026-03-13
+
+### Changed
+
+- **Microsanj IR Camera driver rewritten for FLIR Boson** — previous driver used Spinnaker/PySpin which targets FLIR machine-vision cameras, not the Boson microbolometer. Driver now uses `flirpy` (bundled in installer, no manual install needed). Connects via Boson USB CDC control channel + UVC video stream. USB VID updated to `0x09CB`.
+
+### Fixed
+
+- Spinnaker SDK install instructions removed — users no longer need to download PySpin manually.
+
+---
+
 ## [1.2.6] — 2026-03-13
 
 ### Fixed

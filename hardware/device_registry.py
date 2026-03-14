@@ -178,16 +178,17 @@ DEVICE_REGISTRY: dict[str, DeviceDescriptor] = {
         driver_module  = "hardware.cameras.flir_driver",
         driver_version = "builtin",
         hot_loadable   = False,
-        usb_vid        = 0x1E10,     # FLIR Systems USB VID
-        usb_pid        = None,       # PID varies by core revision — match by pattern
-        serial_patterns= ["FLIR", "OEMCameras", "Microsanj IR"],
-        description    = "FLIR-based uncooled microbolometer thermal camera, "
-                         "4.9 mm fixed focal length, compact square OEM housing "
-                         "(dist. OEMCameras.com). "
+        usb_vid        = 0x09CB,     # FLIR Boson USB VID
+        usb_pid        = None,       # PID varies by Boson revision
+        serial_patterns= ["Boson", "FLIR", "Microsanj IR"],
+        description    = "FLIR Boson-based uncooled microbolometer thermal camera "
+                         "mounted in a Microsanj nosepiece housing. "
+                         "320×256 or 640×512, 16-bit radiometric, ~30 fps. "
                          "IR imaging channel for passive lock-in IR thermography "
-                         "(no stimulus required). 26 VDC supply.",
-        datasheet_url  = "https://www.oemcameras.com/",
-        notes          = "Requires FLIR SDK / Spinnaker for enumeration. "
+                         "(no stimulus required).",
+        datasheet_url  = "https://www.flir.com/products/boson/",
+        notes          = "Driver uses flirpy (bundled). Connects via USB CDC "
+                         "(serial control) + UVC (video stream). "
                          "Set config key hardware.camera.driver='flir' and "
                          "hardware.camera.modality='ir_lockin' to activate "
                          "the IR imaging path in AutoScan.",
