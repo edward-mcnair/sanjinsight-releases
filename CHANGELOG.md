@@ -10,6 +10,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.2.3] — 2026-03-13
+
+### Fixed
+
+- **Camera connect crash** — `DeviceManager` calls `driver.connect()` on all devices but `CameraBase` only defined `open()`. Added concrete `connect()` → `open()` and `disconnect()` → `close()` aliases to `CameraBase` so all camera drivers satisfy the interface without individual changes.
+
+---
+
 ## [1.2.2] — 2026-03-13
 
 ### Fixed

@@ -73,6 +73,14 @@ class CameraDriver(ABC):
         Raises RuntimeError on failure.
         """
 
+    def connect(self) -> None:
+        """Alias for open() — satisfies the DeviceManager driver interface."""
+        self.open()
+
+    def disconnect(self) -> None:
+        """Alias for close() — satisfies the DeviceManager driver interface."""
+        self.close()
+
     @abstractmethod
     def start(self) -> None:
         """Begin continuous acquisition."""
