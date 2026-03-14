@@ -10,6 +10,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.2.2] — 2026-03-13
+
+### Fixed
+
+- **Basler camera not detected** — `pypylon` was missing from the CI build step so the installer never bundled the Basler Python bindings. Added a dedicated CI step that installs `pypylon` (which ships with the pylon runtime in its wheel — no system SDK required on the runner) before PyInstaller runs. Basler TR cameras now enumerate correctly on first launch.
+
+---
+
 ## [1.2.1] — 2026-03-13
 
 ### Fixed

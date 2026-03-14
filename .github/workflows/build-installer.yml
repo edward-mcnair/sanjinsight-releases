@@ -84,6 +84,18 @@ jobs:
             && echo "[OK] pydp832 installed" \
             || echo "[SKIP] pydp832 unavailable — Rigol DP832 native driver not bundled"
 
+      # ── 4c. Install camera SDK Python bindings ────────────────────────────
+      # pypylon 3.x ships with the pylon runtime bundled in the wheel —
+      # no system-level pylon SDK required on the runner.
+      # Failures are ignored so the build still succeeds on runners where
+      # the wheel is unavailable (e.g. Linux CI for macOS artifact).
+      - name: Install camera SDK Python bindings
+        shell: bash
+        run: |
+          python -m pip install pypylon \
+            && echo "[OK] pypylon installed — Basler TR camera support bundled" \
+            || echo "[SKIP] pypylon unavailable — Basler camera will not be bundled"
+
       # ── 5. Read version from version.py ───────────────────────────────────
       - name: Read version
         id: version
