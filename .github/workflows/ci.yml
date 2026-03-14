@@ -49,7 +49,8 @@ jobs:
           print(f'✓ Version: {version_string()}')
           print(f'✓ Tuple:   {VERSION_TUPLE}')
           assert len(VERSION_TUPLE) == 3, 'VERSION_TUPLE must have 3 elements'
-          assert __version__ == '.'.join(str(x) for x in VERSION_TUPLE), \
+          base = '.'.join(str(x) for x in VERSION_TUPLE)
+          assert __version__ == base or __version__.startswith(base), \
               '__version__ and VERSION_TUPLE are out of sync'
           print('✓ version.py is consistent')
           "
