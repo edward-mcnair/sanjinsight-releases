@@ -8,6 +8,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+---
+
+## [1.2.1] — 2026-03-13
+
+### Fixed
+
+- **Hardware Setup Wizard crash** — Opening the wizard (Ctrl+Shift+H) raised `TypeError: widget(self): too many arguments` in `_PageAI.__init__` due to an invalid `QLayout.widget(0)` call. The wizard now opens correctly.
+
 ### Added
 - (next feature here)
 
