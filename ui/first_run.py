@@ -1718,10 +1718,10 @@ class _PageAI(_PageBase):
         if_lay.setContentsMargins(14, 12, 14, 12)
         if_lay.setSpacing(8)
 
-        if_lay.addWidget(QLabel(
-            "Step 1 — Install Ollama (free, takes about 1 minute):"))
-        if_lay.widget(0).setStyleSheet(
+        _step1_lbl = QLabel("Step 1 — Install Ollama (free, takes about 1 minute):")
+        _step1_lbl.setStyleSheet(
             f"font-size:{FONT['label']}pt; font-weight:600; color:#fff;")
+        if_lay.addWidget(_step1_lbl)
 
         btn_row = QHBoxLayout()
         self._install_btn = QPushButton("⬇  Install Ollama for me")
