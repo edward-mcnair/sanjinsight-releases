@@ -46,6 +46,38 @@ class NiImaqdxDriver(CameraDriver):
     Works with any camera that NI Vision Acquisition Software supports.
     """
 
+    @classmethod
+    def preflight(cls) -> tuple:
+        issues = []
+        import sys, os
+        if sys.platform != "win32":
+            issues.append(
+                "NI IMAQdx is only supported on Windows.\n"
+                "Install NI Vision Acquisition Software from ni.com."
+            )
+            return (False, issues)
+        # Check for niimaqdx.dll in the two canonical install locations
+        dll_paths = [
+            r"C:\Windows\System32\niimaqdx.dll",
+            r"C:\Program Files\National Instruments\Shared\NI-IMAQdx\niimaqdx.dll",
+        ]
+        if not any(os.path.isfile(p) for p in dll_paths):
+            issues.append(
+                "niimaqdx.dll not found — NI Vision Acquisition Software is not installed.\n"
+                "Download and install NI Vision Acquisition Software from ni.com,\n"
+                "then restart the application."
+            )
+        # Warn (non-blocking) if the C# attribute helper is missing
+        if not os.path.isfile(_EXE):
+            issues.append(
+                f"ImaqdxAttr.exe not found at {_EXE!r}.\n"
+                "Exposure and gain control will be unavailable until it is built.\n"
+                "Run  build_csharp.bat  in the project root once to build it."
+            )
+        # Return ok=True even with the exe warning — connection is still possible
+        has_dll_error = any("niimaqdx.dll" in i for i in issues)
+        return (not has_dll_error, issues)
+
     def __init__(self, cfg: dict):
         super().__init__(cfg)
         self._dll       = None

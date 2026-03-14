@@ -72,6 +72,19 @@ class MpiProberDriver(StageDriver):
         probe_lift()           — raise needles to safe travel height
     """
 
+    @classmethod
+    def preflight(cls) -> tuple:
+        issues = []
+        try:
+            import serial  # noqa: F401
+        except ImportError:
+            issues.append(
+                "pyserial not found — MPI probe station serial support unavailable.\n"
+                "Try reinstalling SanjINSIGHT.  If the problem persists, "
+                "contact Microsanj support."
+            )
+        return (len(issues) == 0, issues)
+
     def __init__(self, cfg: dict):
         super().__init__(cfg)
         self._port       = cfg.get("port",       "COM6")

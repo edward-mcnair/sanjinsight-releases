@@ -30,6 +30,21 @@ log = logging.getLogger(__name__)
 
 class ThorlabsDriver(StageDriver):
 
+    @classmethod
+    def preflight(cls) -> tuple:
+        issues = []
+        try:
+            import thorlabs_apt_device  # noqa: F401
+        except ImportError:
+            issues.append(
+                "thorlabs_apt_device not found — Thorlabs stage support unavailable.\n"
+                "Install it with:  pip install thorlabs-apt-device\n"
+                "Also install Thorlabs Kinesis software from thorlabs.com.\n"
+                "Try reinstalling SanjINSIGHT.  If the problem persists, "
+                "contact Microsanj support."
+            )
+        return (len(issues) == 0, issues)
+
     def __init__(self, cfg: dict):
         super().__init__(cfg)
         # Store as str for display / logging; convert to int at connect() time

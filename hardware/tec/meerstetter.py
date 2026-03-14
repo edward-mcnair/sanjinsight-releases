@@ -21,6 +21,19 @@ log = logging.getLogger(__name__)
 
 class MeerstetterDriver(TecDriver):
 
+    @classmethod
+    def preflight(cls) -> tuple:
+        issues = []
+        try:
+            import mecom  # noqa: F401
+        except ImportError:
+            issues.append(
+                "pyMeCom library not found — Meerstetter TEC support is not bundled.\n"
+                "Try reinstalling SanjINSIGHT.  If the problem persists, "
+                "contact Microsanj support."
+            )
+        return (len(issues) == 0, issues)
+
     def __init__(self, cfg: dict):
         super().__init__(cfg)
         self._port    = cfg.get("port",    "COM3")

@@ -18,7 +18,6 @@ Config keys (under hardware.camera):
 
 import time
 import numpy as np
-import cv2
 from typing import Optional
 
 import logging
@@ -34,6 +33,26 @@ class DirectShowDriver(CameraDriver):
     Windows DirectShow-compatible camera.
     """
 
+    @classmethod
+    def preflight(cls) -> tuple:
+        issues = []
+        import sys
+        if sys.platform != "win32":
+            issues.append(
+                "DirectShow is a Windows-only API.\n"
+                "Use the pypylon or flir driver for cross-platform camera support."
+            )
+            return (False, issues)
+        try:
+            import cv2  # noqa: F401
+        except ImportError:
+            issues.append(
+                "opencv-python not found — DirectShow camera support is not bundled.\n"
+                "Try reinstalling SanjINSIGHT.  If the problem persists, "
+                "contact Microsanj support."
+            )
+        return (len(issues) == 0, issues)
+
     def __init__(self, cfg: dict):
         super().__init__(cfg)
         self._cap    = None
@@ -43,6 +62,7 @@ class DirectShowDriver(CameraDriver):
         self._fourcc = cfg.get("fourcc", "")   # e.g. "Y16 " for 16-bit mono
 
     def open(self) -> None:
+        import cv2
         cap = cv2.VideoCapture(self._idx, cv2.CAP_DSHOW)
         if not cap.isOpened():
             raise RuntimeError(
@@ -55,7 +75,7 @@ class DirectShowDriver(CameraDriver):
         if self._fourcc:
             cc = self._fourcc.ljust(4)[:4]
             cap.set(cv2.CAP_PROP_FOURCC,
-                    cv2.VideoWriter.fourcc(*cc))
+                    cv2.VideoWriter_fourcc(*cc))
 
         # Read back actual resolution
         w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -71,7 +91,7 @@ class DirectShowDriver(CameraDriver):
             width     = w,
             height    = h,
             bit_depth = 16 if "16" in self._fourcc else 8,
-            max_fps   = cap.get(cv2.CAP_PROP_FPS),
+            max_fps   = cap.get(cv2.CAP_PROP_FPS),   # cv2 already imported above
         )
 
     def start(self) -> None:
@@ -87,6 +107,7 @@ class DirectShowDriver(CameraDriver):
         self._open = False
 
     def grab(self, timeout_ms: int = 2000) -> Optional[CameraFrame]:
+        import cv2
         ret, frame = self._cap.read()
         if not ret or frame is None:
             return None
@@ -120,14 +141,15 @@ class DirectShowDriver(CameraDriver):
     def set_exposure(self, microseconds: float) -> None:
         # DirectShow uses log2 exposure in seconds for some cameras
         # This is best-effort — not all DirectShow cameras support it
+        import cv2, math
         self._cfg["exposure_us"] = microseconds
         seconds = microseconds / 1_000_000.0
-        import math
         log2_val = math.log2(seconds) if seconds > 0 else -10
         self._cap.set(cv2.CAP_PROP_EXPOSURE, log2_val)
         log.debug(f"Exposure = {microseconds:.0f} us (DirectShow best-effort)")
 
     def set_gain(self, db: float) -> None:
+        import cv2
         self._cfg["gain"] = db
         self._cap.set(cv2.CAP_PROP_GAIN, db)
         log.debug(f"Gain = {db:.1f} dB (DirectShow best-effort)")

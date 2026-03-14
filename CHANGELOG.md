@@ -10,6 +10,33 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.2.9] — 2026-03-14
+
+### Added
+
+- **Full hardware-stack pre-flight coverage** — the `preflight()` classmethod introduced in v1.2.8 now covers every driver in the system, not just cameras. All six non-camera subsystem base classes (`TecDriver`, `BiasDriver`, `FpgaDriver`, `StageDriver`, `LddDriver`, `ObjectiveTurretDriver`) expose a default `preflight()` that always passes; each concrete driver overrides it with the correct dependency check.
+- **`NiImaqdxDriver.preflight()`** — checks Windows platform, then scans the two canonical DLL paths for `niimaqdx.dll` (NI Vision Acquisition Software). A missing DLL is a hard failure. Missing `ImaqdxAttr.exe` (the C# attribute helper) is a non-blocking warning; exposure/gain control will be unavailable but camera acquisition still works.
+- **`DirectShowDriver.preflight()`** — checks Windows platform, then verifies `opencv-python` (`cv2`) is importable. Fails with a clear reinstall instruction if the package is missing.
+- **`MeerstetterDriver.preflight()`** (TEC) — checks `mecom` (pyMeCom) importable.
+- **`MeerstetterLdd1121Driver.preflight()`** (LDD) — checks `mecom` (pyMeCom) importable.
+- **`KeithleyDriver.preflight()`** (bias) — checks `pyvisa` importable.
+- **`VisaGenericDriver.preflight()`** (bias) — checks `pyvisa` importable.
+- **`RigolDP832Driver.preflight()`** (bias) — tries three import paths (`pydp832`, `pydp832.dp832lan`, `dp832`) to account for the evolving package structure; fails with install instructions if none is found.
+- **`Ni9637Driver.preflight()`** (FPGA) — checks `nifpga` importable.
+- **`ThorlabsDriver.preflight()`** (stage) — checks `thorlabs_apt_device` importable.
+- **`MpiProberDriver.preflight()`** (stage) — checks `serial` (pyserial) importable.
+- **`OlympusLinxTurret.preflight()`** (turret) — checks `serial` (pyserial) importable.
+- **Expanded `tests/test_hardware.py`** — test suite grows from 29 to 114 tests:
+  - `TestSubsystemDriverPreflight` — parametrized across all 20 non-camera driver modules; 4 checks per module (method present, return type correct, issues are strings, simulated driver always passes) = 80 test cases.
+  - `TestSubsystemFactories` — smoke tests all 6 subsystem factories for simulated-driver creation and unknown-driver rejection (10 test cases).
+
+### Fixed
+
+- **`DirectShowDriver` module-level `import cv2`** — the module previously imported `cv2` at the top level, causing an `ImportError` before `preflight()` could run on systems without `opencv-python`. All `cv2` imports moved inside the methods that use them (matching the deferred-import pattern used by `PylonDriver` and `FlirDriver`).
+- **`cv2.VideoWriter.fourcc` → `cv2.VideoWriter_fourcc`** — corrected OpenCV API call in `DirectShowDriver`; the class-method form `cv2.VideoWriter.fourcc` does not exist in modern OpenCV builds.
+
+---
+
 ## [1.2.8] — 2026-03-14
 
 ### Added

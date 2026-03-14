@@ -28,6 +28,21 @@ log = logging.getLogger(__name__)
 
 class KeithleyDriver(BiasDriver):
 
+    @classmethod
+    def preflight(cls) -> tuple:
+        issues = []
+        try:
+            import pyvisa  # noqa: F401
+        except ImportError:
+            issues.append(
+                "pyvisa not found — Keithley SourceMeter support unavailable.\n"
+                "Install it with:  pip install pyvisa pyvisa-py\n"
+                "For GPIB on Windows, also install NI-VISA from ni.com.\n"
+                "Try reinstalling SanjINSIGHT.  If the problem persists, "
+                "contact Microsanj support."
+            )
+        return (len(issues) == 0, issues)
+
     def __init__(self, cfg: dict):
         super().__init__(cfg)
         self._address = cfg.get("address", "GPIB::24")

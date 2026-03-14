@@ -33,6 +33,28 @@ log = logging.getLogger(__name__)
 class RigolDP832Driver(BiasDriver):
     """Rigol DP832 driver via pydp832 (LAN, no VISA required)."""
 
+    @classmethod
+    def preflight(cls) -> tuple:
+        issues = []
+        import importlib
+        found = False
+        for mod_path in ("pydp832", "pydp832.dp832lan", "dp832"):
+            try:
+                importlib.import_module(mod_path)
+                found = True
+                break
+            except ImportError:
+                continue
+        if not found:
+            issues.append(
+                "pydp832 library not found — Rigol DP832 support unavailable.\n"
+                "Install it with:  pip install pydp832\n"
+                "Alternatively, use driver: 'visa_generic' with pyvisa if NI-VISA is installed.\n"
+                "Try reinstalling SanjINSIGHT.  If the problem persists, "
+                "contact Microsanj support."
+            )
+        return (len(issues) == 0, issues)
+
     def __init__(self, cfg: dict):
         super().__init__(cfg)
         self._host    = cfg.get("host", "192.168.1.20")

@@ -165,5 +165,17 @@ class FpgaDriver(ABC):
         """Return (min_hz, max_hz)."""
         return (0.1, 100_000.0)
 
+    @classmethod
+    def preflight(cls) -> tuple:
+        """
+        Check whether this driver's dependencies are satisfied before
+        attempting to open hardware.
+
+        Returns (ok: bool, issues: list[str]).
+        Subclasses should override this to verify required Python packages
+        are importable.  The default always returns (True, []).
+        """
+        return (True, [])
+
     def __repr__(self):
         return f"<{self.__class__.__name__} open={self._open}>"

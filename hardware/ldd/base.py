@@ -117,6 +117,18 @@ class LddDriver(ABC):
         """Return (min_c, max_c) safe operating range for the laser diode."""
         return (LDD_DIODE_MIN_C, LDD_DIODE_MAX_C)
 
+    @classmethod
+    def preflight(cls) -> tuple:
+        """
+        Check whether this driver's dependencies are satisfied before
+        attempting to connect hardware.
+
+        Returns (ok: bool, issues: list[str]).
+        Subclasses should override this to verify required Python packages
+        are importable.  The default always returns (True, []).
+        """
+        return (True, [])
+
     def __repr__(self):
         return (f"<{self.__class__.__name__} "
                 f"connected={self._connected}>")

@@ -44,6 +44,19 @@ log = logging.getLogger(__name__)
 class MeerstetterLdd1121(LddDriver):
     """Meerstetter LDD-1121 driver via pyMeCom."""
 
+    @classmethod
+    def preflight(cls) -> tuple:
+        issues = []
+        try:
+            import mecom  # noqa: F401
+        except ImportError:
+            issues.append(
+                "pyMeCom library not found — Meerstetter LDD-1121 support is not bundled.\n"
+                "Try reinstalling SanjINSIGHT.  If the problem persists, "
+                "contact Microsanj support."
+            )
+        return (len(issues) == 0, issues)
+
     # MeCom parameter IDs
     _PID_OBJECT_TEMP   = 1000   # °C   — diode NTC temperature
     _PID_ACT_CURRENT   = 1020   # A    — actual output current

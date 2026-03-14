@@ -37,6 +37,21 @@ class Ni9637Driver(FpgaDriver):
     Loads a compiled LabVIEW FPGA bitfile and controls it via nifpga.
     """
 
+    @classmethod
+    def preflight(cls) -> tuple:
+        issues = []
+        try:
+            import nifpga  # noqa: F401
+        except ImportError:
+            issues.append(
+                "nifpga Python package not found — NI 9637 FPGA support unavailable.\n"
+                "Install it with:  pip install nifpga\n"
+                "Also ensure NI-RIO drivers are installed from ni.com.\n"
+                "Try reinstalling SanjINSIGHT.  If the problem persists, "
+                "contact Microsanj support."
+            )
+        return (len(issues) == 0, issues)
+
     def __init__(self, cfg: dict):
         super().__init__(cfg)
         self._session     = None

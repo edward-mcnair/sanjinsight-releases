@@ -138,6 +138,18 @@ class BiasDriver(ABC):
         """Return (min, max) for the compliance limit."""
         return (1e-6, 1.0)
 
+    @classmethod
+    def preflight(cls) -> tuple:
+        """
+        Check whether this driver's dependencies are satisfied before
+        attempting to connect hardware.
+
+        Returns (ok: bool, issues: list[str]).
+        Subclasses should override this to verify required Python packages
+        are importable.  The default always returns (True, []).
+        """
+        return (True, [])
+
     def __repr__(self):
         return (f"<{self.__class__.__name__} "
                 f"connected={self._connected} mode={self._mode}>")

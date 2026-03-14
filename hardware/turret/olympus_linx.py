@@ -60,6 +60,19 @@ class OlympusLinxTurret(ObjectiveTurretDriver):
     Olympus IX objective turret via Arduino/LINX serial interface.
     """
 
+    @classmethod
+    def preflight(cls) -> tuple:
+        issues = []
+        try:
+            import serial  # noqa: F401
+        except ImportError:
+            issues.append(
+                "pyserial not found — Olympus turret serial support unavailable.\n"
+                "Try reinstalling SanjINSIGHT.  If the problem persists, "
+                "contact Microsanj support."
+            )
+        return (len(issues) == 0, issues)
+
     def __init__(self, cfg: dict):
         super().__init__(cfg)
         self._port       = cfg.get("port",      "COM7")

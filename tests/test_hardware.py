@@ -13,6 +13,15 @@ class of problems we encountered during the v1.2.x hardware bring-up:
   • Drivers missing required interface methods
   • Registry entries pointing to non-existent driver modules
   • preflight() returning the wrong type
+
+Coverage (v1.2.9+):
+  1. Device Registry consistency
+  2. CameraDriver interface contract (all camera drivers)
+  3. Camera factory smoke tests
+  4. SimulatedCamera end-to-end lifecycle
+  5. Non-camera subsystem preflight() contract (TEC, Bias, FPGA, Stage, LDD, Turret)
+  6. Non-camera simulated driver preflight always passes
+  7. Non-camera factory smoke tests
 """
 
 import importlib
@@ -278,3 +287,242 @@ class TestSimulatedDriverEndToEnd:
     def test_gain_range_is_valid(self):
         lo, hi = self.cam.gain_range()
         assert lo <= hi
+
+
+# ─────────────────────────────────────────────────────────────────── #
+#  5. Non-camera subsystem preflight() contract                        #
+# ─────────────────────────────────────────────────────────────────── #
+#
+#  Every concrete non-camera driver must:
+#    • Have a preflight() classmethod
+#    • Return (bool, list[str])
+#    • Simulated drivers must always return (True, [])
+#
+#  Tests are parametrized per module and skip individually when
+#  optional hardware deps are missing.
+
+_TEC_DRIVER_MODULES = [
+    "hardware.tec.simulated",
+    "hardware.tec.meerstetter",
+    "hardware.tec.atec",
+    "hardware.tec.thermal_chuck",
+]
+
+_BIAS_DRIVER_MODULES = [
+    "hardware.bias.simulated",
+    "hardware.bias.keithley",
+    "hardware.bias.visa_generic",
+    "hardware.bias.rigol_dp832",
+]
+
+_FPGA_DRIVER_MODULES = [
+    "hardware.fpga.simulated",
+    "hardware.fpga.ni9637",
+]
+
+_STAGE_DRIVER_MODULES = [
+    "hardware.stage.simulated",
+    "hardware.stage.thorlabs",
+    "hardware.stage.serial_stage",
+    "hardware.stage.mpi_prober",
+]
+
+_LDD_DRIVER_MODULES = [
+    "hardware.ldd.simulated",
+    "hardware.ldd.meerstetter_ldd1121",
+]
+
+_TURRET_DRIVER_MODULES = [
+    "hardware.turret.simulated",
+    "hardware.turret.olympus_linx",
+]
+
+_ALL_SUBSYSTEM_MODULES = (
+    _TEC_DRIVER_MODULES
+    + _BIAS_DRIVER_MODULES
+    + _FPGA_DRIVER_MODULES
+    + _STAGE_DRIVER_MODULES
+    + _LDD_DRIVER_MODULES
+    + _TURRET_DRIVER_MODULES
+)
+
+
+def _find_subsystem_driver_class(mod):
+    """
+    Return the first concrete (non-abstract) subclass of any known
+    hardware base class found in *mod*.
+    """
+    base_classes = []
+    try:
+        from hardware.tec.base   import TecDriver;   base_classes.append(TecDriver)
+    except ImportError: pass
+    try:
+        from hardware.bias.base  import BiasDriver;  base_classes.append(BiasDriver)
+    except ImportError: pass
+    try:
+        from hardware.fpga.base  import FpgaDriver;  base_classes.append(FpgaDriver)
+    except ImportError: pass
+    try:
+        from hardware.stage.base import StageDriver; base_classes.append(StageDriver)
+    except ImportError: pass
+    try:
+        from hardware.ldd.base   import LddDriver;   base_classes.append(LddDriver)
+    except ImportError: pass
+    try:
+        from hardware.turret.base import ObjectiveTurretDriver
+        base_classes.append(ObjectiveTurretDriver)
+    except ImportError: pass
+
+    if not base_classes:
+        return None
+
+    for _, obj in inspect.getmembers(mod, inspect.isclass):
+        for base in base_classes:
+            if issubclass(obj, base) and obj is not base:
+                return obj
+    return None
+
+
+@pytest.mark.parametrize("mod_path", _ALL_SUBSYSTEM_MODULES)
+class TestSubsystemDriverPreflight:
+    """
+    Verifies that every non-camera hardware driver satisfies the
+    preflight() contract: exists, returns (bool, list[str]).
+    """
+
+    def test_driver_has_preflight(self, mod_path):
+        """Driver class must have a preflight() classmethod."""
+        mod = _import_or_skip(mod_path)
+        cls = _find_subsystem_driver_class(mod)
+        if cls is None:
+            pytest.skip(f"No subsystem driver subclass found in {mod_path}")
+        assert hasattr(cls, "preflight"), (
+            f"{cls.__name__} is missing preflight() classmethod.\n"
+            "Add a preflight() classmethod that returns (bool, list[str])."
+        )
+        assert callable(cls.preflight), (
+            f"{cls.__name__}.preflight is not callable."
+        )
+
+    def test_preflight_returns_correct_type(self, mod_path):
+        """preflight() must return (bool, list) — never None or a bare value."""
+        mod = _import_or_skip(mod_path)
+        cls = _find_subsystem_driver_class(mod)
+        if cls is None:
+            pytest.skip(f"No subsystem driver subclass found in {mod_path}")
+
+        result = cls.preflight()
+        assert isinstance(result, tuple) and len(result) == 2, (
+            f"{cls.__name__}.preflight() must return (bool, list), got {result!r}"
+        )
+        ok, issues = result
+        assert isinstance(ok, bool), (
+            f"{cls.__name__}.preflight() first element must be bool, got {type(ok)}"
+        )
+        assert isinstance(issues, list), (
+            f"{cls.__name__}.preflight() second element must be list, got {type(issues)}"
+        )
+
+    def test_preflight_issues_are_strings(self, mod_path):
+        """Every item in the preflight issues list must be a string."""
+        mod = _import_or_skip(mod_path)
+        cls = _find_subsystem_driver_class(mod)
+        if cls is None:
+            pytest.skip(f"No subsystem driver subclass found in {mod_path}")
+
+        _, issues = cls.preflight()
+        for i, issue in enumerate(issues):
+            assert isinstance(issue, str), (
+                f"{cls.__name__}.preflight() issues[{i}] is not a string: {issue!r}"
+            )
+
+    def test_simulated_driver_preflight_always_passes(self, mod_path):
+        """Simulated drivers must always pass preflight() — they have no external deps."""
+        if "simulated" not in mod_path:
+            pytest.skip("Only applies to simulated drivers")
+        mod = _import_or_skip(mod_path)
+        cls = _find_subsystem_driver_class(mod)
+        if cls is None:
+            pytest.skip(f"No subsystem driver subclass found in {mod_path}")
+
+        ok, issues = cls.preflight()
+        assert ok is True, (
+            f"{cls.__name__}.preflight() must always return True — "
+            "simulated drivers have no external dependencies"
+        )
+        assert issues == [], (
+            f"{cls.__name__}.preflight() must return empty issues list, got {issues}"
+        )
+
+
+# ─────────────────────────────────────────────────────────────────── #
+#  6. Non-camera factory smoke tests                                   #
+# ─────────────────────────────────────────────────────────────────── #
+
+class TestSubsystemFactories:
+    """
+    Smoke tests that every subsystem factory can produce a simulated driver
+    and that unknown driver keys raise cleanly.
+    """
+
+    def test_simulated_tec_always_available(self):
+        """create_tec({'driver': 'simulated'}) must always succeed."""
+        from hardware.tec.factory import create_tec
+        tec = create_tec({"driver": "simulated"})
+        assert tec is not None
+        assert hasattr(tec, "connect")
+
+    def test_simulated_bias_always_available(self):
+        """create_bias({'driver': 'simulated'}) must always succeed."""
+        from hardware.bias.factory import create_bias
+        bias = create_bias({"driver": "simulated"})
+        assert bias is not None
+        assert hasattr(bias, "connect")
+
+    def test_simulated_fpga_always_available(self):
+        """create_fpga({'driver': 'simulated'}) must always succeed."""
+        from hardware.fpga.factory import create_fpga
+        fpga = create_fpga({"driver": "simulated"})
+        assert fpga is not None
+        assert hasattr(fpga, "open")
+
+    def test_simulated_stage_always_available(self):
+        """create_stage({'driver': 'simulated'}) must always succeed."""
+        from hardware.stage.factory import create_stage
+        stage = create_stage({"driver": "simulated"})
+        assert stage is not None
+        assert hasattr(stage, "connect")
+
+    def test_simulated_ldd_always_available(self):
+        """create_ldd({'driver': 'simulated'}) must always succeed."""
+        from hardware.ldd.factory import create_ldd
+        ldd = create_ldd({"driver": "simulated"})
+        assert ldd is not None
+        assert hasattr(ldd, "connect")
+
+    def test_simulated_turret_always_available(self):
+        """create_turret({'driver': 'simulated'}) must always succeed."""
+        from hardware.turret.factory import create_turret
+        turret = create_turret({"driver": "simulated"})
+        assert turret is not None
+        assert hasattr(turret, "connect")
+
+    def test_unknown_tec_driver_raises(self):
+        from hardware.tec.factory import create_tec
+        with pytest.raises((ValueError, RuntimeError, KeyError)):
+            create_tec({"driver": "this_driver_does_not_exist"})
+
+    def test_unknown_bias_driver_raises(self):
+        from hardware.bias.factory import create_bias
+        with pytest.raises((ValueError, RuntimeError, KeyError)):
+            create_bias({"driver": "this_driver_does_not_exist"})
+
+    def test_unknown_fpga_driver_raises(self):
+        from hardware.fpga.factory import create_fpga
+        with pytest.raises((ValueError, RuntimeError, KeyError)):
+            create_fpga({"driver": "this_driver_does_not_exist"})
+
+    def test_unknown_stage_driver_raises(self):
+        from hardware.stage.factory import create_stage
+        with pytest.raises((ValueError, RuntimeError, KeyError)):
+            create_stage({"driver": "this_driver_does_not_exist"})
