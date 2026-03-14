@@ -10,6 +10,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.2.6] — 2026-03-13
+
+### Fixed
+
+- **IR and TR cameras fail to connect with "No port or address configured"** — SDK-enumerated cameras (pypylon, PySpin) were registered with `CONN_USB` instead of `CONN_CAMERA`, causing the device manager's address guard to incorrectly reject them. All four Basler models and the Microsanj IR Camera now use `CONN_CAMERA` so they bypass the port check and enumerate automatically via their SDK.
+
+---
+
 ## [1.2.5b] — 2026-03-14
 
 ### Fixed
