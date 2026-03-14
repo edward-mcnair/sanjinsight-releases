@@ -10,6 +10,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.2.4] — 2026-03-13
+
+### Changed
+
+- **Bundled Python downgraded 3.11 → 3.10** — FLIR PySpin (required for the Microsanj IR camera) only distributes Windows wheels up to `cp310`. Downgrading ensures users can install PySpin manually after installing the Spinnaker SDK. Do not upgrade the bundled Python past 3.10 without first confirming a newer PySpin wheel is available on the FLIR download page.
+
+---
+
 ## [1.2.3] — 2026-03-13
 
 ### Fixed

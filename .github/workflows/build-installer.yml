@@ -47,10 +47,13 @@ jobs:
         uses: actions/checkout@v4
 
       # ── 2. Python ──────────────────────────────────────────────────────────
-      - name: Set up Python 3.11
+      # Python 3.10 required — FLIR PySpin (Microsanj IR camera) only
+      # distributes wheels up to cp310.  Do not upgrade without checking
+      # the FLIR Spinnaker SDK download page for a newer wheel first.
+      - name: Set up Python 3.10
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.10'
           architecture: 'x64'
 
       # ── 3. Cache pip packages (speeds up subsequent builds) ───────────────
