@@ -241,7 +241,7 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QListWidget,
     QListWidgetItem, QPushButton, QLabel, QLineEdit, QTextEdit,
     QGroupBox, QFormLayout, QDoubleSpinBox, QSpinBox, QCheckBox,
-    QMessageBox, QFrame, QComboBox, QDialog,
+    QMessageBox, QFrame, QComboBox, QDialog, QScrollArea,
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QColor, QFont
@@ -310,12 +310,16 @@ class RecipeTab(QWidget):
         set_btn_icon(self._run_btn, "fa5s.play", "#00d4aa")
         self._run_btn.setStyleSheet(
             "background:#006b40; color:#fff; font-weight:600; border-radius:3px;")
-        for b in [self._new_btn, self._delete_btn, self._run_btn]:
+        self._compare_btn = QPushButton("Compare…")
+        set_btn_icon(self._compare_btn, "fa5s.exchange-alt")
+        self._compare_btn.setFixedHeight(28)
+        for b in [self._new_btn, self._delete_btn, self._run_btn, self._compare_btn]:
             b.setFixedHeight(28)
             btn_row.addWidget(b)
         self._new_btn.clicked.connect(self._on_new)
         self._delete_btn.clicked.connect(self._on_delete)
         self._run_btn.clicked.connect(self._on_run)
+        self._compare_btn.clicked.connect(self._on_compare)
         left_lay.addLayout(btn_row)
 
         self._preset_btn = QPushButton("Load Preset…")
@@ -361,18 +365,44 @@ class RecipeTab(QWidget):
         self._exposure_spin.setRange(1, 1_000_000)
         self._exposure_spin.setValue(5000)
         self._exposure_spin.setSuffix(" µs")
+        self._exposure_spin.setToolTip(
+            "Camera exposure time per frame.\n"
+            "Higher = more signal, more blur risk.\n"
+            "Typical range: 1000–50000 µs."
+        )
         self._gain_spin = QDoubleSpinBox()
         self._gain_spin.setRange(0, 48)
         self._gain_spin.setSuffix(" dB")
+        self._gain_spin.setToolTip(
+            "Camera analogue gain.\n"
+            "Increase only if exposure cannot be raised further.\n"
+            "0 dB = no gain amplification."
+        )
         self._frames_spin = QSpinBox()
         self._frames_spin.setRange(1, 1000)
         self._frames_spin.setValue(16)
+        self._frames_spin.setToolTip(
+            "Number of hot+cold frame pairs to average.\n"
+            "More frames = lower noise but longer acquisition.\n"
+            "Typical: 16–64."
+        )
         self._delay_spin = QDoubleSpinBox()
         self._delay_spin.setRange(0, 60)
         self._delay_spin.setValue(0.1)
         self._delay_spin.setSuffix(" s")
+        self._delay_spin.setToolTip(
+            "Settling time between the cold and hot acquisition phases.\n"
+            "Increase if the bias source takes time to stabilise.\n"
+            "Typical: 0.05–0.5 s."
+        )
         self._modality_combo = QComboBox()
         self._modality_combo.addItems(["thermoreflectance", "ir_lockin", "hybrid", "opp"])
+        self._modality_combo.setToolTip(
+            "Imaging modality.\n"
+            "thermoreflectance: standard ΔR/R for thermal maps.\n"
+            "ir_lockin: mid-wave IR lock-in mode.\n"
+            "hybrid / opp: contact Microsanj for application notes."
+        )
         cam_form.addRow("Exposure:", self._exposure_spin)
         cam_form.addRow("Gain:", self._gain_spin)
         cam_form.addRow("Frames:", self._frames_spin)
@@ -388,13 +418,26 @@ class RecipeTab(QWidget):
         self._thresh_spin.setRange(0.001, 1000)
         self._thresh_spin.setValue(5.0)
         self._thresh_spin.setSuffix(" °C")
+        self._thresh_spin.setToolTip(
+            "Minimum ΔT to be counted as a hotspot.\n"
+            "Pixels below this value are ignored in verdict logic.\n"
+            "Typical: 2–10 °C."
+        )
         self._fail_hs_spin    = QSpinBox()
         self._fail_hs_spin.setRange(1, 10000)
         self._fail_hs_spin.setValue(3)
+        self._fail_hs_spin.setToolTip(
+            "Maximum number of hotspot regions allowed before FAIL verdict.\n"
+            "Set to 1 for zero-defect inspection; higher values allow benign hot spots."
+        )
         self._fail_peak_spin  = QDoubleSpinBox()
         self._fail_peak_spin.setRange(0, 1000)
         self._fail_peak_spin.setValue(20.0)
         self._fail_peak_spin.setSuffix(" °C")
+        self._fail_peak_spin.setToolTip(
+            "Maximum allowable single-pixel peak temperature rise.\n"
+            "Exceeding this threshold triggers an immediate FAIL verdict regardless of hotspot count."
+        )
         an_form.addRow("Threshold:", self._thresh_spin)
         an_form.addRow("Fail: hotspot count ≥", self._fail_hs_spin)
         an_form.addRow("Fail: peak ΔT ≥", self._fail_peak_spin)
@@ -747,9 +790,226 @@ class RecipeTab(QWidget):
         self._label_edit.selectAll()
         self._label_edit.setFocus()
 
+    def _on_compare(self):
+        dlg = _RecipeDiffDialog(self._store.list(), parent=self)
+        dlg.exec_()
+
     def _on_run(self):
         if self._current is None:
             return
         # Save any unsaved edits first
         self._current = self._editor_to_recipe()
         self.recipe_run.emit(self._current)
+
+
+# ================================================================== #
+#  Helpers                                                             #
+# ================================================================== #
+
+def _flat_params(recipe: Recipe) -> "dict[str, str]":
+    """Return all comparable Recipe fields as a flat dict of human-readable strings."""
+    return {
+        "Label":                   recipe.label,
+        "Description":             recipe.description,
+        "Profile":                 recipe.profile_name,
+        "Exposure (\u00b5s)":      f"{recipe.camera.exposure_us:.0f}",
+        "Gain (dB)":               f"{recipe.camera.gain_db:.1f}",
+        "Frames":                  str(recipe.camera.n_frames),
+        "Inter-phase delay (s)":   f"{recipe.acquisition.inter_phase_delay_s:.3f}",
+        "Modality":                recipe.acquisition.modality,
+        "Threshold (\u00b0C)":     f"{recipe.analysis.threshold_k:.1f}",
+        "Fail: hotspot count":     str(recipe.analysis.fail_hotspot_count),
+        "Fail: peak \u0394T (\u00b0C)": f"{recipe.analysis.fail_peak_k:.1f}",
+        "Bias enabled":            str(recipe.bias.enabled),
+        "Bias voltage (V)":        f"{recipe.bias.voltage_v:.2f}",
+        "TEC enabled":             str(recipe.tec.enabled),
+        "TEC setpoint (\u00b0C)":  f"{recipe.tec.setpoint_c:.1f}",
+    }
+
+
+# ================================================================== #
+#  _RecipeDiffDialog                                                   #
+# ================================================================== #
+
+class _RecipeDiffDialog(QDialog):
+    """
+    Side-by-side diff viewer for two scan profiles.
+
+    Opens via the "Compare…" button in RecipeTab.
+    Highlights changed parameters: left value in amber, right in teal.
+    """
+
+    def __init__(self, recipes: List[Recipe], parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Compare Scan Profiles")
+        self.resize(700, 520)
+        self.setStyleSheet(
+            f"background:{PALETTE.get('bg', '#1a1a1a')}; "
+            f"color:{PALETTE.get('text', '#cccccc')};"
+        )
+
+        self._recipes = recipes
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(12, 12, 12, 12)
+        root.setSpacing(8)
+
+        # ── Selector row ──────────────────────────────────────────────
+        sel_row = QHBoxLayout()
+        sel_row.setSpacing(6)
+
+        combo_style = (
+            f"QComboBox {{ background:{PALETTE.get('surface', '#222')}; "
+            f"color:{PALETTE.get('text', '#ccc')}; "
+            f"border:1px solid {PALETTE.get('border', '#333')}; "
+            f"border-radius:3px; padding:2px 6px; "
+            f"font-size:{FONT.get('label', 10)}pt; }}"
+            f"QComboBox::drop-down {{ border:none; }}"
+            f"QComboBox QAbstractItemView {{ "
+            f"background:{PALETTE.get('surface', '#222')}; "
+            f"color:{PALETTE.get('text', '#ccc')}; "
+            f"selection-background-color:{PALETTE.get('accent', '#00d4aa')}22; }}"
+        )
+
+        self._combo_left  = QComboBox()
+        self._combo_right = QComboBox()
+        for combo in (self._combo_left, self._combo_right):
+            combo.setStyleSheet(combo_style)
+            for r in recipes:
+                combo.addItem(r.label, r)
+
+        if len(recipes) >= 2:
+            self._combo_left.setCurrentIndex(0)
+            self._combo_right.setCurrentIndex(1)
+
+        self._cmp_btn = QPushButton("Compare")
+        set_btn_icon(self._cmp_btn, "fa5s.exchange-alt", "#00d4aa")
+        self._cmp_btn.setFixedHeight(28)
+        self._cmp_btn.setStyleSheet(
+            "background:#006b40; color:#fff; font-weight:600; "
+            "border-radius:3px; padding:0 10px;"
+        )
+        self._cmp_btn.clicked.connect(self._rebuild_diff)
+
+        sel_row.addWidget(QLabel("Left:"))
+        sel_row.addWidget(self._combo_left, 1)
+        sel_row.addWidget(QLabel("Right:"))
+        sel_row.addWidget(self._combo_right, 1)
+        sel_row.addWidget(self._cmp_btn)
+        root.addLayout(sel_row)
+
+        # ── Scroll area for diff rows ─────────────────────────────────
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setStyleSheet(
+            f"QScrollArea {{ border:1px solid {PALETTE.get('border', '#2a2a2a')}; "
+            f"border-radius:4px; background:{PALETTE.get('bg', '#1a1a1a')}; }}"
+        )
+        root.addWidget(self._scroll, 1)
+
+        # Build immediately if we have enough recipes
+        if len(recipes) >= 2:
+            self._rebuild_diff()
+        else:
+            self._show_message("Need at least two scan profiles to compare.")
+
+    # ── Diff rendering ───────────────────────────────────────────────
+
+    def _rebuild_diff(self):
+        left_recipe  = self._combo_left.currentData()
+        right_recipe = self._combo_right.currentData()
+
+        if left_recipe is None or right_recipe is None:
+            self._show_message("Need at least two scan profiles to compare.")
+            return
+
+        if left_recipe.uid == right_recipe.uid:
+            self._show_message("Select two different profiles to compare.")
+            return
+
+        left_params  = _flat_params(left_recipe)
+        right_params = _flat_params(right_recipe)
+
+        container = QWidget()
+        container.setStyleSheet(
+            f"background:{PALETTE.get('bg', '#1a1a1a')};"
+        )
+        form = QFormLayout(container)
+        form.setContentsMargins(12, 10, 12, 10)
+        form.setSpacing(6)
+        form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        label_font_bold   = QFont()
+        label_font_bold.setBold(True)
+        label_font_bold.setPointSize(FONT.get("label", 10))
+
+        label_font_normal = QFont()
+        label_font_normal.setBold(False)
+        label_font_normal.setPointSize(FONT.get("label", 10))
+
+        for key in left_params:
+            lv = left_params.get(key, "")
+            rv = right_params.get(key, "")
+            same = (lv == rv)
+
+            # Row label
+            row_lbl = QLabel(key)
+            row_lbl.setFont(label_font_bold if not same else label_font_normal)
+            row_lbl.setStyleSheet(
+                f"color:{PALETTE.get('text', '#ccc') if same else '#ffffff'};"
+            )
+
+            # Value widget
+            if same:
+                val_lbl = QLabel(lv)
+                val_lbl.setStyleSheet(
+                    f"color:{PALETTE.get('textDim', '#777')}; "
+                    f"font-size:{FONT.get('label', 10)}pt;"
+                )
+                form.addRow(row_lbl, val_lbl)
+            else:
+                pair_widget = QWidget()
+                pair_widget.setStyleSheet("background:transparent;")
+                pair_lay = QHBoxLayout(pair_widget)
+                pair_lay.setContentsMargins(0, 0, 0, 0)
+                pair_lay.setSpacing(12)
+
+                left_lbl = QLabel(lv)
+                left_lbl.setStyleSheet(
+                    f"color:#ffb300; font-size:{FONT.get('label', 10)}pt; font-weight:600;"
+                )
+                arrow_lbl = QLabel("\u2192")
+                arrow_lbl.setStyleSheet(
+                    f"color:{PALETTE.get('textDim', '#555')}; "
+                    f"font-size:{FONT.get('label', 10)}pt;"
+                )
+                right_lbl = QLabel(rv)
+                right_lbl.setStyleSheet(
+                    f"color:{PALETTE.get('accent', '#00d4aa')}; "
+                    f"font-size:{FONT.get('label', 10)}pt; font-weight:600;"
+                )
+
+                pair_lay.addWidget(left_lbl)
+                pair_lay.addWidget(arrow_lbl)
+                pair_lay.addWidget(right_lbl)
+                pair_lay.addStretch(1)
+
+                form.addRow(row_lbl, pair_widget)
+
+        self._scroll.setWidget(container)
+
+    def _show_message(self, text: str):
+        container = QWidget()
+        container.setStyleSheet(
+            f"background:{PALETTE.get('bg', '#1a1a1a')};"
+        )
+        lay = QVBoxLayout(container)
+        lay.setAlignment(Qt.AlignCenter)
+        msg = QLabel(text)
+        msg.setAlignment(Qt.AlignCenter)
+        msg.setStyleSheet(
+            f"color:{PALETTE.get('textDim', '#777')}; "
+            f"font-size:{FONT.get('label', 10)}pt; font-style:italic;"
+        )
+        lay.addWidget(msg)
+        self._scroll.setWidget(container)

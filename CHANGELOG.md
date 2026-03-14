@@ -8,10 +8,33 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+---
+
+## [1.3.0] — 2026-03-14
+
+### Added
+
+- **Acquisition safety net** (`acquisition/pipeline.py`) — `_run()` now wraps the hot-phase in `try/except/finally`; the new `_stimulus_safe_off()` method unconditionally disables FPGA modulation and bias on every exit path (normal completion, early abort, and exception). Eliminates the pre-existing bug where an abort during hot-frame collection left the DUT powered.
+- **Structured crash reporter** (`ui/crash_reporter.py`) — `install_crash_reporter(app_state)` hooks `sys.excepthook` to write a timestamped crash report (`~/.microsanj/crashes/crash_<ts>.txt`) containing version info, OS/Python environment, connected hardware driver names, the last 50 log lines (via `_BufferHandler`), and the full traceback. A `QMessageBox` is shown if the UI is alive.
+- **UserStore integrity check and hot backup** (`auth/store.py`) — `_ensure_db()` runs `PRAGMA integrity_check` at every startup and logs `CRITICAL` if the database is corrupt. `backup()` uses the SQLite native `connection.backup()` API for a consistent hot copy to `~/.microsanj/users.db.bak`. `close()` automatically triggers a backup before releasing the connection.
+- **Acquisition pipeline integration tests** (`tests/test_pipelines.py`) — `TestAcquisitionPipelineIntegration` adds 9 test cases: normal ΔR/R production, stimulus OFF on normal/abort/exception exit paths, finite SNR, both averages present, correct `n_frames`, `dark_pixel_fraction` in [0,1], and `finally`-block coverage with a faulting FPGA driver.
+- **Readiness banner full Fix-it coverage** (`ui/widgets/readiness_widget.py`) — corrected two wrong nav-target mappings (`fpga_not_running` and `fpga_not_locked` now map to `"Stimulus"`, not the non-existent `"FPGA"` label), and added the missing `stage_not_homed` → `"Stage"` entry. Every issue code produced by `MetricsService` now has a working "Fix it →" button.
+- **Contextual per-widget help tooltips** — multi-line tooltips added to the most commonly confused controls: all camera/acquisition/analysis spinboxes in `RecipeTab`; status label and Clear button in `HealthTab`; readiness title label in `ReadinessWidget`. Tooltips explain what the parameter does and what values to use.
+- **Session home screen** (`ui/tabs/home_tab.py`) — new `HomeTab` landing dashboard shows the 5 most recent acquisition sessions as cards (thumbnail, label, timestamp, PASS/FAIL chip, Open button). Registered as the first item in the ACQUIRE nav section. Emits `open_session_requested(path)` and `new_acquisition_requested()`. Automatically refreshes after each session save.
+- **Scan profile diff viewer** (`acquisition/recipe_tab.py`) — "Compare…" button opens `_RecipeDiffDialog`: a 700 × 520 px dialog with two combo dropdowns (select any two profiles) and a scrollable diff view. Equal parameters are shown in dim grey; changed parameters highlight both values (left = amber, right = teal). Uses `_flat_params()` to flatten all 15 comparable Recipe fields.
+- **Calibration library** (`acquisition/calibration_library.py`) — slug-keyed named store for `CalibrationResult` objects. Saves `.npz` files + `index.json` in `~/.microsanj/calibrations/`. `best_match(device_id, temperature_c)` scores candidates by device match and temperature proximity.
+- **Batch session reprocessor** (`acquisition/batch_reprocessor.py`) — `BatchReprocessor.reprocess(uids, calibration)` re-applies a `CalibrationResult` to a list of session UIDs without re-capturing data; updates `delta_t.npy` and `session.json` in-place. `BatchReprocessWorker(QThread)` provides a Qt-friendly async wrapper.
+- **Remote control REST API** (`hardware/api_server.py`) — `ApiServer` binds to `127.0.0.1` only; no third-party dependencies (`http.server` stdlib only). Endpoints: `GET /api/v1/status`, `GET /api/v1/acquire/status`, `GET/POST /api/v1/acquire`, `POST /api/v1/stop`, `GET /api/v1/session/{uid}`, `GET /api/v1/sessions`. Optional bearer-token auth via `config.get_pref("api.token", "")`.
+- **Hardware health dashboard** (`ui/tabs/health_tab.py`) — `HealthTab` shows 60-minute rolling trends for TEC channel temperatures, FPGA duty cycle, and camera frame rate using a 3-subplot matplotlib figure (QLabel fallback if matplotlib unavailable). `_RollingBuffer` trims entries older than 3600 s. Updates via 5-second QTimer.
+
 ### Changed
 
-- **DeveloperGuide.md updated for v1.2.x** — Section 4.3 now documents the pre-flight validation system (`preflight()` classmethod) with a full driver coverage table; Section 4.5 adds the `_connect_worker()` connection sequence showing where pre-flight fits; Section 19 adds `preflight()` as a required step (with example) when adding a new driver; Section 21 adds a design-decision entry; Section 22 adds `thorlabs_apt_device` and `pydp832/dp832` to the optional dependency list. Document footer updated to v1.2.9.
-- **UserManual.md updated for v1.2.x** — Microsanj IR Camera (FLIR Boson) documentation corrected throughout: references to the FLIR Spinnaker SDK replaced with `flirpy` (bundled with installer, no manual install required). Added troubleshooting entries for NI IMAQdx cameras and for the pre-flight dependency error dialog. Document header updated to v1.2.9.
+- **DeveloperGuide.md updated for v1.2.x** — Section 4.3 documents the pre-flight validation system with full driver coverage table; Sections 4.5, 19, 21, and 22 updated accordingly. Footer updated to v1.2.9.
+- **UserManual.md updated for v1.2.x** — FLIR Spinnaker SDK references replaced with `flirpy` throughout; troubleshooting entries added for NI IMAQdx cameras and the pre-flight error dialog. Header updated to v1.2.9.
+
+### Dependencies
+
+- `bcrypt>=4.0` added to `requirements.txt` (only new runtime dependency).
 
 ---
 

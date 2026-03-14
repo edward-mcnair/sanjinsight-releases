@@ -295,8 +295,8 @@ class AcquisitionPipeline:
             self._result.hot_avg      = hot_frames
             self._result.hot_captured = n_frames
 
-            # --- Restore stimulus to OFF after capture ---
-            self._set_stimulus(False)
+            # NOTE: _stimulus_safe_off() in finally handles the actual guarantee
+            # that the stimulus is off; the explicit call was removed here.
 
             # --- Processing ---
             self._state = AcqState.PROCESSING
@@ -319,11 +319,6 @@ class AcquisitionPipeline:
                 self.on_complete(self._result)
 
         except Exception as e:
-            # Always restore stimulus to OFF on error
-            try:
-                self._set_stimulus(False)
-            except Exception:
-                pass
             self._state = AcqState.ERROR
             msg = f"Acquisition error: {e}"
             self._emit_progress(
@@ -331,6 +326,27 @@ class AcquisitionPipeline:
                 frames_done=0, frames_total=0, message=msg)
             if self.on_error:
                 self.on_error(msg)
+        finally:
+            self._stimulus_safe_off()
+
+    def _stimulus_safe_off(self) -> None:
+        """
+        Unconditionally turn the stimulus off.
+
+        Called from the ``finally`` block of ``_run()`` to guarantee the
+        DUT is never left in the powered (hot) state after any acquisition
+        exit path — normal completion, abort, or exception.
+        """
+        if self._fpga is not None:
+            try:
+                self._fpga.set_stimulus(False)
+            except Exception as exc:
+                log.warning("_stimulus_safe_off: FPGA set_stimulus(False) failed: %s", exc)
+        if self._bias is not None:
+            try:
+                self._bias.disable()
+            except Exception as exc:
+                log.warning("_stimulus_safe_off: bias.disable() failed: %s", exc)
 
     def _set_stimulus(self, active: bool):
         """

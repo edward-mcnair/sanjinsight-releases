@@ -34,6 +34,7 @@ from auth.models import User, UserType
 
 _MICROSANJ_DIR = Path.home() / ".microsanj"
 _DB_PATH       = _MICROSANJ_DIR / "users.db"
+_BACKUP_PATH   = _MICROSANJ_DIR / "users.db.bak"
 _AUDIT_PATH    = _MICROSANJ_DIR / "audit.log"
 
 # ── Schema ────────────────────────────────────────────────────────────────────
@@ -110,6 +111,13 @@ class UserStore:
                          _SCHEMA_VERSION, self._db_path)
             elif version < _SCHEMA_VERSION:
                 self._migrate(conn, version)
+        # Run integrity check after schema is ready (outside the lock — integrity_check acquires its own)
+        if not self.integrity_check():
+            log.critical(
+                "UserStore: database integrity check FAILED at startup — "
+                "user authentication may not work correctly. "
+                "Backup is at %s", _BACKUP_PATH,
+            )
 
     def _migrate(self, conn: sqlite3.Connection, from_version: int) -> None:
         """Apply incremental migrations from *from_version* to _SCHEMA_VERSION."""
@@ -263,8 +271,65 @@ class UserStore:
                 (ts, uid),
             )
 
+    def integrity_check(self) -> bool:
+        """
+        Run ``PRAGMA integrity_check`` on the database.
+
+        Returns True if the database is healthy, False if corruption is
+        detected.  Logs a CRITICAL-level message on failure.
+
+        Called automatically by ``_ensure_db()`` on every startup so
+        corruption is caught before any write operations occur.
+        """
+        with self._lock:
+            try:
+                rows = self._connect().execute(
+                    "PRAGMA integrity_check"
+                ).fetchall()
+                # SQLite returns [('ok',)] for a healthy database; any other
+                # result indicates corruption.
+                if rows and str(rows[0][0]).lower() == "ok":
+                    return True
+                log.critical(
+                    "UserStore: PRAGMA integrity_check FAILED — database may "
+                    "be corrupt: %s  (path: %s)",
+                    [r[0] for r in rows], self._db_path,
+                )
+                return False
+            except Exception as exc:
+                log.critical(
+                    "UserStore: integrity_check raised: %s  (path: %s)",
+                    exc, self._db_path,
+                )
+                return False
+
+    def backup(self, dest: Path = _BACKUP_PATH) -> bool:
+        """
+        Create a hot backup of the database to *dest*.
+
+        Uses SQLite's built-in ``backup()`` API so the copy is always
+        consistent, even if writes are in progress.  Called automatically
+        by ``close()`` before the connection is released.
+
+        Returns True on success, False on failure (logged at WARNING).
+        """
+        with self._lock:
+            try:
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                src = self._connect()
+                dst_conn = sqlite3.connect(str(dest))
+                with dst_conn:
+                    src.backup(dst_conn)
+                dst_conn.close()
+                log.debug("UserStore: backup written to %s", dest)
+                return True
+            except Exception as exc:
+                log.warning("UserStore: backup to %s failed: %s", dest, exc)
+                return False
+
     def close(self) -> None:
-        """Close the SQLite connection (optional — called on app exit)."""
+        """Flush a backup then close the SQLite connection."""
+        self.backup()          # best-effort — failure is logged, not raised
         with self._lock:
             if self._conn is not None:
                 self._conn.close()

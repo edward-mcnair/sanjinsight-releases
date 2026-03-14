@@ -45,6 +45,9 @@ from ui.theme import PALETTE, FONT
 # have a corresponding hardware tab.  Issue codes are those produced by
 # ai/metrics_service.py.  Codes with dynamic suffixes (e.g. tec_not_stable_0)
 # are matched via startswith().
+#
+# Note: FPGA issues map to "Stimulus" (the merged Stimulus tab that contains
+# the FPGA modulation controls).  Stage homing issues map to "Stage".
 
 _NAV_MAP: dict[str, str] = {
     "camera_disconnected":  "Camera",
@@ -52,8 +55,9 @@ _NAV_MAP: dict[str, str] = {
     "camera_underexposed":  "Camera",
     "high_drift":           "Camera",
     "poor_focus":           "Camera",
-    "fpga_not_running":     "FPGA",
-    "fpga_not_locked":      "FPGA",
+    "fpga_not_running":     "Stimulus",
+    "fpga_not_locked":      "Stimulus",
+    "stage_not_homed":      "Stage",
     # TEC codes have a channel suffix: tec_not_stable_0, tec_not_stable_1
     # These are matched via the prefix check in _nav_target_for().
     "tec_not_stable":       "Temperature",
@@ -115,6 +119,10 @@ class ReadinessWidget(QWidget):
         self._title.setStyleSheet(
             f"font-family: Menlo, monospace; "
             f"font-size: {FONT['label']}pt; font-weight: bold;")
+        self._title.setToolTip(
+            "Shows whether the instrument meets all acquisition prerequisites.\n"
+            "Click 'Fix it →' next to any issue to jump to the relevant hardware tab."
+        )
 
         header_row.addWidget(self._dot)
         header_row.addWidget(self._title)
