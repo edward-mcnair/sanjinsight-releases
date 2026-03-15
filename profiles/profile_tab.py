@@ -197,7 +197,8 @@ class ProfileTab(QWidget):
         root.addWidget(self._table, 3)
 
         # ── Detail pane ────────────────────────────────────────────
-        detail_box = QGroupBox("Profile Details")
+        self._detail_box = QGroupBox("Profile Details")
+        detail_box = self._detail_box
         detail_box.setStyleSheet(f"""
             QGroupBox {{
                 background: {PALETTE['surface']};
@@ -255,6 +256,81 @@ class ProfileTab(QWidget):
         fl.addRow("Notes:",         self._d_notes)
 
         root.addWidget(detail_box, 2)
+
+    # ---------------------------------------------------------------- #
+    #  Theme                                                            #
+    # ---------------------------------------------------------------- #
+
+    def _apply_styles(self) -> None:
+        P = PALETTE
+        self._table.setStyleSheet(f"""
+            QTableWidget {{
+                background: {P['surface2']};
+                alternate-background-color: {P['surface']};
+                color: {P['text']};
+                gridline-color: {P['border']};
+                border: 1px solid {P['border']};
+                border-radius: 3px;
+            }}
+            QTableWidget::item {{
+                padding: 3px 6px;
+                border: none;
+            }}
+            QTableWidget::item:selected {{
+                background: {P['info']};
+                color: {P['bg']};
+            }}
+            QHeaderView::section {{
+                background: {P['surface3']};
+                color: {P['textDim']};
+                font-size: {FONT['caption']}pt;
+                border: none;
+                border-bottom: 1px solid {P['border']};
+                border-right: 1px solid {P['border']};
+                padding: 4px 8px;
+            }}
+            QHeaderView::section:last {{
+                border-right: none;
+            }}
+            QScrollBar:vertical {{
+                background: {P['surface3']};
+                width: 8px; border: none;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {P['border']};
+                border-radius: 4px; min-height: 20px;
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                height: 0px;
+            }}
+        """)
+        self._detail_box.setStyleSheet(f"""
+            QGroupBox {{
+                background: {P['surface']};
+                color: {P['textDim']};
+                font-size: {FONT['label']}pt;
+                border: 1px solid {P['border']};
+                border-radius: 4px;
+                margin-top: 6px;
+            }}
+            QGroupBox::title {{
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                padding: 0 4px;
+                left: 8px;
+            }}
+            QLabel {{
+                background: transparent;
+                color: {P['textDim']};
+                font-size: {FONT['label']}pt;
+            }}
+        """)
+        _ro_qss = f"color: {P['text']}; font-size: {FONT['label']}pt;"
+        for lbl in (self._d_name, self._d_material, self._d_category,
+                    self._d_ct, self._d_wl, self._d_exp, self._d_gain,
+                    self._d_frames, self._d_accum, self._d_dt,
+                    self._d_desc, self._d_notes):
+            lbl.setStyleSheet(_ro_qss)
 
     # ---------------------------------------------------------------- #
     #  Data helpers                                                     #

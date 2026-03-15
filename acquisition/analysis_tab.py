@@ -347,6 +347,11 @@ class AnalysisTab(QWidget):
             btn.clicked.connect(btn_callback)
             lay.addSpacing(4)
             lay.addWidget(btn, 0, Qt.AlignCenter)
+            # Store refs on the container so _apply_styles() can reach them
+            w._theme_icon_lbl  = icon_lbl
+            w._theme_title_lbl = title_lbl
+            w._theme_desc_lbl  = desc_lbl
+            w._theme_btn       = btn
 
         lay.addStretch()
         return w
@@ -357,12 +362,55 @@ class AnalysisTab(QWidget):
 
     def _apply_styles(self) -> None:
         """Re-apply PALETTE-driven styles on theme switch."""
+        P   = PALETTE
+        sur = P.get("surface",  "#2d2d2d")
+        su2 = P.get("surface2", "#3d3d3d")
+        bdr = P.get("border",   "#484848")
+        sub = P.get("textSub",  "#6a6a6a")
+        dim = P.get("textDim",  "#999999")
+        acc = P.get("accent",   "#00d4aa")
         if hasattr(self, "_toolbar"):
             self._toolbar.setStyleSheet(
-                f"background:{PALETTE.get('surface','#2d2d2d')}; "
-                f"border-bottom:1px solid {PALETTE.get('border','#484848')};")
-        # VerdictBanner and other sub-widgets re-render themselves via
-        # their own paintEvent / setStyleSheet when the parent repaints.
+                f"background:{sur}; border-bottom:1px solid {bdr};")
+        # Source / "No data" badge
+        if hasattr(self, "_source_lbl"):
+            cur_text = self._source_lbl.text()
+            if cur_text == "No data":
+                self._source_lbl.setStyleSheet(
+                    f"background:{su2}; color:{dim}; padding:0 10px; "
+                    f"border-radius:3px; font-family:Menlo,monospace; font-size:{FONT['label']}pt;")
+            else:
+                self._source_lbl.setStyleSheet(
+                    f"background:{su2}; color:{acc}; padding:0 10px; "
+                    f"border-radius:3px; font-family:Menlo,monospace; font-size:{FONT['label']}pt;")
+        # Auto-run checkbox
+        if hasattr(self, "_auto_cb"):
+            self._auto_cb.setStyleSheet(
+                f"font-size:{FONT['heading']}pt; color:{sub};")
+        # Empty-state pages in the data stack
+        if hasattr(self, "_data_stack"):
+            for i in range(self._data_stack.count()):
+                pg = self._data_stack.widget(i)
+                if pg is None:
+                    continue
+                if hasattr(pg, "_theme_icon_lbl"):
+                    pg._theme_icon_lbl.setStyleSheet(
+                        scaled_qss(f"font-size:52pt; color:{bdr};"))
+                if hasattr(pg, "_theme_title_lbl"):
+                    pg._theme_title_lbl.setStyleSheet(
+                        f"font-size:{FONT['readoutSm']}pt; font-weight:bold; color:{sub};")
+                if hasattr(pg, "_theme_desc_lbl"):
+                    pg._theme_desc_lbl.setStyleSheet(
+                        f"font-size:{FONT['label']}pt; color:{dim};")
+                if hasattr(pg, "_theme_btn"):
+                    pg._theme_btn.setStyleSheet(f"""
+                        QPushButton {{
+                            background:{su2}; color:{acc};
+                            border:1px solid {acc}55; border-radius:5px;
+                            font-size:{FONT['label']}pt; font-weight:600;
+                        }}
+                        QPushButton:hover {{ background:{sur}; }}
+                    """)
 
     def _build_toolbar(self) -> QWidget:
         bar = QWidget()

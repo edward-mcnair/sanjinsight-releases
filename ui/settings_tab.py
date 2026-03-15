@@ -282,7 +282,8 @@ class SettingsTab(QWidget):
         outer.setSpacing(0)
 
         # ── Search bar + status label (above the scroll area) ─────────
-        search_bar_widget = QWidget()
+        self._search_bar_widget = QWidget()
+        search_bar_widget = self._search_bar_widget
         search_bar_widget.setStyleSheet(f"background:{_BG()};")
         search_bar_lay = QVBoxLayout(search_bar_widget)
         search_bar_lay.setContentsMargins(30, 12, 30, 4)
@@ -321,7 +322,8 @@ class SettingsTab(QWidget):
 
         outer.addWidget(scroll)
 
-        content = QWidget()
+        self._settings_content = QWidget()
+        content = self._settings_content
         content.setStyleSheet(f"background:{_BG()};")
         scroll.setWidget(content)
 
@@ -330,14 +332,16 @@ class SettingsTab(QWidget):
         lay.setSpacing(20)
 
         # ── Page title ────────────────────────────────────────────────
-        pg_title = QLabel("Settings")
+        self._pg_title = QLabel("Settings")
+        pg_title = self._pg_title
         pg_title.setStyleSheet(scaled_qss(f"font-size:20pt; font-weight:700; color:{_TEXT()};"))
         lay.addWidget(pg_title)
 
         lay.addWidget(_sep())
 
         # ── Software version card ─────────────────────────────────────
-        lay.addWidget(self._build_version_card())
+        self._version_card = self._build_version_card()
+        lay.addWidget(self._version_card)
 
         # ── Appearance ────────────────────────────────────────────────
         lay.addWidget(self._build_appearance_group())
@@ -669,6 +673,42 @@ class SettingsTab(QWidget):
         """Called by MainWindow._swap_visual_theme() after a theme switch."""
         # Top-level background
         self.setStyleSheet(f"background:{_BG()};")
+
+        # Content + search bar backgrounds (stored in __init__)
+        if hasattr(self, "_settings_content"):
+            self._settings_content.setStyleSheet(f"background:{_BG()};")
+        if hasattr(self, "_search_bar_widget"):
+            self._search_bar_widget.setStyleSheet(f"background:{_BG()};")
+
+        # Page title
+        if hasattr(self, "_pg_title"):
+            self._pg_title.setStyleSheet(
+                scaled_qss(f"font-size:20pt; font-weight:700; color:{_TEXT()};"))
+
+        # Version card
+        if hasattr(self, "_version_card"):
+            self._version_card.setStyleSheet(
+                f"background:{_BG2()}; border:1px solid {_BORDER()}; border-radius:6px;")
+
+        # Update status label
+        if hasattr(self, "_update_status_lbl"):
+            self._update_status_lbl.setStyleSheet(
+                f"font-size:{FONT['sublabel']}pt; color:{_MUTED()};")
+
+        # All top-level QGroupBox sections
+        _grp_qss = f"""
+            QGroupBox {{
+                color:{_MUTED()}; font-size:{FONT["sublabel"]}pt; font-weight:600;
+                border:1px solid {_BORDER()}; border-radius:5px;
+                margin-top:10px; padding:14px 14px 14px 14px;
+            }}
+            QGroupBox::title {{
+                subcontrol-origin:margin; left:12px; padding:0 6px;
+                background:{_BG()};
+            }}
+        """
+        for grp in getattr(self, "_setting_groups", []):
+            grp.setStyleSheet(_grp_qss)
 
         # Search bar
         if hasattr(self, "_settings_search"):

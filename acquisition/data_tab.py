@@ -399,6 +399,22 @@ class DataTab(QWidget):
         splitter.setSizes([320, 900])
 
     # ---------------------------------------------------------------- #
+    #  Theme refresh                                                    #
+    # ---------------------------------------------------------------- #
+
+    def _apply_styles(self) -> None:
+        P   = PALETTE
+        bg  = P.get("bg",      "#242424")
+        bdr = P.get("border",  "#484848")
+        dim = P.get("textDim", "#999999")
+        txt = P.get("text",    "#ebebeb")
+        # Inline-styled notes editor — the most visibly affected widget
+        if hasattr(self, "_notes_edit"):
+            self._notes_edit.setStyleSheet(
+                f"background:{bg}; color:{txt}; border:1px solid {bdr}; "
+                f"font-size:{FONT['body']}pt; font-family:Menlo,monospace;")
+
+    # ---------------------------------------------------------------- #
     #  List panel (left)                                                #
     # ---------------------------------------------------------------- #
 

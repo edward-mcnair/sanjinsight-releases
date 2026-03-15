@@ -625,10 +625,29 @@ class LiveTab(QWidget):
 
     def _apply_styles(self) -> None:
         """Re-apply PALETTE-driven styles on theme switch."""
+        P   = PALETTE
+        sur = P.get("surface",  "#2d2d2d")
+        su2 = P.get("surface2", "#3d3d3d")
+        bdr = P.get("border",   "#484848")
+        sub = P.get("textSub",  "#6a6a6a")
+        acc = P.get("accent",   "#00d4aa")
         if hasattr(self, "_toolbar"):
             self._toolbar.setStyleSheet(
-                f"background:{PALETTE.get('surface','#2d2d2d')}; "
-                f"border-bottom:1px solid {PALETTE.get('border','#484848')};")
+                f"background:{sur}; border-bottom:1px solid {bdr};")
+        # Status badges: re-apply with fresh palette so they switch correctly
+        _badge_base = (
+            f"padding:0 8px; border-radius:3px; "
+            f"font-family:Menlo,monospace; font-size:{FONT['label']}pt;")
+        if hasattr(self, "_fps_lbl"):
+            # Colour depends on whether live is running — re-apply idle state
+            self._fps_lbl.setStyleSheet(
+                f"background:{su2}; color:{acc}; {_badge_base}")
+        if hasattr(self, "_cycle_lbl"):
+            self._cycle_lbl.setStyleSheet(
+                f"background:{su2}; color:{sub}; {_badge_base}")
+        if hasattr(self, "_state_lbl"):
+            self._state_lbl.setStyleSheet(
+                f"background:{su2}; color:{sub}; {_badge_base}")
 
     def _build_toolbar(self) -> QWidget:
         bar = QWidget()

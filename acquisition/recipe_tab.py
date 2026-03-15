@@ -287,7 +287,8 @@ class RecipeTab(QWidget):
         left_lay.setContentsMargins(0, 0, 0, 0)
         left_lay.setSpacing(4)
 
-        list_hdr = QLabel("Saved Scan Profiles")
+        self._list_hdr = QLabel("Saved Scan Profiles")
+        list_hdr = self._list_hdr
         list_hdr.setStyleSheet(f"color:#ccc; font-size:{FONT['heading']}pt; font-weight:600;")
         left_lay.addWidget(list_hdr)
 
@@ -340,7 +341,8 @@ class RecipeTab(QWidget):
         right_lay.setContentsMargins(0, 0, 0, 0)
         right_lay.setSpacing(6)
 
-        right_hdr = QLabel("Scan Profile Editor")
+        self._right_hdr = QLabel("Scan Profile Editor")
+        right_hdr = self._right_hdr
         right_hdr.setStyleSheet(f"color:#ccc; font-size:{FONT['heading']}pt; font-weight:600;")
         right_lay.addWidget(right_hdr)
 
@@ -500,13 +502,54 @@ class RecipeTab(QWidget):
 
     @staticmethod
     def _box_style() -> str:
+        P = PALETTE
+        sur = P.get("surface",  "#1a1d28")
+        bdr = P.get("border",   "#2e3245")
+        dim = P.get("textDim",  "#8892aa")
+        txt = P.get("text",     "#dde3f2")
+        su2 = P.get("surface2", "#20232e")
         return (
-            f"QGroupBox {{ color:#aaa; font-size:{FONT['label']}pt; border:1px solid #2a2a2a; "
-            "border-radius:4px; margin-top:6px; } "
+            f"QGroupBox {{ color:{dim}; font-size:{FONT['label']}pt; "
+            f"border:1px solid {bdr}; border-radius:4px; margin-top:6px; }} "
             "QGroupBox::title { subcontrol-position:top left; padding:0 4px; } "
-            "QDoubleSpinBox, QSpinBox, QLineEdit, QComboBox { "
-            f"background:#111; color:#ddd; border:1px solid #333; font-size:{FONT['label']}pt; }}"
+            f"QDoubleSpinBox, QSpinBox, QLineEdit, QComboBox {{ "
+            f"background:{sur}; color:{txt}; border:1px solid {bdr}; "
+            f"font-size:{FONT['label']}pt; }}"
         )
+
+    def _apply_styles(self) -> None:
+        P   = PALETTE
+        su2 = P.get("surface2", "#20232e")
+        sur = P.get("surface",  "#1a1d28")
+        bdr = P.get("border",   "#2e3245")
+        txt = P.get("text",     "#dde3f2")
+        dim = P.get("textDim",  "#8892aa")
+        acc = P.get("accent",   "#00d4aa")
+        hdr_qss = f"color:{txt}; font-size:{FONT['heading']}pt; font-weight:600;"
+        if hasattr(self, "_list_hdr"):
+            self._list_hdr.setStyleSheet(hdr_qss)
+        if hasattr(self, "_right_hdr"):
+            self._right_hdr.setStyleSheet(hdr_qss)
+        if hasattr(self, "_list"):
+            self._list.setStyleSheet(f"""
+                QListWidget {{ background:{su2}; color:{txt}; border:1px solid {bdr};
+                              font-size:{FONT['label']}pt; font-family:Menlo,monospace; }}
+                QListWidget::item:selected {{ background:{P.get('info','#0d3a52')}; color:{P.get('bg','#12151f')}; }}
+                QListWidget::item:hover    {{ background:{P.get('surfaceHover','#262a38')}; }}
+            """)
+        box_qss = self._box_style()
+        from PyQt5.QtWidgets import QGroupBox
+        for box in self.findChildren(QGroupBox):
+            box.setStyleSheet(box_qss)
+        if hasattr(self, "_notes_edit"):
+            self._notes_edit.setStyleSheet(
+                f"background:{sur}; color:{txt}; "
+                f"font-size:{FONT['label']}pt; border:none;")
+        if hasattr(self, "_lock_banner") and self._lock_banner.isVisible():
+            self._lock_banner.setStyleSheet(
+                f"background:{acc}22; color:{acc}; "
+                f"border:1px solid {acc}55; border-radius:4px; "
+                f"font-size:{FONT.get('sublabel', 9)}pt; font-weight:600;")
 
     def _set_editor_enabled(self, enabled: bool):
         locked = bool(self._current and self._current.locked)

@@ -51,6 +51,9 @@ class LibraryTab(QWidget):
     def _apply_styles(self) -> None:
         self._tabs.setStyleSheet(_inner_tab_qss())
         self._apply_tab_icons()
+        for sub in (self._profile_tab, self._recipe_tab):
+            if hasattr(sub, "_apply_styles"):
+                sub._apply_styles()
 
     def _apply_tab_icons(self) -> None:
         icons = [
