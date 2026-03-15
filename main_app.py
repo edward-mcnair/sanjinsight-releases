@@ -494,6 +494,8 @@ class MainWindow(QMainWindow):
             NI("Calibration", _I["Calibration"],       self._cal_tab),
             NI("Analysis",    _I["Analysis"],          self._analysis_tab,         badge="★"),
             NI("Sessions",    _I["Sessions"],          self._data_tab),
+            NI("Compare",     _I["Compare"],           self._compare_tab),
+            NI("3D Surface",  _I["3D Surface"],        self._surface_tab),
         ])
         self._nav.add_collapsible("Hardware", _G["Hardware"], [
             NI("Camera",      _I["Camera"],            self._camera_ctrl_tab),
@@ -624,7 +626,11 @@ class MainWindow(QMainWindow):
             PaletteItem("Analysis",    "Analyze",  lambda: self._nav.navigate_to(self._analysis_tab),
                         keywords=["analysis", "process", "result"]),
             PaletteItem("Sessions",    "Analyze",  lambda: self._nav.navigate_to(self._data_tab),
-                        keywords=["sessions", "data", "compare", "3d", "surface", "export"]),
+                        keywords=["sessions", "data", "history", "export"]),
+            PaletteItem("Compare",     "Analyze",  lambda: self._nav.navigate_to(self._compare_tab),
+                        keywords=["compare", "comparison", "overlay", "diff", "side by side"]),
+            PaletteItem("3D Surface",  "Analyze",  lambda: self._nav.navigate_to(self._surface_tab),
+                        keywords=["3d", "surface", "plot", "topography", "three dimensional"]),
             # HARDWARE
             PaletteItem("Camera",      "Hardware", lambda: self._nav.navigate_to(self._camera_ctrl_tab),
                         keywords=["camera", "sensor", "exposure", "gain", "roi", "autofocus"]),
