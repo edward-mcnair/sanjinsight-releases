@@ -12,22 +12,26 @@
 3. [Hardware Setup Wizard](#3-hardware-setup-wizard)
 4. [Application Overview](#4-application-overview)
 5. [Device Status & Emergency Stop](#5-device-status--emergency-stop)
-6. [Live View](#6-live-view)
-7. [Acquisition](#7-acquisition)
-8. [Grid Scan](#8-grid-scan)
-9. [Calibration](#9-calibration)
-10. [Hardware Panels](#10-hardware-panels)
-11. [AI Assistant](#11-ai-assistant)
-12. [Saving and Exporting Data](#12-saving-and-exporting-data)
-13. [Device Manager](#13-device-manager)
-14. [Settings](#14-settings)
-15. [User Accounts & Roles](#15-user-accounts--roles)
-16. [Operator Mode](#16-operator-mode)
-17. [Supported Hardware](#17-supported-hardware)
-18. [Configuration File Reference](#18-configuration-file-reference)
-19. [Keyboard Shortcuts](#19-keyboard-shortcuts)
-20. [Troubleshooting](#20-troubleshooting)
-21. [Technical Reference](#21-technical-reference)
+6. [AutoScan](#6-autoscan)
+7. [Live View](#7-live-view)
+8. [Capture — Single Acquisition](#8-capture--single-acquisition)
+9. [Capture — Grid Scan](#9-capture--grid-scan)
+10. [Transient Capture](#10-transient-capture)
+11. [Calibration](#11-calibration)
+12. [Hardware Panels](#12-hardware-panels)
+13. [AI Assistant](#13-ai-assistant)
+14. [Compare Sessions](#14-compare-sessions)
+15. [3D Surface](#15-3d-surface)
+16. [Saving and Exporting Data](#16-saving-and-exporting-data)
+17. [Device Manager](#17-device-manager)
+18. [Settings](#18-settings)
+19. [User Accounts & Roles](#19-user-accounts--roles)
+20. [Operator Mode](#20-operator-mode)
+21. [Supported Hardware](#21-supported-hardware)
+22. [Configuration File Reference](#22-configuration-file-reference)
+23. [Keyboard Shortcuts](#23-keyboard-shortcuts)
+24. [Troubleshooting](#24-troubleshooting)
+25. [Technical Reference](#25-technical-reference)
 
 ---
 
@@ -57,7 +61,7 @@ Thermoreflectance imaging exploits the fact that a material's optical reflectanc
 | C_T | Thermoreflectance coefficient (material and wavelength specific) | K⁻¹ |
 | ΔT | Temperature change | °C or K |
 
-The application measures ΔR/R by alternating the device under test (DUT) between two bias states ("cold" and "hot") synchronised with the camera via an FPGA lock-in reference signal. C_T is determined by the Calibration workflow (Section 9). Once C_T is known, ΔT = ΔR/R ÷ C_T.
+The application measures ΔR/R by alternating the device under test (DUT) between two bias states ("cold" and "hot") synchronised with the camera via an FPGA lock-in reference signal. C_T is determined by the Calibration workflow (Section 11). Once C_T is known, ΔT = ΔR/R ÷ C_T.
 
 **Thermoreflectance coefficient reference values (C_T [K⁻¹]):**
 
@@ -80,8 +84,10 @@ The application measures ΔR/R by alternating the device under test (DUT) betwee
 
 | Mode | Access | Best for |
 |---|---|---|
-| **Standard** | Toggle in top bar | Step-by-step guided measurement; new users |
-| **Advanced** | Toggle in top bar | Full independent control of all panels and parameters |
+| **AutoScan** | ACQUIRE → AutoScan in sidebar | Guided one-screen workflow; new users and automated QA |
+| **Manual** | Individual panels in ACQUIRE, ANALYZE, Hardware | Full independent control of all acquisition and analysis parameters |
+
+AutoScan and Manual mode are not exclusive — users freely switch between them by navigating the sidebar. AutoScan is simply a single-panel guided workflow that drives the same underlying acquisition engine as the manual panels.
 
 ---
 
@@ -313,11 +319,43 @@ The resource string is visible in **NI MAX → Devices and Interfaces**. Common 
 - `rio://192.168.1.1/RIO0` — Network CompactRIO
 - `Dev1` — USB-6001 DAQ fallback
 
-### 3.7 Page 5 — Summary & Finish
+### 3.7 Page 5 — Bias Source
 
-Review all settings. Click **Finish** to write `config.yaml` and close the wizard. Click **Back** to revise any page. Click **Cancel** to leave the existing `config.yaml` unchanged.
+| Field | Options | Notes |
+|---|---|---|
+| Driver | `keithley` / `visa_generic` / `simulated` | |
+| VISA address | Text field | e.g. `GPIB0::24::INSTR` or `USB0::...` |
+| Instrument type | Combo | Keithley 24xx / 26xx, Rigol DP832, generic SCPI |
 
-After finishing, hardware drivers are initialised. Status dots in the top bar reflect the connection result.
+Use **simulated** if no bias source is connected or for software-only use.
+
+### 3.8 Page 6 — Stage
+
+| Field | Options | Notes |
+|---|---|---|
+| Driver | `thorlabs` / `prior` / `serial_stage` / `simulated` | |
+| COM Port | Editable combo | Auto-filled if detected |
+| Dialect | `prior` / `ludl` / `asi` / `marzhauser` | For `serial_stage` only |
+
+Use **simulated** if no motorised stage is present.
+
+### 3.9 Page 7 — AI Assistant
+
+This page configures the local language model used by the AI Assistant.
+
+- **Ollama** — The recommended backend. If Ollama is not detected, an install link is shown.
+- **Pull model** — Select a model from the combo and click **Pull** to download it into Ollama.
+- **Model list** — After pulling, the downloaded model appears in the list. Select it and click **Connect**.
+
+The AI Assistant works without a model — it falls back to rule-based diagnostics only. The model can also be set up later via **Settings → AI Assistant**.
+
+### 3.10 Page 8 — Done
+
+Review a summary of all configured devices. Click **Finish** to write `config.yaml` and launch the application. Click **Back** to revise any earlier page.
+
+The wizard can be re-opened at any time via **Help → Hardware Setup…** (Ctrl+Shift+H).
+
+> **Skip Setup:** A **Skip Setup** button at the bottom-left of each wizard page closes the wizard without saving changes, using the existing `config.yaml` (or defaults on a fresh install).
 
 ---
 
@@ -327,97 +365,114 @@ After finishing, hardware drivers are initialised. Status dots in the top bar re
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│  [Microsanj logo]  SanjINSIGHT       Standard ◉ Advanced               │
-│  ● Cam  ● TEC1  ● TEC2  ● FPGA  ● Bias  ● Stage      ⚙   ■ STOP  [v] │
+│  [Microsanj logo]  SanjINSIGHT   [ ● Connected Devices ▾ ]  [User] [■ STOP] │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
 | Element | Description |
 |---|---|
-| **Logo** | Microsanj branding |
-| **User display** | Shows logged-in user's display name. Includes **Log in** button when no session is active (visible only when an admin account exists), and **Log out** button when a session is active. |
-| **Standard / Advanced toggle** | Switch the main view mode |
-| **Status dots (●)** | Cyan = connected and responding; Red = disconnected or error |
-| **⚙ (Device Manager)** | Open Device Manager dialog |
+| **Logo / App name** | Microsanj branding |
+| **Connected Devices button** | A single dropdown button showing the overall connection state. Click it to open a popup listing every configured device with its individual status dot (● cyan = connected, ● red = error/disconnected). The popup footer has a **Manage devices…** link that opens the Device Manager. |
+| **User display** | Shows the logged-in user's display name and type badge (e.g. "Jane Smith  [OP]"). Includes a **Log in** button when no session is active (visible only when an admin account exists) and a **Log out** button when a session is active. Hidden in no-auth mode. |
 | **■ STOP** | Emergency stop button — see Section 5 |
-| **[v] badge** | Version update available — click to download |
+
+> **Update badge:** When a newer release is available, a badge appears in the **Connected Devices** dropdown or the application title. Click it to go to **Help → Check for Updates…**.
 
 ### 4.2 Left Sidebar
 
-The sidebar on the left organises all panels into functional groups. Click any item to open it in the main area.
+The sidebar organises all panels into functional groups. Click any item to open it in the main area. The sidebar collapses to a narrow accent bar — click it to re-expand.
 
-**MEASURE section**
+**ACQUIRE section**
+
+| Panel | Shortcut | Sub-tabs | Purpose |
+|---|---|---|---|
+| **AutoScan** ★ | — | — | Guided one-screen measurement workflow |
+| **Live** ★ | Ctrl+L | — | Real-time ΔR/R streaming with EMA smoothing |
+| **Capture** ★ | Ctrl+1 | Single · Grid | Single-shot acquisition and automated grid scan |
+| **Transient** | — | Time-Resolved · Burst | Time-resolved pulsed and burst (movie) capture |
+
+**ANALYZE section**
 
 | Panel | Shortcut | Purpose |
 |---|---|---|
-| **Live** | Ctrl+L | Real-time ΔR/R streaming with EMA smoothing |
-| **Acquire** | Ctrl+1 | Single-shot acquisition with readiness gate |
-| **Scan** | Ctrl+Shift+S | Automated grid scan mapping |
+| **Calibration** | — | TEC-stepped C_T coefficient measurement |
+| **Analysis** ★ | Ctrl+5 | Post-acquisition ΔR/R and ΔT analysis tools |
+| **Sessions** | — | Browse and re-open saved sessions |
+| **Compare** | — | Side-by-side session comparison |
+| **3D Surface** | — | Interactive 3D rendering of ΔR/R or ΔT map |
 
-**ANALYSIS section**
+**Hardware group** *(collapsible — click the group header to expand/collapse)*
 
-| Panel | Purpose |
+| Panel | Shortcut | Sub-tabs | Purpose |
+|---|---|---|---|
+| **Camera** | Ctrl+2 | Camera · ROI · Autofocus | Exposure, gain, live preview, ROI, autofocus |
+| **Stimulus** | — | Modulation · Bias Source | FPGA lock-in controls and bias source output |
+| **Temperature** | Ctrl+3 | — | TEC setpoints, enable/disable, temperature history |
+| **Stage** | Ctrl+4 | — | XYZ position, absolute move, jog pad, Home buttons |
+| **Prober** | — | — | Semi-automatic prober station controls |
+
+> Hardware items whose device is disabled in `config.yaml` are hidden by default.
+
+**LIBRARY section**
+
+| Panel | Sub-tabs | Purpose |
+|---|---|---|
+| **Profiles** | Material Profiles · Scan Profiles | C_T material profiles and locked scan recipes |
+
+**Settings** | Ctrl+, | Application preferences, AI model, user management |
+
+> ★ items are recommended starting points for new users.
+
+#### Bottom Drawer — Console & Log
+
+A **Bottom Drawer** runs along the bottom edge of the window. It is collapsed by default (a thin toggle strip is always visible). Press **Ctrl+`** or click the grip handle to expand it.
+
+| Tab | Purpose |
 |---|---|
-| **Calibration** | TEC-stepped C_T coefficient measurement |
-| **Analysis** | Post-acquisition ΔR/R and ΔT analysis tools |
-| **Compare** | Side-by-side session comparison |
-| **3D Surface** | 3D rendering of ΔR/R or ΔT map |
-
-**Hardware group** *(collapsible — click ▸ arrow to expand/collapse)*
-
-| Panel | Shortcut | Purpose |
-|---|---|---|
-| **Camera** | Ctrl+2 | Exposure, gain, live preview, saturation readout |
-| **Temperature** | Ctrl+3 | TEC setpoints, enable/disable, temperature history |
-| **FPGA** | — | Lock-in frequency, duty cycle, Start/Stop modulation |
-| **Bias Source** | — | Output port selection, voltage/current level, Output ON/OFF |
-| **Stage** | Ctrl+4 | XYZ position readout, absolute move, jog pad, Home buttons |
-| **ROI** | — | Region-of-interest selection for focused acquisition |
-| **Autofocus** | — | Automated focus sweep controls |
-
-**SETUP section**
-
-| Panel | Purpose |
-|---|---|
-| **Profiles** | Material / wavelength / C_T coefficient profiles |
-| **Scan Profiles** | Saved acquisition parameter sets; supports locking for operator use |
-
-**TOOLS section**
-
-| Panel | Shortcut | Purpose |
-|---|---|---|
-| **Data** | — | Browse and re-open saved sessions |
-| **Console** | — | Python console for scripting |
-| **Log** | — | Application event log |
-| **Settings** | Ctrl+, | Application preferences and AI model management |
-
-**AI Assistant** — a dockable panel showing live readiness grade and instrument chat (see Section 11).
+| **Console** | Interactive Python REPL for scripting and automation |
+| **Log** | Live application event log with severity filtering |
 
 ### 4.3 Menu Bar
+
+**File**
+- **Quit** (Ctrl+Q / Cmd+Q) — Exit the application
 
 **Acquisition**
 - **▶ Run Sequence** (Ctrl+R) — Capture cold and hot frames and compute ΔR/R
 - **■ Abort** (Esc) — Stop the active acquisition or scan
-- **Live Mode** (Ctrl+L) — Switch to the Live panel
-- **Scan Mode** (Ctrl+Shift+S) — Switch to the Scan panel
+- **Live Mode** (Ctrl+L) — Navigate to the Live panel
+- **Scan Mode** (Ctrl+Shift+S) — Navigate to the Capture → Grid panel
+- **▶ Start Live Stream** (F5) — Start live streaming
+- **■ Stop Live Stream** (F6) — Stop live streaming
+- **❄ Freeze / Resume** (F7) — Freeze or resume the live display
+- **◈ Run Analysis** (F8) — Run the Analysis pipeline on the current result
+- **⊞ Start / Stop Scan** (F9) — Toggle the grid scan
 
 **View**
-- **Acquire** (Ctrl+1), **Camera** (Ctrl+2), **Temperature** (Ctrl+3), **Stage** (Ctrl+4), **Analysis** (Ctrl+5)
-- **Device Manager** (Ctrl+D)
+- **Acquire** (Ctrl+1) — Navigate to Capture panel
+- **Camera** (Ctrl+2), **Temperature** (Ctrl+3), **Stage** (Ctrl+4), **Analysis** (Ctrl+5)
+- **Device Manager…** (Ctrl+D)
 
 **Help**
 - **About SanjINSIGHT…** — Version, build date, licence
 - **Check for Updates…** — Compare against latest release on GitHub
 - **Hardware Setup…** (Ctrl+Shift+H) — Re-run the hardware wizard
 - **Settings** (Ctrl+,) — Application preferences
+- **License…** — View or activate licence key
+- **Get Support…** — Pre-filled support email with diagnostic data
+- **Create Support Bundle…** — Save a `.zip` of logs, config, and device inventory for support
 
-### 4.4 Status Bar
+### 4.4 Bottom Drawer Toggle Bar
 
-The status bar at the bottom of the window shows:
-- Application version
-- Connection summary (e.g. "3/6 devices connected")
-- Active camera model
-- Frame counter and exposure time during acquisition
+A 34 px strip runs along the very bottom of the window at all times. It provides quick access to the Console and Log without opening the full sidebar:
+
+| Element | Description |
+|---|---|
+| **Console / Log buttons** (left) | Checkable — click to jump to that tab in the drawer; auto-opens the drawer if it is collapsed |
+| **Grip handle** (centre) | iOS-style pill — click or drag to expand/collapse the drawer |
+| **Panel ∧ / ∨** (right) | Chevron button — toggles the drawer open or closed |
+
+Press **Ctrl+`** anywhere in the application to toggle the drawer.
 
 ---
 
@@ -425,7 +480,7 @@ The status bar at the bottom of the window shows:
 
 ### 5.1 Status Indicators
 
-Each hardware class has a coloured status dot in the top bar:
+Device status is shown in the **Connected Devices** dropdown button in the top bar. Click the button to open the popup, which lists every configured device with a coloured dot:
 
 | Colour | Meaning |
 |---|---|
@@ -433,28 +488,72 @@ Each hardware class has a coloured status dot in the top bar:
 | **Red** | Not found, disconnected, or driver error |
 | **Amber** | Connected but in a warning state (e.g. TEC temperature out of range) |
 
-Hover over a dot to see the detailed status tooltip.
+The button's own appearance reflects the worst-case state across all devices. Click **Manage devices…** in the popup footer to open the full Device Manager (Ctrl+D).
 
 ### 5.2 Emergency Stop
 
-The **■ STOP** button is a two-step hardware safety mechanism.
+The **■ STOP** button in the top bar triggers an immediate hardware stop.
 
-1. **Click once** — Button turns amber; the system is "armed". A confirmation message is displayed.
-2. **Click again** — Emergency stop is triggered. All active hardware output is disabled immediately: TEC setpoints are cleared, bias output is switched off, and any running acquisition or scan is aborted.
+1. **Click ■ STOP** (or press **Ctrl+.**) — All active hardware output is disabled immediately: TEC setpoints are cleared, bias output is switched off, and any running acquisition or scan is aborted. The button label changes to **⚠  STOPPED — Click to Clear**.
+2. **Click ⚠ STOPPED — Click to Clear** — Clears the latched stop state and re-arms the button, ready for the next operation.
 
-**Keyboard shortcut:** Press **Ctrl+.** at any time to trigger the emergency stop in a single step, bypassing the arm stage.
-
-To resume after an emergency stop, reconnect devices via the Device Manager (⚙).
+After clearing the stop, reconnect any dropped devices via **Manage devices…** in the Connected Devices popup (or Ctrl+D).
 
 ---
 
-## 6. Live View
+## 6. AutoScan
 
 ### 6.1 Overview
 
+AutoScan is the guided measurement panel. It presents a single-screen workflow — configure, preview, scan, review — without requiring knowledge of individual hardware panels. It drives the same acquisition and analysis engine as the manual panels.
+
+Open AutoScan from the sidebar (ACQUIRE → **AutoScan**).
+
+### 6.2 Left Panel — Configuration
+
+The left panel is divided into collapsible setting groups:
+
+| Group | Key controls |
+|---|---|
+| **Imaging Mode** | Objective magnification, camera driver, illumination wavelength |
+| **Goal** | Measurement objective (Hotspot detection / Calibration / Custom) |
+| **Stimulus** | FPGA frequency, duty cycle, bias voltage/current |
+| **Scan Area** | Single point or grid; columns, rows, step size |
+| **Speed** | Frames/half, settle time |
+| **Advanced** | Trigger mode, inter-phase delay, averaging options |
+
+Click **Preview** to capture a single live frame and verify field-of-view alignment before committing to a full scan.
+
+### 6.3 Right Panel — Live View and Results
+
+The right panel shows a live thermal preview while scanning, then displays the result.
+
+| State | Display |
+|---|---|
+| **Idle** | Live camera feed |
+| **Scanning** | Progress bar + live ΔR/R image updating as tiles complete |
+| **Complete** | Final ΔR/R (or ΔT) map + MetadataStrip (Tags + Notes) + action bar |
+
+**Post-scan actions:**
+
+| Button | Action |
+|---|---|
+| **New Scan** | Clears the result and returns to Idle state |
+| **Send to Analysis** | Loads the result into the Analysis panel for detailed review |
+
+### 6.4 Readiness Check
+
+A readiness indicator at the top of the configuration panel runs the same diagnostic rules as the manual panels. If any check fails, an amber banner shows the issue with a **Fix it →** link to the relevant hardware panel.
+
+---
+
+## 7. Live View
+
+### 7.1 Overview
+
 The Live tab provides continuous real-time thermoreflectance display. Frames alternate between a cold phase and a hot phase; the difference is computed on-the-fly and smoothed with an exponential moving average (EMA).
 
-### 6.2 Toolbar
+### 7.2 Toolbar
 
 | Button | Action |
 |---|---|
@@ -464,7 +563,7 @@ The Live tab provides continuous real-time thermoreflectance display. Frames alt
 | **📷 Capture** | Save the currently displayed frame to disk. |
 | **↺ Reset EMA** | Restart the exponential moving average accumulator (clears the smoothed image). |
 
-### 6.3 Left Panel — Live Settings
+### 7.3 Left Panel — Live Settings
 
 #### Trigger (Group Box)
 
@@ -485,7 +584,7 @@ The Live tab provides continuous real-time thermoreflectance display. Frames alt
 
 Changes to live settings take effect when **Apply Settings** is clicked. This updates the running `LiveProcessor` without restarting the stream.
 
-### 6.4 Centre Panel — Live Canvas
+### 7.4 Centre Panel — Live Canvas
 
 The canvas displays the live ΔR/R map scaled to fill the available space. Colour mapping is controlled by the selector at the bottom of the canvas:
 
@@ -501,7 +600,7 @@ Move the mouse cursor over the canvas to inspect individual pixels. The position
 
 A **FROZEN** badge overlays the canvas when Freeze is active.
 
-### 6.5 Right Panel — Readouts
+### 7.5 Right Panel — Readouts
 
 **SNR Bar** — Vertical dB bargraph (−20 to +40 dB). Colour transitions from green (high SNR, good signal) through yellow to red (low SNR, dominated by noise).
 
@@ -529,13 +628,13 @@ A **FROZEN** badge overlays the canvas when Freeze is active.
 
 ---
 
-## 7. Acquisition
+## 8. Capture — Single Acquisition
 
-### 7.1 Overview
+### 8.1 Overview
 
-The Acquire panel captures a complete measurement: N cold frames and N hot frames are averaged, ΔR/R is computed, and the result is displayed. This is the standard workflow for a single measurement point.
+The **Capture — Single** tab captures a complete measurement: N cold frames and N hot frames are averaged, ΔR/R is computed, and the result is displayed. This is the standard workflow for a single measurement point.
 
-### 7.2 Readiness Banner
+### 8.2 Readiness Banner
 
 A compact readiness banner appears at the very top of the Acquire tab. It runs all diagnostic rules continuously and summarises the result:
 
@@ -547,7 +646,7 @@ A compact readiness banner appears at the very top of the Acquire tab. It runs a
 
 When issues are shown, each one has a **Fix it →** button that navigates directly to the hardware panel responsible. For example, a "Stage not homed" issue links to the Stage panel, where you can click **⌂ Home All**.
 
-### 7.3 Controls
+### 8.3 Controls
 
 **Trigger & Modulation**
 
@@ -574,7 +673,7 @@ When issues are shown, each one has a **Fix it →** button that navigates direc
 | **Averaging** | Enabled | Activates frame-to-frame averaging |
 | **SNR threshold** | 0 dB | Frames with SNR below this threshold are discarded |
 
-### 7.4 Running an Acquisition
+### 8.4 Running an Acquisition
 
 1. Check the readiness banner. Resolve any "NOT READY" issues before proceeding.
 2. Configure exposure, gain, and frames/half in the left panel.
@@ -585,7 +684,7 @@ When issues are shown, each one has a **Fix it →** button that navigates direc
 
 Press **Esc** or click **■ Abort** to cancel a running acquisition.
 
-### 7.5 Result Display
+### 8.5 Result Display
 
 | Tab | Content |
 |---|---|
@@ -595,13 +694,13 @@ Press **Esc** or click **■ Abort** to cancel a running acquisition.
 
 ---
 
-## 8. Grid Scan
+## 9. Capture — Grid Scan
 
-### 8.1 Overview
+### 9.1 Overview
 
 The Scan panel automates a stage-driven grid acquisition, stepping the sample through a rectangular array of positions, capturing a tile at each point, and stitching all tiles into a single large-area map.
 
-### 8.2 Left Panel — Scan Configuration
+### 9.2 Left Panel — Scan Configuration
 
 #### Scan Grid (Group Box)
 
@@ -633,7 +732,7 @@ The Scan panel automates a stage-driven grid acquisition, stepping the sample th
 
 A scrolling text log records all state transitions, errors, and timestamps during the scan.
 
-### 8.3 Right Panel — Map Viewer & Statistics
+### 9.3 Right Panel — Map Viewer & Statistics
 
 **Statistics Bar**
 
@@ -652,7 +751,7 @@ A scrolling text log records all state transitions, errors, and timestamps durin
 | **ΔR/R Map** | Stitched thermoreflectance map with colormap selector. Toggle tile grid overlay with the checkbox. |
 | **ΔT Map** | Stitched temperature change map. Available only if a calibration has been applied. |
 
-### 8.4 Scan Workflow (Internal)
+### 9.4 Scan Workflow (Internal)
 
 For each tile (row-major, or snake-order if enabled):
 
@@ -664,7 +763,7 @@ For each tile (row-major, or snake-order if enabled):
 
 After all tiles complete: final stitching pass, enable export buttons.
 
-### 8.5 Export
+### 9.5 Export
 
 | Button | Output format | Description |
 |---|---|---|
@@ -675,15 +774,52 @@ After all tiles complete: final stitching pass, enable export buttons.
 
 ---
 
-## 9. Calibration
+## 10. Transient Capture
 
-### 9.1 Overview
+### 10.1 Overview
+
+The **Transient** panel (ACQUIRE → Transient) provides two specialised capture modes for time-domain thermoreflectance measurements. It is intended for devices driven by pulsed stimuli where the thermal response must be resolved in time.
+
+### 10.2 Time-Resolved Sub-tab
+
+Captures a sequence of ΔR/R frames phase-locked to a repeating stimulus pulse, building a time-resolved thermal map at each delay offset.
+
+| Control | Description |
+|---|---|
+| **Trigger source** | FPGA trigger (locked to stimulus) or external TTL |
+| **Delay steps** | Number of time delay points |
+| **Delay start / end** | Start and end delay relative to pulse rising edge (ns–µs) |
+| **Frames/step** | Frames averaged at each delay point |
+| **Run** | Starts the delay sweep; progress shown per step |
+
+The result is a 3D array (time × height × width) that can be exported as a NumPy `.npy` or HDF5 file, or animated as a time-series map.
+
+### 10.3 Burst (Movie) Sub-tab
+
+Captures a rapid burst of ΔR/R frames to record a thermal transient as it evolves, without phase-locking to a specific delay.
+
+| Control | Description |
+|---|---|
+| **Frame count** | Total burst frames to capture |
+| **Frame rate** | Requested capture rate (camera-limited) |
+| **Trigger** | Free-run or single external trigger pulse |
+| **Run** | Starts the burst; progress shown as frame N/M |
+
+The output is a sequence of ΔR/R frames exportable as an image stack (TIFF) or NumPy array.
+
+> **20 mA Range Mode:** For IR camera FA and Movie mode, the bias source 20 mA limit must be unchecked (see §12.2 Stimulus → Bias Source sub-tab). Verify the DUT thermal budget before exceeding 20 mA.
+
+---
+
+## 11. Calibration
+
+### 11.1 Overview
 
 Calibration measures the thermoreflectance coefficient **C_T** (units: K⁻¹) on a pixel-by-pixel basis. The TEC steps the sample through a range of temperatures; at each step, the app captures a ΔR/R map. A linear regression of ΔR/R vs. ΔT at each pixel yields C_T and R² (fit quality).
 
 Once applied, C_T is used by all other panels (Live, Acquire, Scan) to display ΔT = ΔR/R ÷ C_T.
 
-### 9.2 Left Panel — Calibration Setup
+### 11.2 Left Panel — Calibration Setup
 
 #### Temperature Sequence
 
@@ -726,7 +862,7 @@ Or build a custom sequence:
 | **Progress bar** | 0–100 % across all steps |
 | **Step label** | "Step N / M — [state]" |
 
-### 9.3 Right Panel — Calibration Results
+### 11.3 Right Panel — Calibration Results
 
 **Statistics Bar**
 
@@ -755,7 +891,7 @@ Or build a custom sequence:
 | **📂 Load .cal** | Load a previously saved calibration |
 | **✓ Apply to Acquisitions** | Mark this calibration as active — enables ΔT display in Live, Acquire, and Scan panels |
 
-### 9.4 Calibration Workflow
+### 11.4 Calibration Workflow
 
 ```
 Set temperature sequence
@@ -785,15 +921,15 @@ Click ▶ Run Calibration
 
 ---
 
-## 10. Hardware Panels
+## 12. Hardware Panels
 
-All hardware panels are located in the collapsible **Hardware** group in the left sidebar.
+All hardware panels are located in the collapsible **Hardware** group in the left sidebar. Each entry may contain multiple sub-tabs.
 
-### 10.1 Camera Panel (Ctrl+2)
+### 12.1 Camera Panel (Ctrl+2)
 
-Controls camera exposure, gain, and live preview.
+The **Camera** sidebar entry opens a panel with three sub-tabs: **Camera**, **ROI**, and **Autofocus**.
 
-**Frame Statistics (Group Box)**
+**Camera sub-tab** — Controls camera exposure and gain; displays a live frame statistics readout.
 
 | Readout | Description |
 |---|---|
@@ -808,17 +944,17 @@ Controls camera exposure, gain, and live preview.
 - **N.NN%** (amber) — Maximum pixel value ≥ 3900; some pixels near saturation
 - **CLIPPED ✗** (red) — One or more pixels at 4095 (hard saturation); ΔR/R measurements in those pixels are invalid
 
-> **What to do when clipped:** Reduce exposure in the Camera panel or lower the illumination intensity until the SATURATION readout returns to "OK".
+> **What to do when clipped:** Reduce exposure in the Camera sub-tab or lower the illumination intensity until the SATURATION readout returns to "OK".
 
-### 10.2 Temperature Panel (Ctrl+3)
+**ROI sub-tab** — Defines a region of interest (rectangle, in pixels) that restricts the active sensor area. Reducing the ROI increases frame rate and reduces data volume per acquisition.
 
-Controls TEC setpoints and displays real-time temperature history for all connected TEC channels.
+**Autofocus sub-tab** — Drives the Z-axis stage to find the sharpest focus position. Select the focus metric (variance, Laplacian, or gradient) and click **Run Autofocus** to execute a Z-sweep.
 
-**TEC Setpoint Range:** 10 °C to 150 °C (hardware limit from EZ-Therm / Nano-THERM specs).
+### 12.2 Stimulus Panel
 
-### 10.3 FPGA Panel
+The **Stimulus** sidebar entry opens a panel with two sub-tabs: **Modulation** and **Bias Source**.
 
-Controls FPGA lock-in modulation frequency, duty cycle, and Start/Stop.
+**Modulation sub-tab** — Controls FPGA lock-in modulation frequency, duty cycle, and Start/Stop.
 
 **Duty Cycle Warning:**
 
@@ -840,9 +976,9 @@ The label color escalates based on severity:
 
 **Start / Stop** — Begin or halt FPGA modulation. Modulation must be running (L1 check) for lock-in acquisition.
 
-### 10.4 Bias Source Panel
+---
 
-Controls the electrical output to the device under test (DUT).
+**Bias Source sub-tab** — Controls the electrical output to the device under test (DUT).
 
 **Output Port Selector:**
 
@@ -862,7 +998,13 @@ When **VO EXT** is selected, a safety warning appears:
 
 > **Compliance limit:** Always set the Compliance Limit to the maximum safe current (or voltage) for your DUT before enabling output.
 
-### 10.5 Stage Panel (Ctrl+4)
+### 12.3 Temperature Panel (Ctrl+3)
+
+Controls TEC setpoints and displays real-time temperature history for all connected TEC channels.
+
+**TEC Setpoint Range:** 10 °C to 150 °C (hardware limit from EZ-Therm / Nano-THERM specs).
+
+### 12.4 Stage Panel (Ctrl+4)
 
 Controls the XYZ motorised stage with absolute move, relative jogging, and home/stop operations.
 
@@ -885,11 +1027,15 @@ Controls the XYZ motorised stage with absolute move, relative jogging, and home/
 
 **■ STOP** — Immediately halts all stage motion.
 
+### 12.5 Prober Panel
+
+The **Prober** panel appears in the Hardware group when a supported probe station is configured. It provides manual probe positioning (X/Y/Z in µm) and contact detection. Configure the prober connection in the Hardware Setup Wizard or Device Manager.
+
 ---
 
-## 11. AI Assistant
+## 13. AI Assistant
 
-### 11.1 Overview
+### 13.1 Overview
 
 The AI Assistant is a dockable panel that provides real-time instrument intelligence powered by a local language model running entirely on your PC (no internet connection required after setup).
 
@@ -899,7 +1045,7 @@ Key capabilities:
 - **Tab explanation** — Explains what the currently visible panel does and what to check given live instrument state
 - **Free-form chat** — Answers questions about instrument settings, measurement technique, and troubleshooting
 
-### 11.2 Grade System
+### 13.2 Grade System
 
 The AI panel shows a large letter grade based on the current diagnostic rule results:
 
@@ -912,21 +1058,21 @@ The AI panel shows a large letter grade based on the current diagnostic rule res
 
 The grade badge (36 pt, bold) is accompanied by a brief summary such as "Instrument ready" or "1 fail · 2 warn".
 
-### 11.3 Issue Rows
+### 13.3 Issue Rows
 
 Up to 5 active issues are listed below the grade badge. Each row shows:
 - **⊗** (red) for a fail, **⚠** (amber) for a warning
 - The rule's display name and observed value (e.g. "TEC 1 stable · Δ0.18°C")
 - Clicking the row navigates to the hint text for that rule
 
-### 11.4 Quick Actions
+### 13.4 Quick Actions
 
 | Button | Action |
 |---|---|
 | **Explain this tab** | Asks the AI to describe the currently visible panel and what to check given the live instrument state. Enabled only when a model is loaded. |
 | **Diagnose** | Asks the AI to review all active issues and suggest a concrete fix for each. |
 
-### 11.5 Free-Form Chat
+### 13.5 Free-Form Chat
 
 Type any question in the chat box and press **Ask** (or Enter). Example questions:
 - "What LED wavelength should I use for GaAs?"
@@ -939,7 +1085,7 @@ The AI grounds every answer in the live JSON instrument state, so it can referen
 
 **Token rate** — Displayed below the response as "N tok/s · X.Xs". On a typical desktop CPU this is 15–50 tokens/second depending on model size.
 
-### 11.6 AI Model Setup
+### 13.6 AI Model Setup
 
 The AI Assistant requires a local language model (~2–5 GB). On first use, the response area shows installation instructions.
 
@@ -950,7 +1096,7 @@ To download the model:
 
 The model is stored locally and never sends data to any external server.
 
-### 11.7 Readiness Widget (Acquire Tab)
+### 13.7 Readiness Widget (Acquire Tab)
 
 A compact readiness banner appears at the top of the Acquire tab independently of the AI Assistant panel. It provides the same pass/fail assessment as the AI grade system in a minimal form factor optimised for the acquisition workflow:
 
@@ -959,9 +1105,52 @@ A compact readiness banner appears at the top of the Acquire tab independently o
 
 ---
 
-## 12. Saving and Exporting Data
+## 14. Compare Sessions
 
-### 12.1 Session Storage
+### 14.1 Overview
+
+The **Compare** panel (ANALYZE → Compare) places two sessions side-by-side so differences in thermal distribution can be assessed visually and quantitatively. Open it from the sidebar after completing two acquisitions, or load sessions from the Sessions browser.
+
+### 14.2 Loading Sessions
+
+- **Left / Right dropdowns** — Select any saved session from the session manager, or drag a `.h5` file directly onto the panel.
+- **Sync zoom** — When enabled, panning or zooming one map mirrors the action on the other.
+- **Difference map** — A third map shows (Left − Right) with a diverging colormap; hot-spots visible only in one session are immediately apparent.
+
+### 14.3 Statistics Comparison
+
+A statistics bar below the maps shows Min, Max, Mean, Std, and SNR for each session side-by-side, plus the absolute difference in each metric.
+
+---
+
+## 15. 3D Surface
+
+### 15.1 Overview
+
+The **3D Surface** panel (ANALYZE → 3D Surface) renders any 2D ΔR/R or ΔT array as an interactive 3D terrain map using Matplotlib's 3D projection. It updates automatically after each acquisition.
+
+### 15.2 Controls
+
+| Control | Description |
+|---|---|
+| **Colormap** | Matches the 2D map panel — Emberline, viridis, hot, etc. |
+| **Z-stretch** | Vertical exaggeration (1–200×). Increase to reveal small ΔT variations that appear flat at 1×. |
+| **Show threshold plane** | Draws a semi-transparent red horizontal plane at the set value. Hotspots above the threshold protrude above the plane, making them immediately visible. |
+| **Elevation / Azimuth sliders** | Adjust the 3D viewing angle continuously. |
+| **Auto-rotate** | Slowly rotates the azimuth at 20 fps for presentation use. |
+| **Export…** | Save the current view to PNG or PDF (200 dpi). |
+
+### 15.3 Data Source
+
+The panel receives data automatically after every Capture, AutoScan, or Grid Scan result. If a calibration is applied, the ΔT surface is shown; otherwise ΔR/R is shown.
+
+To manually load a different dataset, use **Send to Analysis** from the AutoScan or Capture result area, then navigate to 3D Surface — the panel retains the last data pushed to it.
+
+---
+
+## 16. Saving and Exporting Data
+
+### 16.1 Session Storage
 
 When you save a session, a folder is created under `~\.microsanj_sessions\` containing:
 
@@ -975,7 +1164,7 @@ When you save a session, a folder is created under `~\.microsanj_sessions\` cont
   thumbnail.png     — Small PNG preview
 ```
 
-### 12.2 Export Formats
+### 16.2 Export Formats
 
 | Format | Extension | Description | Compatible with |
 |---|---|---|---|
@@ -987,7 +1176,7 @@ When you save a session, a folder is created under `~\.microsanj_sessions\` cont
 | **PNG** | `.png` | 8-bit colormapped raster image | Any image viewer |
 | **PDF** | `.pdf` | Multi-page report with maps and statistics | Adobe Reader, any PDF viewer |
 
-### 12.3 Calibration Files
+### 16.3 Calibration Files
 
 Calibration files (`.npz`) contain:
 
@@ -1001,7 +1190,7 @@ Load a calibration with **📂 Load .cal** in the Calibration panel, then click 
 
 ---
 
-## 13. Device Manager
+## 17. Device Manager
 
 Open with **⚙** (top bar) or **Ctrl+D**.
 
@@ -1022,34 +1211,97 @@ The Device Manager shows the current connection state and driver details for eac
 
 ---
 
-## 14. Settings
+## 18. Settings
 
-Open with **Help → Settings** or **Ctrl+,**.
+Open with **Help → Settings** or **Ctrl+,**. The Settings panel is organised into collapsible sections.
 
-| Setting | Description |
-|---|---|
-| **Update check** | Enable/disable automatic update checks on startup |
-| **Log to file** | Enable writing the application log to `logs/microsanj.log` |
-| **Log level** | `INFO` (default) or `DEBUG` (verbose; for troubleshooting) |
-| **Mode on startup** | Standard or Advanced |
-
-**AI Assistant tab**
+### 18.1 Appearance
 
 | Setting | Description |
 |---|---|
-| **Download Model** | Download the local language model (~2–5 GB). Shows progress bar during download. |
-| **Model status** | Displays whether a model is installed and its file size. |
-| **AI enabled** | Enable or disable the AI Assistant panel globally. |
+| **Theme** | Three-button segmented control: **Auto** (follows OS dark/light mode), **Dark**, **Light** |
+
+### 18.2 Lab
+
+| Setting | Description |
+|---|---|
+| **Active operator** | Display name stamped on saved sessions when no login is active |
+| **Saved operators** | Manage the list of operator names available in the dropdown |
+
+### 18.3 Security *(admin-only)*
+
+| Setting | Description |
+|---|---|
+| **Require login on startup** | When enabled, the login screen appears on every launch and after inactivity timeout |
+| **Lock timeout** | Inactivity period before the session auto-locks (minutes; 0 = never) |
+
+### 18.4 Users *(admin-only)*
+
+Embeds the full user management table. See Section 19.4 for details.
+
+### 18.5 Updates
+
+| Setting | Description |
+|---|---|
+| **Auto-check on startup** | Enable/disable automatic update checks |
+| **Check frequency** | Daily / Weekly / Monthly |
+| **Channel** | Stable / Beta / Dev |
+| **Check Now** | Manually trigger an update check |
+| **Release Notes** | Open the changelog for the latest release |
+
+### 18.6 AI Assistant
+
+**Local model (Ollama / bundled)**
+
+| Setting | Description |
+|---|---|
+| **AI enabled** | Enable or disable the AI Assistant globally |
+| **Model** | Select which locally installed model to use |
+| **Download Model** | Download the selected model (~2–5 GB). Progress shown inline. |
+| **Model path** | Override the default model directory |
+| **GPU allocation** | Slider: percentage of GPU VRAM allocated to inference |
+| **Persona** | Auto (from user type) / Technician / Failure Analyst / Researcher |
+| **Scope** | Always / Session / RAG — controls how much instrument context is included in each prompt |
+
+**Cloud AI**
+
+| Setting | Description |
+|---|---|
+| **Provider** | OpenAI / Anthropic / Azure / Custom |
+| **Model** | Model identifier (e.g. `gpt-4o`, `claude-3-5-sonnet`) |
+| **API key** | Paste your API key (stored in OS keychain, never in `config.yaml`) |
+
+**Ollama**
+
+| Setting | Description |
+|---|---|
+| **Pull model** | Download a new model into Ollama from the Ollama model registry |
+| **Model list** | Select from models already installed in Ollama |
+| **Connect** | Test the Ollama connection and activate the selected model |
+
+### 18.7 License
+
+| Element | Description |
+|---|---|
+| **Status** | Shows licence type and expiry if applicable |
+| **Manage license** | Enter or transfer a licence key |
+
+### 18.8 Support
+
+| Button | Action |
+|---|---|
+| **About** | Version, build date, licence summary |
+| **Get Support…** | Opens a pre-filled support email with diagnostic data attached |
 
 ---
 
-## 15. User Accounts & Roles
+## 19. User Accounts & Roles
 
-### 15.1 Overview
+### 19.1 Overview
 
 SanjINSIGHT includes a role-based access control (RBAC) system that lets administrators control who can use the instrument and what they can change. The auth system is **opt-in** — research labs that don't need user management can leave the default setting (`require_login: false`) and the application behaves exactly as before v1.2.0.
 
-### 15.2 User Types
+### 19.2 User Types
 
 Three user types map the natural roles in a lab or production environment. Each type determines the UI surface the user sees and the default AI Assistant persona they get.
 
@@ -1062,11 +1314,11 @@ Three user types map the natural roles in a lab or production environment. Each 
 
 **Administrator** is a privilege overlay — any user type can be granted admin rights. Admin does not change how the instrument AI talks to the user; it adds access to user management and global settings.
 
-> **Technician users** always land in the Operator Shell after login — a simplified interface designed for repeatably running approved scan profiles. See Section 16 for details.
+> **Technician users** always land in the Operator Shell after login — a simplified interface designed for repeatably running approved scan profiles. See Section 20 for details.
 
 > **AI persona:** The AI Assistant automatically switches context to match the logged-in user. Failure Analysts get evidence-first diagnostic guidance; Researchers get exploratory explanations. Technicians always get the simplified Lab Technician persona.
 
-### 15.3 Admin Setup (First Launch)
+### 19.3 Admin Setup (First Launch)
 
 The very first time SanjINSIGHT starts on a new installation, the **Admin Setup Wizard** appears. This one-time screen creates the administrator account that controls who can use the system.
 
@@ -1076,7 +1328,7 @@ The very first time SanjINSIGHT starts on a new installation, the **Admin Setup 
 
 > You only see this screen once, on a fresh installation. After the admin account exists, subsequent launches proceed directly.
 
-### 15.4 Creating and Managing Users
+### 19.4 Creating and Managing Users
 
 Open **Settings → Users** (admin login required). The Users panel shows a table of all accounts with columns for display name, username, user type, admin flag, last login, and active status.
 
@@ -1097,7 +1349,7 @@ Open **Settings → Users** (admin login required). The Users panel shows a tabl
 
 **Resetting a password:** Click **Reset Password** to set a new temporary password.
 
-### 15.5 Login Gate
+### 19.5 Login Gate
 
 By default, SanjINSIGHT does not require login (`auth.require_login = false`). To require login:
 
@@ -1111,7 +1363,7 @@ Once enabled, the login screen appears on every launch and after the inactivity 
 
 **No-login mode:** When `require_login` is off, the application still records a "no-login session" in the audit log so that measurement history can be attributed to the system even without named users.
 
-### 15.6 Per-User Preferences
+### 19.6 Per-User Preferences
 
 When login is active, each user has their own preference file (`~/.microsanj/users/{uid}/prefs.json`). User preferences override the global defaults but cannot change hardware or security settings.
 
@@ -1124,7 +1376,7 @@ When login is active, each user has their own preference file (`~/.microsanj/use
 
 Global settings (hardware config, auth settings, lock timeout) are admin-only and stored in `config.yaml`.
 
-### 15.7 Audit Log
+### 19.7 Audit Log
 
 All authentication events are appended to `~/.microsanj/audit.log` as JSON Lines. The log is human-readable and can be grepped or imported into a spreadsheet.
 
@@ -1148,9 +1400,9 @@ The log rotates at 5 MB and keeps 3 backups.
 
 ---
 
-## 16. Operator Mode
+## 20. Operator Mode
 
-### 16.1 Overview
+### 20.1 Overview
 
 Operator Mode is a simplified interface for technicians who run repeatably against approved scan profiles. It launches automatically when a **Technician** user logs in.
 
@@ -1171,18 +1423,18 @@ Operator Mode is a simplified interface for technicians who run repeatably again
 - **Centre — Scan Work Area:** Live camera view, Part ID / Serial Number field, and the START SCAN button.
 - **Right — Shift Log:** Running log of today's results with PASS/FAIL badges and running totals.
 
-### 16.2 Running a Scan
+### 20.2 Running a Scan
 
 1. Log in as a Technician user.
 2. Select a scan profile from the left panel. Only profiles with the "Approved for Operators" badge appear.
 3. Scan or type the part serial number in the **Part ID** field. If a USB barcode scanner is connected, scanning the barcode and pressing Enter auto-starts the scan.
 4. Click **▶ START SCAN** (or press Enter if the Part ID field is focused).
-5. A full-screen verdict screen appears after each scan (see Section 16.3).
+5. A full-screen verdict screen appears after each scan (see Section 20.3).
 6. Results are logged automatically to the Shift Log and exported as a PDF report.
 
 > **START SCAN is disabled** until both a scan profile is selected and a non-empty Part ID is entered.
 
-### 16.3 Verdict Screen
+### 20.3 Verdict Screen
 
 After each scan, a full-screen overlay shows the result:
 
@@ -1210,7 +1462,7 @@ Background colour: green (PASS) / red (FAIL) / amber (REVIEW)
 - **FAIL** — One or more hotspots exceed the limit
 - **REVIEW** — Result is within the limit but above a warning threshold (if configured)
 
-### 16.4 Shift Log
+### 20.4 Shift Log
 
 The Shift Log panel on the right side records every scan in the current session. Each entry shows:
 - PASS / FAIL / REVIEW badge
@@ -1222,7 +1474,7 @@ Running totals ("12 scans · 91% pass") are shown at the top.
 
 Click **Export CSV** to save the shift log as a comma-separated file for quality system reporting.
 
-### 16.5 Approving Scan Profiles for Operator Use
+### 20.5 Approving Scan Profiles for Operator Use
 
 Only engineers and admins can approve scan profiles. In the full UI:
 
@@ -1238,7 +1490,7 @@ Once locked:
 
 > **If the Scan Profile list is empty in Operator Mode:** No profiles have been approved yet. An engineer must open a Scan Profile in the full UI, configure it, and click **Approve & Lock**.
 
-### 16.6 Supervisor Override
+### 20.6 Supervisor Override
 
 If an engineer needs temporary access at an operator station without logging the technician out:
 
@@ -1247,22 +1499,22 @@ If an engineer needs temporary access at an operator station without logging the
 3. If credentials are valid, temporary access is granted.
 4. Access auto-reverts to the logged-in technician after **15 minutes**, or when the engineer clicks **End Override**.
 
-All supervisor override events are logged to the audit log (Section 15.7).
+All supervisor override events are logged to the audit log (Section 19.7).
 
 ---
 
-## 17. Supported Hardware
+## 21. Supported Hardware
 
-### 17.1 Cameras
+### 21.1 Cameras
 
 | Model | Sensor | Connection | Driver | Required SDK |
 |---|---|---|---|---|
-| Basler acA1920-155um | 1920×1200, mono | USB 3.0 | `pypylon` | Basler Pylon SDK 6.x / 7.x |
-| Basler acA640-750um | 640×480, mono | USB 3.0 | `pypylon` | Basler Pylon SDK 6.x / 7.x |
-| Basler acA2040-90um | 2040×1088, mono | USB 3.0 | `pypylon` | Basler Pylon SDK 6.x / 7.x |
-| Basler acA1300-200um | 1280×1024, mono | USB 3.0 | `pypylon` | Basler Pylon SDK 6.x / 7.x |
-| Any Basler USB3 Vision | varies | USB 3.0 | `pypylon` | Basler Pylon SDK 6.x / 7.x |
-| Any Basler GigE Vision | varies | Gigabit Ethernet | `pypylon` | Basler Pylon SDK 6.x / 7.x |
+| Basler acA1920-155um | 1920×1200, mono | USB 3.0 | `pypylon` | Basler Pylon SDK 8.x |
+| Basler acA640-750um | 640×480, mono | USB 3.0 | `pypylon` | Basler Pylon SDK 8.x |
+| Basler acA2040-90um | 2040×1088, mono | USB 3.0 | `pypylon` | Basler Pylon SDK 8.x |
+| Basler acA1300-200um | 1280×1024, mono | USB 3.0 | `pypylon` | Basler Pylon SDK 8.x |
+| Any Basler USB3 Vision | varies | USB 3.0 | `pypylon` | Basler Pylon SDK 8.x |
+| Any Basler GigE Vision | varies | Gigabit Ethernet | `pypylon` | Basler Pylon SDK 8.x |
 | NI IMAQdx cameras | varies | USB / GigE / Camera Link | `ni_imaqdx` | NI Vision Acquisition Software 2019+ |
 | DirectShow-compatible | varies | USB | `directshow` | None (Windows API) |
 | Simulated | 512×512, synthetic | — | `simulated` | None |
@@ -1270,7 +1522,7 @@ All supervisor override events are logged to the audit log (Section 15.7).
 > **Pylon SDK download:** [baslerweb.com/downloads](https://www.baslerweb.com/en/downloads/software-downloads/)
 > **NI Vision Acquisition download:** [ni.com/downloads](https://www.ni.com/en/support/downloads/drivers/download.ni-vision-acquisition-software.html)
 
-### 17.2 TEC Controllers
+### 21.2 TEC Controllers
 
 | Model | Manufacturer | Connection | Driver | Baud | Required Package |
 |---|---|---|---|---|---|
@@ -1281,7 +1533,7 @@ All supervisor override events are logged to the audit log (Section 15.7).
 
 > The Meerstetter protocol requires the FTDI VCP driver for USB connections. Windows 11 usually installs this automatically. Manual download: [ftdichip.com/drivers/vcp-drivers](https://ftdichip.com/drivers/vcp-drivers/).
 
-### 17.3 FPGA / Signal Generation
+### 21.3 FPGA / Signal Generation
 
 | Model | Manufacturer | Connection | Driver | Required Software |
 |---|---|---|---|---|
@@ -1292,7 +1544,7 @@ All supervisor override events are logged to the audit log (Section 15.7).
 > **NI-RIO download:** [ni.com → NI-RIO](https://www.ni.com/en/support/downloads/drivers/download.ni-rio.html)
 > The compiled bitfile (`.lvbitx`) is provided by Microsanj on the instrument USB key. The bitfile must match the NI-RIO version installed on the PC — if you upgrade NI-RIO, request a recompiled bitfile from Microsanj support.
 
-### 17.4 Bias Sources
+### 21.4 Bias Sources
 
 #### Keithley SourceMeters (SCPI command set)
 
@@ -1324,7 +1576,7 @@ All supervisor override events are logged to the audit log (Section 15.7).
 
 > **VISA GPIB connections** require either NI-VISA + NI-GPIB-USB-HS adapter, or Keysight IO Libraries Suite + Keysight GPIB adapter. USB and Ethernet VISA instruments work with `pyvisa-py` only (no NI-VISA required).
 
-### 17.5 Motorised Stages
+### 21.5 Motorised Stages
 
 #### Thorlabs (USB, via thorlabs-apt-device)
 
@@ -1354,13 +1606,13 @@ All supervisor override events are logged to the audit log (Section 15.7).
 |---|---|---|---|
 | Semi-automatic prober | MPI Corporation | RS-232 (115 200 baud) | `mpi_prober` |
 
-### 17.6 Objective Turret
+### 21.6 Objective Turret
 
 | Controller | Manufacturer | Connection | Driver | Baud |
 |---|---|---|---|---|
 | LINX (Arduino-based) | Olympus / custom | USB-CDC | `olympus_linx` | 115 200 |
 
-### 17.7 SDK and Driver Version Reference
+### 21.7 SDK and Driver Version Reference
 
 | Software | Minimum Version | Recommended | Notes |
 |---|---|---|---|
@@ -1375,7 +1627,7 @@ All supervisor override events are logged to the audit log (Section 15.7).
 
 ---
 
-## 18. Configuration File Reference
+## 22. Configuration File Reference
 
 `config.yaml` is located in the application installation directory. Edit it with a plain-text editor if you need to make changes outside the wizard.
 
@@ -1424,34 +1676,54 @@ logging:
 
 ---
 
-## 19. Keyboard Shortcuts
+## 23. Keyboard Shortcuts
+
+**Acquisition**
 
 | Shortcut | Action |
 |---|---|
-| **Ctrl+R** | Run acquisition sequence |
+| **Ctrl+R** | Run acquisition (Capture — Single) |
 | **Esc** | Abort current acquisition or scan |
-| **Ctrl+L** | Switch to Live view |
-| **Ctrl+Shift+S** | Switch to Scan view |
-| **Ctrl+1** | Acquire panel |
-| **Ctrl+2** | Camera panel |
-| **Ctrl+3** | Temperature panel |
-| **Ctrl+4** | Stage panel |
+| **F5** | Start live ΔR/R preview |
+| **F6** | Stop live preview |
+| **F7** | Freeze / resume live display |
+| **F8** | Run hotspot analysis on current result |
+| **F9** | Start or abort grid scan |
+
+**Navigation**
+
+| Shortcut | Action |
+|---|---|
+| **Ctrl+L** | Switch to Live View |
+| **Ctrl+Shift+S** | Switch to Capture — Grid Scan |
+| **Ctrl+1** | Capture panel (single acquisition) |
+| **Ctrl+2** | Camera panel (Hardware group) |
+| **Ctrl+3** | Temperature panel (Hardware group) |
+| **Ctrl+4** | Stage panel (Hardware group) |
 | **Ctrl+5** | Analysis panel |
+| **Ctrl+K** | Command Palette (search all panels) |
+
+**Application**
+
+| Shortcut | Action |
+|---|---|
 | **Ctrl+D** | Device Manager |
-| **Ctrl+Shift+H** | Hardware Setup wizard |
+| **Ctrl+Shift+H** | Hardware Setup Wizard |
 | **Ctrl+,** | Settings |
-| **Ctrl+.** | Emergency stop (immediate, bypasses arm stage) |
+| **Ctrl+.** | Emergency stop (immediate) |
+| **Ctrl+`** | Toggle Bottom Drawer (Console / Log) |
+| **Ctrl+?** | Keyboard Shortcut overlay |
 
 ---
 
-## 20. Troubleshooting
+## 24. Troubleshooting
 
-### Status dot stays red after startup
+### Connected Devices button shows a red indicator after startup
 
-1. Open **Device Manager** (⚙ or Ctrl+D).
-2. Select the affected device and click **Reconnect**.
+1. Click the **Connected Devices** button in the top-right of the header to open the device status popup. Individual devices with a red dot (● red) are disconnected or faulted.
+2. Open **Device Manager** (Ctrl+D), select the affected device, and click **Reconnect**.
 3. If it fails, open **Hardware Setup** (Ctrl+Shift+H) and verify the driver selection, port, and resource string.
-4. Confirm the hardware SDK is installed (see Section 2.2).
+4. Confirm the hardware SDK is installed (see §2.2).
 
 ### Camera not detected
 
@@ -1560,9 +1832,9 @@ Starting from v1.2.8, SanjINSIGHT validates all required software dependencies b
 
 ---
 
-## 21. Technical Reference
+## 25. Technical Reference
 
-### 21.1 Acquisition Data Structures
+### 25.1 Acquisition Data Structures
 
 **AcquisitionResult**
 
@@ -1608,7 +1880,7 @@ Starting from v1.2.8, SanjINSIGHT validates all required software dependencies b
 | `timestamp` | float | Unix timestamp |
 | `valid` | bool | True if fit succeeded |
 
-### 21.2 Diagnostic Rules
+### 25.2 Diagnostic Rules
 
 The diagnostic engine evaluates the following rules on every `MetricsService` snapshot. Rules are organised in evaluation order.
 
@@ -1650,7 +1922,7 @@ The diagnostic engine evaluates the following rules on every `MetricsService` sn
 |---|---|---|
 | T1 | Duty cycle thermal risk | FPGA duty cycle ≥ 50 % (warn) or ≥ 80 % (fail) |
 
-### 21.3 LiveConfig Parameters
+### 25.3 LiveConfig Parameters
 
 | Parameter | Range | Default | Description |
 |---|---|---|---|
@@ -1662,7 +1934,7 @@ The diagnostic engine evaluates the following rules on every `MetricsService` sn
 | `roi_x, roi_y` | 0–(W−1), 0–(H−1) | 0, 0 | ROI top-left origin |
 | `roi_w, roi_h` | 0–W, 0–H | 0, 0 | ROI size (0 = full frame) |
 
-### 21.4 File Locations
+### 25.4 File Locations
 
 | Item | Location |
 |---|---|
@@ -1676,7 +1948,7 @@ The diagnostic engine evaluates the following rules on every `MetricsService` sn
 | Audit log | `%USERPROFILE%\.microsanj\audit.log` (JSON Lines, 5 MB rotation) |
 | Per-user preferences | `%USERPROFILE%\.microsanj\users\{uid}\prefs.json` |
 
-### 21.5 Thread Architecture
+### 25.5 Thread Architecture
 
 | Thread | Purpose | Poll rate |
 |---|---|---|
