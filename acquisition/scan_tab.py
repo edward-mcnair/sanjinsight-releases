@@ -295,31 +295,32 @@ class ScanTab(QWidget):
         grid_box = QGroupBox("Scan Grid")
         gl = QGridLayout(grid_box)
         gl.setSpacing(6)
+        gl.setColumnStretch(1, 1)
 
         def row(lbl, widget, r):
             gl.addWidget(self._sub(lbl), r, 0)
             gl.addWidget(widget, r, 1)
 
         self._n_cols    = QSpinBox();       self._n_cols.setRange(1, 20)
-        self._n_cols.setValue(3);           self._n_cols.setFixedWidth(70)
+        self._n_cols.setValue(3);           self._n_cols.setMinimumWidth(70)
 
         self._n_rows    = QSpinBox();       self._n_rows.setRange(1, 20)
-        self._n_rows.setValue(3);           self._n_rows.setFixedWidth(70)
+        self._n_rows.setValue(3);           self._n_rows.setMinimumWidth(70)
 
         self._step_x    = QDoubleSpinBox(); self._step_x.setRange(1, 10000)
         self._step_x.setValue(100.0);       self._step_x.setSuffix(" μm")
-        self._step_x.setFixedWidth(110)
+        self._step_x.setMinimumWidth(80)
 
         self._step_y    = QDoubleSpinBox(); self._step_y.setRange(1, 10000)
         self._step_y.setValue(100.0);       self._step_y.setSuffix(" μm")
-        self._step_y.setFixedWidth(110)
+        self._step_y.setMinimumWidth(80)
 
         self._settle    = QDoubleSpinBox(); self._settle.setRange(0.1, 30)
         self._settle.setValue(0.5);         self._settle.setSuffix(" s")
-        self._settle.setFixedWidth(90)
+        self._settle.setMinimumWidth(70)
 
         self._n_frames  = QSpinBox();       self._n_frames.setRange(5, 200)
-        self._n_frames.setValue(20);        self._n_frames.setFixedWidth(70)
+        self._n_frames.setValue(20);        self._n_frames.setMinimumWidth(70)
 
         self._snake     = QCheckBox("Snake scan (boustrophedon)")
         self._snake.setChecked(True)
@@ -470,7 +471,7 @@ class ScanTab(QWidget):
         cmap_row = QHBoxLayout()
         cmap_row.addWidget(QLabel("Colormap:"))
         self._cmap_combo = QComboBox()
-        self._cmap_combo.setFixedWidth(110)
+        self._cmap_combo.setMinimumWidth(160)
         saved_cmap = cfg_mod.get_pref("display.colormap", "Thermal Delta")
         setup_cmap_combo(self._cmap_combo, saved_cmap)
         self._cmap_combo.currentTextChanged.connect(self._redisplay)

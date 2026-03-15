@@ -119,12 +119,13 @@ class MovieTab(QWidget):
         cap_box = QGroupBox("Capture Settings")
         cl = QGridLayout(cap_box)
         cl.setSpacing(6)
+        cl.setColumnStretch(1, 1)
 
         self._n_frames = QSpinBox()
         self._n_frames.setRange(MOVIE_MIN_N_FRAMES, MOVIE_MAX_N_FRAMES)
         self._n_frames.setValue(MOVIE_DEFAULT_N_FRAMES)
         self._n_frames.setSuffix(" frames")
-        self._n_frames.setFixedWidth(110)
+        self._n_frames.setMinimumWidth(80)
         self._n_frames.setToolTip(
             f"Number of frames to capture in burst.\n"
             f"Range: {MOVIE_MIN_N_FRAMES}–{MOVIE_MAX_N_FRAMES} frames.")
@@ -133,7 +134,7 @@ class MovieTab(QWidget):
         self._settle_ms.setRange(0.0, 2000.0)
         self._settle_ms.setValue(MOVIE_DEFAULT_SETTLE_MS)
         self._settle_ms.setSuffix(" ms")
-        self._settle_ms.setFixedWidth(110)
+        self._settle_ms.setMinimumWidth(80)
         self._settle_ms.setToolTip(
             "Wait time after bias power ON before burst capture begins.\n"
             "Allows the DUT to reach a representative initial temperature.")
@@ -273,7 +274,7 @@ class MovieTab(QWidget):
         cmap_row = QHBoxLayout()
         cmap_row.addWidget(QLabel("Colormap:"))
         self._cmap_combo = QComboBox()
-        self._cmap_combo.setFixedWidth(130)
+        self._cmap_combo.setMinimumWidth(160)
         saved_cmap = cfg_mod.get_pref("display.colormap", "Thermal Delta")
         setup_cmap_combo(self._cmap_combo, saved_cmap)
         self._cmap_combo.currentTextChanged.connect(self._redisplay)

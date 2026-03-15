@@ -1428,7 +1428,7 @@ class SettingsTab(QWidget):
         ib.setContentsMargins(14, 12, 14, 12)
         ib.setSpacing(8)
 
-        install_notice = QLabel("⚡  Ollama is not installed on this machine.")
+        install_notice = QLabel("Ollama is not installed on this machine.")
         install_notice.setStyleSheet(
             f"font-size:{FONT['label']}pt; font-weight:600; color:{_AMBER};")
         ib.addWidget(install_notice)

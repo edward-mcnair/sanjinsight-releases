@@ -168,7 +168,7 @@ class RecipeSelectorPanel(QWidget):
 
         # ── Search box ─────────────────────────────────────────────────────
         self._search = QLineEdit()
-        self._search.setPlaceholderText("🔍  Search scan profiles…")
+        self._search.setPlaceholderText("Search scan profiles…")
         self._search.setFixedHeight(32)
         self._search.setStyleSheet(
             f"QLineEdit {{ background:#13172a; color:{PALETTE.get('text','#ebebeb')}; "

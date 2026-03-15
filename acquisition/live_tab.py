@@ -679,7 +679,7 @@ class LiveTab(QWidget):
         # Colormap selector in toolbar
         lay.addWidget(QLabel("Colormap:"))
         self._cmap_combo = QComboBox()
-        self._cmap_combo.setFixedWidth(110)
+        self._cmap_combo.setMinimumWidth(160)
         self._cmap_combo.setFixedHeight(28)
         saved_cmap = cfg_mod.get_pref("display.colormap", "Thermal Delta")
         setup_cmap_combo(self._cmap_combo, saved_cmap)
@@ -721,6 +721,7 @@ class LiveTab(QWidget):
         trig_box = QGroupBox("Trigger")
         tl = QGridLayout(trig_box)
         tl.setSpacing(5)
+        tl.setColumnStretch(1, 1)
 
         self._trig_mode = QComboBox()
         self._trig_mode.addItems(["fpga", "software"])
@@ -728,7 +729,7 @@ class LiveTab(QWidget):
         self._trig_delay.setRange(0, 100)
         self._trig_delay.setValue(5.0)
         self._trig_delay.setSuffix(" ms")
-        self._trig_delay.setFixedWidth(90)
+        self._trig_delay.setMinimumWidth(70)
 
         tl.addWidget(self._sub("Mode"),  0, 0)
         tl.addWidget(self._trig_mode,    0, 1)
@@ -740,16 +741,17 @@ class LiveTab(QWidget):
         acq_box = QGroupBox("Acquisition")
         al = QGridLayout(acq_box)
         al.setSpacing(5)
+        al.setColumnStretch(1, 1)
 
         self._frames_per_half = QSpinBox()
         self._frames_per_half.setRange(1, 64)
         self._frames_per_half.setValue(4)
-        self._frames_per_half.setFixedWidth(70)
+        self._frames_per_half.setMinimumWidth(70)
 
         self._accum = QSpinBox()
         self._accum.setRange(1, 256)
         self._accum.setValue(16)
-        self._accum.setFixedWidth(70)
+        self._accum.setMinimumWidth(70)
         self._accum.setToolTip(
             "EMA depth — higher = smoother signal, slower transient response")
 
@@ -757,7 +759,7 @@ class LiveTab(QWidget):
         self._disp_fps.setRange(1, 30)
         self._disp_fps.setValue(10)
         self._disp_fps.setSuffix(" fps")
-        self._disp_fps.setFixedWidth(90)
+        self._disp_fps.setMinimumWidth(70)
 
         from ui.help import help_label
         al.addWidget(help_label("Frames/half", "n_frames"),  0, 0)

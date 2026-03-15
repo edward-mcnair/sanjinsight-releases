@@ -112,6 +112,16 @@ class IC:
     SEND          = "mdi.send"
     STETHOSCOPE   = "mdi.stethoscope"
     DEVICE_MGR    = "mdi.server"
+    # Auth / account
+    LOGIN         = "mdi.login"
+    LOGOUT        = "mdi.logout"
+    USER          = "mdi.account-outline"
+    # Search / discovery
+    SEARCH        = "mdi.magnify"
+    # Keys / credentials
+    KEY           = "mdi.key-outline"
+    # Hardware connection
+    CONNECT       = "mdi.power-plug-outline"
 
 
 # ── Sidebar navigation icon registry ─────────────────────────────────────────
@@ -249,6 +259,31 @@ def make_icon(icon_name: str, color: str | None = None, size: int = 16):
         return qta.icon(icon_name, color=color, scale_factor=size / 16)
     except Exception:
         return None
+
+
+def make_icon_label(
+    icon_name: str,
+    color: str | None = None,
+    size: int = 16,
+):
+    """Return a QLabel showing the given MDI icon as a flat vector pixmap.
+
+    Use this anywhere you need an icon in a non-button context (dialog headers,
+    status badges, inline indicators) instead of a Unicode/emoji character.
+    Returns a plain QLabel with no text if qtawesome is unavailable.
+    """
+    try:
+        from PyQt5.QtWidgets import QLabel
+        from PyQt5.QtCore import Qt
+        lbl = QLabel()
+        lbl.setAlignment(Qt.AlignCenter)
+        icon = make_icon(icon_name, color=color, size=size)
+        if icon:
+            lbl.setPixmap(icon.pixmap(size, size))
+        return lbl
+    except Exception:
+        from PyQt5.QtWidgets import QLabel
+        return QLabel()
 
 
 def set_btn_icon(

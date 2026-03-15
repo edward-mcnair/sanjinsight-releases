@@ -148,7 +148,7 @@ class TemperatureTab(QWidget):
         for lbl, val in [("-20°C",-20),("0°C",0),("25°C",25),
                           ("50°C",50),("85°C",85)]:
             b = QPushButton(lbl)
-            b.setFixedWidth(52)
+            b.setMinimumWidth(66)
             ctrl.addWidget(b)
             b.clicked.connect(
                 lambda _, v=val, s=spin, box=box: (

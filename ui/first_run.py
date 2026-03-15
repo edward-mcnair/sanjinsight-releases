@@ -371,14 +371,14 @@ class _PageWelcome(_PageBase):
         self._content.addWidget(tip)
 
         # Live scan-status line — updated by _ScanWorker signals
-        self._scan_label = QLabel("🔍  Scanning for connected hardware…")
+        self._scan_label = QLabel("Scanning for connected hardware…")
         self._scan_label.setStyleSheet(
             f"font-size:{FONT['sublabel']}pt; color:{PALETTE.get('textSub','#6a6a6a')}; font-style:italic; padding:4px 0;")
         self._content.addWidget(self._scan_label)
 
     def set_scan_status(self, msg: str):
         """Called by _ScanWorker.status_update signal."""
-        self._scan_label.setText(f"🔍  {msg}")
+        self._scan_label.setText(msg)
 
     def set_scan_done(self, known_count: int):
         """Called by _ScanWorker.completed signal after pages are updated."""

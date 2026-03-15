@@ -155,7 +155,7 @@ class MainWindow(QMainWindow):
         for lbl, val in [("50us",50),("500us",500),("1ms",1000),
                          ("5ms",5000),("20ms",20000),("100ms",100000)]:
             b = QPushButton(lbl)
-            b.setFixedWidth(60)
+            b.setMinimumWidth(70)
             b.clicked.connect(lambda _, v=val: self._set_exposure(v))
             presets.addWidget(b)
         presets.addStretch()

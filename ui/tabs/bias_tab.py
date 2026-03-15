@@ -21,7 +21,7 @@ from ui.theme import FONT, PALETTE, scaled_qss
 from ai.instrument_knowledge import (
     BIAS_VO_INT_MAX_V, BIAS_AUX_INT_MAX_V, BIAS_VO_EXT_MAX_V,
     SHUNT_20MA_OHM)
-from ui.icons import set_btn_icon
+from ui.icons import IC, make_icon_label, set_btn_icon
 
 
 # (label, max_v, bipolar)
@@ -95,19 +95,19 @@ class BiasTab(QWidget):
         pl.addWidget(self._preset_combo)
 
         load_btn = QPushButton("Load")
-        load_btn.setFixedWidth(60)
+        load_btn.setMinimumWidth(76)
         load_btn.setToolTip("Apply the selected preset")
         load_btn.clicked.connect(self._load_preset)
         pl.addWidget(load_btn)
 
         save_btn = QPushButton("Save…")
-        save_btn.setFixedWidth(60)
+        save_btn.setMinimumWidth(76)
         save_btn.setToolTip("Save current settings as a new preset")
         save_btn.clicked.connect(self._save_preset)
         pl.addWidget(save_btn)
 
         del_btn = QPushButton("Delete")
-        del_btn.setFixedWidth(60)
+        del_btn.setMinimumWidth(76)
         del_btn.setToolTip("Delete the selected user preset")
         del_btn.clicked.connect(self._delete_preset)
         pl.addWidget(del_btn)
@@ -176,7 +176,7 @@ class BiasTab(QWidget):
         for lbl, val in [("0V",0),("0.5V",0.5),("1V",1),
                           ("1.8V",1.8),("3.3V",3.3),("5V",5)]:
             b = QPushButton(lbl)
-            b.setFixedWidth(52)
+            b.setMinimumWidth(58)
             b.clicked.connect(
                 lambda _, v=val: (self._level_spin.setValue(v),
                                   self._set_level(v)))
@@ -189,7 +189,7 @@ class BiasTab(QWidget):
         for lbl, val in [("0A",0),("1mA",0.001),("10mA",0.01),
                           ("100mA",0.1),("500mA",0.5),("1A",1.0)]:
             b = QPushButton(lbl)
-            b.setFixedWidth(56)
+            b.setMinimumWidth(74)
             b.clicked.connect(
                 lambda _, v=val: (self._level_spin.setValue(v),
                                   self._set_level(v)))
@@ -276,13 +276,7 @@ class BiasTab(QWidget):
         lay.setAlignment(Qt.AlignCenter)
         lay.setSpacing(16)
 
-        try:
-            import qtawesome as qta
-            icon_lbl = QLabel()
-            icon_lbl.setPixmap(qta.icon("fa5s.unlink", color="#555").pixmap(64, 64))
-        except Exception:
-            icon_lbl = QLabel("⚡")
-            icon_lbl.setStyleSheet(scaled_qss("font-size: 48pt; color: #333;"))
+        icon_lbl = make_icon_label(IC.LINK_OFF, color="#555555", size=64)
         icon_lbl.setAlignment(Qt.AlignCenter)
 
         title_lbl = QLabel(f"{title} Not Connected")

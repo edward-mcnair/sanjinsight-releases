@@ -739,7 +739,7 @@ class HelpPopover(QWidget):
             cl.addLayout(warn_row)
 
         if content.get("docs"):
-            docs_lbl = QLabel(f"📖  User Guide: {content['docs']}")
+            docs_lbl = QLabel(f"User Guide: {content['docs']}")
             docs_lbl.setStyleSheet(
                 f"font-size:{FONT['label']}pt; color:{PALETTE.get('textDim','#999999')}; font-style:italic; background:transparent;")
             cl.addWidget(docs_lbl)
@@ -880,6 +880,6 @@ def help_label(label_text: str,
     if style:
         lbl.setStyleSheet(style)
     lay.addWidget(lbl)
-    lay.addWidget(HelpButton(topic_id))
     lay.addStretch()
+    lay.addWidget(HelpButton(topic_id))
     return w

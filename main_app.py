@@ -188,7 +188,6 @@ from ui.tabs.transient_capture_tab import TransientCaptureTab
 from ui.tabs.camera_control_tab    import CameraControlTab
 from ui.tabs.stimulus_tab          import StimulusTab
 from ui.tabs.library_tab           import LibraryTab
-from ui.tabs.home_tab              import HomeTab
 from ui.widgets.bottom_drawer      import BottomDrawer, DrawerToggleBar
 from ai.metrics_service          import MetricsService
 from ai.diagnostic_engine        import DiagnosticEngine
@@ -420,7 +419,6 @@ class MainWindow(QMainWindow):
         self._stimulus_tab          = StimulusTab(self._fpga_tab, self._bias_tab)
         self._library_tab           = LibraryTab(self._profile_tab, self._recipe_tab)
         self._autoscan_tab          = AutoScanTab()
-        self._home_tab              = HomeTab()
 
         # ── Bottom drawer (Console + Log) ────────────────────────────────
         self._bottom_drawer = BottomDrawer(self._console_tab, self._log_tab)
@@ -486,10 +484,7 @@ class MainWindow(QMainWindow):
         # ── Register all panels with the sidebar nav ──────────────────
         from ui.sidebar_nav import NavItem as NI
         from ui.icons import NAV_ICONS as _I, GROUP_ICONS as _G
-
-        from ui.icons import IC as _IC
         self._nav.add_section("ACQUIRE", [
-            NI("Home",        _IC.HOME,                self._home_tab),
             NI("AutoScan",    _I["AutoScan"],          self._autoscan_tab,         badge="★"),
             NI("Live",        _I["Live"],              self._live_tab,             badge="★"),
             NI("Capture",     _I["Capture"],           self._capture_tab,          badge="★"),
@@ -545,11 +540,6 @@ class MainWindow(QMainWindow):
                     self._auth._store.has_users())
             except Exception:
                 pass
-
-        # HomeTab signal wiring
-        self._home_tab.open_session_requested.connect(self._open_session_from_home)
-        self._home_tab.new_acquisition_requested.connect(
-            lambda: self._nav.select_by_label("AutoScan"))
 
         # AutoScanTab signal wiring
         self._autoscan_tab.scan_requested.connect(self._on_autoscan_scan_requested)
@@ -1794,13 +1784,7 @@ class MainWindow(QMainWindow):
     def _on_acq_saved(self, session):
         """New session was saved — refresh data tab immediately."""
         self._data_tab.add_session(session)
-        if hasattr(self, "_home_tab"):
-            self._home_tab.refresh()
 
-    def _open_session_from_home(self, folder_path: str) -> None:
-        """Open a session selected from the HomeTab."""
-        self._data_tab.open_session_by_path(folder_path)
-        self._nav.select_by_label("Sessions")
 
     def _on_log(self, msg: str):
         self._log_tab.append(msg)

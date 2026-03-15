@@ -182,7 +182,7 @@ class SupportDialog(QDialog):
         lay.setSpacing(12)
 
         # ── Title ────────────────────────────────────────────────────────────
-        title = QLabel("📧  Get Support")
+        title = QLabel("Get Support")
         title.setStyleSheet(
             f"font-size:{FONT['heading']}pt; font-weight:700; "
             f"color:{PALETTE['accent']};"

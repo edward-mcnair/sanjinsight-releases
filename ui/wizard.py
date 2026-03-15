@@ -28,6 +28,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from PyQt5.QtGui  import (QColor, QPainter, QPen, QImage, QPixmap)
 from ui.font_utils import sans_font
+from ui.icons import IC, set_btn_icon
 from ui.theme import FONT, PALETTE, scaled_qss
 
 
@@ -537,7 +538,8 @@ class Step2Focus(QWidget):
         af_title = QLabel("AUTO-FOCUS")
         af_title.setStyleSheet(
             f"font-size:{FONT['label']}pt; letter-spacing:1.5px; color:{PALETTE.get('textSub','#6a6a6a')};")
-        self._af_btn = QPushButton("⚡  Auto-Focus")
+        self._af_btn = QPushButton("Auto-Focus")
+        set_btn_icon(self._af_btn, IC.AUTOFOCUS)
         self._af_btn.setObjectName("primary")
         self._af_btn.setFixedHeight(34)
         self._af_btn.clicked.connect(self._run_autofocus)
@@ -691,11 +693,11 @@ class Step2Focus(QWidget):
         except Exception:
             pass
         self._af_btn.setEnabled(True)
-        self._af_btn.setText("⚡  Auto-Focus")
+        self._af_btn.setText("Auto-Focus")
 
     def _on_af_done(self, result):
         self._af_btn.setEnabled(True)
-        self._af_btn.setText("⚡  Auto-Focus")
+        self._af_btn.setText("Auto-Focus")
         if result and hasattr(result, "focus_score"):
             score = result.focus_score
             ok    = getattr(result, "converged", True)

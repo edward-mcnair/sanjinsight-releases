@@ -70,6 +70,7 @@ from hardware.device_registry import (
     DTYPE_UNKNOWN, CONN_SERIAL, CONN_ETHERNET, CONN_USB, CONN_PCIE)
 from hardware.device_manager  import DeviceManager, DeviceState, DeviceEntry
 from ui.font_utils import mono_font
+from ui.icons import IC, set_btn_icon
 from ui.theme import FONT, PALETTE, scaled_qss
 from hardware.device_scanner  import DeviceScanner
 from hardware.driver_store    import DriverStore, RemoteDriverEntry
@@ -227,7 +228,8 @@ class _DeviceListPanel(QWidget):
         title = QLabel("DEVICES")
         title.setStyleSheet(
             f"font-size:8.5pt; letter-spacing:2px; color:{PALETTE.get('textDim','#6a6a6a')};")
-        self._scan_btn = QPushButton("🔍  Scan")
+        self._scan_btn = QPushButton("Scan")
+        set_btn_icon(self._scan_btn, IC.SEARCH)
         self._scan_btn.setFixedHeight(24)
         self._scan_btn.setStyleSheet(self._ss_scan)
         self._net_chk = QCheckBox("+ Network")
@@ -474,7 +476,7 @@ class _DeviceListPanel(QWidget):
 
         self._scan_prog.setVisible(False)
         self._scan_btn.setEnabled(True)
-        self._scan_btn.setText("🔍  Scan")
+        self._scan_btn.setText("Scan")
         self._scan_btn.setStyleSheet(self._ss_scan)
 
         if cancelled:
@@ -545,6 +547,17 @@ class _DeviceProfilePanel(QWidget):
         scroll.setWidget(self._body)
         root.addWidget(scroll, 1)
 
+        # Footer — Connect / Disconnect always pinned below the scroll area
+        self._footer = QWidget()
+        self._footer.setVisible(False)
+        self._footer.setStyleSheet(
+            f"background:{PALETTE.get('bg','#1e1f24')};"
+            f" border-top:1px solid {PALETTE.get('border','#484848')};")
+        self._footer_layout = QHBoxLayout(self._footer)
+        self._footer_layout.setContentsMargins(16, 12, 16, 14)
+        self._footer_layout.setSpacing(8)
+        root.addWidget(self._footer)
+
         self._show_placeholder()
 
     def _clear(self):
@@ -564,6 +577,10 @@ class _DeviceProfilePanel(QWidget):
                 # from takeAt() is sufficient.
 
         _purge(self._body_layout)
+        if hasattr(self, "_footer_layout"):
+            _purge(self._footer_layout)
+        if hasattr(self, "_footer"):
+            self._footer.setVisible(False)
 
     def _show_placeholder(self):
         self._clear()
@@ -678,10 +695,10 @@ class _DeviceProfilePanel(QWidget):
             notes.setStyleSheet(f"font-size:8.5pt; color:{PALETTE.get('textDim','#6a6a6a')}; font-style:italic;")
             self._body_layout.addWidget(notes)
 
-        # ---- Action buttons ----
-        self._build_actions(entry)
-
         self._body_layout.addStretch()
+
+        # ---- Action buttons (footer — outside scroll area) ----
+        self._build_actions(entry)
 
     def _build_params(self, entry: DeviceEntry):
         desc = entry.descriptor
@@ -1369,15 +1386,13 @@ class _DeviceProfilePanel(QWidget):
         QTimer.singleShot(0, _apply)
 
     def _build_actions(self, entry: DeviceEntry):
-        row = QHBoxLayout()
-        row.setSpacing(8)
-
         can_connect    = entry.state in (DeviceState.DISCOVERED,
                                           DeviceState.ABSENT,
                                           DeviceState.ERROR)
         can_disconnect = entry.state == DeviceState.CONNECTED
 
-        conn_btn = QPushButton("⚡  Connect")
+        conn_btn = QPushButton("Connect")
+        set_btn_icon(conn_btn, IC.CONNECT)
         conn_btn.setObjectName("primary")
         conn_btn.setFixedHeight(32)
         conn_btn.setEnabled(can_connect)
@@ -1393,10 +1408,10 @@ class _DeviceProfilePanel(QWidget):
             f"QPushButton:disabled{{color:#333; border-color:{PALETTE.get('border','#484848')}; background:{PALETTE.get('bg','#242424')};}}"))
         disc_btn.clicked.connect(lambda: self._do_disconnect(entry.uid))
 
-        row.addWidget(conn_btn)
-        row.addWidget(disc_btn)
-        row.addStretch()
-        self._body_layout.addLayout(row)
+        self._footer_layout.addWidget(conn_btn)
+        self._footer_layout.addWidget(disc_btn)
+        self._footer_layout.addStretch()
+        self._footer.setVisible(True)
 
         self._conn_btn = conn_btn
         self._disc_btn = disc_btn
@@ -1482,7 +1497,7 @@ class _DriverCard(QFrame):
         # Bottom row: hot-load indicator + install button
         bot = QHBoxLayout()
         hl_lbl = QLabel(
-            "⚡ Hot-loadable" if entry.hot_loadable else "↻ Requires restart")
+            "Hot-loadable" if entry.hot_loadable else "↻ Requires restart")
         hl_lbl.setStyleSheet(
             f"font-size:8.5pt; "
             f"color:{'#00d4aa66' if entry.hot_loadable else '#888'};")
@@ -2195,7 +2210,7 @@ class DeviceManagerDialog(QDialog):
                 "explore the full interface with simulated devices — "
                 "no physical hardware required." + ports_hint)
 
-        scan_btn  = box.addButton("🔍  Scan Again", QMessageBox.AcceptRole)
+        scan_btn  = box.addButton("Scan Again", QMessageBox.AcceptRole)
         wizard_btn = None
 
         if already_demo:

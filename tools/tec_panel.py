@@ -239,7 +239,7 @@ class TecPanel(QMainWindow):
         for label, val in [("-20°C", -20), ("0°C", 0), ("25°C", 25),
                            ("50°C", 50), ("85°C", 85)]:
             b = QPushButton(label)
-            b.setFixedWidth(56)
+            b.setMinimumWidth(66)
             b.clicked.connect(
                 lambda _, t=tec, s=spin, v=val: (s.setValue(v),
                                                   self._set_target(t, v)))

@@ -56,6 +56,7 @@ class AcquireTab(QWidget):
         ctrl_box = QGroupBox("Capture")
         cl = QGridLayout(ctrl_box)
         cl.setSpacing(8)
+        cl.setColumnStretch(1, 1)
 
         from ui.help import help_label
         cl.addWidget(help_label("Frames / phase", "n_frames"), 0, 0)
@@ -63,7 +64,7 @@ class AcquireTab(QWidget):
         self._frames.setRange(1, 10000)
         self._frames.setValue(100)
         self._frames.setSuffix(" frames")
-        self._frames.setFixedWidth(130)
+        self._frames.setMinimumWidth(110)
         cl.addWidget(self._frames, 0, 1)
 
         cl.addWidget(self._sub("Phase delay (s)"), 1, 0)
@@ -72,7 +73,7 @@ class AcquireTab(QWidget):
         self._delay.setValue(0)
         self._delay.setSingleStep(0.5)
         self._delay.setSuffix(" s")
-        self._delay.setFixedWidth(90)
+        self._delay.setMinimumWidth(90)
         self._delay.setToolTip(
             "Wait time between switching from cold to hot (or vice versa).\n"
             "Allows the device to reach thermal equilibrium after the stimulus changes.\n"
@@ -81,7 +82,7 @@ class AcquireTab(QWidget):
 
         cl.addWidget(self._sub("ΔR/R colormap"), 2, 0)
         self._cmap = QComboBox()
-        self._cmap.setFixedWidth(110)
+        self._cmap.setMinimumWidth(160)
         saved_cmap = cfg_mod.get_pref("display.colormap", "Thermal Delta")
         setup_cmap_combo(self._cmap, saved_cmap)
         self._cmap.currentTextChanged.connect(self._on_cmap_changed)

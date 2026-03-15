@@ -425,13 +425,14 @@ class AnalysisTab(QWidget):
         th_box = QGroupBox("Detection Threshold")
         tl = QGridLayout(th_box)
         tl.setSpacing(6)
+        tl.setColumnStretch(1, 1)
 
         self._thresh_spin = QDoubleSpinBox()
         self._thresh_spin.setRange(0.1, 200.0)
         self._thresh_spin.setValue(5.0)
         self._thresh_spin.setSuffix(" °C")
         self._thresh_spin.setSingleStep(0.5)
-        self._thresh_spin.setFixedWidth(100)
+        self._thresh_spin.setMinimumWidth(80)
 
         self._use_dt_cb = QCheckBox("Use ΔT map (°C)")
         self._use_dt_cb.setChecked(True)
@@ -446,13 +447,13 @@ class AnalysisTab(QWidget):
             s = QDoubleSpinBox()
             s.setRange(lo, hi); s.setValue(val)
             if suf: s.setSuffix(suf)
-            s.setFixedWidth(90)
+            s.setMinimumWidth(80)
             return s
 
         def sp(val, lo=0, hi=999):
             s = QSpinBox()
             s.setRange(lo, hi); s.setValue(val)
-            s.setFixedWidth(90)
+            s.setMinimumWidth(80)
             return s
 
         self._fail_count = sp(1,   lo=0)
@@ -465,6 +466,7 @@ class AnalysisTab(QWidget):
         pf_box = QGroupBox("Pass / Fail Rules")
         pl = QGridLayout(pf_box)
         pl.setSpacing(5)
+        pl.setColumnStretch(1, 1)
         for row, (lbl, widget, topic) in enumerate([
             ("FAIL if count ≥", self._fail_count, "fail_hotspot_count"),
             ("FAIL if peak ≥",  self._fail_peak,  "fail_peak_k"),

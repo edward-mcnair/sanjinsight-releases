@@ -286,6 +286,7 @@ class CalibrationTab(QWidget):
         cfg_box = QGroupBox("Capture Settings")
         cl = QGridLayout(cfg_box)
         cl.setSpacing(6)
+        cl.setColumnStretch(1, 1)
 
         def row(lbl, widget, r):
             cl.addWidget(self._sub(lbl), r, 0)
@@ -293,14 +294,14 @@ class CalibrationTab(QWidget):
 
         self._n_avg     = QSpinBox();   self._n_avg.setRange(5, 500)
         self._n_avg.setValue(CAL_N_AVERAGES)   # 100 frames — standard (SanjANALYZER)
-        self._n_avg.setFixedWidth(80)
+        self._n_avg.setMinimumWidth(80)
         self._n_avg.setToolTip(
             f"Frames averaged per temperature step.\n"
             f"Standard calibration uses {CAL_N_AVERAGES} frames (SanjANALYZER default).")
 
         self._settle    = QDoubleSpinBox(); self._settle.setRange(1, CAL_SETTLE_TIMEOUT_S)
         self._settle.setValue(60.0);        self._settle.setSuffix(" s")
-        self._settle.setFixedWidth(90)
+        self._settle.setMinimumWidth(80)
         self._settle.setToolTip(
             f"Maximum time to wait for each setpoint to stabilise before capturing.\n"
             f"Hardware timeout limit: {CAL_SETTLE_TIMEOUT_S} s (SanjANALYZER).\n"
@@ -308,15 +309,15 @@ class CalibrationTab(QWidget):
 
         self._stable_tol = QDoubleSpinBox(); self._stable_tol.setRange(0.01, 2.0)
         self._stable_tol.setValue(0.2);      self._stable_tol.setSuffix(" °C")
-        self._stable_tol.setFixedWidth(90)
+        self._stable_tol.setMinimumWidth(80)
 
         self._stable_dur = QDoubleSpinBox(); self._stable_dur.setRange(1, 60)
         self._stable_dur.setValue(5.0);      self._stable_dur.setSuffix(" s")
-        self._stable_dur.setFixedWidth(90)
+        self._stable_dur.setMinimumWidth(80)
 
         self._min_r2 = QDoubleSpinBox(); self._min_r2.setRange(0.1, 1.0)
         self._min_r2.setValue(0.80);     self._min_r2.setDecimals(2)
-        self._min_r2.setFixedWidth(80)
+        self._min_r2.setMinimumWidth(80)
 
         row("Avg frames/step",  self._n_avg,       0)
         row("Max settle time",  self._settle,      1)
@@ -416,7 +417,7 @@ class CalibrationTab(QWidget):
         cmap_row = QHBoxLayout()
         cmap_row.addWidget(QLabel("Colormap:"))
         self._cmap_combo = QComboBox()
-        self._cmap_combo.setFixedWidth(130)
+        self._cmap_combo.setMinimumWidth(160)
         saved_cmap = cfg_mod.get_pref("display.colormap", "Thermal Delta")
         setup_cmap_combo(self._cmap_combo, saved_cmap)
         self._cmap_combo.currentTextChanged.connect(self._redisplay)

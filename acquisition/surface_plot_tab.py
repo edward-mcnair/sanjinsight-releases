@@ -86,7 +86,7 @@ class SurfacePlotTab(QWidget):
         toolbar.addWidget(QLabel("Colormap:"))
         self._cmap_combo = QComboBox()
         self._cmap_combo.setFixedHeight(28)
-        self._cmap_combo.setFixedWidth(130)
+        self._cmap_combo.setMinimumWidth(160)
         saved_cmap = cfg_mod.get_pref("display.colormap", "Emberline")
         setup_cmap_combo(self._cmap_combo, saved_cmap)
         self._cmap_combo.currentTextChanged.connect(self._replot)

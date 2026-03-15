@@ -35,7 +35,7 @@ from hardware.app_state    import app_state
 from ui.widgets.image_pane import ImagePane
 from ui.widgets.collapsible_panel import CollapsiblePanel
 from ui.theme import FONT, PALETTE, scaled_qss
-from ui.icons import set_btn_icon
+from ui.icons import IC, make_icon_label, set_btn_icon
 
 
 def hline():
@@ -121,7 +121,7 @@ class CameraTab(QWidget):
         for lbl, v in [("50μs", 50), ("1ms", 1000), ("5ms", 5000),
                        ("20ms", 20000), ("100ms", 100000)]:
             b = QPushButton(lbl)
-            b.setFixedWidth(55)
+            b.setMinimumWidth(70)
             b.clicked.connect(lambda _, val=v: self._set_exp(val))
             pr.addWidget(b)
         pr.addStretch()
@@ -247,7 +247,7 @@ class CameraTab(QWidget):
         pr2 = QHBoxLayout()
         for lbl, w, h in _PRESETS:
             b = QPushButton(lbl)
-            b.setFixedWidth(80)
+            b.setMinimumWidth(96)
             b.clicked.connect(lambda _, ww=w, hh=h: self._set_simcam_res(ww, hh))
             pr2.addWidget(b)
         pr2.addStretch()
@@ -310,13 +310,7 @@ class CameraTab(QWidget):
         lay.setAlignment(Qt.AlignCenter)
         lay.setSpacing(16)
 
-        try:
-            import qtawesome as qta
-            icon_lbl = QLabel()
-            icon_lbl.setPixmap(qta.icon("fa5s.unlink", color="#555").pixmap(64, 64))
-        except Exception:
-            icon_lbl = QLabel("⚡")
-            icon_lbl.setStyleSheet(scaled_qss("font-size: 48pt; color: #333;"))
+        icon_lbl = make_icon_label(IC.LINK_OFF, color="#555555", size=64)
         icon_lbl.setAlignment(Qt.AlignCenter)
 
         title_lbl = QLabel(f"{title} Not Connected")

@@ -18,7 +18,7 @@ from PyQt5.QtCore    import Qt, pyqtSignal
 
 from hardware.app_state import app_state
 from ui.theme import FONT, PALETTE, scaled_qss
-from ui.icons import set_btn_icon
+from ui.icons import IC, make_icon_label, set_btn_icon
 
 
 class StageTab(QWidget):
@@ -172,13 +172,7 @@ class StageTab(QWidget):
         lay.setAlignment(Qt.AlignCenter)
         lay.setSpacing(16)
 
-        try:
-            import qtawesome as qta
-            icon_lbl = QLabel()
-            icon_lbl.setPixmap(qta.icon("fa5s.unlink", color="#555").pixmap(64, 64))
-        except Exception:
-            icon_lbl = QLabel("⚡")
-            icon_lbl.setStyleSheet(scaled_qss("font-size: 48pt; color: #333;"))
+        icon_lbl = make_icon_label(IC.LINK_OFF, color="#555555", size=64)
         icon_lbl.setAlignment(Qt.AlignCenter)
 
         title_lbl = QLabel(f"{title} Not Connected")

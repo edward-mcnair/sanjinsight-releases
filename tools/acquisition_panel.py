@@ -212,7 +212,7 @@ class AcquisitionPanel(QMainWindow):
         self._cmap_combo = QComboBox()
         for c in ["signed", "hot", "cool", "viridis", "gray"]:
             self._cmap_combo.addItem(c)
-        self._cmap_combo.setFixedWidth(100)
+        self._cmap_combo.setMinimumWidth(160)
         ctrl_layout.addWidget(self._cmap_combo, 2, 1)
 
         # Capture buttons

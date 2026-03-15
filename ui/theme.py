@@ -8,7 +8,7 @@ no hardcoded hex values live anywhere outside this file.
 Quick reference
 ---------------
     from ui.theme import PALETTE, FONT, build_style, set_theme
-    from ui.theme import btn_primary_qss, status_pill_qss
+    from ui.theme import btn_primary_qss, btn_accent_qss, status_pill_qss
 
     # At startup (after apply_dpi_scale):
     app.setStyleSheet(build_style("dark"))
@@ -17,6 +17,21 @@ Quick reference
     set_theme("light")
     app.setStyleSheet(build_style("light"))
     app.setPalette(build_qt_palette("light"))
+
+Colour roles
+------------
+  accent / accentHover / accentDim
+      Teal — system health, status, active indicators, focus rings,
+      checkboxes, progress bars.  "The instrument is healthy."
+
+  cta / ctaHover / ctaDim
+      Blue — primary user-action CTAs: Run, Save, Apply, Export.
+      "You are doing something."  Used for QPushButton#primary and
+      btn_primary_qss().  Distinct from accent so CTAs read immediately
+      as interactive.
+
+  success / warning / danger / info
+      Semantic one-offs: verdicts, readiness states, alerts.
 """
 
 from __future__ import annotations
@@ -24,42 +39,56 @@ from __future__ import annotations
 import sys as _sys
 
 
-# ── Raw colour palettes ──────────────────────────────────────────────────────
-#
-# These dicts are the ONLY place hex values live.  Every other part of the
-# codebase reads from PALETTE (the live active dict) or calls build_style().
+# ══════════════════════════════════════════════════════════════════════════════
+#  Raw colour palettes
+# ══════════════════════════════════════════════════════════════════════════════
 #
 # Design language
 # ---------------
-# Both themes share a cool blue-gray tonal axis — the same colour temperature
-# in dark and light.  This makes the transition between modes feel intentional
-# rather than accidental.  Four surface depth levels (bg → surface → surface2
-# → surface3) create visual hierarchy without shadows.
+# Both themes share a cool blue-gray tonal axis.  Pure neutral grays feel
+# flat and lifeless on modern displays; a slight blue cast (≈3–5 % blue
+# saturation) reads as precision and gives the app a more intentional feel.
+#
+# The four dark-mode surface depths are spaced ~10–12 luminance levels apart
+# (perceptually uniform on sRGB monitors at typical gamma) so the depth
+# hierarchy is clearly readable.
+#
+# Light mode uses near-white as the base (Apple's #f5f5f7 pattern).
+# The old mid-gray #d9d9d9 base has been retired — it read as a dated
+# Windows 95 desktop.
+#
+# Two accent roles:
+#   accent  — teal  (#00d4aa dark / #009e80 light): system health, status
+#   cta     — blue  (#4188f5 dark / #1a73e8 light): primary user actions
 
 _DARK_RAW: dict = {
-    # ── Backgrounds (neutral dark gray, #242424 base) ────────────────────────
-    "bg":           "#242424",   # deepest: main window / page canvas
-    "surface":      "#2d2d2d",   # panels, sidebar, cards
-    "surface2":     "#333333",   # list rows, elevated cells
-    "surface3":     "#3a3a3a",   # input fields, header bar, inset areas
+    # ── Backgrounds (cool blue-gray, #1e1f24 base) ───────────────────────────
+    "bg":           "#1e1f24",   # deepest: main window / page canvas
+    "surface":      "#28292f",   # panels, sidebar, cards          (Δ+10)
+    "surface2":     "#32333a",   # list rows, elevated cells        (Δ+10)
+    "surface3":     "#3c3e47",   # input fields, header bar         (Δ+11)
     # ── Borders ─────────────────────────────────────────────────────────────
-    "border":       "#484848",   # standard panel borders
-    "border2":      "#3d3d3d",   # deep / wizard-style borders
+    "border":       "#4c4e58",   # standard panel borders           (Δ+17 — visible)
+    "border2":      "#404249",   # subtle / wizard-style borders
     # ── Interactive states ───────────────────────────────────────────────────
-    "surfaceHover": "#404040",   # any surface on mouse-over
-    # ── Text (high-contrast neutrals) ────────────────────────────────────────
-    "text":         "#ebebeb",   # primary   (~12:1 on surface  ✓)
-    "textDim":      "#999999",   # secondary (~5.2:1 on surface ✓)
-    "textSub":      "#6a6a6a",   # hint / caption
-    # ── Brand accent — teal ─────────────────────────────────────────────────
+    "surfaceHover": "#404249",   # any surface on mouse-over
+    # ── Text (cool-tinted neutrals) ──────────────────────────────────────────
+    "text":         "#eceef2",   # primary   (~13:1 on surface  ✓)
+    "textDim":      "#9ea3b0",   # secondary (~5.5:1 on surface ✓)
+    "textSub":      "#5e6270",   # hint / caption
+    # ── Brand accent — teal (system health / status) ─────────────────────────
     "accent":       "#00d4aa",
     "accentDim":    "#00d4aa2e", # teal @ 18 % opacity
     "accentHover":  "#00e8bb",   # lighter teal for hover
+    # ── CTA — blue (primary user actions) ────────────────────────────────────
+    "cta":          "#4188f5",
+    "ctaHover":     "#5c9ef7",
+    "ctaDim":       "#4188f52e", # blue @ 18 % opacity
     # ── Semantic ────────────────────────────────────────────────────────────
-    "success":      "#00d4aa",
+    "success":      "#00d479",
     "warning":      "#ffaa44",
     "danger":       "#ff4466",
-    "info":         "#5b8ff9",
+    "info":         "#4188f5",   # aligned with CTA blue
     # ── Readiness widget ────────────────────────────────────────────────────
     "readyBg":       "#0a2e28",
     "readyBorder":   "#00d4aa",
@@ -67,62 +96,81 @@ _DARK_RAW: dict = {
     "warnBorder":    "#ffaa44",
     "errorBg":       "#2e0e18",
     "errorBorder":   "#ff4466",
-    "unknownBg":     "#2d2d2d",
-    "unknownBorder": "#484848",
+    "unknownBg":     "#28292f",
+    "unknownBorder": "#4c4e58",
 }
 
 _LIGHT_RAW: dict = {
-    # ── Backgrounds (neutral mid-gray, #d9d9d9 base) ─────────────────────────
-    "bg":           "#d9d9d9",   # deepest: main window / page canvas
-    "surface":      "#f4f4f4",   # panels, sidebar, cards  (~16:1 text contrast ✓)
-    "surface2":     "#ebebeb",   # list rows, elevated cells
-    "surface3":     "#e0e0e0",   # input fields, header bar, inset areas
+    # ── Backgrounds (Apple near-white, #f5f5f7 base) ─────────────────────────
+    "bg":           "#f5f5f7",   # deepest: main window / page canvas
+    "surface":      "#ffffff",   # panels, cards — pure white on light gray
+    "surface2":     "#f0f0f5",   # list rows, elevated cells (cool tint)
+    "surface3":     "#e8e8ed",   # input fields, header bar, inset areas
     # ── Borders ─────────────────────────────────────────────────────────────
-    "border":       "#c2c2c2",   # standard panel borders (visible on all surfaces)
-    "border2":      "#b0b0b0",   # deep / emphasized borders
+    "border":       "#d1d1d6",   # standard panel borders (Apple separator)
+    "border2":      "#c7c7cc",   # deep / emphasized borders
     # ── Interactive states ───────────────────────────────────────────────────
-    "surfaceHover": "#e6e6e6",   # any surface on mouse-over
-    # ── Text (neutral, high-contrast on all light surfaces) ──────────────────
-    "text":         "#1a1a1a",   # primary   (~16:1 on surface  ✓)
-    "textDim":      "#5a5a5a",   # secondary (~6.3:1 on surface ✓)
-    "textSub":      "#888888",   # hint / caption
-    # ── Brand accent — teal darkened for WCAG AA on light surfaces ───────────
+    "surfaceHover": "#ebebf0",   # any surface on mouse-over
+    # ── Text (cool-tinted, high-contrast on all light surfaces) ──────────────
+    "text":         "#1a1a1e",   # primary   (~16:1 on surface  ✓)
+    "textDim":      "#5a5a72",   # secondary (~6.5:1 on surface ✓, cool tint)
+    "textSub":      "#8e8ea0",   # hint / caption (cool tint)
+    # ── Brand accent — teal darkened for WCAG AA on light ────────────────────
     "accent":       "#009e80",
     "accentDim":    "#009e8020",
     "accentHover":  "#007d68",
+    # ── CTA — blue (primary user actions) ────────────────────────────────────
+    "cta":          "#1a73e8",   # Google-blue family, WCAG AA on white ✓
+    "ctaHover":     "#1557b0",
+    "ctaDim":       "#1a73e820",
     # ── Semantic ────────────────────────────────────────────────────────────
     "success":      "#009e80",
     "warning":      "#c47d00",
     "danger":       "#d42050",
-    "info":         "#3a5fd4",
+    "info":         "#1a73e8",   # aligned with CTA blue
     # ── Readiness widget ────────────────────────────────────────────────────
-    "readyBg":       "#ddf0eb",
+    "readyBg":       "#d6f5ed",
     "readyBorder":   "#009e80",
-    "warnBg":        "#f0e4c8",
+    "warnBg":        "#fef3e0",
     "warnBorder":    "#c47d00",
-    "errorBg":       "#f0d8e0",
+    "errorBg":       "#fee8ee",
     "errorBorder":   "#d42050",
-    "unknownBg":     "#ebebeb",
-    "unknownBorder": "#c2c2c2",
+    "unknownBg":     "#f0f0f5",
+    "unknownBorder": "#d1d1d6",
 }
 
 
-# ── Font scale (pt sizes, macOS 72-DPI baseline) ─────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+#  Font scale
+# ══════════════════════════════════════════════════════════════════════════════
 #
 # apply_dpi_scale() rescales these once QApplication + QScreen are available.
 # build_style() reads FONT at call time, so any widget constructed after
 # apply_dpi_scale() automatically gets the correctly-scaled sizes.
+#
+# Scale rationale
+# ---------------
+#   title (18) → heading (15): 3pt gap — clearly distinct section labels
+#   heading (15) → body (13):  2pt gap — readable panel hierarchy
+#   body (13) → label (12):    1pt gap — deliberate; form labels read
+#                              slightly subordinate to their values
+#   label (12) → sublabel/caption (11): 1pt — the smallest text in the app;
+#                              Inter's tall x-height keeps 11pt legible
+#
+# caption was raised from 10 → 11 pt.  At 96 DPI, 10 pt is 13 CSS px —
+# borderline readable even with Inter.  11 pt (15 CSS px) is safe on all
+# screen types including ageing lab monitors.
 
 _FONT_BASE: dict = {
-    "title":     17,   # sidebar app name / wizard h1
-    "heading":   14,   # panel section headings
+    "title":     18,   # sidebar app name / wizard h1          (was 17)
+    "heading":   15,   # panel section headings                 (was 14)
     "body":      13,   # general text, buttons, inputs
     "label":     12,   # form row labels
-    "sublabel":  11,   # secondary / dim sub-labels
-    "caption":   10,   # hints, badges, inline notes
-    "readout":   22,   # big status readout values
-    "readoutLg": 26,   # large readout (e.g. temperature actual)
-    "readoutSm": 16,   # compact readout (e.g. exposure/gain labels)
+    "sublabel":  11,   # secondary / dim sub-labels, section caps
+    "caption":   11,   # hints, badges, timestamps              (was 10)
+    "readout":   24,   # big status readout values              (was 22)
+    "readoutLg": 28,   # large readout (e.g. temperature actual)(was 26)
+    "readoutSm": 17,   # compact readout (e.g. exposure/gain)  (was 16)
     "mono":      13,   # monospace (console, log, frame stats)
 }
 
@@ -130,25 +178,42 @@ _DPI_SCALE: float = 1.0 if _sys.platform == "darwin" else 72.0 / 96.0
 
 
 def apply_dpi_scale(scale: float) -> None:
-    """Update FONT in-place using the real screen DPI scale factor.
+    """Update FONT in-place and load bundled Inter fonts.
 
     Call once, right after QApplication is created::
 
         app = QApplication(sys.argv)
         from ui.theme import apply_dpi_scale
         apply_dpi_scale(72.0 / app.primaryScreen().logicalDotsPerInch())
+
+    Also triggers Inter font loading (no-op if ``ui/fonts/`` is absent).
     """
     global _DPI_SCALE
     _DPI_SCALE = scale
     for k, v in _FONT_BASE.items():
         FONT[k] = max(8, int(round(v * scale)))
+    _try_load_inter()
+
+
+def _try_load_inter() -> None:
+    """Load bundled Inter font files.  Silent no-op on any failure."""
+    try:
+        from ui.font_utils import load_inter as _load
+        from PyQt5.QtWidgets import QApplication
+        app = QApplication.instance()
+        if app is not None:
+            _load(app)
+    except Exception:
+        pass
 
 
 # Initialised with best-guess platform scale; apply_dpi_scale() refines it.
 FONT: dict = {k: max(8, int(round(v * _DPI_SCALE))) for k, v in _FONT_BASE.items()}
 
 
-# ── Active palette ────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+#  Active palette
+# ══════════════════════════════════════════════════════════════════════════════
 #
 # PALETTE is the single live dict all widget code imports.  set_theme() clears
 # and repopulates it so every PALETTE["key"] reference automatically reflects
@@ -176,7 +241,9 @@ def active_theme() -> str:
     return _active_mode
 
 
-# ── OS theme detection ────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+#  OS theme detection
+# ══════════════════════════════════════════════════════════════════════════════
 
 def detect_system_theme() -> str:
     """Query the OS for the current light/dark preference.
@@ -218,7 +285,9 @@ def detect_system_theme() -> str:
     return "dark"
 
 
-# ── QPalette builder ──────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+#  QPalette builder
+# ══════════════════════════════════════════════════════════════════════════════
 
 def build_qt_palette(mode: str = "dark"):
     """Return a QPalette matching the requested theme mode."""
@@ -235,8 +304,8 @@ def build_qt_palette(mode: str = "dark"):
     pal.setColor(QPalette.Button,          QColor(p["surface2"]))
     pal.setColor(QPalette.ButtonText,      QColor(p["text"]))
     pal.setColor(QPalette.BrightText,      QColor(p["accent"]))
-    pal.setColor(QPalette.Link,            QColor(p["info"]))
-    pal.setColor(QPalette.Highlight,       QColor(p["accent"]))
+    pal.setColor(QPalette.Link,            QColor(p["cta"]))
+    pal.setColor(QPalette.Highlight,       QColor(p["cta"]))
     pal.setColor(QPalette.HighlightedText, QColor("#ffffff"))
     pal.setColor(QPalette.Disabled, QPalette.WindowText, QColor(p["textSub"]))
     pal.setColor(QPalette.Disabled, QPalette.Text,       QColor(p["textSub"]))
@@ -244,21 +313,31 @@ def build_qt_palette(mode: str = "dark"):
     return pal
 
 
-# ── Master QSS builder ────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+#  Master QSS builder
+# ══════════════════════════════════════════════════════════════════════════════
 
 def build_style(mode: str = "dark") -> str:
     """Generate the complete application stylesheet for the given mode.
 
-    Replaces the hardcoded STYLE constant previously defined in main_app.py.
     Call once at startup and again on any theme switch.
-
     FONT must already be DPI-scaled — call apply_dpi_scale() first.
+
+    Border-radius convention
+    ------------------------
+      6px  — all interactive controls: buttons, inputs, combos, checkboxes
+      8px  — menus and floating popups
+      10px — cards and panels (session cards, GroupBox alternative)
+      4px  — compact elements: list/tree items, badges, pills
+      3px  — progress bars (deliberately pill-shaped at thin height)
     """
     p = _DARK_RAW if mode == "dark" else _LIGHT_RAW
     f = FONT
 
     _acc  = p["accent"]
     _ahov = p["accentHover"]
+    _cta  = p["cta"]
+    _ctah = p["ctaHover"]
     _text = p["text"]
     _dim  = p["textDim"]
     _sub  = p["textSub"]
@@ -289,7 +368,7 @@ QWidget {{
     background: {_bg};
     color: {_text};
     font-size: {f['body']}pt;
-    selection-background-color: {_acc};
+    selection-background-color: {_cta};
     selection-color: #ffffff;
 }}
 QMainWindow, QDialog {{
@@ -308,7 +387,7 @@ QLabel {{
     color: {_text};
 }}
 QLabel#readout {{
-    font-family: 'Menlo', 'Courier New', monospace;
+    font-family: 'Menlo', 'Consolas', 'Courier New', monospace;
     font-size: {f['readoutLg']}pt;
     color: {_acc};
 }}
@@ -328,8 +407,8 @@ QPushButton {{
     background: {_s2};
     color: {_text};
     border: 1px solid {_bdr};
-    border-radius: 4px;
-    padding: 5px 14px;
+    border-radius: 6px;
+    padding: 6px 14px;
     font-size: {f['body']}pt;
 }}
 QPushButton:hover {{
@@ -338,11 +417,11 @@ QPushButton:hover {{
 }}
 QPushButton:pressed {{
     background: {_bg};
-    padding-top: 6px;
-    padding-bottom: 4px;
+    padding-top: 7px;
+    padding-bottom: 5px;
 }}
 QPushButton:focus {{
-    border-color: {_acc};
+    border-color: {_cta};
     outline: none;
 }}
 QPushButton:disabled {{
@@ -356,40 +435,43 @@ QPushButton:checked {{
     border-color: {_acc};
 }}
 
-/* Primary action (teal) */
+/* Primary action — solid blue CTA */
 QPushButton#primary {{
-    background: {_dk('#003d2e', '#d4f3ed')};
-    color: {_acc};
-    border-color: {_acc};
+    background: {_cta};
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 16px;
     font-weight: 600;
 }}
 QPushButton#primary:hover {{
-    background: {_dk('#004d3a', '#c0ede4')};
-    color: {_ahov};
-    border-color: {_ahov};
+    background: {_ctah};
 }}
 QPushButton#primary:pressed {{
-    background: {_dk('#002820', '#a8e4d8')};
-    padding-top: 6px; padding-bottom: 4px;
+    background: {_dk('#2e68d8', '#1250a0')};
+    padding-top: 7px;
+    padding-bottom: 5px;
 }}
-QPushButton#primary:focus   {{ border-color: {_acc}; outline: none; }}
+QPushButton#primary:focus   {{ outline: none; }}
 QPushButton#primary:disabled {{
-    background: {_dk('#1a2e28', '#e8f5f2')};
-    color: {_dk('#2a5040', '#80b8ae')};
-    border-color: {_dk('#1e3030', '#c0ddd8')};
+    background: {_dk('#2a3050', '#c8d8f8')};
+    color: {_dk('#5070a0', '#7090d0')};
+    border: none;
 }}
 
 /* Danger action (red) */
 QPushButton#danger {{
     background: {_dk('#2a0810', '#fde8ee')};
     color: {_dng};
-    border-color: {_dng};
+    border: 1px solid {_dng};
+    border-radius: 6px;
+    padding: 6px 14px;
     font-weight: 600;
 }}
 QPushButton#danger:hover    {{ background: {_dk('#3a0c18', '#f8d0db')}; }}
 QPushButton#danger:pressed  {{
     background: {_dk('#1a040c', '#f0bec8')};
-    padding-top: 6px; padding-bottom: 4px;
+    padding-top: 7px; padding-bottom: 5px;
 }}
 QPushButton#danger:focus    {{ border-color: {_dng}; outline: none; }}
 QPushButton#danger:disabled {{
@@ -400,8 +482,10 @@ QPushButton#danger:disabled {{
 QPushButton#cold_btn {{
     background: {_dk('#001a33', '#e8f0ff')};
     color: {_dk('#66aaff', '#2255bb')};
-    border-color: {_dk('#3377cc', '#6688dd')};
+    border: 1px solid {_dk('#3377cc', '#6688dd')};
+    border-radius: 6px;
     font-weight: 600;
+    padding: 6px 14px;
 }}
 QPushButton#cold_btn:hover {{
     background: {_dk('#002244', '#d8e8ff')};
@@ -412,8 +496,10 @@ QPushButton#cold_btn:hover {{
 QPushButton#hot_btn {{
     background: {_dk('#331a00', '#fff4e0')};
     color: {_warn};
-    border-color: {_dk('#cc6600', '#c47d00')};
+    border: 1px solid {_dk('#cc6600', '#c47d00')};
+    border-radius: 6px;
     font-weight: 600;
+    padding: 6px 14px;
 }}
 QPushButton#hot_btn:hover {{
     background: {_dk('#442200', '#ffe8c0')};
@@ -425,14 +511,15 @@ QPushButton[running="true"] {{
     background: {_dk('#2a1e00', '#fff4d0')};
     color: {_dk('#f5a623', '#8b5a00')};
     border: 2px solid {_dk('#f5a62366', '#c47d0066')};
+    border-radius: 6px;
     font-weight: 600;
-    padding: 4px 13px;
+    padding: 5px 13px;
 }}
 QPushButton[running="true"]#primary {{
-    background: {_dk('#002820', '#d4f3ed')};
-    color: {_acc};
-    border: 2px solid {_acc}66;
-    padding: 4px 13px;
+    background: {_dk('#0e1e44', '#d0e4f8')};
+    color: {_cta};
+    border: 2px solid {_cta}66;
+    padding: 5px 15px;
 }}
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -442,13 +529,13 @@ QLineEdit {{
     background: {_s3};
     color: {_text};
     border: 1px solid {_bdr};
-    border-radius: 4px;
+    border-radius: 6px;
     padding: 4px 8px;
     font-size: {f['body']}pt;
-    selection-background-color: {_acc};
+    selection-background-color: {_cta};
     selection-color: #ffffff;
 }}
-QLineEdit:focus    {{ border-color: {_acc}; }}
+QLineEdit:focus    {{ border-color: {_cta}; }}
 QLineEdit:disabled {{ color: {_sub}; background: {_s2}; }}
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -458,15 +545,15 @@ QTextEdit, QPlainTextEdit {{
     background: {_s3};
     color: {_text};
     border: 1px solid {_bdr};
-    border-radius: 4px;
+    border-radius: 6px;
     padding: 4px;
     font-size: {f['body']}pt;
-    selection-background-color: {_acc};
+    selection-background-color: {_cta};
     selection-color: #ffffff;
 }}
-QTextEdit:focus, QPlainTextEdit:focus {{ border-color: {_acc}; }}
+QTextEdit:focus, QPlainTextEdit:focus {{ border-color: {_cta}; }}
 QTextEdit#console, QPlainTextEdit#console {{
-    font-family: 'Menlo', 'Courier New', monospace;
+    font-family: 'Menlo', 'Consolas', 'Courier New', monospace;
     font-size: {f['mono']}pt;
     background: {_dk('#0d1018', '#f8f9fc')};
     color: {_dk('#a8d8b0', '#1a4a20')};
@@ -480,27 +567,27 @@ QSpinBox, QDoubleSpinBox {{
     background: {_s3};
     color: {_text};
     border: 1px solid {_bdr};
-    border-radius: 4px;
+    border-radius: 6px;
     padding: 4px 6px;
     font-size: {f['body']}pt;
 }}
-QSpinBox:focus, QDoubleSpinBox:focus {{ border-color: {_acc}; }}
+QSpinBox:focus, QDoubleSpinBox:focus {{ border-color: {_cta}; }}
 QSpinBox:disabled, QDoubleSpinBox:disabled {{ color: {_sub}; background: {_s2}; }}
 QSpinBox::up-button, QDoubleSpinBox::up-button {{
     subcontrol-origin: border;
     subcontrol-position: top right;
-    width: 18px;
+    width: 20px;
     border-left: 1px solid {_bdr};
     border-bottom: 1px solid {_bdr};
-    border-radius: 0 4px 0 0;
+    border-radius: 0 6px 0 0;
     background: {_s2};
 }}
 QSpinBox::down-button, QDoubleSpinBox::down-button {{
     subcontrol-origin: border;
     subcontrol-position: bottom right;
-    width: 18px;
+    width: 20px;
     border-left: 1px solid {_bdr};
-    border-radius: 0 0 4px 0;
+    border-radius: 0 0 6px 0;
     background: {_s2};
 }}
 QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
@@ -527,17 +614,17 @@ QComboBox {{
     background: {_s3};
     color: {_text};
     border: 1px solid {_bdr};
-    border-radius: 4px;
+    border-radius: 6px;
     padding: 4px 8px;
     font-size: {f['body']}pt;
 }}
-QComboBox:focus    {{ border-color: {_acc}; }}
+QComboBox:focus    {{ border-color: {_cta}; }}
 QComboBox:disabled {{ color: {_sub}; background: {_s2}; }}
 QComboBox::drop-down {{
     border: none;
-    width: 24px;
+    width: 26px;
     border-left: 1px solid {_bdr};
-    border-radius: 0 4px 4px 0;
+    border-radius: 0 6px 6px 0;
 }}
 QComboBox::down-arrow {{
     border-left: 4px solid transparent;
@@ -549,9 +636,9 @@ QComboBox QAbstractItemView {{
     background: {_s};
     color: {_text};
     border: 1px solid {_bdr};
-    border-radius: 4px;
+    border-radius: 6px;
     padding: 2px;
-    selection-background-color: {_acc};
+    selection-background-color: {_cta};
     selection-color: #ffffff;
     outline: none;
 }}
@@ -568,7 +655,7 @@ QCheckBox {{
 QCheckBox::indicator {{
     width: 16px; height: 16px;
     border: 1px solid {_bdr};
-    border-radius: 3px;
+    border-radius: 4px;
     background: {_s3};
 }}
 QCheckBox::indicator:hover   {{ border-color: {_acc}; }}
@@ -606,9 +693,9 @@ QGroupBox {{
     font-size: {f['label']}pt;
     font-weight: 600;
     border: 1px solid {_bdr};
-    border-radius: 6px;
-    margin-top: 8px;
-    padding-top: 6px;
+    border-radius: 8px;
+    margin-top: 10px;
+    padding-top: 8px;
     background: transparent;
 }}
 QGroupBox::title {{
@@ -624,7 +711,7 @@ QGroupBox::title {{
 ════════════════════════════════════════════════════════════════════════════ */
 QTabWidget::pane {{
     border: 1px solid {_bdr};
-    border-radius: 0 4px 4px 4px;
+    border-radius: 0 6px 6px 6px;
     background: {_s};
 }}
 QTabWidget::tab-bar {{ alignment: left; }}
@@ -634,15 +721,15 @@ QTabBar::tab {{
     color: {_dim};
     border: 1px solid {_bdr};
     border-bottom: none;
-    border-radius: 4px 4px 0 0;
-    padding: 6px 18px;
+    border-radius: 6px 6px 0 0;
+    padding: 7px 20px;
     font-size: {f['body']}pt;
     margin-right: 2px;
 }}
 QTabBar::tab:selected {{
     background: {_s};
     color: {_text};
-    border-bottom: 2px solid {_acc};
+    border-bottom: 2px solid {_cta};
 }}
 QTabBar::tab:hover:!selected {{
     background: {_hov};
@@ -734,7 +821,7 @@ QListWidget, QListView, QTreeWidget, QTreeView {{
     background: {_s};
     color: {_text};
     border: 1px solid {_bdr};
-    border-radius: 4px;
+    border-radius: 6px;
     outline: none;
     font-size: {f['body']}pt;
     alternate-background-color: {_s2};
@@ -742,13 +829,13 @@ QListWidget, QListView, QTreeWidget, QTreeView {{
 QListWidget::item, QListView::item,
 QTreeWidget::item, QTreeView::item {{
     padding: 4px 8px;
-    border-radius: 3px;
+    border-radius: 4px;
 }}
 QListWidget::item:hover, QListView::item:hover,
 QTreeWidget::item:hover, QTreeView::item:hover {{ background: {_hov}; }}
 QListWidget::item:selected, QListView::item:selected,
 QTreeWidget::item:selected, QTreeView::item:selected {{
-    background: {_acc};
+    background: {_cta};
     color: #ffffff;
 }}
 QTreeView::branch {{ background: {_s}; }}
@@ -757,7 +844,7 @@ QTableWidget, QTableView {{
     background: {_s};
     color: {_text};
     border: 1px solid {_bdr};
-    border-radius: 4px;
+    border-radius: 6px;
     gridline-color: {_bdr};
     outline: none;
     font-size: {f['body']}pt;
@@ -767,7 +854,7 @@ QTableWidget::item, QTableView::item {{
     border: none;
 }}
 QTableWidget::item:selected, QTableView::item:selected {{
-    background: {_acc};
+    background: {_cta};
     color: #ffffff;
 }}
 QHeaderView::section {{
@@ -812,13 +899,13 @@ QMenu {{
     background: {_s};
     color: {_text};
     border: 1px solid {_bdr};
-    border-radius: 6px;
+    border-radius: 8px;
     padding: 4px;
     font-size: {f['body']}pt;
 }}
 QMenu::item {{
-    padding: 6px 20px 6px 14px;
-    border-radius: 3px;
+    padding: 7px 22px 7px 14px;
+    border-radius: 4px;
 }}
 QMenu::item:selected {{ background: {_hov}; color: {_text}; }}
 QMenu::separator {{ height: 1px; background: {_bdr}; margin: 4px 8px; }}
@@ -830,7 +917,7 @@ QToolTip {{
     background: {_tt_bg};
     color: {_tt_fg};
     border: 1px solid {_tt_bdr};
-    border-radius: 4px;
+    border-radius: 6px;
     padding: 6px 10px;
     font-size: {f['label']}pt;
 }}
@@ -853,7 +940,9 @@ QDockWidget::title {{
 """
 
 
-# ── scaled_qss (backward compatibility) ──────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+#  scaled_qss (backward compatibility)
+# ══════════════════════════════════════════════════════════════════════════════
 
 def scaled_qss(qss: str) -> str:
     """Scale every ``font-size: Npt`` token in a QSS string by _DPI_SCALE.
@@ -871,7 +960,9 @@ def scaled_qss(qss: str) -> str:
     )
 
 
-# ── Component helpers ─────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+#  Component helpers
+# ══════════════════════════════════════════════════════════════════════════════
 #
 # These return focused QSS snippets for widgets that need styling beyond the
 # base application stylesheet.  All read from PALETTE (the live dict) so they
@@ -879,7 +970,37 @@ def scaled_qss(qss: str) -> str:
 
 
 def btn_primary_qss() -> str:
-    """Teal primary action button (Save, Run, Apply…)."""
+    """Solid blue primary action button (Run, Save, Apply, Export…).
+
+    Uses the CTA blue role — visually distinct from the teal accent so
+    user-action buttons read immediately as interactive.
+    """
+    p, f = PALETTE, FONT
+    cta  = p["cta"]
+    ctah = p["ctaHover"]
+    dark = active_theme() == "dark"
+    return f"""
+    QPushButton {{
+        background: {cta}; color: #ffffff; border: none;
+        border-radius: 6px; padding: 6px 16px;
+        font-size: {f['body']}pt; font-weight: 600;
+    }}
+    QPushButton:hover   {{ background: {ctah}; }}
+    QPushButton:pressed {{ background: {'#2e68d8' if dark else '#1250a0'};
+                           padding-top: 7px; padding-bottom: 5px; }}
+    QPushButton:disabled {{ background: {'#2a3050' if dark else '#c8d8f8'};
+                            color: {'#5070a0' if dark else '#7090d0'};
+                            border: none; }}
+    """
+
+
+def btn_accent_qss() -> str:
+    """Ghost-teal accent button — for device/system confirmations.
+
+    Use for actions that confirm a system state (Connect, Apply Calibration,
+    Start TEC) where the teal health-colour reinforces the action's meaning.
+    Use ``btn_primary_qss()`` for the main user-action CTA instead.
+    """
     p, f = PALETTE, FONT
     acc  = p["accent"]
     ahov = p["accentHover"]
@@ -888,13 +1009,13 @@ def btn_primary_qss() -> str:
     QPushButton {{
         background: {'#003d2e' if dark else '#d4f3ed'};
         color: {acc}; border: 1px solid {acc};
-        border-radius: 4px; padding: 5px 16px;
+        border-radius: 6px; padding: 6px 14px;
         font-size: {f['body']}pt; font-weight: 600;
     }}
     QPushButton:hover   {{ background: {'#004d3a' if dark else '#c0ede4'};
                            color: {ahov}; border-color: {ahov}; }}
     QPushButton:pressed {{ background: {'#002820' if dark else '#a8e4d8'};
-                           padding-top: 6px; padding-bottom: 4px; }}
+                           padding-top: 7px; padding-bottom: 5px; }}
     QPushButton:disabled {{ background: {'#1a2e28' if dark else '#e8f5f2'};
                             color: {'#2a5040' if dark else '#80b8ae'};
                             border-color: {'#1e3030' if dark else '#c0ddd8'}; }}
@@ -907,11 +1028,11 @@ def btn_secondary_qss() -> str:
     return f"""
     QPushButton {{
         background: {p['surface2']}; color: {p['textDim']};
-        border: 1px solid {p['border']}; border-radius: 4px;
-        padding: 5px 16px; font-size: {f['body']}pt;
+        border: 1px solid {p['border']}; border-radius: 6px;
+        padding: 6px 14px; font-size: {f['body']}pt;
     }}
     QPushButton:hover   {{ background: {p['surfaceHover']}; color: {p['text']}; }}
-    QPushButton:pressed {{ background: {p['bg']}; padding-top: 6px; padding-bottom: 4px; }}
+    QPushButton:pressed {{ background: {p['bg']}; padding-top: 7px; padding-bottom: 5px; }}
     QPushButton:disabled {{ color: {p['textSub']}; border-color: {p['border']}; }}
     """
 
@@ -925,12 +1046,12 @@ def btn_danger_qss() -> str:
     QPushButton {{
         background: {'#2a0810' if dark else '#fde8ee'};
         color: {dng}; border: 1px solid {dng};
-        border-radius: 4px; padding: 5px 16px;
+        border-radius: 6px; padding: 6px 14px;
         font-size: {f['body']}pt; font-weight: 600;
     }}
     QPushButton:hover   {{ background: {'#3a0c18' if dark else '#f8d0db'}; }}
     QPushButton:pressed {{ background: {'#1a040c' if dark else '#f0bec8'};
-                           padding-top: 6px; padding-bottom: 4px; }}
+                           padding-top: 7px; padding-bottom: 5px; }}
     QPushButton:disabled {{ color: {p['textSub']}; background: {p['surface2']};
                             border-color: {p['border']}; }}
     """
@@ -941,13 +1062,13 @@ def btn_wizard_primary_qss() -> str:
     f = FONT
     return f"""
     QPushButton {{
-        background: #4e73df; color: #fff; border: none;
+        background: #4188f5; color: #fff; border: none;
         border-radius: 6px; padding: 8px 22px;
         font-size: {f['body']}pt; font-weight: 600;
     }}
-    QPushButton:hover    {{ background: #3a5fc8; }}
-    QPushButton:pressed  {{ background: #2e4fa8; padding-top: 9px; padding-bottom: 7px; }}
-    QPushButton:disabled {{ background: #333; color: #666; }}
+    QPushButton:hover    {{ background: #5c9ef7; }}
+    QPushButton:pressed  {{ background: #2e68d8; padding-top: 9px; padding-bottom: 7px; }}
+    QPushButton:disabled {{ background: #2a3050; color: #5070a0; }}
     """
 
 
@@ -971,12 +1092,12 @@ def input_qss() -> str:
     return f"""
     QLineEdit, QDoubleSpinBox, QSpinBox, QComboBox {{
         background: {p['surface3']}; color: {p['text']};
-        border: 1px solid {p['border']}; border-radius: 4px;
+        border: 1px solid {p['border']}; border-radius: 6px;
         padding: 4px 8px; font-size: {f['body']}pt;
-        selection-background-color: {p['accent']};
+        selection-background-color: {p['cta']};
     }}
     QLineEdit:focus, QDoubleSpinBox:focus,
-    QSpinBox:focus, QComboBox:focus {{ border-color: {p['accent']}; }}
+    QSpinBox:focus, QComboBox:focus {{ border-color: {p['cta']}; }}
     QComboBox::drop-down {{ border: none; }}
     QComboBox QAbstractItemView {{
         background: {p['surface']}; color: {p['text']};
@@ -991,11 +1112,11 @@ def wizard_input_qss() -> str:
     return f"""
     QLineEdit, QComboBox {{
         background: #13172a; color: #ddd;
-        border: 1px solid #2a3249; border-radius: 4px;
-        padding: 5px 10px; font-size: {f['body']}pt;
-        selection-background-color: #4e73df;
+        border: 1px solid #2a3249; border-radius: 6px;
+        padding: 6px 10px; font-size: {f['body']}pt;
+        selection-background-color: #4188f5;
     }}
-    QLineEdit:focus, QComboBox:focus {{ border-color: #4e73df; }}
+    QLineEdit:focus, QComboBox:focus {{ border-color: #4188f5; }}
     QComboBox::drop-down {{ border: none; }}
     QComboBox QAbstractItemView {{
         background: #13172a; color: #ddd; border: 1px solid #2a3249;
@@ -1009,8 +1130,8 @@ def groupbox_qss() -> str:
     return f"""
     QGroupBox {{
         color: {p['textDim']}; font-size: {f['label']}pt; font-weight: 600;
-        border: 1px solid {p['border']}; border-radius: 6px;
-        margin-top: 8px; padding-top: 6px; background: transparent;
+        border: 1px solid {p['border']}; border-radius: 8px;
+        margin-top: 10px; padding-top: 8px; background: transparent;
     }}
     QGroupBox::title {{
         subcontrol-origin: margin; subcontrol-position: top left;
@@ -1042,8 +1163,8 @@ def status_pill_qss(semantic: str) -> str:
     QLabel {{
         background: {color}2e;
         color: {color};
-        border-radius: 3px;
-        padding: 1px 7px;
+        border-radius: 4px;
+        padding: 1px 8px;
         font-size: {f['caption']}pt;
         font-weight: 600;
     }}
@@ -1053,12 +1174,15 @@ def status_pill_qss(semantic: str) -> str:
 def segmented_control_qss() -> str:
     """Base style for Auto/Dark/Light and similar segmented controls.
 
+    Uses the accent teal for the checked state — these are mode selectors,
+    not action buttons, so the system-health colour is semantically correct.
+
     Apply per-button border-radius overrides on top::
 
         base = segmented_control_qss()
-        first_btn.setStyleSheet(base + "QPushButton { border-radius: 4px 0 0 4px; }")
+        first_btn.setStyleSheet(base + "QPushButton { border-radius: 6px 0 0 6px; }")
         mid_btn.setStyleSheet(  base + "QPushButton { border-radius: 0; border-left: none; }")
-        last_btn.setStyleSheet( base + "QPushButton { border-radius: 0 4px 4px 0; border-left: none; }")
+        last_btn.setStyleSheet( base + "QPushButton { border-radius: 0 6px 6px 0; border-left: none; }")
     """
     p, f = PALETTE, FONT
     acc = p["accent"]
@@ -1090,8 +1214,8 @@ def badge_qss(semantic: str) -> str:
     QLabel {{
         background: {color};
         color: #ffffff;
-        border-radius: 3px;
-        padding: 1px 5px;
+        border-radius: 4px;
+        padding: 1px 6px;
         font-size: {f['caption']}pt;
         font-weight: 700;
     }}

@@ -83,7 +83,7 @@ class BundleDialog(QDialog):
         lay.setSpacing(12)
 
         # ── Title ─────────────────────────────────────────────────────
-        title = QLabel("🗂  Create Support Bundle")
+        title = QLabel("Create Support Bundle")
         title.setStyleSheet(
             f"font-size:{FONT.get('heading', 15)}pt; font-weight:700; "
             f"color:{PALETTE['accent']};"

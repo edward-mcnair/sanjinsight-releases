@@ -21,6 +21,7 @@ from PyQt5.QtWidgets import (
 )
 
 from version import APP_NAME, APP_VENDOR, SUPPORT_EMAIL
+from ui.icons import IC, make_icon_label
 from ui.theme import FONT, scaled_qss
 
 log = logging.getLogger(__name__)
@@ -106,8 +107,7 @@ class LicenseDialog(QDialog):
         lay.setContentsMargins(28, 0, 28, 0)
         lay.setSpacing(12)
 
-        icon = QLabel("🔑")
-        icon.setStyleSheet(scaled_qss("font-size:22pt;"))
+        icon = make_icon_label(IC.KEY, color="#ffffff", size=28)
         lay.addWidget(icon)
 
         col = QVBoxLayout()

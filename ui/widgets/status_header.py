@@ -22,6 +22,7 @@ from PyQt5.QtCore    import Qt, QTimer, pyqtSignal
 
 import config as cfg_mod
 from ui.theme import FONT, PALETTE, scaled_qss, active_theme
+from ui.icons import IC, set_btn_icon, make_icon_label
 
 
 # ── Device label lookup ───────────────────────────────────────────────────────
@@ -117,10 +118,10 @@ class _DevicesPopup(QWidget):
     # ── Popup lifecycle ──────────────────────────────────────────────────
 
     def show_below(self, anchor: QWidget):
-        """Position popup just below anchor and show."""
+        """Position popup flush against the bottom of anchor and show."""
         pos = anchor.mapToGlobal(anchor.rect().bottomLeft())
         self.adjustSize()
-        self.move(pos.x(), pos.y() + 4)
+        self.move(pos.x(), pos.y())
         self.show()
         self.raise_()
 
@@ -222,11 +223,11 @@ class _DevicesPopup(QWidget):
 
         self.setStyleSheet(
             f"_DevicesPopup {{ background:{bg}; border:1px solid {bdr}; "
-            f"border-radius:8px; }}")
+            f"border-top:none; border-radius:0 0 8px 8px; }}")
 
         # Header
         self._hdr.setStyleSheet(
-            f"background:{bg2}; border-radius:7px 7px 0 0;")
+            f"background:{bg2}; border-radius:0;")
         self._hdr_text.setStyleSheet(
             f"font-size:{FONT['label']}pt; font-weight:700; "
             f"color:{txt}; background:transparent;")
@@ -307,6 +308,7 @@ class ConnectedDevicesButton(QWidget):
         super().__init__(parent)
         self._devices: dict[str, dict] = {}
         self._popup: _DevicesPopup | None = None
+        self._open: bool = False
 
         self.setAttribute(Qt.WA_Hover)
         self.setCursor(Qt.PointingHandCursor)
@@ -344,11 +346,23 @@ class ConnectedDevicesButton(QWidget):
             p = self._ensure_popup()
             if p.isVisible():
                 p.hide()
+                self._set_open(False)
             else:
                 p.update_devices(self._devices)
                 p._apply_styles()
                 p.show_below(self)
+                self._set_open(True)
+                p.installEventFilter(self)   # detect popup close
         super().mousePressEvent(e)
+
+    def eventFilter(self, obj, event):
+        if obj is self._popup and event.type() == event.Hide:
+            self._set_open(False)
+        return False
+
+    def _set_open(self, open_: bool):
+        self._open = open_
+        self._apply_styles()
 
     # ── Device state ─────────────────────────────────────────────────────
 
@@ -416,13 +430,21 @@ class ConnectedDevicesButton(QWidget):
         bdr   = P.get("border",       "#484848")
         hover = P.get("surfaceHover", "#404040")
         txt   = P.get("text",         "#ebebeb")
-        sub   = P.get("textSub",      "#6a6a6a")
+
+        # When open: square bottom corners + no bottom border (merges with popup)
+        if self._open:
+            radius   = "5px 5px 0 0"
+            border_b = "none"
+        else:
+            radius   = "5px"
+            border_b = f"1px solid {bdr}"
 
         self.setStyleSheet(f"""
             ConnectedDevicesButton {{
                 background: {surf};
                 border: 1px solid {bdr};
-                border-radius: 5px;
+                border-bottom: {border_b};
+                border-radius: {radius};
             }}
             ConnectedDevicesButton:hover {{
                 background: {hover};
@@ -520,7 +542,7 @@ class _OperatorPopup(QWidget):
         anchor_bottom_right = anchor.mapToGlobal(anchor.rect().bottomRight())
         self.adjustSize()
         x = anchor_bottom_right.x() - self.width()
-        self.move(x, anchor_bottom_right.y() + 4)
+        self.move(x, anchor_bottom_right.y())
         self.show()
         self.raise_()
 
@@ -592,8 +614,8 @@ class _OperatorPopup(QWidget):
 
         self.setStyleSheet(
             f"_OperatorPopup {{ background:{bg}; border:1px solid {bdr}; "
-            f"border-radius:8px; }}")
-        self._hdr.setStyleSheet(f"background:{bg2}; border-radius:7px 7px 0 0;")
+            f"border-top:none; border-radius:0 0 8px 8px; }}")
+        self._hdr.setStyleSheet(f"background:{bg2}; border-radius:0;")
         self._hdr.findChild(QLabel).setStyleSheet(
             f"font-size:{FONT['label']}pt; font-weight:700; "
             f"color:{txt}; background:transparent;")
@@ -650,6 +672,7 @@ class OperatorButton(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._popup: _OperatorPopup | None = None
+        self._open: bool = False
 
         self.setAttribute(Qt.WA_Hover)
         self.setCursor(Qt.PointingHandCursor)
@@ -660,7 +683,7 @@ class OperatorButton(QWidget):
         lay.setContentsMargins(10, 0, 10, 0)
         lay.setSpacing(5)
 
-        self._icon_lbl  = QLabel("👤")
+        self._icon_lbl  = make_icon_label(IC.USER, color=PALETTE.get("textDim", "#8892aa"), size=14)
         self._name_lbl  = QLabel("Operator")
         self._arrow_lbl = QLabel("▾")
 
@@ -686,13 +709,26 @@ class OperatorButton(QWidget):
             p = self._ensure_popup()
             if p.isVisible():
                 p.hide()
+                self._set_open(False)
             else:
                 operators = cfg_mod.get_pref("lab.operators", []) or []
                 active    = cfg_mod.get_pref("lab.active_operator", "") or ""
                 p.rebuild(operators, active)
                 p._apply_styles()
                 p.show_below(self)
+                self._set_open(True)
+                p.installEventFilter(self)
         super().mousePressEvent(e)
+
+    def eventFilter(self, obj, event):
+        if obj is self._popup and event.type() == event.Hide:
+            self._set_open(False)
+        return False
+
+    def _set_open(self, open_: bool):
+        self._open = open_
+        self._apply_styles()
+
 
     # ── State ─────────────────────────────────────────────────────────
 
@@ -752,11 +788,19 @@ class OperatorButton(QWidget):
         txt   = P.get("text",         "#ebebeb")
         dim   = P.get("textDim",      "#999999")
 
+        if self._open:
+            radius   = "5px 5px 0 0"
+            border_b = "none"
+        else:
+            radius   = "5px"
+            border_b = f"1px solid {bdr}"
+
         self.setStyleSheet(f"""
             OperatorButton {{
                 background: {surf};
                 border: 1px solid {bdr};
-                border-radius: 5px;
+                border-bottom: {border_b};
+                border-radius: {radius};
             }}
             OperatorButton:hover {{
                 background: {hover};
@@ -880,7 +924,8 @@ class StatusHeader(QWidget):
         lay.addWidget(self._operator_btn)
 
         # ── Admin "Log in" button (visible only when auth users exist + no session)
-        self._login_btn = QPushButton("🔐  Log in")
+        self._login_btn = QPushButton("Log in")
+        set_btn_icon(self._login_btn, IC.LOGIN)
         self._login_btn.setFixedHeight(28)
         self._login_btn.setToolTip(
             "Log in to access administrator features\n"
@@ -890,7 +935,8 @@ class StatusHeader(QWidget):
         lay.addWidget(self._login_btn)
 
         # ── Admin "Log out" button (visible only when a session is active)
-        self._logout_btn = QPushButton("🔓  Log out")
+        self._logout_btn = QPushButton("Log out")
+        set_btn_icon(self._logout_btn, IC.LOGOUT)
         self._logout_btn.setFixedHeight(28)
         self._logout_btn.setToolTip("Log out and return to unauthenticated mode")
         self._logout_btn.setVisible(False)

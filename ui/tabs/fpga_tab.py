@@ -31,7 +31,7 @@ from PyQt5.QtCore    import Qt, pyqtSignal
 from hardware.app_state import app_state
 from ui.widgets.collapsible_panel import CollapsiblePanel
 from ui.theme import FONT, PALETTE, scaled_qss
-from ui.icons import set_btn_icon
+from ui.icons import IC, make_icon_label, set_btn_icon
 
 
 def hline():
@@ -107,19 +107,19 @@ class FpgaTab(QWidget):
         pl.addWidget(self._preset_combo)
 
         load_btn = QPushButton("Load")
-        load_btn.setFixedWidth(60)
+        load_btn.setMinimumWidth(76)
         load_btn.setToolTip("Apply the selected preset")
         load_btn.clicked.connect(self._load_preset)
         pl.addWidget(load_btn)
 
         save_btn = QPushButton("Save…")
-        save_btn.setFixedWidth(60)
+        save_btn.setMinimumWidth(76)
         save_btn.setToolTip("Save current settings as a new preset")
         save_btn.clicked.connect(self._save_preset)
         pl.addWidget(save_btn)
 
         del_btn = QPushButton("Delete")
-        del_btn.setFixedWidth(60)
+        del_btn.setMinimumWidth(76)
         del_btn.setToolTip("Delete the selected user preset")
         del_btn.clicked.connect(self._delete_preset)
         pl.addWidget(del_btn)
@@ -141,7 +141,7 @@ class FpgaTab(QWidget):
         for lbl, val in [("1 Hz", 1), ("10 Hz", 10), ("100 Hz", 100),
                          ("1 kHz", 1000), ("10 kHz", 10000)]:
             b = QPushButton(lbl)
-            b.setFixedWidth(72)
+            b.setMinimumWidth(80)
             b.clicked.connect(
                 lambda _, v=val: (self._freq_spin.setValue(v), self._set_freq(v)))
             freq_row.addWidget(b)
@@ -281,13 +281,7 @@ class FpgaTab(QWidget):
         lay.setAlignment(Qt.AlignCenter)
         lay.setSpacing(16)
 
-        try:
-            import qtawesome as qta
-            icon_lbl = QLabel()
-            icon_lbl.setPixmap(qta.icon("fa5s.unlink", color="#555").pixmap(64, 64))
-        except Exception:
-            icon_lbl = QLabel("⚡")
-            icon_lbl.setStyleSheet(scaled_qss("font-size: 48pt; color: #333;"))
+        icon_lbl = make_icon_label(IC.LINK_OFF, color="#555555", size=64)
         icon_lbl.setAlignment(Qt.AlignCenter)
 
         title_lbl = QLabel(f"{title} Not Connected")

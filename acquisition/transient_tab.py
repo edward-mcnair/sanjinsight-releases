@@ -209,11 +209,12 @@ class TransientTab(QWidget):
         tim_box = QGroupBox("Timing")
         tl = QGridLayout(tim_box)
         tl.setSpacing(6)
+        tl.setColumnStretch(1, 1)
 
         self._n_delays = QSpinBox()
         self._n_delays.setRange(2, 500)
         self._n_delays.setValue(TRANSIENT_DEFAULT_N_DELAYS)
-        self._n_delays.setFixedWidth(90)
+        self._n_delays.setMinimumWidth(80)
         self._n_delays.setToolTip("Number of discrete delay steps in the output cube.")
 
         self._delay_start = QDoubleSpinBox()
@@ -221,7 +222,7 @@ class TransientTab(QWidget):
         self._delay_start.setValue(0.0)
         self._delay_start.setDecimals(3)
         self._delay_start.setSuffix(" ms")
-        self._delay_start.setFixedWidth(100)
+        self._delay_start.setMinimumWidth(80)
         self._delay_start.setToolTip("First delay from pulse leading edge (ms).")
 
         self._delay_end = QDoubleSpinBox()
@@ -229,7 +230,7 @@ class TransientTab(QWidget):
         self._delay_end.setValue(TRANSIENT_DEFAULT_DELAY_END_S * 1e3)
         self._delay_end.setDecimals(2)
         self._delay_end.setSuffix(" ms")
-        self._delay_end.setFixedWidth(100)
+        self._delay_end.setMinimumWidth(80)
         self._delay_end.setToolTip("Last delay from pulse leading edge (ms).")
 
         self._pulse_us = QDoubleSpinBox()
@@ -237,7 +238,7 @@ class TransientTab(QWidget):
         self._pulse_us.setValue(TRANSIENT_DEFAULT_PULSE_US)
         self._pulse_us.setDecimals(1)
         self._pulse_us.setSuffix(" µs")
-        self._pulse_us.setFixedWidth(100)
+        self._pulse_us.setMinimumWidth(80)
         self._pulse_us.setToolTip(
             "Duration of each power pulse in microseconds.\n"
             "The FPGA fires this pulse, then waits `delay` before camera capture.")
@@ -256,11 +257,12 @@ class TransientTab(QWidget):
         avg_box = QGroupBox("Averaging")
         al = QGridLayout(avg_box)
         al.setSpacing(6)
+        al.setColumnStretch(1, 1)
 
         self._n_avg = QSpinBox()
         self._n_avg.setRange(1, 1000)
         self._n_avg.setValue(TRANSIENT_DEFAULT_N_AVERAGES)
-        self._n_avg.setFixedWidth(90)
+        self._n_avg.setMinimumWidth(80)
         self._n_avg.setToolTip(
             f"Number of trigger cycles averaged per delay step.\n"
             f"Minimum recommended: {TRANSIENT_MIN_AVERAGES} for acceptable SNR.")
@@ -309,13 +311,14 @@ class TransientTab(QWidget):
         self._vsweep_box = vs_box
         vl = QGridLayout(vs_box)
         vl.setSpacing(6)
+        vl.setColumnStretch(1, 1)
 
         self._vsweep_start = QDoubleSpinBox()
         self._vsweep_start.setRange(-60.0, 60.0)
         self._vsweep_start.setValue(0.5)
         self._vsweep_start.setSuffix(" V")
         self._vsweep_start.setDecimals(3)
-        self._vsweep_start.setFixedWidth(100)
+        self._vsweep_start.setMinimumWidth(80)
         self._vsweep_start.setToolTip("First bias voltage in the sweep.")
 
         self._vsweep_step = QDoubleSpinBox()
@@ -323,7 +326,7 @@ class TransientTab(QWidget):
         self._vsweep_step.setValue(0.5)
         self._vsweep_step.setSuffix(" V")
         self._vsweep_step.setDecimals(3)
-        self._vsweep_step.setFixedWidth(100)
+        self._vsweep_step.setMinimumWidth(80)
         self._vsweep_step.setToolTip("Voltage increment between steps.")
 
         self._vsweep_end = QDoubleSpinBox()
@@ -331,7 +334,7 @@ class TransientTab(QWidget):
         self._vsweep_end.setValue(3.0)
         self._vsweep_end.setSuffix(" V")
         self._vsweep_end.setDecimals(3)
-        self._vsweep_end.setFixedWidth(100)
+        self._vsweep_end.setMinimumWidth(80)
         self._vsweep_end.setToolTip("Last bias voltage in the sweep.")
 
         self._vsweep_n_lbl = QLabel("—")
@@ -459,7 +462,7 @@ class TransientTab(QWidget):
         cmap_row = QHBoxLayout()
         cmap_row.addWidget(self._sub("Colormap:"))
         self._cmap_combo = QComboBox()
-        self._cmap_combo.setFixedWidth(130)
+        self._cmap_combo.setMinimumWidth(160)
         saved_cmap = cfg_mod.get_pref("display.colormap", "Thermal Delta")
         setup_cmap_combo(self._cmap_combo, saved_cmap)
         self._cmap_combo.currentTextChanged.connect(

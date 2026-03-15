@@ -24,7 +24,7 @@ from .session         import Session, SessionMeta
 from .session_manager import SessionManager
 from .processing      import to_display, apply_colormap, setup_cmap_combo
 import config as cfg_mod
-from ui.icons import set_btn_icon
+from ui.icons import IC, make_icon_label, set_btn_icon
 from ui.theme import FONT, PALETTE, scaled_qss
 
 
@@ -213,7 +213,7 @@ class SessionCard(QFrame):
             free_tags = list(getattr(meta, "tags", []) or [])
 
             if op:
-                chips_lay.addWidget(self._chip(f"👤 {op}", "#4e73df", filled=True))
+                chips_lay.addWidget(self._chip(op, "#4e73df", filled=True))
             if dev:
                 chips_lay.addWidget(self._chip(dev, "#00d4aa"))
             if proj:
@@ -227,10 +227,8 @@ class SessionCard(QFrame):
         lay.addLayout(info, 1)
 
         # Notes badge — visible only when the session has notes
-        self._notes_badge = QLabel("📝")
+        self._notes_badge = make_icon_label(IC.NOTE, color="#00d4aa66", size=14)
         self._notes_badge.setFixedSize(20, 20)
-        self._notes_badge.setAlignment(Qt.AlignCenter)
-        self._notes_badge.setStyleSheet(f"color:#00d4aa66; font-size:{FONT['body']}pt;")
         self._notes_badge.setToolTip("This session has notes")
         self._notes_badge.setVisible(bool(meta.notes))
         lay.addWidget(self._notes_badge)
@@ -580,7 +578,7 @@ class DataTab(QWidget):
         self._pane_cmp  = DataImagePane("COMPARISON  A − B  ΔR/R")
 
         self._cmap_combo = QComboBox()
-        self._cmap_combo.setFixedWidth(110)
+        self._cmap_combo.setMinimumWidth(160)
         saved_cmap = cfg_mod.get_pref("display.colormap", "Thermal Delta")
         setup_cmap_combo(self._cmap_combo, saved_cmap)
         self._cmap_combo.currentTextChanged.connect(self._redisplay_drr)
