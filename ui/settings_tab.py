@@ -748,6 +748,45 @@ class SettingsTab(QWidget):
                 QPushButton:hover:!checked {{ background:{_BG()}; color:{_TEXT()}; }}
             """)
 
+        # Lab / Operator form widgets
+        if hasattr(self, "_lab_op_combo"):
+            self._lab_op_combo.setStyleSheet(_COMBO())
+        if hasattr(self, "_lab_new_edit"):
+            self._lab_new_edit.setStyleSheet(f"""
+                QLineEdit {{
+                    background:{_BG2()}; color:{_TEXT()}; border:1px solid {_BORDER()};
+                    border-radius:4px; padding:4px 8px; font-size:{FONT["label"]}pt;
+                }}
+            """)
+        if hasattr(self, "_lab_add_btn"):
+            self._lab_add_btn.setStyleSheet(_BTN_SECONDARY())
+        if hasattr(self, "_lab_require_chk"):
+            self._lab_require_chk.setStyleSheet(_CHECK())
+        if hasattr(self, "_lab_confirm_chk"):
+            self._lab_confirm_chk.setStyleSheet(_CHECK())
+        # Rebuild the operator list rows (they use _TEXT()/_MUTED() lambdas)
+        if hasattr(self, "_lab_op_list_lay"):
+            self._lab_rebuild_list()
+
+        # Software Updates form widgets
+        if hasattr(self, "_auto_check"):
+            self._auto_check.setStyleSheet(_CHECK())
+        if hasattr(self, "_freq_combo"):
+            self._freq_combo.setStyleSheet(_COMBO())
+        if hasattr(self, "_channel_combo"):
+            self._channel_combo.setStyleSheet(_COMBO())
+        if hasattr(self, "_check_btn"):
+            self._check_btn.setStyleSheet(_BTN_PRIMARY())
+        if hasattr(self, "_check_result"):
+            self._check_result.setStyleSheet(
+                f"font-size:{FONT['label']}pt; color:{_MUTED()};")
+
+        # Security group widgets
+        if hasattr(self, "_sec_require_login_chk"):
+            self._sec_require_login_chk.setStyleSheet(_CHECK())
+        if hasattr(self, "_sec_timeout_spin"):
+            self._sec_timeout_spin.setStyleSheet(_COMBO())
+
     def _build_version_card(self) -> QWidget:
         card = QWidget()
         card.setStyleSheet(

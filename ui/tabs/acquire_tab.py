@@ -241,6 +241,16 @@ class AcquireTab(QWidget):
         self._abort_btn.clicked.connect(self._abort)
         self._export_btn.clicked.connect(self._export)
 
+    def _apply_styles(self) -> None:
+        P = PALETTE
+        bg  = P.get("bg",      "#242424")
+        txt = P.get("text",    "#ebebeb")
+        bdr = P.get("border",  "#484848")
+        if hasattr(self, "_notes_edit"):
+            self._notes_edit.setStyleSheet(
+                f"background:{bg}; color:{txt}; border:1px solid {bdr}; "
+                f"font-size:{FONT['body']}pt; font-family:Menlo,monospace;")
+
     def set_active_recipe_name(self, name: str | None) -> None:
         """Called by MainWindow when a recipe is applied to reflect its name."""
         self._active_recipe_lbl.setText(name or "(none)")

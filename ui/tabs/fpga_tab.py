@@ -186,8 +186,10 @@ class FpgaTab(QWidget):
         stop_btn  = QPushButton("Stop")
         set_btn_icon(stop_btn, "fa5s.stop", "#ff6666")
         stop_btn.setObjectName("danger")
-        stim_on   = QPushButton("Output ON")
-        stim_off  = QPushButton("Output OFF")
+        self._stim_on_btn  = QPushButton("Output ON")
+        self._stim_off_btn = QPushButton("Output OFF")
+        stim_on  = self._stim_on_btn
+        stim_off = self._stim_off_btn
         stim_on.setStyleSheet(
             f"background:#331a00; color:{PALETTE['warning']}; border-color:#cc6600;")
         stim_off.setStyleSheet(
@@ -319,6 +321,22 @@ class FpgaTab(QWidget):
     def set_hardware_available(self, available: bool) -> None:
         """Switch between empty state (page 0) and full controls (page 1)."""
         self._stack.setCurrentIndex(1 if available else 0)
+
+    # ── Theme ─────────────────────────────────────────────────────────
+
+    def _apply_styles(self) -> None:
+        P   = PALETTE
+        warn = P.get("warning", "#f5a623")
+        info = P.get("info",    "#4a9eff")
+        wbg  = P.get("surface", "#1a1d28")
+        ibg  = wbg
+        wbdr = P.get("border",  "#2e3245")
+        if hasattr(self, "_stim_on_btn"):
+            self._stim_on_btn.setStyleSheet(
+                f"background:{warn}22; color:{warn}; border-color:{warn}55;")
+        if hasattr(self, "_stim_off_btn"):
+            self._stim_off_btn.setStyleSheet(
+                f"background:{info}22; color:{info}; border-color:{info}55;")
 
     # ── Inline validation indicator ───────────────────────────────────
 

@@ -157,6 +157,8 @@ class TemperatureTab(QWidget):
         ctrl.addStretch()
         en_btn  = QPushButton("Enable")
         dis_btn = QPushButton("Disable")
+        box._en_btn  = en_btn
+        box._dis_btn = dis_btn
         en_btn.setFixedWidth(70)
         dis_btn.setFixedWidth(70)
         en_btn.setStyleSheet( "background:#003322; color:#00d4aa; border-color:#00d4aa;")
@@ -228,6 +230,19 @@ class TemperatureTab(QWidget):
         ab_ack.clicked.connect(lambda _, b=box: self._acknowledge_alarm(b))
 
         return box
+
+    def _apply_styles(self) -> None:
+        P    = PALETTE
+        acc  = P.get("accent",  "#00d4aa")
+        dng  = P.get("danger",  "#ff5555")
+        sur  = P.get("surface", "#1a1d28")
+        for panel in getattr(self, "_panels", []):
+            if hasattr(panel, "_en_btn"):
+                panel._en_btn.setStyleSheet(
+                    f"background:{acc}22; color:{acc}; border-color:{acc}55;")
+            if hasattr(panel, "_dis_btn"):
+                panel._dis_btn.setStyleSheet(
+                    f"background:{dng}22; color:{dng}; border-color:{dng}55;")
 
     def _readout_widget(self, label, initial, color):
         w = QWidget()
