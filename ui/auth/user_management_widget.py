@@ -40,6 +40,7 @@ import re
 from typing import Optional
 
 from PyQt5.QtCore    import Qt, pyqtSignal
+from PyQt5.QtGui     import QColor
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QTableWidget, QTableWidgetItem, QHeaderView,
@@ -776,8 +777,7 @@ class UserManagementWidget(QWidget):
                     item.setTextAlignment(Qt.AlignCenter)
                 if not user.is_active:
                     item.setForeground(
-                        __import__("PyQt5.QtGui", fromlist=["QColor"]).QColor(
-                            PALETTE.get("textSub", "#6a6a6a")))
+                        QColor(PALETTE.get("textSub", "#6a6a6a")))
                 self._table.setItem(row, col, item)
 
         self._update_toolbar_state()
@@ -846,8 +846,7 @@ class UserManagementWidget(QWidget):
         has_sel = user is not None
         self._edit_btn.setEnabled(has_sel)
         self._reset_btn.setEnabled(has_sel)
-        self._deact_btn.setEnabled(
-            has_sel and user.is_active if has_sel else False)
+        self._deact_btn.setEnabled(has_sel and user.is_active)
 
     # ── CRUD actions ───────────────────────────────────────────────────────────
 

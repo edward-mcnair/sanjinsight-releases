@@ -202,10 +202,12 @@ class LoginScreen(QWidget):
         self._user_edit.setFocus()
 
     def _apply_styles(self) -> None:
-        """Re-apply theme. Call from MainWindow when theme changes."""
-        # Background follows OS theme but card keeps the fixed dark card style
-        # (login screen is always the dark wizard aesthetic).
-        pass
+        """No-op by design.
+
+        LoginScreen uses a fixed dark-card aesthetic regardless of the app
+        theme (consistent with AdminSetupWizard and OperatorShell).  It is
+        shown before MainWindow exists, so the theme-swap loop never reaches it.
+        """
 
     # ── Login flow ─────────────────────────────────────────────────────────────
 

@@ -178,9 +178,9 @@ class ShiftLogPanel(QWidget):
         self._export_btn.setStyleSheet(
             f"QPushButton {{ background:{PALETTE.get('surface2','#333')}; "
             f"color:{PALETTE.get('textDim','#999')}; "
-            f"border:1px solid {PALETTE.get('border','#484')}; border-radius:4px; "
+            f"border:1px solid {PALETTE.get('border','#484848')}; border-radius:4px; "
             f"font-size:{FONT.get('sublabel', 9)}pt; }}"
-            f"QPushButton:hover {{ background:{PALETTE.get('surfaceHover','#404')}; "
+            f"QPushButton:hover {{ background:{PALETTE.get('surfaceHover','#404040')}; "
             f"color:{PALETTE.get('text','#ebebeb')}; }}"
             "QPushButton:disabled { color:#444; border-color:#333; }")
         self._export_btn.setEnabled(False)

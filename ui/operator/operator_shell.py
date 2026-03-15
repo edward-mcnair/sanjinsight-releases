@@ -65,6 +65,7 @@ from __future__ import annotations
 
 import logging
 import time
+from datetime import datetime
 from typing import Optional
 
 from PyQt5.QtCore    import Qt, pyqtSignal, QTimer
@@ -433,7 +434,7 @@ class OperatorShell(QMainWindow):
                     map_mean_k=0.0, map_std_k=0.0, threshold_k=5.0,
                     overlay_rgb=None, binary_mask=None,
                     timestamp=time.time(),
-                    timestamp_str=__import__("datetime").datetime.now().strftime(
+                    timestamp_str=datetime.now().strftime(
                         "%Y-%m-%d %H:%M:%S"),
                     config=None, notes="Analysis unavailable", valid=False,
                 )
@@ -461,6 +462,9 @@ class OperatorShell(QMainWindow):
         # ── Stop scanning state ────────────────────────────────────────────
         self._scan_area.set_scanning(False)
         self._set_status(f"Last: {verdict} — {self._active_part_id}")
+        # Store for "View Details" modal
+        self._last_analysis_result = analysis_result
+        self._last_part_id         = self._active_part_id
 
         # ── Auto-save session + generate PDF (best-effort) ─────────────────
         QTimer.singleShot(0, lambda: self._save_and_report(
@@ -574,8 +578,132 @@ class OperatorShell(QMainWindow):
         self._scan_area.clear_part_id()
 
     def _on_view_details(self) -> None:
-        # Phase D will wire this to a full analysis view
-        log.info("OperatorShell: view details requested")
+        """Show a read-only detail dialog for the most recent scan result."""
+        result  = getattr(self, "_last_analysis_result", None)
+        part_id = getattr(self, "_last_part_id", "")
+        if result is None:
+            return
+        log.info("OperatorShell: view details for part '%s'", part_id)
+        self._show_details_dialog(result, part_id)
+
+    def _show_details_dialog(self, result, part_id: str) -> None:
+        """Modal with the full hotspot table + metric summary."""
+        from PyQt5.QtWidgets import (
+            QDialog, QVBoxLayout, QHBoxLayout, QLabel,
+            QTableWidget, QTableWidgetItem, QPushButton,
+            QHeaderView,
+        )
+        from PyQt5.QtGui import QColor
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"Scan Details — {part_id}")
+        dlg.setMinimumSize(520, 420)
+        dlg.setStyleSheet(
+            f"QDialog {{ background:{PALETTE.get('surface','#2d2d2d')}; "
+            f"color:{PALETTE.get('text','#ebebeb')}; }}"
+            f"QLabel  {{ background:transparent; }}"
+        )
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(18, 14, 18, 14)
+        lay.setSpacing(10)
+
+        # ── Title ──────────────────────────────────────────────────────────
+        verdict = getattr(result, "verdict", "UNKNOWN")
+        _vc = {
+            "PASS":    PALETTE.get("success",  "#30d158"),
+            "FAIL":    PALETTE.get("danger",   "#ff453a"),
+            "WARNING": PALETTE.get("warning",  "#ff9f0a"),
+        }.get(verdict, PALETTE.get("textDim", "#999"))
+        title_lbl = QLabel(f"{verdict}  —  {part_id}")
+        title_lbl.setStyleSheet(
+            f"font-size:{FONT.get('heading',15)}pt; font-weight:700; color:{_vc};"
+        )
+        lay.addWidget(title_lbl)
+
+        # ── Summary row ────────────────────────────────────────────────────
+        def _metric(label: str, value: str) -> QLabel:
+            w = QLabel(f"<b>{label}</b>  {value}")
+            w.setStyleSheet(
+                f"font-size:{FONT.get('label',11)}pt; "
+                f"color:{PALETTE.get('textDim','#999')};"
+            )
+            return w
+
+        summary_row = QHBoxLayout()
+        summary_row.addWidget(_metric("Max hotspot:",
+            f"{getattr(result, 'max_peak_k', 0.0):.1f} °C"))
+        summary_row.addWidget(_metric("Hotspots:",
+            str(getattr(result, 'n_hotspots', 0))))
+        summary_row.addWidget(_metric("Area fraction:",
+            f"{getattr(result, 'area_fraction', 0.0)*100:.2f}%"))
+        summary_row.addWidget(_metric("Valid:",
+            "Yes" if getattr(result, 'valid', True) else "No"))
+        summary_row.addStretch()
+        lay.addLayout(summary_row)
+
+        # ── Hotspot table ──────────────────────────────────────────────────
+        hotspots = getattr(result, "hotspots", []) or []
+        if hotspots:
+            table = QTableWidget(len(hotspots), 4)
+            table.setHorizontalHeaderLabels(["#", "Peak (°C)", "Area (px²)", "Severity"])
+            table.verticalHeader().setVisible(False)
+            table.setEditTriggers(QTableWidget.NoEditTriggers)
+            table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+            table.setStyleSheet(
+                f"QTableWidget {{ background:{PALETTE.get('bg','#242424')}; "
+                f"color:{PALETTE.get('text','#ebebeb')}; border:none; gridline-color:{PALETTE.get('border','#484848')}; }}"
+                f"QHeaderView::section {{ background:{PALETTE.get('surface2','#353535')}; "
+                f"color:{PALETTE.get('textDim','#999')}; border:none; padding:4px; }}"
+            )
+            _sev_colors = {
+                "critical": PALETTE.get("danger",  "#ff453a"),
+                "warning":  PALETTE.get("warning", "#ff9f0a"),
+            }
+            for row_i, hs in enumerate(hotspots):
+                table.setItem(row_i, 0, QTableWidgetItem(str(row_i + 1)))
+                table.setItem(row_i, 1, QTableWidgetItem(
+                    f"{getattr(hs, 'peak_k', 0.0):.1f}"))
+                table.setItem(row_i, 2, QTableWidgetItem(
+                    str(getattr(hs, 'area_px', 0))))
+                sev  = getattr(hs, "severity", "")
+                sev_item = QTableWidgetItem(sev.capitalize() if sev else "—")
+                sev_item.setForeground(
+                    QColor(_sev_colors.get(sev.lower(), PALETTE.get("text", "#ebebeb"))))
+                table.setItem(row_i, 3, sev_item)
+            lay.addWidget(table, 1)
+        else:
+            no_hs = QLabel("No hotspots detected.")
+            no_hs.setStyleSheet(
+                f"color:{PALETTE.get('textDim','#999')}; font-style:italic; padding:8px;")
+            lay.addWidget(no_hs)
+
+        # ── Notes ──────────────────────────────────────────────────────────
+        notes = getattr(result, "notes", "")
+        if notes:
+            notes_lbl = QLabel(f"Notes: {notes}")
+            notes_lbl.setWordWrap(True)
+            notes_lbl.setStyleSheet(
+                f"font-size:{FONT.get('caption',10)}pt; "
+                f"color:{PALETTE.get('textSub','#6a6a6a')}; font-style:italic;")
+            lay.addWidget(notes_lbl)
+
+        # ── Close button ───────────────────────────────────────────────────
+        close_btn = QPushButton("Close")
+        close_btn.setFixedHeight(30)
+        close_btn.setStyleSheet(
+            f"QPushButton {{ background:{PALETTE.get('surface2','#353535')}; "
+            f"color:{PALETTE.get('textDim','#999')}; border:1px solid {PALETTE.get('border','#484848')}; "
+            f"border-radius:4px; padding:4px 20px; font-size:{FONT.get('body',12)}pt; }}"
+            f"QPushButton:hover {{ background:{PALETTE.get('surfaceHover','#404040')}; "
+            f"color:{PALETTE.get('text','#ebebeb')}; }}"
+        )
+        close_btn.clicked.connect(dlg.accept)
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        btn_row.addWidget(close_btn)
+        lay.addLayout(btn_row)
+
+        dlg.exec_()
 
     # ── Status bar ─────────────────────────────────────────────────────────────
 
