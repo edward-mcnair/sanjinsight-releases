@@ -124,7 +124,7 @@ class TemperatureTab(QWidget):
         main.addLayout(top)
 
         # ── Plot ──────────────────────────────────────────────────────
-        plot = TempPlot(h=208)
+        plot = TempPlot(h=166)
         box._plot = plot
         main.addWidget(plot)
 
