@@ -75,7 +75,10 @@ class TempPlot(QWidget):
         # operating region, doubling pixel density so small fluctuations (e.g.
         # ±0.05°C when a TEC is locked) are clearly visible.
         data_span = max(vals) - min(vals)
-        margin    = max(data_span * 2, 5.0)   # at least ±5°C breathing room
+        # 15% breathing room on each side, minimum ±5°C.
+        # Using data_span * 2 would inflate the Y-range 3× during a temperature
+        # ramp, pushing step=100 and leaving only 2-3 visible gridlines.
+        margin = max(data_span * 0.15, 5.0)
         lo   = min(vals) - margin
         hi   = max(vals) + margin
         span = max(hi - lo, 1.0)
