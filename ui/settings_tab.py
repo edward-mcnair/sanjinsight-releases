@@ -787,6 +787,62 @@ class SettingsTab(QWidget):
         if hasattr(self, "_sec_timeout_spin"):
             self._sec_timeout_spin.setStyleSheet(_COMBO())
 
+        # AI Assistant group widgets
+        if hasattr(self, "_ai_privacy_frame"):
+            self._ai_privacy_frame.setStyleSheet(
+                f"QFrame {{ background:{_BG2()}; border:1px solid {_GREEN}55; "
+                f"border-radius:5px; }}")
+        if hasattr(self, "_ai_hw_frame"):
+            self._ai_hw_frame.setStyleSheet(
+                f"QFrame {{ background:{_BG2()}; border:1px solid {_BORDER()}; "
+                f"border-radius:4px; }}")
+        if hasattr(self, "_ai_enable_chk"):
+            self._ai_enable_chk.setStyleSheet(_CHECK())
+        if hasattr(self, "_ai_model_combo"):
+            self._ai_model_combo.setStyleSheet(_COMBO())
+        if hasattr(self, "_ai_download_btn"):
+            self._ai_download_btn.setStyleSheet(_BTN_PRIMARY())
+        if hasattr(self, "_ai_cancel_btn"):
+            self._ai_cancel_btn.setStyleSheet(_BTN_SECONDARY())
+        if hasattr(self, "_ai_progress_bar"):
+            self._ai_progress_bar.setStyleSheet(
+                f"QProgressBar {{ background:{_BG2()}; border:1px solid {_BORDER()}; "
+                f"border-radius:4px; font-size:{FONT['caption']}pt; color:{_TEXT()}; }}"
+                f"QProgressBar::chunk {{ background:{_GREEN}; border-radius:3px; }}")
+        if hasattr(self, "_ai_path_edit"):
+            self._ai_path_edit.setStyleSheet(
+                f"QLineEdit {{ background:{_BG2()}; color:{_TEXT()}; "
+                f"border:1px solid {_BORDER()}; border-radius:4px; "
+                f"font-size:{FONT['label']}pt; padding:5px 8px; }}")
+        if hasattr(self, "_ai_browse_btn"):
+            self._ai_browse_btn.setStyleSheet(_BTN_SECONDARY())
+        if hasattr(self, "_ai_gpu_slider"):
+            self._ai_gpu_slider.setStyleSheet(f"""
+                QSlider::groove:horizontal {{
+                    background:{_BG2()}; border:1px solid {_BORDER()};
+                    height:6px; border-radius:3px;
+                }}
+                QSlider::handle:horizontal {{
+                    background:{_ACCENT()}; border:none;
+                    width:16px; height:16px; margin:-5px 0; border-radius:8px;
+                }}
+                QSlider::sub-page:horizontal {{
+                    background:{_ACCENT()}55; border-radius:3px;
+                }}
+                QSlider:disabled::handle:horizontal {{ background:{_BORDER()}; }}
+                QSlider:disabled::sub-page:horizontal {{ background:{_BG2()}; }}
+            """)
+        if hasattr(self, "_ai_apply_btn"):
+            self._ai_apply_btn.setStyleSheet(_BTN_PRIMARY())
+
+        # Software Updates — View All Releases button
+        if hasattr(self, "_releases_btn"):
+            self._releases_btn.setStyleSheet(_BTN_SECONDARY())
+
+        # Support group — About button
+        if hasattr(self, "_about_btn"):
+            self._about_btn.setStyleSheet(_BTN_SECONDARY())
+
     def _build_version_card(self) -> QWidget:
         card = QWidget()
         card.setStyleSheet(
@@ -953,7 +1009,8 @@ class SettingsTab(QWidget):
             "header. You can also view all releases on the Microsanj GitHub page.")
         lay.addWidget(note)
 
-        releases_btn = QPushButton("View All Releases on GitHub ↗")
+        self._releases_btn = QPushButton("View All Releases on GitHub ↗")
+        releases_btn = self._releases_btn
         releases_btn.setStyleSheet(_BTN_SECONDARY())
         releases_btn.clicked.connect(
             lambda: QDesktopServices.openUrl(QUrl(RELEASES_PAGE_URL)))
@@ -988,7 +1045,8 @@ class SettingsTab(QWidget):
         lay.setSpacing(14)
 
         # ── Privacy guarantee frame ──────────────────────────────────────────
-        privacy_frame = QFrame()
+        self._ai_privacy_frame = QFrame()
+        privacy_frame = self._ai_privacy_frame
         privacy_frame.setStyleSheet(
             f"QFrame {{ background:{_BG2()}; border:1px solid {_GREEN}55; "
             f"border-radius:5px; }}"
@@ -1048,7 +1106,8 @@ class SettingsTab(QWidget):
         dl_lay.setSpacing(8)
 
         # Hardware summary card
-        hw_frame = QFrame()
+        self._ai_hw_frame = QFrame()
+        hw_frame = self._ai_hw_frame
         hw_frame.setStyleSheet(
             f"QFrame {{ background:{_BG2()}; border:1px solid {_BORDER()}; "
             f"border-radius:4px; }}"
@@ -1156,7 +1215,8 @@ class SettingsTab(QWidget):
             lambda t: cfg_mod.set_pref("ai.model_path", t))
         path_row.addWidget(self._ai_path_edit, 1)
 
-        browse_btn = QPushButton("Browse…")
+        self._ai_browse_btn = QPushButton("Browse…")
+        browse_btn = self._ai_browse_btn
         browse_btn.setStyleSheet(_BTN_SECONDARY())
         browse_btn.setFixedWidth(120)  # was 90 — too narrow for "Browse…" at 12pt + 18px padding
         browse_btn.clicked.connect(self._browse_model)
@@ -2144,7 +2204,8 @@ class SettingsTab(QWidget):
             "and system information. Use the button below to copy it to your clipboard.")
         lay.addWidget(info)
 
-        about_btn = QPushButton("About SanjINSIGHT…")
+        self._about_btn = QPushButton("About SanjINSIGHT…")
+        about_btn = self._about_btn
         about_btn.setStyleSheet(_BTN_SECONDARY())
         about_btn.clicked.connect(self._open_about)
         lay.addWidget(about_btn)

@@ -116,7 +116,8 @@ class StageTab(QWidget):
         # Home + Stop row  — split-button: main click = Home All, arrow = XY / Z
         ctrl_row = QHBoxLayout()
 
-        home_btn = QToolButton()
+        self._home_btn = QToolButton()
+        home_btn = self._home_btn
         home_btn.setText("  Home All")
         home_btn.setPopupMode(QToolButton.MenuButtonPopup)
         home_btn.setFixedHeight(32)
@@ -135,7 +136,8 @@ class StageTab(QWidget):
         except Exception:
             pass
 
-        home_menu = QMenu(home_btn)
+        self._home_menu = QMenu(home_btn)
+        home_menu = self._home_menu
         home_menu.setStyleSheet(
             f"QMenu {{ background:{PALETTE.get('surface2','#3d3d3d')}; "
             f"color:{PALETTE.get('text','#ebebeb')}; border:1px solid {PALETTE.get('border','#484848')}; "
@@ -165,6 +167,34 @@ class StageTab(QWidget):
         root.addStretch()
 
     # ── Empty state ───────────────────────────────────────────────────
+
+    def _apply_styles(self) -> None:
+        P    = PALETTE
+        sur  = P.get("surface",      "#1a1d28")
+        su2  = P.get("surface2",     "#20232e")
+        bdr  = P.get("border",       "#2e3245")
+        txt  = P.get("text",         "#dde3f2")
+        acc  = P.get("accent",       "#00d4aa")
+        if hasattr(self, "_home_btn"):
+            self._home_btn.setStyleSheet(
+                f"QToolButton {{ background:{sur}; color:{txt}; "
+                f"border:1px solid {bdr}; border-radius:5px; "
+                f"padding:0 8px; font-size:{FONT['label']}pt; }}"
+                f"QToolButton:hover {{ background:{su2}; }}"
+                f"QToolButton::menu-button {{ border-left:1px solid {bdr}; "
+                f"width:18px; border-radius:0 5px 5px 0; }}"
+            )
+            try:
+                import qtawesome as qta
+                self._home_btn.setIcon(qta.icon("fa5s.home", color=txt))
+            except Exception:
+                pass
+        if hasattr(self, "_home_menu"):
+            self._home_menu.setStyleSheet(
+                f"QMenu {{ background:{su2}; color:{txt}; "
+                f"border:1px solid {bdr}; border-radius:4px; }} "
+                f"QMenu::item:selected {{ background:{acc}22; }}"
+            )
 
     def _build_empty_state(self, title: str, device: str, tip: str) -> QWidget:
         w = QWidget()
