@@ -60,58 +60,64 @@ class TemperatureTab(QWidget):
         # ── Alarm banner (hidden by default) ─────────────────────────
         alarm_banner = QWidget()
         alarm_banner.setVisible(False)
+        _dng  = PALETTE.get("danger",   "#ff453a")
+        _warn = PALETTE.get("warning",  "#ff9f0a")
+        _surf = PALETTE.get("surface",  "#2d2d2d")
+        _sur2 = PALETTE.get("surface2", "#3d3d3d")
         alarm_banner.setStyleSheet(
-            "background:#330000; border:1px solid #ff4444; border-radius:3px;")
+            f"background:{_dng}22; border:1px solid {_dng}; border-radius:3px;")
         ab_lay = QHBoxLayout(alarm_banner)
         ab_lay.setContentsMargins(10, 6, 10, 6)
         ab_icon = QLabel("⊗")
-        ab_icon.setStyleSheet(f"color:#ff4444; font-size:{FONT['readoutSm']}pt;")
+        ab_icon.setStyleSheet(f"color:{_dng}; font-size:{FONT['readoutSm']}pt;")
         ab_msg  = QLabel("Temperature alarm")
-        ab_msg.setStyleSheet(f"color:#ff6666; font-size:{FONT['body']}pt;")
+        ab_msg.setStyleSheet(f"color:{_dng}; font-size:{FONT['body']}pt;")
         ab_msg.setWordWrap(True)
         ab_ack  = QPushButton("Acknowledge")
         ab_ack.setFixedHeight(26)
         ab_ack.setStyleSheet(f"""
             QPushButton {{
-                background:{PALETTE.get('surface','#2d2d2d')}; color:#ff9999;
-                border:1px solid #ff444466; border-radius:3px;
+                background:{_surf}; color:{_dng};
+                border:1px solid {_dng}66; border-radius:3px;
                 font-size:{FONT['label']}pt; padding: 0 10px;
             }}
-            QPushButton:hover {{ background:{PALETTE.get('surface2','#3d3d3d')}; color:#ffbbbb; }}
+            QPushButton:hover {{ background:{_sur2}; }}
         """)
         ab_lay.addWidget(ab_icon)
         ab_lay.addWidget(ab_msg, 1)
         ab_lay.addWidget(ab_ack)
-        box._alarm_banner  = alarm_banner
-        box._alarm_msg_lbl = ab_msg
-        box._alarm_ack_btn = ab_ack
+        box._alarm_banner   = alarm_banner
+        box._alarm_msg_lbl  = ab_msg
+        box._alarm_icon_lbl = ab_icon
+        box._alarm_ack_btn  = ab_ack
         main.addWidget(alarm_banner)
 
         # ── Warning banner (hidden by default) ───────────────────────
         warn_banner = QWidget()
         warn_banner.setVisible(False)
         warn_banner.setStyleSheet(
-            f"background:{PALETTE.get('surface','#2d2d2d')}; border:1px solid #ff990066; border-radius:3px;")
+            f"background:{_warn}22; border:1px solid {_warn}66; border-radius:3px;")
         wb_lay = QHBoxLayout(warn_banner)
         wb_lay.setContentsMargins(10, 4, 10, 4)
         wb_icon = QLabel("⚠")
-        wb_icon.setStyleSheet(f"color:#ff9900; font-size:{FONT['heading']}pt;")
+        wb_icon.setStyleSheet(f"color:{_warn}; font-size:{FONT['heading']}pt;")
         wb_msg  = QLabel("Approaching limit")
-        wb_msg.setStyleSheet(f"color:#ffaa44; font-size:{FONT['label']}pt;")
+        wb_msg.setStyleSheet(f"color:{_warn}; font-size:{FONT['label']}pt;")
         wb_msg.setWordWrap(True)
         wb_lay.addWidget(wb_icon)
         wb_lay.addWidget(wb_msg, 1)
-        box._warn_banner  = warn_banner
-        box._warn_msg_lbl = wb_msg
+        box._warn_banner   = warn_banner
+        box._warn_msg_lbl  = wb_msg
+        box._warn_icon_lbl = wb_icon
         main.addWidget(warn_banner)
 
         # ── Readouts ─────────────────────────────────────────────────
         top = QHBoxLayout()
-        actual_w = self._readout_widget("ACTUAL", "--", "#00d4aa")
-        target_w = self._readout_widget("SETPOINT", "--", "#ffaa44")
-        power_w  = self._readout_widget("OUTPUT", "--", "#6699ff")
-        state_w  = self._readout_widget("STATUS", "UNKNOWN", "#555")
-        ready_w  = self._readout_widget("ACQUISITION", "CHECKING", PALETTE["textDim"])
+        actual_w = self._readout_widget("ACTUAL",      "--",       "accent")
+        target_w = self._readout_widget("SETPOINT",    "--",       "warning")
+        power_w  = self._readout_widget("OUTPUT",      "--",       "cta")
+        state_w  = self._readout_widget("STATUS",      "UNKNOWN",  "textSub")
+        ready_w  = self._readout_widget("ACQUISITION", "CHECKING", "textDim")
 
         box._actual_lbl = actual_w._val
         box._target_lbl = target_w._val
@@ -161,14 +167,18 @@ class TemperatureTab(QWidget):
         box._dis_btn = dis_btn
         en_btn.setMinimumWidth(85)
         dis_btn.setMinimumWidth(85)
+        _acc2 = PALETTE.get("accent", "#00d4aa")
+        _dng2 = PALETTE.get("danger", "#ff453a")
+        _ar, _ag, _ab = int(_acc2[1:3],16), int(_acc2[3:5],16), int(_acc2[5:7],16)
+        _dr, _dg, _db = int(_dng2[1:3],16), int(_dng2[3:5],16), int(_dng2[5:7],16)
         en_btn.setStyleSheet(
-            "QPushButton { background:rgba(0,212,170,0.13); color:#00d4aa; "
-            "border:1px solid rgba(0,212,170,0.35); border-radius:4px; padding:0 8px; }"
-            "QPushButton:hover { background:rgba(0,212,170,0.22); }")
+            f"QPushButton {{ background:rgba({_ar},{_ag},{_ab},0.13); color:{_acc2}; "
+            f"border:1px solid rgba({_ar},{_ag},{_ab},0.35); border-radius:4px; padding:0 8px; }}"
+            f"QPushButton:hover {{ background:rgba({_ar},{_ag},{_ab},0.22); }}")
         dis_btn.setStyleSheet(
-            "QPushButton { background:rgba(255,85,85,0.13); color:#ff5555; "
-            "border:1px solid rgba(255,85,85,0.35); border-radius:4px; padding:0 8px; }"
-            "QPushButton:hover { background:rgba(255,85,85,0.22); }")
+            f"QPushButton {{ background:rgba({_dr},{_dg},{_db},0.13); color:{_dng2}; "
+            f"border:1px solid rgba({_dr},{_dg},{_db},0.35); border-radius:4px; padding:0 8px; }}"
+            f"QPushButton:hover {{ background:rgba({_dr},{_dg},{_db},0.22); }}")
         ctrl.addWidget(en_btn)
         ctrl.addWidget(dis_btn)
         main.addLayout(ctrl)
@@ -238,9 +248,12 @@ class TemperatureTab(QWidget):
         return box
 
     def _apply_styles(self) -> None:
-        P   = PALETTE
-        acc = P.get("accent", "#00d4aa")
-        dng = P.get("danger", "#ff5555")
+        P    = PALETTE
+        acc  = P.get("accent",  "#00d4aa")
+        dng  = P.get("danger",  "#ff453a")
+        warn = P.get("warning", "#ff9f0a")
+        surf = P.get("surface", "#2d2d2d")
+        sur2 = P.get("surface2","#3d3d3d")
 
         def _rgb(h):
             h = h.lstrip("#")
@@ -250,6 +263,7 @@ class TemperatureTab(QWidget):
         dr, dg, db = _rgb(dng)
 
         for panel in getattr(self, "_panels", []):
+            # ── Enable / Disable buttons ──────────────────────────────
             if hasattr(panel, "_en_btn"):
                 panel._en_btn.setStyleSheet(
                     f"QPushButton {{ background:rgba({ar},{ag},{ab},0.13); color:{acc}; "
@@ -260,8 +274,48 @@ class TemperatureTab(QWidget):
                     f"QPushButton {{ background:rgba({dr},{dg},{db},0.13); color:{dng}; "
                     f"border:1px solid rgba({dr},{dg},{db},0.35); border-radius:4px; padding:0 8px; }}"
                     f"QPushButton:hover {{ background:rgba({dr},{dg},{db},0.22); }}")
+            # ── Alarm banner ──────────────────────────────────────────
+            if hasattr(panel, "_alarm_banner"):
+                panel._alarm_banner.setStyleSheet(
+                    f"background:{dng}22; border:1px solid {dng}; border-radius:3px;")
+            if hasattr(panel, "_alarm_icon_lbl"):
+                panel._alarm_icon_lbl.setStyleSheet(
+                    f"color:{dng}; font-size:{FONT['readoutSm']}pt;")
+            if hasattr(panel, "_alarm_msg_lbl"):
+                panel._alarm_msg_lbl.setStyleSheet(
+                    f"color:{dng}; font-size:{FONT['body']}pt;")
+            if hasattr(panel, "_alarm_ack_btn"):
+                panel._alarm_ack_btn.setStyleSheet(
+                    f"QPushButton {{ background:{surf}; color:{dng}; "
+                    f"border:1px solid {dng}66; border-radius:3px; "
+                    f"font-size:{FONT['label']}pt; padding: 0 10px; }}"
+                    f"QPushButton:hover {{ background:{sur2}; }}")
+            # ── Warning banner ────────────────────────────────────────
+            if hasattr(panel, "_warn_banner"):
+                panel._warn_banner.setStyleSheet(
+                    f"background:{warn}22; border:1px solid {warn}66; border-radius:3px;")
+            if hasattr(panel, "_warn_icon_lbl"):
+                panel._warn_icon_lbl.setStyleSheet(
+                    f"color:{warn}; font-size:{FONT['heading']}pt;")
+            if hasattr(panel, "_warn_msg_lbl"):
+                panel._warn_msg_lbl.setStyleSheet(
+                    f"color:{warn}; font-size:{FONT['label']}pt;")
+            # ── Readout value labels (default/idle colours only) ──────
+            for attr, pal_key in [
+                ("_actual_lbl", "accent"),
+                ("_target_lbl", "warning"),
+                ("_power_lbl",  "cta"),
+                ("_state_lbl",  "textSub"),
+                ("_ready_lbl",  "textDim"),
+            ]:
+                lbl = getattr(panel, attr, None)
+                if lbl:
+                    lbl.setStyleSheet(
+                        f"font-family:Menlo,monospace; font-size:{FONT['readoutLg']}pt; "
+                        f"color:{P.get(pal_key,'#00d4aa')};")
 
-    def _readout_widget(self, label, initial, color):
+    def _readout_widget(self, label, initial, pal_key):
+        """Create a readout widget.  pal_key is a PALETTE key (e.g. "accent")."""
         w = QWidget()
         v = QVBoxLayout(w)
         v.setAlignment(Qt.AlignCenter)
@@ -270,11 +324,13 @@ class TemperatureTab(QWidget):
         sub.setAlignment(Qt.AlignCenter)
         val = QLabel(initial)
         val.setAlignment(Qt.AlignCenter)
+        color = PALETTE.get(pal_key, "#00d4aa")
         val.setStyleSheet(
             f"font-family:Menlo,monospace; font-size:{FONT['readoutLg']}pt; color:{color};")
         v.addWidget(sub)
         v.addWidget(val)
-        w._val = val
+        w._val     = val
+        w._pal_key = pal_key
         return w
 
     def update_tec(self, index: int, status):
@@ -294,12 +350,14 @@ class TemperatureTab(QWidget):
         p._target_lbl.setText(f"{status.target_temp:.1f} °C")
         p._power_lbl.setText( f"{status.output_power:.2f} W")
         if not status.enabled:
+            _sub = PALETTE.get("textSub", "#6a6a6a")
+            _dim = PALETTE.get("textDim", "#999999")
             p._state_lbl.setText("DISABLED")
             p._state_lbl.setStyleSheet(
-                f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:#444;")
+                f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:{_sub};")
             p._ready_lbl.setText("○  Disabled")
             p._ready_lbl.setStyleSheet(
-                f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:#555;")
+                f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:{_dim};")
         elif status.stable:
             p._state_lbl.setText("STABLE ✓")
             p._state_lbl.setStyleSheet(
@@ -331,7 +389,7 @@ class TemperatureTab(QWidget):
         p._warn_banner.setVisible(False)
         p._actual_lbl.setStyleSheet(
             f"font-family:Menlo,monospace; font-size:{FONT['readoutLg']}pt; color:{PALETTE['danger']};")
-        p.setStyleSheet("QGroupBox { border-color: #ff4444; }")
+        p.setStyleSheet(f"QGroupBox {{ border-color: {PALETTE.get('danger','#ff453a')}; }}")
 
     def show_warning(self, index: int, message: str):
         """Show the warning banner for the given TEC panel."""

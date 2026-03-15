@@ -71,68 +71,87 @@ class CommandPalette(QDialog):
         # ── Card ─────────────────────────────────────────────────────────
         card = QWidget()
         card.setObjectName("cmdCard")
-        card.setStyleSheet("""
-            QWidget#cmdCard {
-                background: #0f0f16;
-                border: 1px solid #2a2a3a;
-                border-radius: 10px;
-            }
-        """)
         card.setFixedWidth(560)
         card_lay = QVBoxLayout(card)
         card_lay.setContentsMargins(12, 12, 12, 12)
         card_lay.setSpacing(8)
+        self._card = card
 
         # Search bar
         self._search = QLineEdit()
         self._search.setPlaceholderText("Search tabs and actions…")
         self._search.setFixedHeight(40)
-        self._search.setStyleSheet("""
-            QLineEdit {
-                background: #1a1a28;
-                border: 1px solid #333;
-                border-radius: 6px;
-                color: #eee;
-                font-size: 14pt;
-                padding: 4px 12px;
-            }
-            QLineEdit:focus { border-color: #00d4aa; }
-        """)
         self._search.textChanged.connect(self._filter)
         self._search.returnPressed.connect(self._activate_current)
 
         # Results list
         self._list = QListWidget()
         self._list.setFixedHeight(320)
-        self._list.setStyleSheet("""
-            QListWidget {
-                background: transparent;
-                border: none;
-                outline: none;
-            }
-            QListWidget::item {
-                background: transparent;
-                color: #ccc;
-                border-radius: 4px;
-                padding: 6px 10px;
-                font-size: 12pt;
-            }
-            QListWidget::item:hover { background: #1e2a40; }
-            QListWidget::item:selected { background: #0d3028; color: #00d4aa; }
-        """)
         self._list.itemActivated.connect(self._on_item_activated)
 
         # Footer hint
-        hint = QLabel("↑↓ navigate  ·  ↵ select  ·  Esc close")
-        hint.setAlignment(Qt.AlignCenter)
-        hint.setStyleSheet("font-size: 9pt; color: #333;")
+        self._hint = QLabel("↑↓ navigate  ·  ↵ select  ·  Esc close")
+        self._hint.setAlignment(Qt.AlignCenter)
 
         card_lay.addWidget(self._search)
         card_lay.addWidget(self._list)
-        card_lay.addWidget(hint)
+        card_lay.addWidget(self._hint)
 
         outer.addWidget(card, 0, Qt.AlignTop | Qt.AlignHCenter)
         self.setMinimumHeight(420)
+        self._apply_styles()
+
+    # ── Styling ──────────────────────────────────────────────────────
+
+    def _apply_styles(self) -> None:
+        """Re-apply all PALETTE-driven styles — called on construction and theme switch."""
+        P    = PALETTE
+        bg   = P.get("bg",          "#242424")
+        sur  = P.get("surface",     "#2d2d2d")
+        sur2 = P.get("surface2",    "#3d3d3d")
+        hov  = P.get("surfaceHover","#404040")
+        bdr  = P.get("border",      "#484848")
+        txt  = P.get("text",        "#ebebeb")
+        dim  = P.get("textDim",     "#999999")
+        sub  = P.get("textSub",     "#6a6a6a")
+        acc  = P.get("accent",      "#00d4aa")
+
+        self._card.setStyleSheet(f"""
+            QWidget#cmdCard {{
+                background: {sur};
+                border: 1px solid {bdr};
+                border-radius: 10px;
+            }}
+        """)
+        self._search.setStyleSheet(f"""
+            QLineEdit {{
+                background: {sur2};
+                border: 1px solid {bdr};
+                border-radius: 6px;
+                color: {txt};
+                font-size: 14pt;
+                padding: 4px 12px;
+            }}
+            QLineEdit:focus {{ border-color: {acc}; }}
+        """)
+        self._list.setStyleSheet(f"""
+            QListWidget {{
+                background: transparent;
+                border: none;
+                outline: none;
+            }}
+            QListWidget::item {{
+                background: transparent;
+                color: {txt};
+                border-radius: 4px;
+                padding: 6px 10px;
+                font-size: {FONT['body']}pt;
+            }}
+            QListWidget::item:hover    {{ background: {hov}; }}
+            QListWidget::item:selected {{ background: {sur2}; color: {acc}; }}
+        """)
+        self._hint.setStyleSheet(
+            f"font-size: {FONT['caption']}pt; color: {sub};")
 
     # ── Public API ───────────────────────────────────────────────────
 
@@ -164,7 +183,7 @@ class CommandPalette(QDialog):
                 cur_group = item.group
                 sep = QListWidgetItem(f"  {cur_group.upper()}")
                 sep.setFlags(Qt.NoItemFlags)
-                sep.setForeground(QColor("#555"))
+                sep.setForeground(QColor(PALETTE.get("textSub", "#6a6a6a")))
                 f = sans_font(FONT["caption"])
                 f.setLetterSpacing(QFont.AbsoluteSpacing, 1.5)
                 sep.setFont(f)

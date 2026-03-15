@@ -313,6 +313,16 @@ class _PageBase(QWidget):
         self._content.setSpacing(14)
         root.addLayout(self._content, 1)
 
+    # ── PALETTE-driven colour properties (shared by all wizard pages) ──
+    @property
+    def _ACCENT(self): return PALETTE.get("cta",     "#0a84ff")
+    @property
+    def _GREEN(self):  return PALETTE.get("accent",  "#00d4aa")
+    @property
+    def _AMBER(self):  return PALETTE.get("warning", "#ff9f0a")
+    @property
+    def _DANGER(self): return PALETTE.get("danger",  "#ff453a")
+
     def values(self) -> dict:
         """Return a flat dict of key→value to be merged into config."""
         return {}
@@ -352,9 +362,10 @@ class _PageWelcome(_PageBase):
             "If neither camera is connected, leave the Camera driver set to  simulated.")
         prereq.setOpenExternalLinks(True)
         prereq.setWordWrap(True)
+        _cta = PALETTE.get("cta", "#0a84ff")
         prereq.setStyleSheet(
             f"font-size:{FONT['sublabel']}pt; color:{PALETTE.get('text','#ebebeb')}; "
-            "background:#0d1f2d; border:1px solid #1e4a6a; border-left:3px solid #4e9cd4; "
+            f"background:{_cta}18; border:1px solid {_cta}55; border-left:3px solid {_cta}; "
             "border-radius:4px; padding:10px;")
         self._content.addWidget(prereq)
         self._content.addStretch(1)
@@ -387,13 +398,13 @@ class _PageWelcome(_PageBase):
                 f"✓  Scan complete — {known_count} known device(s) detected. "
                 "Settings have been pre-filled on the following pages.")
             self._scan_label.setStyleSheet(
-                f"font-size:{FONT['sublabel']}pt; color:#00d4aa; padding:4px 0;")
+                f"font-size:{FONT['sublabel']}pt; color:{PALETTE.get('accent','#00d4aa')}; padding:4px 0;")
         else:
             self._scan_label.setText(
                 "⚠  Scan complete — no known devices found. "
                 "Select drivers and ports manually, or check USB connections.")
             self._scan_label.setStyleSheet(
-                f"font-size:{FONT['sublabel']}pt; color:#e8a020; padding:4px 0;")
+                f"font-size:{FONT['sublabel']}pt; color:{PALETTE.get('warning','#ff9f0a')}; padding:4px 0;")
 
 
 class _PortRow(QWidget):
@@ -565,7 +576,7 @@ class _PageTEC(_PageBase):
         self._mecom_notice.setWordWrap(True)
         self._mecom_notice.setStyleSheet(
             f"font-size:{FONT['caption']}pt; color:{PALETTE['warning']}; "
-            "background:#1a1500; border:1px solid #4a3800; border-radius:4px; "
+            f"background:{PALETTE.get('warning','#ff9f0a')}18; border:1px solid {PALETTE.get('warning','#ff9f0a')}44; border-radius:4px; "
             "padding:8px;")
         self._mecom_notice.setVisible(False)
         fl1.addRow(self._mecom_notice)
@@ -790,7 +801,7 @@ class _PageCamera(_PageBase):
         self._pylon_notice.setWordWrap(True)
         self._pylon_notice.setStyleSheet(
             f"font-size:{FONT['caption']}pt; color:{PALETTE['warning']}; "
-            "background:#1a1500; border:1px solid #4a3800; border-radius:4px; "
+            f"background:{PALETTE.get('warning','#ff9f0a')}18; border:1px solid {PALETTE.get('warning','#ff9f0a')}44; border-radius:4px; "
             "padding:8px;")
         self._pylon_notice.setVisible(False)
         fl.addRow(self._pylon_notice)
@@ -811,7 +822,7 @@ class _PageCamera(_PageBase):
         self._flir_notice.setWordWrap(True)
         self._flir_notice.setStyleSheet(
             f"font-size:{FONT['caption']}pt; color:{PALETTE['warning']}; "
-            "background:#1a1500; border:1px solid #4a3800; border-radius:4px; "
+            f"background:{PALETTE.get('warning','#ff9f0a')}18; border:1px solid {PALETTE.get('warning','#ff9f0a')}44; border-radius:4px; "
             "padding:8px;")
         self._flir_notice.setVisible(False)
         fl.addRow(self._flir_notice)
@@ -1191,10 +1202,6 @@ class _PageBias(_PageBase):
     install links when the selected driver's dependency is missing.
     """
 
-    _ACCENT = "#4e73df"
-    _GREEN  = "#00d4aa"
-    _AMBER  = "#f5a623"
-    _DANGER = "#ff5555"
     _MUTED  = PALETTE.get('textSub','#6a6a6a')
 
     def __init__(self, cfg: dict, parent=None):
@@ -1277,36 +1284,36 @@ class _PageBias(_PageBase):
 
         # ── pyvisa notice (shown when pyvisa is missing) ──────────────────
         self._visa_notice = QLabel(
-            '⚠  <b>pyvisa is not installed</b> — required for Keithley and VISA Generic drivers.<br>'
-            'Install: &nbsp;<code>pip install pyvisa pyvisa-py</code><br>'
-            'Or NI-VISA: <a href="https://www.ni.com/en/support/downloads/drivers/'
-            'download.ni-visa.html" style="color:#4e73df;">ni.com/en/support/downloads ↗</a>'
-            '&nbsp;&nbsp;|&nbsp;&nbsp;'
-            'Also see: <a href="https://github.com/sgoadhouse/dcps" '
-            'style="color:#4e73df;">dcps (Keithley wrapper) ↗</a>'
+            f'⚠  <b>pyvisa is not installed</b> — required for Keithley and VISA Generic drivers.<br>'
+            f'Install: &nbsp;<code>pip install pyvisa pyvisa-py</code><br>'
+            f'Or NI-VISA: <a href="https://www.ni.com/en/support/downloads/drivers/'
+            f'download.ni-visa.html" style="color:{self._ACCENT};">ni.com/en/support/downloads ↗</a>'
+            f'&nbsp;&nbsp;|&nbsp;&nbsp;'
+            f'Also see: <a href="https://github.com/sgoadhouse/dcps" '
+            f'style="color:{self._ACCENT};">dcps (Keithley wrapper) ↗</a>'
         )
         self._visa_notice.setOpenExternalLinks(True)
         self._visa_notice.setWordWrap(True)
         self._visa_notice.setStyleSheet(
             f"font-size:{FONT['sublabel']}pt; color:{self._AMBER}; background:{PALETTE.get('bg','#242424')}; "
-            "border:1px solid #f5a62344; border-radius:4px; padding:8px;")
+            f"border:1px solid {self._AMBER}44; border-radius:4px; padding:8px;")
         self._visa_notice.setVisible(False)
         self._content.addWidget(self._visa_notice)
 
         # ── pydp832 notice (shown when pydp832 is missing) ────────────────
         self._dp832_notice = QLabel(
-            '⚠  <b>pydp832 is not installed</b> — required for the Rigol DP832 native driver.<br>'
-            'Install: &nbsp;<code>pip install pydp832</code><br>'
-            '<a href="https://github.com/tspspi/pydp832" '
-            'style="color:#4e73df;">github.com/tspspi/pydp832 ↗</a>'
-            '&nbsp;&nbsp;|&nbsp;&nbsp;'
-            'Or use <b>visa_generic</b> driver with pyvisa instead.'
+            f'⚠  <b>pydp832 is not installed</b> — required for the Rigol DP832 native driver.<br>'
+            f'Install: &nbsp;<code>pip install pydp832</code><br>'
+            f'<a href="https://github.com/tspspi/pydp832" '
+            f'style="color:{self._ACCENT};">github.com/tspspi/pydp832 ↗</a>'
+            f'&nbsp;&nbsp;|&nbsp;&nbsp;'
+            f'Or use <b>visa_generic</b> driver with pyvisa instead.'
         )
         self._dp832_notice.setOpenExternalLinks(True)
         self._dp832_notice.setWordWrap(True)
         self._dp832_notice.setStyleSheet(
             f"font-size:{FONT['sublabel']}pt; color:{self._AMBER}; background:{PALETTE.get('bg','#242424')}; "
-            "border:1px solid #f5a62344; border-radius:4px; padding:8px;")
+            f"border:1px solid {self._AMBER}44; border-radius:4px; padding:8px;")
         self._dp832_notice.setVisible(False)
         self._content.addWidget(self._dp832_notice)
 
@@ -1456,10 +1463,6 @@ class _PageStage(_PageBase):
       • simulated   — software-only for testing without hardware
     """
 
-    _ACCENT = "#4e73df"
-    _GREEN  = "#00d4aa"
-    _AMBER  = "#f5a623"
-    _DANGER = "#ff5555"
     _MUTED  = PALETTE.get('textSub','#6a6a6a')
 
     def __init__(self, cfg: dict, parent=None):
@@ -1546,20 +1549,20 @@ class _PageStage(_PageBase):
 
         # ── thorlabs_apt_device notice ────────────────────────────────────
         self._apt_notice = QLabel(
-            '⚠  <b>thorlabs-apt-device is not installed</b> — required for Thorlabs stages.<br>'
-            'Install: &nbsp;<code>pip install thorlabs-apt-device</code><br>'
-            'Also install <b>Thorlabs Kinesis</b> software (provides USB drivers):<br>'
-            '<a href="https://www.thorlabs.com/software_pages/ViewSoftwarePage.cfm?Code=Motion_Control" '
-            'style="color:#4e73df;">thorlabs.com — Kinesis download ↗</a>'
-            '&nbsp;&nbsp;|&nbsp;&nbsp;'
-            '<a href="https://github.com/kzhao1228/pystage_apt" '
-            'style="color:#4e73df;">pystage_apt alternative ↗</a>'
+            f'⚠  <b>thorlabs-apt-device is not installed</b> — required for Thorlabs stages.<br>'
+            f'Install: &nbsp;<code>pip install thorlabs-apt-device</code><br>'
+            f'Also install <b>Thorlabs Kinesis</b> software (provides USB drivers):<br>'
+            f'<a href="https://www.thorlabs.com/software_pages/ViewSoftwarePage.cfm?Code=Motion_Control" '
+            f'style="color:{self._ACCENT};">thorlabs.com — Kinesis download ↗</a>'
+            f'&nbsp;&nbsp;|&nbsp;&nbsp;'
+            f'<a href="https://github.com/kzhao1228/pystage_apt" '
+            f'style="color:{self._ACCENT};">pystage_apt alternative ↗</a>'
         )
         self._apt_notice.setOpenExternalLinks(True)
         self._apt_notice.setWordWrap(True)
         self._apt_notice.setStyleSheet(
             f"font-size:{FONT['sublabel']}pt; color:{self._AMBER}; background:{PALETTE.get('bg','#242424')}; "
-            "border:1px solid #f5a62344; border-radius:4px; padding:8px;")
+            f"border:1px solid {self._AMBER}44; border-radius:4px; padding:8px;")
         self._apt_notice.setVisible(False)
         self._content.addWidget(self._apt_notice)
 
@@ -1690,10 +1693,6 @@ class _PageAI(_PageBase):
     steps without breaking anything.
     """
 
-    _ACCENT = "#4e73df"
-    _GREEN  = "#00d4aa"
-    _AMBER  = "#f5a623"
-    _DANGER = "#ff5555"
     _MUTED  = PALETTE.get('textSub','#6a6a6a')
 
     def __init__(self, parent=None):
@@ -1713,7 +1712,7 @@ class _PageAI(_PageBase):
         # ── Install section ───────────────────────────────────────────────
         self._install_frame = QFrame()
         self._install_frame.setStyleSheet(
-            f"background:{PALETTE.get('bg','#242424')}; border:1px solid #f5a62344; border-radius:6px;")
+            f"background:{PALETTE.get('bg','#242424')}; border:1px solid {self._AMBER}44; border-radius:6px;")
         if_lay = QVBoxLayout(self._install_frame)
         if_lay.setContentsMargins(14, 12, 14, 12)
         if_lay.setSpacing(8)
@@ -1764,7 +1763,7 @@ class _PageAI(_PageBase):
         # ── Pull section ──────────────────────────────────────────────────
         self._pull_frame = QFrame()
         self._pull_frame.setStyleSheet(
-            f"background:{PALETTE.get('bg','#242424')}; border:1px solid #00d4aa44; border-radius:6px;")
+            f"background:{PALETTE.get('bg','#242424')}; border:1px solid {PALETTE.get('accent','#00d4aa')}44; border-radius:6px;")
         pf_lay = QVBoxLayout(self._pull_frame)
         pf_lay.setContentsMargins(14, 12, 14, 12)
         pf_lay.setSpacing(8)
@@ -2167,9 +2166,9 @@ class FirstRunWizard(QDialog):
 
         for i, dot in enumerate(self._dots):
             if i == idx:
-                dot.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:#4e73df; font-weight:700;")
+                dot.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{PALETTE.get('cta','#0a84ff')}; font-weight:700;")
             elif i < idx:
-                dot.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:#00d4aa;")
+                dot.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{PALETTE.get('accent','#00d4aa')};")
             else:
                 dot.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{PALETTE.get('border','#484848')};")
 
