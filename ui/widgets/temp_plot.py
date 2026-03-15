@@ -83,9 +83,12 @@ class TempPlot(QWidget):
         def tx(i): return int(pad + i/(self.HISTORY-1)*(W-2*pad))
         def ty(v): return int(H-pad-(v-lo)/span*(H-2*pad))
 
-        # Grid
-        p.setPen(QPen(QColor(35,35,35), 1))
-        step = max(1, int(span/4))
+        # Grid — pick a "nice" step that keeps labels from overlapping.
+        # Guarantee at least 20 px between labels (14 px font + 6 px gap).
+        _min_gap = 20
+        _max_lbl = max(2, (H - 2*pad) // _min_gap)
+        _raw     = span / _max_lbl
+        step = next((s for s in [1,2,5,10,20,50,100,200] if s >= _raw), int(_raw)+1)
         t = (int(lo/step)-1)*step
         p.setFont(mono_font(11))
         while t <= hi+step:
