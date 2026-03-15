@@ -1,6 +1,6 @@
 # SanjINSIGHT — Quick Start Guide
 
-**Microsanj SanjINSIGHT v1.2.0**
+**Microsanj SanjINSIGHT v1.3.0**
 *Get from first launch to your first thermoreflectance measurement in minutes.*
 
 ---

@@ -1,6 +1,6 @@
 # SanjINSIGHT — Developer Guide
 
-**Version**: 1.2.0
+**Version**: 1.3.0
 **Platform**: Windows 10/11 (64-bit); macOS/Linux supported for development
 **Stack**: Python 3.11 · PyQt5 · NumPy · PyInstaller · Inno Setup
 **Repository**: Private source (`edward-mcnair/sanjinsight`) · Public releases (`edward-mcnair/sanjinsight-releases`)
@@ -267,7 +267,7 @@ sanjinsight/
 - **No global module-level state.** Hardware references live in `ApplicationState`; preferences live in `config`; signals live in `AppSignals`.
 - **Factory pattern for all drivers.** Each device type has an abstract base class and a `factory.py` that reads `config.yaml` and instantiates the correct implementation.
 - **Simulated drivers for every device.** Demo mode or development without hardware is always possible.
-- **Auth is opt-in.** When `auth.require_login` is `false` (default), the startup flow is identical to pre-v1.2.0 — no login screen, no user management visible.
+- **Auth is opt-in.** When `auth.require_login` is `false` (default), the startup flow is identical to pre-v1.3.0 — no login screen, no user management visible.
 - **OperatorShell is a complete separate window.** It never imports MainWindow; Technician users cannot reach the full UI even by accident.
 
 ---
@@ -1218,7 +1218,7 @@ Checks GitHub Releases for a newer version. Source repo is private; the public `
 **Callback:**
 
 ```python
-checker = UpdateChecker(current_version="1.2.0", on_update=my_callback)
+checker = UpdateChecker(current_version="1.3.0", on_update=my_callback)
 checker.check_async()    # Non-blocking background thread
 result = checker.check_sync()   # Blocking (used for "Check Now" button)
 ```
@@ -1349,7 +1349,7 @@ main_app.MainWindow.__init__()
 ### 17.1 GitHub Actions (`.github/workflows/build-installer.yml`)
 
 **Triggers:**
-- `git push origin v1.2.0` — builds + creates GitHub Release on `sanjinsight-releases`
+- `git push origin v1.3.0` — builds + creates GitHub Release on `sanjinsight-releases`
 - Manual **Run workflow** in Actions UI — builds only (artifact available for 1 day)
 
 **Steps:**
@@ -1366,18 +1366,18 @@ main_app.MainWindow.__init__()
 
 ```bash
 # 1. Update version
-# Edit version.py: __version__ = "1.2.0", BUILD_DATE = "2026-03-15"
+# Edit version.py: VERSION_TUPLE = (1, 3, 0), BUILD_DATE = "2026-03-14"
 
-# 2. Update CHANGELOG.md: add ## [1.2.0] — 2026-03-15 section
+# 2. Update CHANGELOG.md: add ## [1.3.0] — 2026-03-14 section
 
 # 3. Commit
 git add version.py CHANGELOG.md
-git commit -m "chore: bump to v1.2.0"
+git commit -m "chore: bump to v1.3.0"
 
 # 4. Tag and push — this triggers CI
-git tag v1.2.0
+git tag v1.3.0
 git push origin main
-git push origin v1.2.0
+git push origin v1.3.0
 
 # 5. CI builds installer and publishes release automatically
 # 6. Verify at https://github.com/edward-mcnair/sanjinsight-releases/releases
@@ -1674,5 +1674,5 @@ pytest>=7.4            Test runner
 
 ---
 
-*This document was last updated for SanjINSIGHT v1.2.9 (2026-03-14).
+*This document was last updated for SanjINSIGHT v1.3.0 (2026-03-14).
 Update it whenever significant architectural changes are made.*
