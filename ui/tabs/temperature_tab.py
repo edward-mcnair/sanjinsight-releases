@@ -206,7 +206,7 @@ class TemperatureTab(QWidget):
         warn_spin.setSuffix(" °C")
 
         apply_btn = QPushButton("Apply")
-        apply_btn.setFixedWidth(55)
+        apply_btn.setMinimumWidth(65)
 
         for w in [min_spin, max_spin, warn_spin]:
             w.setStyleSheet(f"font-size:{FONT['label']}pt;")

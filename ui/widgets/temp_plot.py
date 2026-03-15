@@ -24,8 +24,7 @@ class TempPlot(QWidget):
 
     def __init__(self, h=140):
         super().__init__()
-        self.setMinimumSize(100, 80)
-        self.setMaximumHeight(h)
+        self.setFixedHeight(h)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self._actual = collections.deque([None]*self.HISTORY, maxlen=self.HISTORY)
         self._target = collections.deque([None]*self.HISTORY, maxlen=self.HISTORY)
