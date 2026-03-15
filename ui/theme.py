@@ -21,7 +21,7 @@ Quick reference
 Colour roles
 ------------
   accent / accentHover / accentDim
-      Teal — system health, status, active indicators, focus rings,
+      Mint-teal — system health, status, active indicators, focus rings,
       checkboxes, progress bars.  "The instrument is healthy."
 
   cta / ctaHover / ctaDim
@@ -32,6 +32,15 @@ Colour roles
 
   success / warning / danger / info
       Semantic one-offs: verdicts, readiness states, alerts.
+      Derived from Apple's precisely-calibrated system colors.
+
+  systemPurple / systemIndigo / systemPink / systemMint
+  systemYellow / systemCyan / systemBrown
+      Extended Apple system colors for icons and indicators.
+      Purple → AI / advanced features.  Indigo → classification / navigation.
+      Pink → critical alert.  Mint → connection / sync.
+      Yellow → caution / pending.  Cyan → data / streaming.
+      Brown → materials / physical layer.
 """
 
 from __future__ import annotations
@@ -43,100 +52,137 @@ import sys as _sys
 #  Raw colour palettes
 # ══════════════════════════════════════════════════════════════════════════════
 #
-# Design language
-# ---------------
-# Both themes share a cool blue-gray tonal axis.  Pure neutral grays feel
-# flat and lifeless on modern displays; a slight blue cast (≈3–5 % blue
-# saturation) reads as precision and gives the app a more intentional feel.
+# Design language — informed by Apple Human Interface Guidelines
+# -------------------------------------------------------------
+# Both themes follow Apple's layered background model:
+#   Dark:  near-black workspace canvas → elevated sidebar/panels → controls
+#   Light: grouped-background grey base → pure-white panels → inset fields
 #
-# The four dark-mode surface depths are spaced ~10–12 luminance levels apart
-# (perceptually uniform on sRGB monitors at typical gamma) so the depth
-# hierarchy is clearly readable.
+# The key insight from Apple's macOS design system is that navigation and
+# workspace must occupy clearly distinct depth levels.  In dark mode the
+# workspace sits at near-black (#111113) and the sidebar is elevated to
+# Apple's secondarySystemBackground (#1c1c1e) — a visible, decisive step.
+# In light mode the workspace is the grouped background (#f2f2f7) and panels
+# are pure white (#ffffff) — unambiguous contrast that reads immediately.
 #
-# Light mode uses near-white as the base (Apple's #f5f5f7 pattern).
-# The old mid-gray #d9d9d9 base has been retired — it read as a dated
-# Windows 95 desktop.
+# Semantic colors use Apple's precisely-calibrated system-color values.
+# They were tuned for contrast, cultural legibility, and colorblind safety.
+# We extend the palette with seven Apple system colors for icons/indicators:
+# purple, indigo, pink, mint, yellow, cyan, brown — giving each type of
+# hardware, protocol, or state a distinct, instantly-recognizable hue.
 #
-# Two accent roles:
-#   accent  — teal  (#00d4aa dark / #009e80 light): system health, status
-#   cta     — blue  (#4188f5 dark / #1a73e8 light): primary user actions
+# Accent roles:
+#   accent  — mint-teal (#00c7be dark / #009e80 light): instrument health
+#   cta     — blue      (#0a84ff dark / #007aff light): primary user actions
 
 _DARK_RAW: dict = {
-    # ── Backgrounds (cool blue-gray, #1e1f24 base) ───────────────────────────
-    "bg":           "#1e1f24",   # deepest: main window / page canvas
-    "surface":      "#28292f",   # panels, sidebar, cards          (Δ+10)
-    "surface2":     "#32333a",   # list rows, elevated cells        (Δ+10)
-    "surface3":     "#3c3e47",   # input fields, header bar         (Δ+11)
-    # ── Borders ─────────────────────────────────────────────────────────────
-    "border":       "#4c4e58",   # standard panel borders           (Δ+17 — visible)
-    "border2":      "#404249",   # subtle / wizard-style borders
+    # ── Backgrounds — Apple macOS layering model ──────────────────────────────
+    # Each level is noticeably darker/lighter than the one above it.
+    # workspace canvas: near-black (like macOS systemBackground in dark mode)
+    # sidebar/panels: Apple's secondarySystemBackground (#1c1c1e)
+    # list rows / cards: tertiary (#242426)
+    # input fields / inset: quaternary (#2c2c2e Apple tertiarySystemBackground)
+    # header bar / popovers: most elevated (#3a3a3c Apple systemGray4 dark)
+    "bg":           "#111113",   # workspace canvas — near black
+    "surface":      "#1c1c1e",   # sidebar, panels  — Apple secondarySystemBg
+    "surface2":     "#242426",   # list rows, cards
+    "surface3":     "#2c2c2e",   # input fields     — Apple tertiarySystemBg
+    "surface4":     "#3a3a3c",   # header bar, popovers, tooltips (most elevated)
+    # ── Borders — Apple opaqueSeparator dark (#38383a) ────────────────────────
+    "border":       "#38383a",   # standard panel borders
+    "border2":      "#2e2e30",   # subtle / inner borders
     # ── Interactive states ───────────────────────────────────────────────────
-    "surfaceHover": "#404249",   # any surface on mouse-over
-    # ── Text (cool-tinted neutrals) ──────────────────────────────────────────
-    "text":         "#eceef2",   # primary   (~13:1 on surface  ✓)
-    "textDim":      "#9ea3b0",   # secondary (~5.5:1 on surface ✓)
-    "textSub":      "#5e6270",   # hint / caption
-    # ── Brand accent — teal (system health / status) ─────────────────────────
-    "accent":       "#00d4aa",
-    "accentDim":    "#00d4aa2e", # teal @ 18 % opacity
-    "accentHover":  "#00e8bb",   # lighter teal for hover
-    # ── CTA — blue (primary user actions) ────────────────────────────────────
-    "cta":          "#4188f5",
-    "ctaHover":     "#5c9ef7",
-    "ctaDim":       "#4188f52e", # blue @ 18 % opacity
-    # ── Semantic ────────────────────────────────────────────────────────────
-    "success":      "#00d479",
-    "warning":      "#ffaa44",
-    "danger":       "#ff4466",
-    "info":         "#4188f5",   # aligned with CTA blue
-    # ── Readiness widget ────────────────────────────────────────────────────
-    "readyBg":       "#0a2e28",
-    "readyBorder":   "#00d4aa",
-    "warnBg":        "#2e1e08",
-    "warnBorder":    "#ffaa44",
-    "errorBg":       "#2e0e18",
-    "errorBorder":   "#ff4466",
-    "unknownBg":     "#28292f",
-    "unknownBorder": "#4c4e58",
+    "surfaceHover": "#2e2e30",   # surface on mouse-over (between surface2/3)
+    # ── Text — Apple label hierarchy (opacity-based, cool-white) ─────────────
+    # label (#ebebf5 @85%): primary readable text
+    # secondaryLabel (#ebebf5 @55%): supporting text
+    # tertiaryLabel (#ebebf5 @30%): hints, placeholders
+    "text":         "#ebebf5",   # primary label — Apple dark label
+    "textDim":      "#9696a8",   # secondary label ~55% — cool tinted
+    "textSub":      "#545462",   # tertiary label  ~30%
+    # ── Brand accent — mint-teal (instrument health / status) ─────────────────
+    # Closer to Apple's systemMint (#00d9d4) — reads as "all systems healthy"
+    "accent":       "#00c7be",   # Apple systemMint dark
+    "accentDim":    "#00c7be26", # mint @ 15 % opacity
+    "accentHover":  "#00d9d4",   # brighter mint for hover
+    # ── CTA — Apple systemBlue dark (#0a84ff) ────────────────────────────────
+    "cta":          "#0a84ff",   # Apple systemBlue dark
+    "ctaHover":     "#409cff",   # lighter blue for hover
+    "ctaDim":       "#0a84ff26", # blue @ 15 % opacity
+    # ── Semantic — Apple system colors, precisely calibrated ──────────────────
+    "success":      "#30d158",   # Apple systemGreen dark
+    "warning":      "#ff9f0a",   # Apple systemOrange dark
+    "danger":       "#ff453a",   # Apple systemRed dark
+    "info":         "#64d5ff",   # Apple systemTeal dark (distinct from CTA blue)
+    # ── Extended Apple system colors — icons and indicators ───────────────────
+    # Use these to give each domain a distinct, instantly-recognizable hue.
+    "systemPurple": "#bf5af2",   # AI features, advanced analysis, spectral data
+    "systemIndigo": "#5e5ce6",   # classification, sessions, protocol layers
+    "systemPink":   "#ff375f",   # critical alert, thermal runaway, emergency stop
+    "systemMint":   "#63e6e2",   # connection status, sync, data flow (light mint)
+    "systemYellow": "#ffd60a",   # caution, pending calibration, staged changes
+    "systemCyan":   "#5ac8f5",   # data streaming, live acquisition, network
+    "systemBrown":  "#ac8e68",   # physical hardware, materials, substrate layers
+    # ── Readiness widget ─────────────────────────────────────────────────────
+    "readyBg":       "#0a2918",  # deep green tint
+    "readyBorder":   "#30d158",
+    "warnBg":        "#2e1a00",  # deep orange tint
+    "warnBorder":    "#ff9f0a",
+    "errorBg":       "#2e0c08",  # deep red tint
+    "errorBorder":   "#ff453a",
+    "unknownBg":     "#1c1c1e",
+    "unknownBorder": "#38383a",
 }
 
 _LIGHT_RAW: dict = {
-    # ── Backgrounds (Apple near-white, #f5f5f7 base) ─────────────────────────
-    "bg":           "#f5f5f7",   # deepest: main window / page canvas
-    "surface":      "#ffffff",   # panels, cards — pure white on light gray
-    "surface2":     "#f0f0f5",   # list rows, elevated cells (cool tint)
-    "surface3":     "#e8e8ed",   # input fields, header bar, inset areas
-    # ── Borders ─────────────────────────────────────────────────────────────
-    "border":       "#d1d1d6",   # standard panel borders (Apple separator)
-    "border2":      "#c7c7cc",   # deep / emphasized borders
+    # ── Backgrounds — Apple grouped-background model ──────────────────────────
+    # Light mode: grey grouped base → white panels → grey inset → strong inset
+    # This is the exact pattern Apple uses in Finder, Mail, Notes, Settings.
+    # The contrast is decisive: white cards on a clearly-grey field.
+    "bg":           "#f2f2f7",   # Apple systemGroupedBackground light
+    "surface":      "#ffffff",   # panels, sidebar — pure white on grey field
+    "surface2":     "#f2f2f7",   # alternating rows — back to grouped bg
+    "surface3":     "#e5e5ea",   # input fields    — Apple systemGray5 light
+    "surface4":     "#d1d1d6",   # header bar, most elevated — Apple systemGray4
+    # ── Borders — Apple separator light (#c6c6c8) ─────────────────────────────
+    "border":       "#c6c6c8",   # Apple opaqueSeparator light
+    "border2":      "#d1d1d6",   # subtle / inner borders
     # ── Interactive states ───────────────────────────────────────────────────
-    "surfaceHover": "#ebebf0",   # any surface on mouse-over
-    # ── Text (cool-tinted, high-contrast on all light surfaces) ──────────────
-    "text":         "#1a1a1e",   # primary   (~16:1 on surface  ✓)
-    "textDim":      "#5a5a72",   # secondary (~6.5:1 on surface ✓, cool tint)
-    "textSub":      "#8e8ea0",   # hint / caption (cool tint)
-    # ── Brand accent — teal darkened for WCAG AA on light ────────────────────
-    "accent":       "#009e80",
-    "accentDim":    "#009e8020",
+    "surfaceHover": "#ebebf0",   # surface on mouse-over
+    # ── Text — Apple label hierarchy, cool-dark tint ──────────────────────────
+    "text":         "#0a0a0f",   # primary label — near black, slight cool cast
+    "textDim":      "#3c3c52",   # secondary label — cool dark grey
+    "textSub":      "#8e8ea0",   # tertiary label  — Apple systemGray light
+    # ── Brand accent — teal darkened for WCAG AA on white ────────────────────
+    "accent":       "#009e80",   # darkened mint for sufficient contrast on white
+    "accentDim":    "#009e8018",
     "accentHover":  "#007d68",
-    # ── CTA — blue (primary user actions) ────────────────────────────────────
-    "cta":          "#1a73e8",   # Google-blue family, WCAG AA on white ✓
-    "ctaHover":     "#1557b0",
-    "ctaDim":       "#1a73e820",
-    # ── Semantic ────────────────────────────────────────────────────────────
-    "success":      "#009e80",
-    "warning":      "#c47d00",
-    "danger":       "#d42050",
-    "info":         "#1a73e8",   # aligned with CTA blue
-    # ── Readiness widget ────────────────────────────────────────────────────
-    "readyBg":       "#d6f5ed",
-    "readyBorder":   "#009e80",
-    "warnBg":        "#fef3e0",
-    "warnBorder":    "#c47d00",
-    "errorBg":       "#fee8ee",
-    "errorBorder":   "#d42050",
-    "unknownBg":     "#f0f0f5",
-    "unknownBorder": "#d1d1d6",
+    # ── CTA — Apple systemBlue light (#007aff) ───────────────────────────────
+    "cta":          "#007aff",   # Apple systemBlue light — WCAG AA on white ✓
+    "ctaHover":     "#0071e3",   # Apple blue pressed state
+    "ctaDim":       "#007aff18",
+    # ── Semantic — Apple system colors, light mode ────────────────────────────
+    "success":      "#34c759",   # Apple systemGreen light
+    "warning":      "#ff9500",   # Apple systemOrange light
+    "danger":       "#ff3b30",   # Apple systemRed light
+    "info":         "#5ac8fa",   # Apple systemTeal light
+    # ── Extended Apple system colors — icons and indicators ───────────────────
+    "systemPurple": "#af52de",   # Apple systemPurple light
+    "systemIndigo": "#5856d6",   # Apple systemIndigo light
+    "systemPink":   "#ff2d55",   # Apple systemPink light
+    "systemMint":   "#00c7be",   # Apple systemMint light
+    "systemYellow": "#ffcc00",   # Apple systemYellow light
+    "systemCyan":   "#50b5d5",   # Apple systemCyan light (darkened for contrast)
+    "systemBrown":  "#a2845e",   # Apple systemBrown light
+    # ── Readiness widget ─────────────────────────────────────────────────────
+    "readyBg":       "#d4f5e2",
+    "readyBorder":   "#34c759",
+    "warnBg":        "#fff3d0",
+    "warnBorder":    "#ff9500",
+    "errorBg":       "#fde8e6",
+    "errorBorder":   "#ff3b30",
+    "unknownBg":     "#f2f2f7",
+    "unknownBorder": "#c6c6c8",
 }
 
 
@@ -298,8 +344,8 @@ def build_qt_palette(mode: str = "dark"):
     pal.setColor(QPalette.WindowText,      QColor(p["text"]))
     pal.setColor(QPalette.Base,            QColor(p["surface3"]))
     pal.setColor(QPalette.AlternateBase,   QColor(p["surface2"]))
-    pal.setColor(QPalette.ToolTipBase,     QColor("#1a1d28"))   # always dark
-    pal.setColor(QPalette.ToolTipText,     QColor("#dde3f2"))   # always light
+    pal.setColor(QPalette.ToolTipBase,     QColor(p["surface4"]))
+    pal.setColor(QPalette.ToolTipText,     QColor(p["text"]))
     pal.setColor(QPalette.Text,            QColor(p["text"]))
     pal.setColor(QPalette.Button,          QColor(p["surface2"]))
     pal.setColor(QPalette.ButtonText,      QColor(p["text"]))
@@ -345,15 +391,18 @@ def build_style(mode: str = "dark") -> str:
     _s    = p["surface"]
     _s2   = p["surface2"]
     _s3   = p["surface3"]
+    _s4   = p["surface4"]
     _bdr  = p["border"]
+    _bdr2 = p["border2"]
     _hov  = p["surfaceHover"]
     _warn = p["warning"]
     _dng  = p["danger"]
 
-    # Tooltips always dark for maximum readability in both modes
-    _tt_bg  = "#1a1d28"
-    _tt_fg  = "#dde3f2"
-    _tt_bdr = "#2e3245"
+    # Tooltips: use the most elevated surface level (surface4) for both modes
+    # — avoids the old always-dark hack that looked wrong in light mode.
+    _tt_bg  = p["surface4"]
+    _tt_fg  = p["text"]
+    _tt_bdr = p["border"]
 
     _dark = mode == "dark"
 
@@ -448,14 +497,14 @@ QPushButton#primary:hover {{
     background: {_ctah};
 }}
 QPushButton#primary:pressed {{
-    background: {_dk('#2e68d8', '#1250a0')};
+    background: {_dk('#0060d0', '#0060c0')};
     padding-top: 7px;
     padding-bottom: 5px;
 }}
 QPushButton#primary:focus   {{ outline: none; }}
 QPushButton#primary:disabled {{
-    background: {_dk('#2a3050', '#c8d8f8')};
-    color: {_dk('#5070a0', '#7090d0')};
+    background: {_dk('#1c2a3a', '#c0d8f8')};
+    color: {_dk('#3a5878', '#6090c8')};
     border: none;
 }}
 
@@ -480,43 +529,43 @@ QPushButton#danger:disabled {{
 
 /* Domain: cold frame capture */
 QPushButton#cold_btn {{
-    background: {_dk('#001a33', '#e8f0ff')};
-    color: {_dk('#66aaff', '#2255bb')};
-    border: 1px solid {_dk('#3377cc', '#6688dd')};
+    background: {_dk('#001830', '#e0eeff')};
+    color: {_dk('#409cff', '#0060c0')};
+    border: 1px solid {_dk('#0a84ff55', '#007aff66')};
     border-radius: 6px;
     font-weight: 600;
     padding: 6px 14px;
 }}
 QPushButton#cold_btn:hover {{
-    background: {_dk('#002244', '#d8e8ff')};
-    border-color: {_dk('#4488dd', '#4477cc')};
+    background: {_dk('#002040', '#cce0ff')};
+    border-color: {_dk('#409cff', '#0060c0')};
 }}
 
 /* Domain: hot frame capture */
 QPushButton#hot_btn {{
-    background: {_dk('#331a00', '#fff4e0')};
+    background: {_dk('#2e1800', '#fff0d8')};
     color: {_warn};
-    border: 1px solid {_dk('#cc6600', '#c47d00')};
+    border: 1px solid {_dk('#ff9f0a55', '#ff950066')};
     border-radius: 6px;
     font-weight: 600;
     padding: 6px 14px;
 }}
 QPushButton#hot_btn:hover {{
-    background: {_dk('#442200', '#ffe8c0')};
-    border-color: {_dk('#dd7700', '#a86800')};
+    background: {_dk('#3e2000', '#ffe4b8')};
+    border-color: {_warn};
 }}
 
 /* Running / in-progress dynamic state */
 QPushButton[running="true"] {{
     background: {_dk('#2a1e00', '#fff4d0')};
-    color: {_dk('#f5a623', '#8b5a00')};
-    border: 2px solid {_dk('#f5a62366', '#c47d0066')};
+    color: {_dk('#ff9f0a', '#8b5200')};
+    border: 2px solid {_warn}55;
     border-radius: 6px;
     font-weight: 600;
     padding: 5px 13px;
 }}
 QPushButton[running="true"]#primary {{
-    background: {_dk('#0e1e44', '#d0e4f8')};
+    background: {_dk('#001830', '#d0e8ff')};
     color: {_cta};
     border: 2px solid {_cta}66;
     padding: 5px 15px;
@@ -555,9 +604,9 @@ QTextEdit:focus, QPlainTextEdit:focus {{ border-color: {_cta}; }}
 QTextEdit#console, QPlainTextEdit#console {{
     font-family: 'Menlo', 'Consolas', 'Courier New', monospace;
     font-size: {f['mono']}pt;
-    background: {_dk('#0d1018', '#f8f9fc')};
-    color: {_dk('#a8d8b0', '#1a4a20')};
-    border-color: {_dk('#1e2338', '#c0c6d8')};
+    background: {_dk('#0a0a0c', '#f5f5f7')};
+    color: {_dk('#30d158', '#1a4a20')};
+    border-color: {_bdr};
 }}
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -703,7 +752,7 @@ QGroupBox::title {{
     subcontrol-position: top left;
     padding: 0 6px;
     left: 10px;
-    background: {_bg};
+    background: transparent;
 }}
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -883,13 +932,13 @@ QSplitter::handle:vertical   {{ height: 5px; }}
    STATUS BAR & MENU BAR
 ════════════════════════════════════════════════════════════════════════════ */
 QStatusBar {{
-    background: {_s3};
+    background: {_s4};
     color: {_dim};
     font-size: {f['caption']}pt;
     border-top: 1px solid {_bdr};
 }}
 QMenuBar {{
-    background: {_s3};
+    background: {_s4};
     color: {_dim};
     border-bottom: 1px solid {_bdr};
     font-size: {f['body']}pt;
@@ -972,8 +1021,8 @@ def scaled_qss(qss: str) -> str:
 def btn_primary_qss() -> str:
     """Solid blue primary action button (Run, Save, Apply, Export…).
 
-    Uses the CTA blue role — visually distinct from the teal accent so
-    user-action buttons read immediately as interactive.
+    Uses the CTA blue role — Apple systemBlue — visually distinct from the
+    mint-teal accent so user-action buttons read immediately as interactive.
     """
     p, f = PALETTE, FONT
     cta  = p["cta"]
@@ -986,19 +1035,19 @@ def btn_primary_qss() -> str:
         font-size: {f['body']}pt; font-weight: 600;
     }}
     QPushButton:hover   {{ background: {ctah}; }}
-    QPushButton:pressed {{ background: {'#2e68d8' if dark else '#1250a0'};
+    QPushButton:pressed {{ background: {'#0060d0' if dark else '#0060c0'};
                            padding-top: 7px; padding-bottom: 5px; }}
-    QPushButton:disabled {{ background: {'#2a3050' if dark else '#c8d8f8'};
-                            color: {'#5070a0' if dark else '#7090d0'};
+    QPushButton:disabled {{ background: {'#1c2a3a' if dark else '#c0d8f8'};
+                            color: {'#3a5878' if dark else '#6090c8'};
                             border: none; }}
     """
 
 
 def btn_accent_qss() -> str:
-    """Ghost-teal accent button — for device/system confirmations.
+    """Ghost mint-teal accent button — for device/system confirmations.
 
     Use for actions that confirm a system state (Connect, Apply Calibration,
-    Start TEC) where the teal health-colour reinforces the action's meaning.
+    Start TEC) where the mint health-colour reinforces the action's meaning.
     Use ``btn_primary_qss()`` for the main user-action CTA instead.
     """
     p, f = PALETTE, FONT
@@ -1007,18 +1056,18 @@ def btn_accent_qss() -> str:
     dark = active_theme() == "dark"
     return f"""
     QPushButton {{
-        background: {'#003d2e' if dark else '#d4f3ed'};
+        background: {'#00332e' if dark else '#d0f5f0'};
         color: {acc}; border: 1px solid {acc};
         border-radius: 6px; padding: 6px 14px;
         font-size: {f['body']}pt; font-weight: 600;
     }}
-    QPushButton:hover   {{ background: {'#004d3a' if dark else '#c0ede4'};
+    QPushButton:hover   {{ background: {'#004038' if dark else '#b8ede6'};
                            color: {ahov}; border-color: {ahov}; }}
-    QPushButton:pressed {{ background: {'#002820' if dark else '#a8e4d8'};
+    QPushButton:pressed {{ background: {'#002018' if dark else '#98e0d8'};
                            padding-top: 7px; padding-bottom: 5px; }}
-    QPushButton:disabled {{ background: {'#1a2e28' if dark else '#e8f5f2'};
-                            color: {'#2a5040' if dark else '#80b8ae'};
-                            border-color: {'#1e3030' if dark else '#c0ddd8'}; }}
+    QPushButton:disabled {{ background: {'#1a2820' if dark else '#e8f5f2'};
+                            color: {'#2a4838' if dark else '#7ab8b0'};
+                            border-color: {'#1e2e28' if dark else '#b8d8d4'}; }}
     """
 
 

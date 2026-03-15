@@ -1008,7 +1008,9 @@ class StatusHeader(QWidget):
     def _apply_styles(self) -> None:
         """Re-apply all PALETTE-driven styles.  Called on theme change."""
         P     = PALETTE
-        bg    = P.get("surface",  "#2d2d2d")
+        # Header bar is the most elevated surface — use surface4 so it sits
+        # visually above both the sidebar (surface) and the workspace (bg).
+        bg    = P.get("surface4", "#3a3a3c")
         bdr   = P.get("border",   "#484848")
         dim   = P.get("textDim",  "#999999")
         sub   = P.get("textSub",  "#6a6a6a")

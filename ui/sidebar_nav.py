@@ -43,7 +43,7 @@ def _TEXT_DIM():   return PALETTE.get("textDim",     "#8892aa")
 def _TEXT_NORM():  return PALETTE.get("text",        "#dde3f2")
 def _TEXT_WHITE(): return PALETTE.get("text",        "#dde3f2")
 def _DIVIDER():    return PALETTE.get("border",      "#2e3245")
-def _HDR_BG():     return PALETTE.get("surface3",    "#252830")
+def _HDR_BG():     return PALETTE.get("surface4",    "#3a3a3c")
 
 # ── Sizes ──────────────────────────────────────────────────────────
 _ITEM_H    = 30    # menu row height
