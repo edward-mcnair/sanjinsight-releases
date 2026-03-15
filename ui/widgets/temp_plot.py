@@ -83,12 +83,16 @@ class TempPlot(QWidget):
         def tx(i): return int(pad + i/(self.HISTORY-1)*(W-2*pad))
         def ty(v): return int(H-pad-(v-lo)/span*(H-2*pad))
 
-        # Grid — pick a "nice" step that keeps labels from overlapping.
-        # Guarantee at least 20 px between labels (14 px font + 6 px gap).
-        _min_gap = 20
-        _max_lbl = max(2, (H - 2*pad) // _min_gap)
-        _raw     = span / _max_lbl
-        step = next((s for s in [1,2,5,10,20,50,100,200] if s >= _raw), int(_raw)+1)
+        # Grid — pick the smallest "nice" step where consecutive labels are
+        # at least 19 px apart (14 px font + 5 px gap).  Checking px/step
+        # directly avoids the float boundary bug where span=10.03 with
+        # max_labels=5 gives _raw=2.006, skipping step=2 → step=5 (3 lines).
+        _inner = H - 2 * pad
+        for step in [1, 2, 5, 10, 20, 50, 100, 200]:
+            if _inner * step / span >= 19:
+                break
+        else:
+            step = int(span) + 1
         t = (int(lo/step)-1)*step
         p.setFont(mono_font(11))
         while t <= hi+step:
