@@ -774,14 +774,18 @@ class MainWindow(QMainWindow):
         try:
             set_theme(effective)
             app.setStyleSheet(_bs(effective))
-            app.setPalette(build_qt_palette())
+            app.setPalette(build_qt_palette(effective))
+            style = app.style()
             for w in app.allWidgets():
+                style.unpolish(w)
+                style.polish(w)
                 if hasattr(w, "_apply_styles"):
                     w._apply_styles()
                 w.update()
             self._restyle_menu_bar()
         finally:
             self.setUpdatesEnabled(True)
+        app.processEvents()
 
     def apply_theme(self, mode: str) -> None:
         """Switch theme preference to 'auto', 'dark', or 'light'."""
