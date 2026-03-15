@@ -124,7 +124,7 @@ class TemperatureTab(QWidget):
         main.addLayout(top)
 
         # ── Plot ──────────────────────────────────────────────────────
-        plot = TempPlot(h=260)
+        plot = TempPlot(h=208)
         box._plot = plot
         main.addWidget(plot)
 
@@ -201,7 +201,7 @@ class TemperatureTab(QWidget):
         warn_spin.setValue(5.0)
         warn_spin.setSingleStep(0.5)
         warn_spin.setDecimals(1)
-        warn_spin.setFixedWidth(105)  # wide enough for "warn ±20.0 °C" on Windows
+        warn_spin.setMinimumWidth(120)  # wide enough for "warn ±20.0 °C" on Windows
         warn_spin.setPrefix("warn ±")
         warn_spin.setSuffix(" °C")
 
