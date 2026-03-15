@@ -47,12 +47,10 @@ class TempPlot(QWidget):
     def paintEvent(self, e):
         p = QPainter(self)
         W, H = self.width(), self.height()
-        # Keep pad proportional so the inner chart area never collapses.
-        # At the minimum height (80 px) a fixed pad=36 leaves only 8 px of
-        # drawable space — enough to compress both limit lines and labels
-        # into the same pixel row.  Capping at H//3 ensures there is always
-        # at least H//3 pixels of inner area on each side.
-        pad  = min(36, H // 3)
+        # Scale pad with H//5 so shorter charts (e.g. 166 px) don't waste
+        # nearly half their height on margins.  Floor at 20 px to keep limit
+        # line labels readable; ceiling at 36 px for tall charts.
+        pad = max(20, min(36, H // 5))
         p.fillRect(0, 0, W, H, QColor(13, 13, 13))
 
         vals = [v for v in list(self._actual)+list(self._target) if v is not None]
