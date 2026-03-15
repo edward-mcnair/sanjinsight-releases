@@ -185,6 +185,7 @@ class AcquireTab(QWidget):
         chips_lbl = QLabel("Quick tags:")
         chips_lbl.setObjectName("sublabel")
         chips_row.addWidget(chips_lbl)
+        self._chip_btns = []
         for chip_text in ["25°C", "dark room", "no bias", "after reflow",
                            "calibrated", "reference sample"]:
             btn = QPushButton(chip_text)
@@ -197,6 +198,7 @@ class AcquireTab(QWidget):
             btn.clicked.connect(
                 lambda _, t=chip_text: self._insert_notes_chip(t))
             chips_row.addWidget(btn)
+            self._chip_btns.append(btn)
         chips_row.addStretch()
         nl.addLayout(chips_row)
         left.addWidget(notes_box)
@@ -250,6 +252,15 @@ class AcquireTab(QWidget):
             self._notes_edit.setStyleSheet(
                 f"background:{bg}; color:{txt}; border:1px solid {bdr}; "
                 f"font-size:{FONT['body']}pt; font-family:Menlo,monospace;")
+        acc = P.get("accent",   "#00d4aa")
+        su2 = P.get("surface2", "#3d3d3d")
+        sur = P.get("surface",  "#2d2d2d")
+        for btn in getattr(self, "_chip_btns", []):
+            btn.setStyleSheet(
+                f"QPushButton {{ background:{su2}; color:{acc}; "
+                f"border:1px solid {acc}44; border-radius:10px; "
+                f"font-size:{FONT['sublabel']}pt; padding:0 8px; }}"
+                f"QPushButton:hover {{ background:{sur}; }}")
 
     def set_active_recipe_name(self, name: str | None) -> None:
         """Called by MainWindow when a recipe is applied to reflect its name."""
