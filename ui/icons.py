@@ -28,7 +28,7 @@ from __future__ import annotations
 class IC:
     """MDI icon name constants."""
     # Acquisition / workflow
-    LIVE          = "mdi.circle-medium"
+    LIVE          = "mdi.circle"
     CAPTURE       = "mdi.camera-plus-outline"
     SCAN_GRID     = "mdi.view-grid-outline"
     MOVIE         = "mdi.filmstrip"

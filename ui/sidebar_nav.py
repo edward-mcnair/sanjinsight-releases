@@ -179,9 +179,9 @@ class _MenuItem(QWidget):
             cache_key = (icon_name, icon_col.name())
             px = _pix_cache.get(cache_key)
             if px is None:
-                px = qta.icon(icon_name, color=icon_col.name()).pixmap(16, 16)
+                px = qta.icon(icon_name, color=icon_col.name()).pixmap(18, 18)
                 _pix_cache[cache_key] = px
-            p.drawPixmap(x + 1, (h - 16) // 2, px)
+            p.drawPixmap(x + 1, (h - 18) // 2, px)
         else:
             p.setFont(_sans_font(_FONT["label"]))
             p.setPen(icon_col)
@@ -286,9 +286,9 @@ class _CollapseHeader(QWidget):
             cache_key = (self._icon, col.name())
             px = _pix_cache.get(cache_key)
             if px is None:
-                px = qta.icon(self._icon, color=col.name()).pixmap(16, 16)
+                px = qta.icon(self._icon, color=col.name()).pixmap(18, 18)
                 _pix_cache[cache_key] = px
-            p.drawPixmap(19, (h - 16) // 2, px)
+            p.drawPixmap(19, (h - 18) // 2, px)
         else:
             p.setFont(_sans_font(_FONT["label"]))
             p.setPen(col)

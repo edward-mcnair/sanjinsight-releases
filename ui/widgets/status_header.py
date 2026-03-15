@@ -22,7 +22,7 @@ from PyQt5.QtCore    import Qt, QTimer, pyqtSignal
 
 import config as cfg_mod
 from ui.theme import FONT, PALETTE, scaled_qss, active_theme
-from ui.icons import IC, set_btn_icon, make_icon_label
+from ui.icons import IC, set_btn_icon, make_icon, make_icon_label
 
 
 # ── Device label lookup ───────────────────────────────────────────────────────
@@ -683,7 +683,7 @@ class OperatorButton(QWidget):
         lay.setContentsMargins(10, 0, 10, 0)
         lay.setSpacing(5)
 
-        self._icon_lbl  = make_icon_label(IC.USER, color=PALETTE.get("textDim", "#8892aa"), size=14)
+        self._icon_lbl  = make_icon_label(IC.USER, color=PALETTE.get("textDim", "#8892aa"), size=18)
         self._name_lbl  = QLabel("Operator")
         self._arrow_lbl = QLabel("▾")
 
@@ -806,8 +806,10 @@ class OperatorButton(QWidget):
                 background: {hover};
             }}
         """)
-        self._icon_lbl.setStyleSheet(
-            f"font-size:{FONT['body']}pt; background:transparent;")
+        _user_icon = make_icon(IC.USER, color=dim, size=18)
+        if _user_icon:
+            self._icon_lbl.setPixmap(_user_icon.pixmap(18, 18))
+        self._icon_lbl.setStyleSheet("background:transparent;")
         self._name_lbl.setStyleSheet(
             f"font-size:{FONT['label']}pt; font-weight:600; "
             f"color:{txt}; background:transparent;")
