@@ -124,7 +124,7 @@ class TemperatureTab(QWidget):
         main.addLayout(top)
 
         # ── Plot ──────────────────────────────────────────────────────
-        plot = TempPlot(h=130)
+        plot = TempPlot(h=260)
         box._plot = plot
         main.addWidget(plot)
 
@@ -159,10 +159,16 @@ class TemperatureTab(QWidget):
         dis_btn = QPushButton("Disable")
         box._en_btn  = en_btn
         box._dis_btn = dis_btn
-        en_btn.setFixedWidth(70)
-        dis_btn.setFixedWidth(70)
-        en_btn.setStyleSheet( "background:#003322; color:#00d4aa; border-color:#00d4aa;")
-        dis_btn.setStyleSheet("background:#330000; color:#ff6666; border-color:#ff4444;")
+        en_btn.setMinimumWidth(85)
+        dis_btn.setMinimumWidth(85)
+        en_btn.setStyleSheet(
+            "QPushButton { background:rgba(0,212,170,0.13); color:#00d4aa; "
+            "border:1px solid rgba(0,212,170,0.35); border-radius:4px; padding:0 8px; }"
+            "QPushButton:hover { background:rgba(0,212,170,0.22); }")
+        dis_btn.setStyleSheet(
+            "QPushButton { background:rgba(255,85,85,0.13); color:#ff5555; "
+            "border:1px solid rgba(255,85,85,0.35); border-radius:4px; padding:0 8px; }"
+            "QPushButton:hover { background:rgba(255,85,85,0.22); }")
         ctrl.addWidget(en_btn)
         ctrl.addWidget(dis_btn)
         main.addLayout(ctrl)
@@ -232,17 +238,28 @@ class TemperatureTab(QWidget):
         return box
 
     def _apply_styles(self) -> None:
-        P    = PALETTE
-        acc  = P.get("accent",  "#00d4aa")
-        dng  = P.get("danger",  "#ff5555")
-        sur  = P.get("surface", "#1a1d28")
+        P   = PALETTE
+        acc = P.get("accent", "#00d4aa")
+        dng = P.get("danger", "#ff5555")
+
+        def _rgb(h):
+            h = h.lstrip("#")
+            return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+
+        ar, ag, ab = _rgb(acc)
+        dr, dg, db = _rgb(dng)
+
         for panel in getattr(self, "_panels", []):
             if hasattr(panel, "_en_btn"):
                 panel._en_btn.setStyleSheet(
-                    f"background:{acc}22; color:{acc}; border-color:{acc}55;")
+                    f"QPushButton {{ background:rgba({ar},{ag},{ab},0.13); color:{acc}; "
+                    f"border:1px solid rgba({ar},{ag},{ab},0.35); border-radius:4px; padding:0 8px; }}"
+                    f"QPushButton:hover {{ background:rgba({ar},{ag},{ab},0.22); }}")
             if hasattr(panel, "_dis_btn"):
                 panel._dis_btn.setStyleSheet(
-                    f"background:{dng}22; color:{dng}; border-color:{dng}55;")
+                    f"QPushButton {{ background:rgba({dr},{dg},{db},0.13); color:{dng}; "
+                    f"border:1px solid rgba({dr},{dg},{db},0.35); border-radius:4px; padding:0 8px; }}"
+                    f"QPushButton:hover {{ background:rgba({dr},{dg},{db},0.22); }}")
 
     def _readout_widget(self, label, initial, color):
         w = QWidget()

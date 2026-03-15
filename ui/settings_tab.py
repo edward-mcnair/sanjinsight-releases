@@ -846,6 +846,10 @@ class SettingsTab(QWidget):
         if hasattr(self, "_about_btn"):
             self._about_btn.setStyleSheet(_BTN_SECONDARY())
 
+        # License group — Manage button
+        if hasattr(self, "_manage_license_btn"):
+            self._manage_license_btn.setStyleSheet(_BTN_PRIMARY())
+
     def _build_version_card(self) -> QWidget:
         card = QWidget()
         card.setStyleSheet(
@@ -2133,12 +2137,12 @@ class SettingsTab(QWidget):
         sr_lay.addWidget(self._lic_status_icon)
         sr_lay.addWidget(self._lic_status_label, 1)
 
-        manage_btn = QPushButton("Manage License…")
-        manage_btn.setStyleSheet(_BTN_PRIMARY())
-        manage_btn.setFixedHeight(30)
-        manage_btn.setToolTip("View license details or activate a new key")
-        manage_btn.clicked.connect(self._on_manage_license)
-        sr_lay.addWidget(manage_btn)
+        self._manage_license_btn = QPushButton("Manage License…")
+        self._manage_license_btn.setStyleSheet(_BTN_PRIMARY())
+        self._manage_license_btn.setFixedHeight(30)
+        self._manage_license_btn.setToolTip("View license details or activate a new key")
+        self._manage_license_btn.clicked.connect(self._on_manage_license)
+        sr_lay.addWidget(self._manage_license_btn)
 
         lay.addWidget(status_row)
 
