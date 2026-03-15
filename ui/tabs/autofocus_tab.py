@@ -40,10 +40,10 @@ class AutofocusTab(QWidget):
         # ---- Status row ----
         status_box = QGroupBox("Status")
         sl = QHBoxLayout(status_box)
-        self._state_w  = self._readout("STATE",     "IDLE",  "#555")
-        self._best_z_w = self._readout("BEST Z",    "--",    "#00d4aa")
-        self._score_w  = self._readout("SCORE",     "--",    "#ffaa44")
-        self._time_w   = self._readout("TIME",      "--",    "#6699ff")
+        self._state_w  = self._readout("STATE",     "IDLE",  "textSub")
+        self._best_z_w = self._readout("BEST Z",    "--",    "accent")
+        self._score_w  = self._readout("SCORE",     "--",    "warning")
+        self._time_w   = self._readout("TIME",      "--",    "cta")
         for w in [self._state_w, self._best_z_w,
                   self._score_w, self._time_w]:
             sl.addWidget(w)
@@ -160,10 +160,10 @@ class AutofocusTab(QWidget):
         # ---- Run controls ----
         ctrl = QHBoxLayout()
         self._run_btn   = QPushButton("Run Autofocus")
-        set_btn_icon(self._run_btn, "fa5s.play", "#00d4aa")
+        set_btn_icon(self._run_btn, "fa5s.play", PALETTE.get("accent", "#00d4aa"))
         self._run_btn.setObjectName("primary")
         self._abort_btn = QPushButton("Abort")
-        set_btn_icon(self._abort_btn, "fa5s.stop", "#ff6666")
+        set_btn_icon(self._abort_btn, "fa5s.stop", PALETTE.get("danger", "#ff453a"))
         self._abort_btn.setObjectName("danger")
         self._abort_btn.setEnabled(False)
         self._run_btn.setFixedWidth(150)
@@ -193,7 +193,8 @@ class AutofocusTab(QWidget):
 
     # ---------------------------------------------------------------- #
 
-    def _readout(self, label, initial, color):
+    def _readout(self, label, initial, pal_key):
+        """Create a readout widget.  pal_key is a PALETTE key (e.g. "accent")."""
         w = QWidget()
         v = QVBoxLayout(w)
         v.setAlignment(Qt.AlignCenter)
@@ -202,12 +203,23 @@ class AutofocusTab(QWidget):
         sub.setAlignment(Qt.AlignCenter)
         val = QLabel(initial)
         val.setAlignment(Qt.AlignCenter)
+        color = PALETTE.get(pal_key, "#00d4aa")
         val.setStyleSheet(
             f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:{color};")
         v.addWidget(sub)
         v.addWidget(val)
-        w._val = val
+        w._val      = val
+        w._pal_key  = pal_key
         return w
+
+    def _apply_styles(self):
+        """Re-apply PALETTE-driven colours on theme switch."""
+        for rw in (self._state_w, self._best_z_w, self._score_w, self._time_w):
+            color = PALETTE.get(rw._pal_key, "#00d4aa")
+            rw._val.setStyleSheet(
+                f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:{color};")
+        set_btn_icon(self._run_btn,   "fa5s.play", PALETTE.get("accent", "#00d4aa"))
+        set_btn_icon(self._abort_btn, "fa5s.stop", PALETTE.get("danger", "#ff453a"))
 
     def _sub(self, text):
         l = QLabel(text)

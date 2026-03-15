@@ -119,23 +119,31 @@ def _assemble_email(
 # ── Button style helpers ───────────────────────────────────────────────────────
 
 def _btn_primary_style() -> str:
-    b = FONT["body"]
+    b    = FONT["body"]
+    cta  = PALETTE.get("cta",      "#0a84ff")
+    ctah = PALETTE.get("ctaHover", "#409cff")
+    ctad = PALETTE.get("ctaDim",   "#0a84ff26")
     return (
-        f"QPushButton {{ background:#006b40; color:#fff; border:none; border-radius:4px; "
+        f"QPushButton {{ background:{cta}; color:#fff; border:none; border-radius:4px; "
         f"padding:5px 16px; font-size:{b}pt; font-weight:600; }}"
-        f"QPushButton:hover   {{ background:#008050; }}"
-        f"QPushButton:pressed {{ background:#005030; }}"
+        f"QPushButton:hover   {{ background:{ctah}; }}"
+        f"QPushButton:pressed {{ background:{cta}; }}"
+        f"QPushButton:disabled {{ background:{ctad}; color:#ffffff66; }}"
     )
 
 
 def _btn_secondary_style() -> str:
-    b = FONT["body"]
-    s, d, t = PALETTE["surface3"], PALETTE["border"], PALETTE["textDim"]
+    b  = FONT["body"]
+    s  = PALETTE.get("surface3",     "#333333")
+    sh = PALETTE.get("surfaceHover", "#404040")
+    d  = PALETTE.get("border",       "#484848")
+    t  = PALETTE.get("textDim",      "#999999")
+    tn = PALETTE.get("text",         "#ebebeb")
     return (
         f"QPushButton {{ background:{s}; color:{t}; border:1px solid {d}; "
         f"border-radius:4px; padding:5px 16px; font-size:{b}pt; }}"
-        f"QPushButton:hover   {{ background:#252525; color:{PALETTE['text']}; }}"
-        f"QPushButton:pressed {{ background:#111; }}"
+        f"QPushButton:hover   {{ background:{sh}; color:{tn}; }}"
+        f"QPushButton:pressed {{ background:{d}; }}"
     )
 
 

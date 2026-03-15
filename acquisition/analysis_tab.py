@@ -42,11 +42,11 @@ from .analysis import (ThermalAnalysisEngine, AnalysisConfig,
 class VerdictBanner(QWidget):
     """Large, colour-coded PASS / WARNING / FAIL indicator."""
 
-    # Only label + fg stored; bg/border are derived from PALETTE at runtime
+    # Label + PALETTE key stored; hex resolved at paint time so theme switching works
     STYLES = {
-        VERDICT_PASS:    ("PASS",    "#00d479"),
-        VERDICT_WARNING: ("WARNING", "#ffb300"),
-        VERDICT_FAIL:    ("FAIL",    "#ff3b3b"),
+        VERDICT_PASS:    ("PASS",    "success"),
+        VERDICT_WARNING: ("WARNING", "warning"),
+        VERDICT_FAIL:    ("FAIL",    "danger"),
     }
 
     def __init__(self):
@@ -74,27 +74,34 @@ class VerdictBanner(QWidget):
         ol.addWidget(self._icon)
         ol.addWidget(self._sub)
         lay.addWidget(self._outer)
+        self._current_verdict   = "NONE"
+        self._current_subtitle  = ""
         self._set("NONE", "")
 
     def _set(self, verdict: str, subtitle: str):
-        surf   = PALETTE.get('surface', '#2d2d2d')
-        bdr    = PALETTE.get('border',  '#484848')
+        self._current_verdict  = verdict
+        self._current_subtitle = subtitle
+        surf = PALETTE.get('surface', '#2d2d2d')
+        bdr  = PALETTE.get('border',  '#484848')
         if verdict == "NONE":
             fg     = PALETTE.get('textDim', '#999999')
-            bg     = surf
             border = bdr
         else:
-            _, fg = self.STYLES.get(verdict, ("—", PALETTE.get('textDim', '#999999')))
-            bg     = surf
+            _, pal_key = self.STYLES.get(verdict, ("—", "textDim"))
+            fg     = PALETTE.get(pal_key, PALETTE.get('textDim', '#999999'))
             border = fg + "55"   # semantic colour at ~33 % opacity
         self._outer.setStyleSheet(
-            f"background:{bg}; border:1px solid {border}; border-radius:4px;")
+            f"background:{surf}; border:1px solid {border}; border-radius:4px;")
         self._icon.setText(verdict if verdict != "NONE" else "—")
         self._icon.setStyleSheet(scaled_qss(
             f"font-size:36pt; font-weight:bold; "
             f"font-family:Menlo,monospace; color:{fg};"))
         self._sub.setText(subtitle)
         self._sub.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{fg}88;")
+
+    def _apply_styles(self):
+        """Re-render with current PALETTE — called on theme switch."""
+        self._set(self._current_verdict, self._current_subtitle)
 
     def update_verdict(self, result: AnalysisResult):
         n  = result.n_hotspots
@@ -124,10 +131,14 @@ class OverlayCanvas(QWidget):
         super().__init__()
         self.setMinimumSize(200, 150)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.setStyleSheet("background:#0d0d0d;")
         self.setMouseTracking(True)
+        self._apply_styles()
         self._pixmap = None
         self._result: Optional[AnalysisResult] = None
+
+    def _apply_styles(self):
+        bg = PALETTE.get('bg', '#242424')
+        self.setStyleSheet(f"background:{bg};")
 
     def update_result(self, result: AnalysisResult):
         self._result = result
@@ -147,9 +158,9 @@ class OverlayCanvas(QWidget):
 
     def paintEvent(self, e):
         p = QPainter(self)
-        p.fillRect(self.rect(), QColor(13, 13, 13))
+        p.fillRect(self.rect(), QColor(PALETTE.get('bg', '#242424')))
         if self._pixmap is None:
-            p.setPen(QColor(40, 40, 40))
+            p.setPen(QColor(PALETTE.get('border', '#484848')))
             p.setFont(sans_font(18))
             p.drawText(self.rect(), Qt.AlignCenter,
                        "No analysis result\n\nPress  ▶  Run Analysis")
@@ -199,6 +210,19 @@ class HotspotTable(QTableWidget):
         self.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.setAlternatingRowColors(True)
+        self._apply_styles()
+        hh = self.horizontalHeader()
+        hh.setSectionResizeMode(QHeaderView.ResizeToContents)
+        hh.setSectionResizeMode(1, QHeaderView.Stretch)
+        self.verticalHeader().setVisible(False)
+
+    # Severity → PALETTE key; hex resolved at call time so theme switching works
+    SEVERITY_COLORS = {
+        "fail":    "danger",
+        "warning": "warning",
+    }
+
+    def _apply_styles(self):
         self.setStyleSheet(f"""
             QTableWidget {{
                 background:{PALETTE.get('bg','#242424')}; alternate-background-color:{PALETTE.get('surface','#2d2d2d')};
@@ -212,16 +236,6 @@ class HotspotTable(QTableWidget):
                 font-size:{FONT['body']}pt; letter-spacing:1px;
             }}
         """)
-        hh = self.horizontalHeader()
-        hh.setSectionResizeMode(QHeaderView.ResizeToContents)
-        hh.setSectionResizeMode(1, QHeaderView.Stretch)
-        self.verticalHeader().setVisible(False)
-
-    # Only fg stored; bg is derived from PALETTE at runtime
-    SEVERITY_COLORS = {
-        "fail":    "#ff3b3b",
-        "warning": "#ffb300",
-    }
 
     def update_hotspots(self, hotspots: list):
         self.setRowCount(0)
@@ -230,7 +244,8 @@ class HotspotTable(QTableWidget):
         for h in hotspots:
             r = self.rowCount()
             self.insertRow(r)
-            fg = self.SEVERITY_COLORS.get(h.severity, _dim)
+            pal_key = self.SEVERITY_COLORS.get(h.severity, "")
+            fg = PALETTE.get(pal_key, _dim) if pal_key else _dim
             bg = _surf2
 
             def cell(text, align=Qt.AlignCenter):
@@ -411,6 +426,12 @@ class AnalysisTab(QWidget):
                         }}
                         QPushButton:hover {{ background:{sur}; }}
                     """)
+        if hasattr(self, "_banner"):
+            self._banner._apply_styles()
+        if hasattr(self, "_canvas"):
+            self._canvas._apply_styles()
+        if hasattr(self, "_table"):
+            self._table._apply_styles()
 
     def _build_toolbar(self) -> QWidget:
         bar = QWidget()

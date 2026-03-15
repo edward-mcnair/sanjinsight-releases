@@ -68,11 +68,11 @@ class BiasTab(QWidget):
         # Status readouts
         status_box = QGroupBox("Measured Output")
         sl = QHBoxLayout(status_box)
-        self._v_w      = self._readout("VOLTAGE",    "--",    "#00d4aa")
-        self._i_w      = self._readout("CURRENT",    "--",    "#ffaa44")
-        self._p_w      = self._readout("POWER",      "--",    "#6699ff")
-        self._comp_w   = self._readout("COMPLIANCE", "--",    "#888")
-        self._state_w  = self._readout("OUTPUT",     "OFF",   "#555")
+        self._v_w      = self._readout("VOLTAGE",    "--",    "accent")
+        self._i_w      = self._readout("CURRENT",    "--",    "warning")
+        self._p_w      = self._readout("POWER",      "--",    "cta")
+        self._comp_w   = self._readout("COMPLIANCE", "--",    "textDim")
+        self._state_w  = self._readout("OUTPUT",     "OFF",   "textSub")
         for w in [self._v_w, self._i_w, self._p_w,
                   self._comp_w, self._state_w]:
             sl.addWidget(w)
@@ -161,10 +161,10 @@ class BiasTab(QWidget):
         self._level_spin.setSingleStep(0.1)
         self._level_spin.setFixedWidth(120)
         self._level_unit = QLabel("V")
-        self._level_unit.setStyleSheet(f"color:#666; font-size:{FONT['body']}pt;")
+        self._level_unit.setStyleSheet(f"color:{PALETTE.get('textDim','#999999')}; font-size:{FONT['body']}pt;")
         self._level_indicator = QLabel("✓")
         self._level_indicator.setStyleSheet(
-            f"color:#00d4aa; font-size:{FONT['body']}pt; padding-left:6px;")
+            f"color:{PALETTE.get('accent','#00d4aa')}; font-size:{FONT['body']}pt; padding-left:6px;")
         level_row.addWidget(self._level_spin)
         level_row.addWidget(self._level_unit)
         level_row.addWidget(self._level_indicator)
@@ -207,7 +207,7 @@ class BiasTab(QWidget):
         self._comp_spin.setSingleStep(0.01)
         self._comp_spin.setFixedWidth(120)
         self._comp_unit = QLabel("A limit")
-        self._comp_unit.setStyleSheet(f"color:#666; font-size:{FONT['body']}pt;")
+        self._comp_unit.setStyleSheet(f"color:{PALETTE.get('textDim','#999999')}; font-size:{FONT['body']}pt;")
         comp_row.addWidget(self._comp_spin)
         comp_row.addWidget(self._comp_unit)
         comp_row.addStretch()
@@ -238,13 +238,16 @@ class BiasTab(QWidget):
         btn_row = QHBoxLayout()
         apply_btn  = QPushButton("Apply Settings")
         self._on_btn  = QPushButton("Output ON")
-        set_btn_icon(self._on_btn, "fa5s.circle", "#00d4aa")
+        set_btn_icon(self._on_btn, "fa5s.circle", PALETTE.get("accent", "#00d4aa"))
         self._off_btn = QPushButton("Output OFF")
-        set_btn_icon(self._off_btn, "fa5s.circle", "#555555")
+        set_btn_icon(self._off_btn, "fa5s.circle", PALETTE.get("textSub", "#6a6a6a"))
+        _acc  = PALETTE.get("accent",  "#00d4aa")
+        _dng  = PALETTE.get("danger",  "#ff453a")
+        _surf = PALETTE.get("surface", "#2d2d2d")
         self._on_btn.setStyleSheet(
-            "background:#003322; color:#00d4aa; border-color:#00d4aa; font-weight:bold;")
+            f"background:{_surf}; color:{_acc}; border-color:{_acc}; font-weight:bold;")
         self._off_btn.setStyleSheet(
-            "background:#330000; color:#ff6666; border-color:#ff4444; font-weight:bold;")
+            f"background:{_surf}; color:{_dng}; border-color:{_dng}; font-weight:bold;")
         for b in [apply_btn, self._on_btn, self._off_btn]:
             b.setFixedWidth(130)
             btn_row.addWidget(b)
@@ -276,12 +279,14 @@ class BiasTab(QWidget):
         lay.setAlignment(Qt.AlignCenter)
         lay.setSpacing(16)
 
-        icon_lbl = make_icon_label(IC.LINK_OFF, color="#555555", size=64)
+        icon_lbl = make_icon_label(IC.LINK_OFF, color=PALETTE.get("textSub", "#6a6a6a"), size=64)
         icon_lbl.setAlignment(Qt.AlignCenter)
 
         title_lbl = QLabel(f"{title} Not Connected")
         title_lbl.setAlignment(Qt.AlignCenter)
-        title_lbl.setStyleSheet(f"font-size: {FONT['readoutSm']}pt; font-weight: bold; color: #888;")
+        title_lbl.setStyleSheet(
+            f"font-size: {FONT['readoutSm']}pt; font-weight: bold; "
+            f"color: {PALETTE.get('textDim','#999999')};")
 
         tip_lbl = QLabel(tip)
         tip_lbl.setAlignment(Qt.AlignCenter)
@@ -292,10 +297,11 @@ class BiasTab(QWidget):
         btn = QPushButton("Open Device Manager")
         btn.setFixedWidth(200)
         btn.setFixedHeight(36)
+        _acc = PALETTE.get("accent", "#00d4aa")
         btn.setStyleSheet(f"""
             QPushButton {{
-                background: {PALETTE.get('surface','#2d2d2d')}; color: #00d4aa;
-                border: 1px solid #00d4aa66; border-radius: 5px;
+                background: {PALETTE.get('surface','#2d2d2d')}; color: {_acc};
+                border: 1px solid {_acc}66; border-radius: 5px;
                 font-size: {FONT['label']}pt; font-weight: 600;
             }}
             QPushButton:hover {{ background: {PALETTE.get('surface2','#3d3d3d')}; }}
@@ -317,7 +323,8 @@ class BiasTab(QWidget):
 
     # ---------------------------------------------------------------- #
 
-    def _readout(self, label, initial, color):
+    def _readout(self, label, initial, pal_key):
+        """Create a readout widget.  pal_key is a PALETTE key (e.g. "accent")."""
         w = QWidget()
         v = QVBoxLayout(w)
         v.setAlignment(Qt.AlignCenter)
@@ -326,12 +333,43 @@ class BiasTab(QWidget):
         sub.setAlignment(Qt.AlignCenter)
         val = QLabel(initial)
         val.setAlignment(Qt.AlignCenter)
+        color = PALETTE.get(pal_key, "#00d4aa")
         val.setStyleSheet(
             f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:{color};")
         v.addWidget(sub)
         v.addWidget(val)
-        w._val = val
+        w._val     = val
+        w._pal_key = pal_key
         return w
+
+    def _apply_styles(self):
+        """Re-apply PALETTE-driven colours on theme switch."""
+        # Readout value labels
+        for rw in (self._v_w, self._i_w, self._p_w, self._comp_w, self._state_w):
+            color = PALETTE.get(rw._pal_key, "#00d4aa")
+            rw._val.setStyleSheet(
+                f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:{color};")
+        # Unit / indicator labels
+        dim  = PALETTE.get("textDim",  "#999999")
+        acc  = PALETTE.get("accent",   "#00d4aa")
+        dng  = PALETTE.get("danger",   "#ff453a")
+        surf = PALETTE.get("surface",  "#2d2d2d")
+        if hasattr(self, "_level_unit"):
+            self._level_unit.setStyleSheet(f"color:{dim}; font-size:{FONT['body']}pt;")
+        if hasattr(self, "_comp_unit"):
+            self._comp_unit.setStyleSheet(f"color:{dim}; font-size:{FONT['body']}pt;")
+        # ON/OFF buttons
+        if hasattr(self, "_on_btn"):
+            set_btn_icon(self._on_btn,  "fa5s.circle", acc)
+            self._on_btn.setStyleSheet(
+                f"background:{surf}; color:{acc}; border-color:{acc}; font-weight:bold;")
+        if hasattr(self, "_off_btn"):
+            set_btn_icon(self._off_btn, "fa5s.circle", PALETTE.get("textSub", "#6a6a6a"))
+            self._off_btn.setStyleSheet(
+                f"background:{surf}; color:{dng}; border-color:{dng}; font-weight:bold;")
+        # Re-run level validation to update the indicator colour
+        if hasattr(self, "_level_spin"):
+            self._validate_level()
 
     def _sub(self, text):
         l = QLabel(text)
@@ -373,11 +411,11 @@ class BiasTab(QWidget):
         if valid:
             self._level_indicator.setText(f"\u2713 (within {limit_str})")
             self._level_indicator.setStyleSheet(
-                f"color:#00d4aa; font-size:{FONT['caption']}pt; padding-left:6px;")
+                f"color:{PALETTE.get('accent','#00d4aa')}; font-size:{FONT['caption']}pt; padding-left:6px;")
         else:
             self._level_indicator.setText(f"\u2717 exceeds {limit_str} limit")
             self._level_indicator.setStyleSheet(
-                f"color:#ff5555; font-size:{FONT['caption']}pt; padding-left:6px;")
+                f"color:{PALETTE.get('danger','#ff453a')}; font-size:{FONT['caption']}pt; padding-left:6px;")
 
     def _on_port_change(self):
         """Update level spinbox limits and VO EXT warning for the selected port."""

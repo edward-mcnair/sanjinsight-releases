@@ -31,25 +31,34 @@ _PT = FONT.get("body", 12)
 
 def _btn_primary(text: str) -> QPushButton:
     btn = QPushButton(text)
+    cta  = PALETTE.get("cta",      "#0a84ff")
+    ctah = PALETTE.get("ctaHover", "#409cff")
+    ctad = PALETTE.get("ctaDim",   "#0a84ff26")
+    pt   = FONT.get("body", 13)
     btn.setStyleSheet(
-        f"QPushButton {{ background:#006b40; color:#fff; border:none; "
-        f"border-radius:4px; padding:5px 16px; font-size:{_PT}pt; font-weight:600; }}"
-        f"QPushButton:hover   {{ background:#008050; }}"
-        f"QPushButton:pressed {{ background:#005030; }}"
-        f"QPushButton:disabled {{ background:#1e3a2a; color:#2a5040; }}"
+        f"QPushButton {{ background:{cta}; color:#fff; border:none; "
+        f"border-radius:4px; padding:5px 16px; font-size:{pt}pt; font-weight:600; }}"
+        f"QPushButton:hover   {{ background:{ctah}; }}"
+        f"QPushButton:pressed {{ background:{cta}; }}"
+        f"QPushButton:disabled {{ background:{ctad}; color:#ffffff66; }}"
     )
     return btn
 
 
 def _btn_secondary(text: str) -> QPushButton:
     btn = QPushButton(text)
-    s, d, t = PALETTE["surface3"], PALETTE["border"], PALETTE["textDim"]
+    s    = PALETTE.get("surface3",     "#333333")
+    sh   = PALETTE.get("surfaceHover", "#404040")
+    d    = PALETTE.get("border",       "#484848")
+    t    = PALETTE.get("textDim",      "#999999")
+    tn   = PALETTE.get("text",         "#ebebeb")
+    pt   = FONT.get("body", 13)
     btn.setStyleSheet(
         f"QPushButton {{ background:{s}; color:{t}; border:1px solid {d}; "
-        f"border-radius:4px; padding:5px 16px; font-size:{_PT}pt; }}"
-        f"QPushButton:hover   {{ background:#252525; color:{PALETTE['text']}; }}"
-        f"QPushButton:pressed {{ background:#111; }}"
-        f"QPushButton:disabled {{ color:#333; border-color:#222; }}"
+        f"border-radius:4px; padding:5px 16px; font-size:{pt}pt; }}"
+        f"QPushButton:hover   {{ background:{sh}; color:{tn}; }}"
+        f"QPushButton:pressed {{ background:{d}; }}"
+        f"QPushButton:disabled {{ color:{d}; border-color:{d}; }}"
     )
     return btn
 
@@ -239,7 +248,8 @@ class BundleDialog(QDialog):
     def _on_failed(self, msg: str) -> None:
         self._progress_bar.setVisible(False)
         self._status_lbl.setStyleSheet(
-            f"color:#ff6666; font-size:{FONT.get('label', 11)}pt;"
+            f"color:{PALETTE.get('danger', '#ff453a')}; "
+            f"font-size:{FONT.get('label', 11)}pt;"
         )
         self._status_lbl.setText(f"✗  Failed: {msg}")
         self._create_btn.setEnabled(True)
