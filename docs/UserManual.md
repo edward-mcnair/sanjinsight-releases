@@ -1,7 +1,7 @@
 # SanjINSIGHT User Manual
 
-**Microsanj SanjINSIGHT v1.2.9**
-**Document revision: 2026-03-14**
+**Microsanj SanjINSIGHT v1.3.0**
+**Document revision: 2026-03-15**
 
 ---
 
@@ -110,10 +110,10 @@ The application measures ΔR/R by alternating the device under test (DUT) betwee
 | Disk | 4 GB free | NVMe SSD with 50 GB free | SSD strongly recommended; AI model alone is 2–5 GB; large scan sessions can exceed 10 GB |
 | USB | USB 3.0 × 2 | USB 3.0 × 4 or more | One port per USB camera + additional ports for serial adapters (TEC, stage, turret) |
 | Network | 100 Mbps Ethernet | Gigabit Ethernet | Required if the FPGA chassis or camera connects over a network rather than USB |
-| GPU | Not required | NVIDIA RTX series, 8 GB VRAM+ | A dedicated NVIDIA GPU dramatically accelerates the AI Assistant (see note below) |
+| GPU | Not required | NVIDIA RTX 4070 (12 GB VRAM) minimum; RTX 4090 or RTX A6000 for large models | A dedicated NVIDIA GPU dramatically accelerates the AI Assistant (see note below) |
 | Display | 1920×1080 | 2560×1440, dual monitors | Dual monitors allow the live thermal map and analysis panels to be visible simultaneously |
 
-> **GPU and AI inference:** Without a dedicated GPU, the AI Assistant runs on the CPU at approximately 15–50 tokens/second (model dependent). An NVIDIA GPU with CUDA support raises this to 200–500+ tokens/second and enables larger, more capable models. The application runs fully without a GPU — only AI response speed is affected.
+> **GPU and AI inference:** Without a dedicated GPU, the AI Assistant runs on the CPU at approximately 15–50 tokens/second (model dependent). An NVIDIA GPU with CUDA support raises this to 200–500+ tokens/second and enables larger, more capable models (7B–13B parameter range). The application runs fully without a GPU — only AI response speed is affected. The RTX 4070 (12 GB VRAM) is the practical minimum for running larger models at useful speeds; the RTX 4090 or RTX A6000 are recommended for 70B-class models. GPU detection is automatic — no additional configuration is required.
 
 #### Will it run on an Intel NUC or mini-PC?
 
@@ -152,15 +152,17 @@ The SanjINSIGHT `.exe` installer is a self-contained bundle built with PyInstall
 
 #### Step 2 — Install NI hardware drivers
 
-The installer cannot bundle Windows kernel-level hardware drivers. Install these **before** launching SanjINSIGHT for the first time. Each installer requires a restart.
+The installer cannot bundle Windows kernel-level hardware drivers. Install these **before** launching SanjINSIGHT for the first time.
 
-| Driver | Required for | Download |
-|---|---|---|
-| **NI-RIO** | FPGA — NI 9637 | [ni.com → NI-RIO](https://www.ni.com/en/support/downloads/drivers/download.ni-rio.html) |
-| **NI Vision Acquisition Software** | Camera — NI IMAQdx | [ni.com → NI-VAS](https://www.ni.com/en/support/downloads/drivers/download.ni-vision-acquisition-software.html) |
-| **NI-VISA** | Bias source — Keithley (GPIB / USB / LAN) | [ni.com → NI-VISA](https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html) |
-| **Basler Pylon 8 SDK** | Basler TR camera | [baslerweb.com/downloads](https://www.baslerweb.com/en-us/downloads/software/) — includes the USB3 Vision driver and `pypylon` Python bindings |
-| *(none)* | Microsanj IR Camera (FLIR Boson) | The `flirpy` library is bundled with the SanjINSIGHT installer — no manual download required. Connect the camera via USB before launching. |
+> **Restart tip:** NI-RIO and NI Vision Acquisition Software both require a restart. You can install all three NI packages first and then restart once — you do not need to restart between each NI install. NI-VISA does not require a restart.
+
+| Driver | Required for | Restart | Download |
+|---|---|---|---|
+| **NI-RIO** | FPGA — NI 9637 | Yes | [ni.com → NI-RIO](https://www.ni.com/en/support/downloads/drivers/download.ni-rio.html) |
+| **NI Vision Acquisition Software** | Camera — NI IMAQdx | Yes | [ni.com → NI-VAS](https://www.ni.com/en/support/downloads/drivers/download.ni-vision-acquisition-software.html) |
+| **NI-VISA** | Bias source — Keithley (GPIB / USB / LAN) | No | [ni.com → NI-VISA](https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html) |
+| **Basler Pylon 8 SDK** | Basler TR camera | No | [baslerweb.com/downloads](https://www.baslerweb.com/en-us/downloads/software/) — includes the USB3 Vision driver and `pypylon` Python bindings |
+| **FLIR Spinnaker SDK** | Microsanj IR Camera | No | [flir.com/spinnaker-sdk](https://www.flir.com/products/spinnaker-sdk/) — after installing the SDK, also run `pip install spinnaker_python` (the wheel is included inside the Spinnaker package) |
 
 After installing the NI drivers, open **NI MAX** (Measurement & Automation Explorer) and verify:
 - The camera appears under **Devices and Interfaces** with the correct name (e.g. `cam4`).
@@ -194,16 +196,18 @@ The AI Assistant requires a local language model file (~2–5 GB, downloaded onc
 
 ```
 □ Run SanjINSIGHT-Setup.exe
-□ Install NI-RIO drivers + restart
-□ Install NI Vision Acquisition Software + restart
-□ Install NI-VISA
-□ Install Basler Pylon 8 SDK        (Basler TR camera systems only)
-□ (Microsanj IR Camera: no external SDK needed — flirpy is bundled)
+□ Install NI-RIO                               ← do NOT restart yet
+□ Install NI Vision Acquisition Software       ← do NOT restart yet
+□ Install NI-VISA                              ← no restart needed
+□ Restart PC once (satisfies NI-RIO + NI-VAS restart requirements)
+□ Install Basler Pylon 8 SDK                   (Basler TR camera systems only)
+□ Install FLIR Spinnaker SDK +
+    pip install spinnaker_python               (Microsanj IR camera systems only)
 □ Confirm camera + FPGA visible in NI MAX
 □ Copy FPGA bitfile → C:\Microsanj\firmware\ez500firmware.lvbitx
-□ Launch SanjINSIGHT → complete Admin Setup  (first launch only)
+□ Launch SanjINSIGHT → complete Admin Setup    (first launch only)
 □ Complete Hardware Setup Wizard
-□ Settings → AI Assistant → Download Model  (optional)
+□ Settings → AI Assistant → Download Model     (optional, ~2–5 GB)
 ```
 
 ### 2.4 Updates
@@ -254,7 +258,7 @@ Any user of any type can be granted **Administrator** privileges as an overlay. 
 
 ### 3.3 Page 1 — Welcome
 
-Displays a brief overview of the system and a **camera SDK prerequisites** notice. For Basler TR cameras, install the Basler Pylon 8 SDK before clicking Next. The Microsanj IR Camera (FLIR Boson) requires no external SDK — `flirpy` is bundled with the installer.
+Displays a brief overview of the system and a **camera SDK prerequisites** notice. For Basler TR cameras, install the Basler Pylon 8 SDK before clicking Next. For the Microsanj IR Camera, install the FLIR Spinnaker SDK and run `pip install spinnaker_python` before clicking Next — an amber notice with a download link is shown if the SDK is not detected.
 
 The scan status label updates as each hardware class is checked. Wait for "Scan complete — N devices found" before clicking **Next**, or click through immediately if you prefer to configure manually.
 
@@ -289,7 +293,7 @@ Two TEC controllers are supported independently.
 | NI Camera Name | Text field | NI IMAQdx only — e.g. `cam4` |
 
 > **pypylon** — Requires Basler Pylon 8 SDK. Supports the Basler acA1920-155um TR camera. If the SDK is not installed, an amber notice appears with a download link.
-> **Microsanj IR Camera** — Uses `flirpy`, which is bundled with the SanjINSIGHT installer. No external SDK needed. Click **Test Camera** to verify the camera is detected.
+> **Microsanj IR Camera** — Requires the FLIR Spinnaker SDK and `spinnaker_python` Python wheel (see Section 2.3, Step 2). If the SDK is not installed, an amber notice appears in the wizard with a direct download link. After installing, click **Test Camera** to verify the camera is detected.
 > **ni_imaqdx** — Requires NI Vision Acquisition Software. Camera name is shown in NI MAX.
 > **simulated** — Generates synthetic frames; no hardware needed.
 
@@ -1365,7 +1369,7 @@ All supervisor override events are logged to the audit log (Section 15.7).
 | NI Vision Acquisition Software | 2019 | Latest | Includes NI-IMAQdx |
 | NI-VISA | 19.0 | Latest | Required for GPIB instruments |
 | Basler Pylon SDK | 7.x | **8.x** | Pylon 8 recommended; pypylon 3.x ships with it |
-| `flirpy` | 0.2 | **Latest** | Bundled with SanjINSIGHT installer; controls the Microsanj IR Camera (FLIR Boson) via USB. No manual install required. |
+| FLIR Spinnaker SDK | 3.x | **Latest** | Required for the Microsanj IR Camera. Download from [flir.com/spinnaker-sdk](https://www.flir.com/products/spinnaker-sdk/). After installing, run `pip install spinnaker_python` (wheel is included inside the SDK package). |
 | Thorlabs Kinesis | 1.14 | Latest | Required for Thorlabs USB stages |
 | FTDI VCP Driver | 2.12 | Latest | Auto-installed by Windows Update on most systems |
 
@@ -1521,10 +1525,11 @@ logging:
 
 ### Microsanj IR camera not found
 
-- The `flirpy` library is bundled with SanjINSIGHT — no external SDK installation is required.
-- If the Device Manager shows "flirpy not found", the installer package may be corrupt: re-run `SanjINSIGHT-Setup.exe` to reinstall.
-- Check the USB connection; the camera enumerates as a UVC device. Ensure no other application (e.g. a video conference app) has exclusive access to the camera.
-- Run **Test Camera** in the Hardware Setup Wizard (Ctrl+Shift+H → Camera page) to confirm the camera is detected by the driver.
+- Ensure the **FLIR Spinnaker SDK** is installed: [flir.com/spinnaker-sdk](https://www.flir.com/products/spinnaker-sdk/). After installing the SDK, run `pip install spinnaker_python` (the wheel file ships inside the SDK package).
+- If the Device Manager shows "spinnaker_python not found", the `pip install` step was skipped — run it from a command prompt and then restart SanjINSIGHT.
+- Check the USB 3.0 connection; try a different port. The camera requires USB 3.0 (not USB 2.0) for reliable operation.
+- Ensure no other application (e.g. a video conference app) has exclusive access to the camera.
+- Run **Test Camera** in the Hardware Setup Wizard (Ctrl+Shift+H → Camera page) to confirm the camera is detected by the Spinnaker driver.
 
 ### NI IMAQdx camera not found
 

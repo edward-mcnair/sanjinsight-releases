@@ -14,7 +14,7 @@
 | **RAM** | 8 GB (16 GB with AI) | 32 GB |
 | **Disk** | 4 GB free | SSD, 50 GB free |
 | **USB** | USB 3.0 × 2 | USB 3.0 × 4 |
-| **GPU** | Not required | NVIDIA RTX (faster AI) |
+| **GPU** | Not required | NVIDIA RTX 4070+ (12 GB VRAM) |
 
 > **Windows version:** Press **Win+R** → type `winver` → press Enter. Build number must be **17763 or higher**.
 
@@ -42,7 +42,7 @@ The installer cannot bundle OS-level hardware drivers. Install these **before** 
 | **Basler Pylon 8 SDK** | Basler TR camera | [baslerweb.com/downloads](https://www.baslerweb.com/en-us/downloads/software/) |
 | **FLIR Spinnaker SDK** | Microsanj IR camera | [flir.com/spinnaker-sdk](https://www.flir.com/products/spinnaker-sdk/) — then `pip install spinnaker_python` (wheel ships inside the SDK package) |
 
-> **NI drivers** require a restart after each installer. Install all three, then restart once.
+> **NI drivers:** NI-RIO and NI Vision Acquisition Software both require a restart after installation; NI-VISA does not. You can install all three NI packages first and then restart once — you do not need to restart between each NI install.
 
 > **Camera SDKs** do not require a restart. Install both if you have both cameras. If you only have one camera type, install only the relevant SDK.
 
@@ -66,9 +66,10 @@ The AI Assistant requires a language model file (~2–5 GB). Go to **Settings �
 
 ```
 □ Run SanjINSIGHT-Setup.exe
-□ Install NI-RIO drivers + restart
-□ Install NI Vision Acquisition Software + restart
-□ Install NI-VISA
+□ Install NI-RIO                               ← do NOT restart yet
+□ Install NI Vision Acquisition Software       ← do NOT restart yet
+□ Install NI-VISA                              ← no restart needed
+□ Restart PC once (satisfies NI-RIO + NI-VAS restart requirements)
 □ Install Basler Pylon 8 SDK         (Basler TR camera systems only)
 □ Install FLIR Spinnaker SDK +
     pip install spinnaker_python      (Microsanj IR camera systems only)
