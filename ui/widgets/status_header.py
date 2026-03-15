@@ -950,7 +950,7 @@ class StatusHeader(QWidget):
         self._demo_banner = QPushButton("  Demo Mode  ✕  ")
         self._demo_banner.setObjectName("demoBanner")
         self._demo_banner.setVisible(False)
-        self._demo_banner.setFixedHeight(36)
+        self._demo_banner.setFixedHeight(30)
         self._demo_banner.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         self._demo_banner.setToolTip(
             "Running with simulated hardware — no instrument connected.\n"
@@ -962,7 +962,7 @@ class StatusHeader(QWidget):
         # ── Emergency Stop (always red — intentionally semantic) ──────
         lay.addSpacing(8)
         self._estop_btn = QPushButton("■  STOP")
-        self._estop_btn.setFixedHeight(36)
+        self._estop_btn.setFixedHeight(30)
         self._estop_btn.setMinimumWidth(90)
         self._estop_btn.setToolTip(
             "Emergency Stop — immediately disables bias output, "
