@@ -101,6 +101,10 @@ datas = [
     (os.path.join(_root, 'assets', 'microsanj-bug.svg'),        'assets'),
     (os.path.join(_root, 'assets', 'app-icon.png'),             'assets'),
     (os.path.join(_root, 'assets', 'app-icon.icns'),            'assets'),
+    # Demo images — loaded by hardware/cameras/simulated.py for realistic demo frames.
+    # Without these the simulated camera falls back to the parametric IC model.
+    (os.path.join(_root, 'assets', 'demo_background.png'),      'assets'),
+    (os.path.join(_root, 'assets', 'demo_signal.png'),          'assets'),
 
     # Documentation (read by ai/prompt_templates.py at runtime)
     *( [(os.path.join(_root, 'docs', 'QuickstartGuide.md'), 'docs'),

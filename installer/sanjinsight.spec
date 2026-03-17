@@ -178,6 +178,10 @@ datas = [
     (os.path.join(PROJECT_DIR, 'assets', 'app-icon.png'),              'assets'),
     (os.path.join(PROJECT_DIR, 'assets', 'app-icon.ico'),              'assets'),
     (os.path.join(PROJECT_DIR, 'assets', 'app-icon.icns'),             'assets'),
+    # Demo images — loaded by hardware/cameras/simulated.py for realistic demo frames.
+    # Without these the simulated camera falls back to the parametric IC model.
+    (os.path.join(PROJECT_DIR, 'assets', 'demo_background.png'),       'assets'),
+    (os.path.join(PROJECT_DIR, 'assets', 'demo_signal.png'),           'assets'),
 
     # ── Documentation (read at module-import time by ai/prompt_templates.py) ─
     # ai/prompt_templates.py resolves: Path(__file__).parent.parent / "docs"
