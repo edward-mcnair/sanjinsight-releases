@@ -1399,6 +1399,45 @@ class MainWindow(QMainWindow):
         dlg.license_changed.connect(self._settings_tab.refresh_license_status)
         dlg.exec_()
 
+    def _maybe_show_license_prompt(self):
+        """Show the first-run license activation prompt if appropriate.
+
+        Conditions that must ALL be true to show the prompt:
+          - Software is not in forced demo mode (--demo flag / app_state.demo_mode).
+          - License tier is UNLICENSED (no valid key stored).
+          - The user has never previously dismissed this prompt
+            (``ui.license_prompted`` pref is False / absent).
+
+        After the dialog closes — regardless of whether the user activated a
+        key or chose demo mode — the pref is set to True so the prompt never
+        reappears.  Users can always reach the full license dialog via
+        Help → License… or Settings → License.
+        """
+        import config as _cfg
+        from hardware.app_state import app_state as _app_state
+        from licensing.license_model import LicenseTier
+
+        # Skip if already running in deliberate demo mode
+        if _app_state.demo_mode:
+            return
+
+        # Skip if a valid license is already active
+        if _app_state.license_info.tier != LicenseTier.UNLICENSED:
+            return
+
+        # Skip if the user has already seen and dismissed this prompt
+        if _cfg.get_pref("ui.license_prompted", False):
+            return
+
+        from ui.license_prompt import LicenseActivationPrompt
+        dlg = LicenseActivationPrompt(parent=self)
+        dlg.license_activated.connect(self._load_license)
+        dlg.license_activated.connect(self._settings_tab.refresh_license_status)
+        dlg.exec_()   # blocks; accept() on success, reject() on demo choice
+
+        # Mark as shown regardless of outcome so it never fires again
+        _cfg.set_pref("ui.license_prompted", True)
+
     def _show_license_expiry_warning(self, info):
         """Show a one-time amber warning when the license expires within 30 days."""
         from PyQt5.QtWidgets import QMessageBox
@@ -2724,6 +2763,12 @@ if __name__ == "__main__":
     window.show()
     window._load_license()           # validate stored license key
     window._start_update_checker()   # background check, non-blocking
+
+    # Show the first-run license prompt after the window has settled.
+    # QTimer.singleShot ensures the event loop is running and all startup
+    # dialogs (Device Manager, autosave recovery) have had a chance to appear
+    # first.  The prompt is a no-op on subsequent launches (pref guard inside).
+    QTimer.singleShot(600, window._maybe_show_license_prompt)
 
     # ── Autosave recovery check ──────────────────────────────────────
     try:
