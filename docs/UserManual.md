@@ -186,13 +186,17 @@ C:\Microsanj\firmware\ez500firmware.lvbitx
 
 Create the folder if it does not exist. The Hardware Setup Wizard will prompt for this path.
 
-#### Step 4 — Launch and complete the Hardware Setup Wizard
+#### Step 4 — Launch, complete the Hardware Setup Wizard, and activate your license
 
-Launch **SanjINSIGHT** from the Start Menu or Desktop shortcut. The Hardware Setup Wizard opens automatically on the first run (see Section 3 for full details). The wizard guides you through:
-- TEC controller COM ports
-- Camera driver and name
-- FPGA resource string and bitfile path
-- Bias source VISA address
+Launch **SanjINSIGHT** from the Start Menu or Desktop shortcut. The first launch proceeds through three automatic steps:
+
+1. **Admin Setup** — create the administrator account (one-time only).
+2. **Hardware Setup Wizard** — configure TEC, camera, FPGA, bias source, stage, and optionally the AI model (see Section 3 for full details).
+3. **License Activation prompt** — after the wizard closes, a dialog appears asking you to activate your license key or continue in demo mode:
+   - **Activate License** — paste the key supplied by Microsanj and click **Activate License**. The key is validated immediately; the application unlocks full hardware access on success.
+   - **Continue in Demo Mode** — dismiss the prompt and run with simulated hardware. You can activate a license at any time via **Help → License…** or **Settings → License**.
+
+> The license prompt appears only once. If you skip it, the application runs in demo mode until a key is entered manually.
 
 #### Step 5 — Download the AI model (optional)
 
@@ -213,6 +217,7 @@ The AI Assistant requires a local language model file (~2–5 GB, downloaded onc
 □ Copy FPGA bitfile → C:\Microsanj\firmware\ez500firmware.lvbitx
 □ Launch SanjINSIGHT → complete Admin Setup    (first launch only)
 □ Complete Hardware Setup Wizard
+□ Activate license key (or choose Continue in Demo Mode)
 □ Settings → AI Assistant → Download Model     (optional, ~2–5 GB)
 ```
 
@@ -356,6 +361,8 @@ Review a summary of all configured devices. Click **Finish** to write `config.ya
 The wizard can be re-opened at any time via **Help → Hardware Setup…** (Ctrl+Shift+H).
 
 > **Skip Setup:** A **Skip Setup** button at the bottom-left of each wizard page closes the wizard without saving changes, using the existing `config.yaml` (or defaults on a fresh install).
+
+> **License Activation:** Immediately after the wizard closes on a fresh install, the **License Activation** prompt appears (see Section 18.7). You can activate your key there or choose **Continue in Demo Mode** and activate later.
 
 ---
 
@@ -1281,10 +1288,23 @@ Embeds the full user management table. See Section 19.4 for details.
 
 ### 18.7 License
 
+#### First-run License Activation prompt
+
+On a fresh installation (or whenever no valid license key is stored), SanjINSIGHT shows the **License Activation** prompt automatically after the Hardware Setup Wizard closes. The prompt appears only once; subsequent launches skip it entirely.
+
+| Button | Action |
+|---|---|
+| **Activate License** | Paste your Microsanj license key and click to validate. The key is checked immediately — on success the application unlocks full hardware access and the dialog closes. |
+| **Continue in Demo Mode** | Dismiss the prompt permanently. The application runs in demo mode (simulated hardware) until a key is entered manually. |
+
+> If activation fails, an inline error message is shown. Double-check the key or contact support@microsanj.com. You can try again without closing the dialog.
+
+#### License settings
+
 | Element | Description |
 |---|---|
-| **Status** | Shows licence type and expiry if applicable |
-| **Manage license** | Enter or transfer a licence key |
+| **Status** | Shows the current license tier, licensed name, and expiry date if applicable. Amber if expiring within 30 days. |
+| **Manage license** | Open the full License dialog to enter a new key or remove the current one. Removing a key reverts the application to demo mode. |
 
 ### 18.8 Support
 

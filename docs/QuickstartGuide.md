@@ -89,9 +89,12 @@ The very first time SanjINSIGHT starts, the **Admin Setup** screen appears. This
 
 1. Enter a display name, username, and password (confirmed twice).
 2. Click **Create Account**. The account is created and you are logged in automatically.
-3. The Hardware Setup Wizard opens immediately after.
+3. The **Hardware Setup Wizard** opens immediately after.
+4. When the wizard closes, the **License Activation** prompt appears:
+   - **Activate License** — paste the key supplied by Microsanj and click **Activate License**. The application unlocks full hardware access on success.
+   - **Continue in Demo Mode** — skip activation and run with simulated hardware. You can enter a key at any time via **Help → License…**
 
-> You only see this screen once, on a fresh installation. After the admin account exists, subsequent launches go straight to the Hardware Setup Wizard (or the login screen if login is required).
+> You only see the Admin Setup screen once. You only see the License Activation prompt once — on the first launch without a stored key.
 
 ### Hardware Setup Wizard
 
