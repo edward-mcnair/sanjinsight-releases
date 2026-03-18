@@ -11,6 +11,90 @@ Run:  python3 main_app.py
 
 from __future__ import annotations
 
+# ── Pre-boot crash guard ──────────────────────────────────────────────────────
+# MUST stay at the top of this file — before every other import.
+#
+# On Windows with console=False (the production installer build), any exception
+# that occurs before the Qt window appears is completely invisible: the process
+# simply vanishes with no window, no log, and no error dialog.
+#
+# This block installs a sys.excepthook using ONLY stdlib (so it works even if
+# PyQt5, numpy, or any bundled package fails to import).  On a crash it:
+#   1. Writes a timestamped crash report to ~/.microsanj/logs/startup_crash.txt
+#   2. Shows a native Windows MessageBox via ctypes (no Qt required)
+#   3. Exits with code 1
+#
+# The handler is later superseded by the richer Qt-aware hook installed inside
+# main(), so this is purely the "before Qt exists" safety net.
+# ─────────────────────────────────────────────────────────────────────────────
+import sys    as _sys_boot
+import os     as _os_boot
+import time   as _time_boot
+import traceback as _tb_boot
+
+_BOOT_LOG_DIR  = _os_boot.path.join(_os_boot.path.expanduser("~"), ".microsanj", "logs")
+_BOOT_CRASH    = _os_boot.path.join(_BOOT_LOG_DIR, "startup_crash.txt")
+
+
+def _write_crash_report(msg: str) -> None:
+    """Write crash details to disk — uses only stdlib, never raises."""
+    try:
+        _os_boot.makedirs(_BOOT_LOG_DIR, exist_ok=True)
+        with open(_BOOT_CRASH, "a", encoding="utf-8") as _fh:
+            _fh.write(
+                f"\n{'='*60}\n"
+                f"SanjINSIGHT startup crash\n"
+                f"Time    : {_time_boot.strftime('%Y-%m-%d %H:%M:%S')}\n"
+                f"Python  : {_sys_boot.version}\n"
+                f"Platform: {_sys_boot.platform}\n"
+                f"Exe     : {getattr(_sys_boot, 'executable', '?')}\n"
+                f"{'='*60}\n"
+                f"{msg}\n"
+            )
+    except Exception:
+        pass  # If we can't write the file there's nothing more we can do
+
+
+def _pre_boot_excepthook(exc_type, exc_value, exc_tb) -> None:
+    """Global exception handler active from the very first import onward."""
+    msg = "".join(_tb_boot.format_exception(exc_type, exc_value, exc_tb))
+    _write_crash_report(msg)
+
+    # Native Windows message box — works with no Qt, no console
+    if _sys_boot.platform == "win32":
+        try:
+            import ctypes as _ctypes
+            _ctypes.windll.user32.MessageBoxW(
+                0,
+                (
+                    f"SanjINSIGHT could not start.\n\n"
+                    f"Error: {exc_type.__name__}: {exc_value}\n\n"
+                    f"A full crash report has been saved to:\n"
+                    f"{_BOOT_CRASH}\n\n"
+                    f"Please send this file to Microsanj support."
+                ),
+                "SanjINSIGHT — Startup Error",
+                0x10,   # MB_ICONERROR
+            )
+        except Exception:
+            pass
+
+    _sys_boot.exit(1)
+
+
+_sys_boot.excepthook = _pre_boot_excepthook
+
+# Write a startup-attempt marker so support knows the app was launched.
+# This line is overwritten / appended on each launch; a crash report
+# appearing after a "=== STARTED ===" line confirms the app did reach
+# Python startup (as opposed to a missing DLL caught by Windows before
+# Python runs at all).
+_write_crash_report(
+    f"=== STARTED === {_time_boot.strftime('%Y-%m-%d %H:%M:%S')}  "
+    f"argv={_sys_boot.argv}"
+)
+# ─────────────────────────────────────────────────────────────────────────────
+
 import sys
 import os
 import re
@@ -2769,6 +2853,13 @@ if __name__ == "__main__":
     # dialogs (Device Manager, autosave recovery) have had a chance to appear
     # first.  The prompt is a no-op on subsequent launches (pref guard inside).
     QTimer.singleShot(600, window._maybe_show_license_prompt)
+
+    # Mark startup as complete in the crash-report file so support knows
+    # the app reached the event loop successfully.
+    _write_crash_report(
+        f"=== STARTUP COMPLETE === {_time_boot.strftime('%Y-%m-%d %H:%M:%S')}  "
+        f"demo={_FORCE_DEMO}"
+    )
 
     # ── Autosave recovery check ──────────────────────────────────────
     try:
