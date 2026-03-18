@@ -105,6 +105,15 @@ hidden_imports = [
     'serial.tools.list_ports',
     'serial.tools.list_ports_windows',
 
+    # ── Licensing ─────────────────────────────────────────────────────
+    # Imported lazily (inside methods) in main_app.py and ui/license_prompt.py
+    # so PyInstaller's static analysis may miss them.  Listing explicitly
+    # ensures the entire package is bundled — a missing licensing module
+    # at runtime would crash silently on Windows (console=False).
+    'licensing',
+    'licensing.license_model',
+    'licensing.license_validator',
+
     # ── AI assistant — llama-cpp-python (optional, graceful if missing) ──
     # These are imported conditionally in ai/model_runner.py.
     # PyInstaller needs them listed here so they are bundled when present.

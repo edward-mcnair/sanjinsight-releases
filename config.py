@@ -253,7 +253,29 @@ def reload(path: str = None) -> None:
 import json
 from pathlib import Path as _Path
 
-_PREFS_PATH = _Path.home() / ".microsanj" / "preferences.json"
+def _prefs_path() -> _Path:
+    """Return the preferences file path, falling back safely on network homes.
+
+    Path.home() can raise RuntimeError on Windows machines where the user
+    profile directory is unreachable (network-mapped homes, locked-down
+    enterprise environments, or certain AppData-redirect policies).  A
+    failure here would crash the whole config module before logging exists.
+    """
+    try:
+        return _Path.home() / ".microsanj" / "preferences.json"
+    except Exception:
+        # Fall back to %LOCALAPPDATA% or %TEMP% — always available on Windows
+        import os as _os
+        fallback = (
+            _os.environ.get("LOCALAPPDATA")
+            or _os.environ.get("APPDATA")
+            or _os.environ.get("TEMP")
+            or "."
+        )
+        return _Path(fallback) / "Microsanj" / "preferences.json"
+
+
+_PREFS_PATH = _prefs_path()
 _prefs: dict = {}
 _prefs_log = logging.getLogger(__name__ + ".prefs")
 

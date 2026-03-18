@@ -37,7 +37,27 @@ _BOOT_CRASH    = _os_boot.path.join(_BOOT_LOG_DIR, "startup_crash.txt")
 
 
 def _write_crash_report(msg: str) -> None:
-    """Write crash details to disk — uses only stdlib, never raises."""
+    """Write crash details to the crash file and, if available, the log.
+
+    Uses only stdlib for the file write so it works even when PyQt5 and
+    the rotating log handler have not yet been set up.  Never raises.
+    """
+    # Route through the logging system when it is already configured
+    # (i.e. after logging_config.setup() has run inside __main__).
+    try:
+        import logging as _logging_boot
+        _root_log = _logging_boot.getLogger()
+        if _root_log.handlers:
+            _root_log.critical("STARTUP CRASH: %s", msg)
+            for _lh in _root_log.handlers:
+                try:
+                    _lh.flush()
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+    # Always write to the dedicated crash file — works before any logging setup
     try:
         _os_boot.makedirs(_BOOT_LOG_DIR, exist_ok=True)
         with open(_BOOT_CRASH, "a", encoding="utf-8") as _fh:
@@ -2562,6 +2582,59 @@ if __name__ == "__main__":
             pass
 
     _sys.excepthook = _qt_exception_hook
+
+    # ── Background-thread exception hook ──────────────────────────────
+    # threading.excepthook (Python 3.8+) is called when a daemon or worker
+    # thread raises an unhandled exception.  Without this, every crash in
+    # HardwareService threads, scan workers, or autosave threads is silently
+    # swallowed — not even the pre-boot hook sees them, because the pre-boot
+    # hook only covers the main thread.
+    import threading as _threading
+
+    def _thread_excepthook(args: "_threading.ExceptHookArgs") -> None:
+        if args.exc_type is SystemExit:
+            return  # normal thread shutdown — not an error
+        msg = "".join(_tb.format_exception(
+            args.exc_type, args.exc_value, args.exc_tb))
+        full = f"Unhandled exception in thread '{args.thread.name}':\n{msg}"
+        _crash_log.critical(full)
+        for _h in logging.getLogger().handlers:
+            try:
+                _h.flush()
+            except Exception:
+                pass
+        # Also write to the pre-boot crash file so field support finds it
+        # even if the rotating log hasn't been retrieved yet.
+        _write_crash_report(
+            f"THREAD CRASH [{args.thread.name}]\n{msg}"
+        )
+
+    _threading.excepthook = _thread_excepthook
+
+    # ── Unraisable exception hook ──────────────────────────────────────
+    # sys.unraisablehook (Python 3.8+) catches exceptions that Python cannot
+    # raise normally — typically thrown by __del__ destructors and C-extension
+    # finalizers during garbage collection.  PyQt5 triggers these on shutdown
+    # when signal/slot connections are cleaned up after the Qt event loop ends.
+    # Without this hook they are printed to stderr (invisible on Windows with
+    # console=False) or dropped entirely.
+    def _unraisable_hook(unraisable) -> None:
+        msg = (
+            f"Unraisable exception in {unraisable.object!r}:\n"
+            + "".join(_tb.format_exception(
+                unraisable.exc_type,
+                unraisable.exc_value,
+                unraisable.exc_traceback,
+            ))
+        )
+        _crash_log.error("sys.unraisablehook: %s", msg)
+        for _h in logging.getLogger().handlers:
+            try:
+                _h.flush()
+            except Exception:
+                pass
+
+    _sys.unraisablehook = _unraisable_hook
 
     # ── Determine launch mode ─────────────────────────────────────────
     # Demo mode activates when:
