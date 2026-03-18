@@ -454,37 +454,40 @@ class DeviceManager:
             "ip":      entry.ip_address or desc.default_ip,
         }
 
-        try:
-            if dtype == DTYPE_CAMERA:
-                from hardware.cameras import create_camera
-                return create_camera(cfg)
-            elif dtype == DTYPE_TEC:
-                from hardware.tec import create_tec
-                return create_tec(cfg)
-            elif dtype == DTYPE_FPGA:
-                from hardware.fpga import create_fpga
-                return create_fpga(cfg)
-            elif dtype == DTYPE_STAGE:
-                from hardware.stage import create_stage
-                return create_stage(cfg)
-            elif dtype == DTYPE_PROBER:
-                # Prober uses the stage factory with the mpi_prober driver key
-                from hardware.stage import create_stage
-                cfg_prober = dict(cfg, driver="mpi_prober")
-                return create_stage(cfg_prober)
-            elif dtype == DTYPE_TURRET:
-                from hardware.turret.factory import create_turret
-                return create_turret(cfg)
-            elif dtype == DTYPE_BIAS:
-                from hardware.bias import create_bias
-                return create_bias(cfg)
-            elif dtype == DTYPE_LDD:
-                from hardware.ldd.factory import create_ldd
-                return create_ldd(cfg)
-            else:
-                raise ValueError(f"No factory for device type: {dtype}")
-        except Exception:
-            # Try hot-loading a custom driver module if present
+        # Known device types use their dedicated factory functions.
+        # Exceptions from these factories are real errors — propagate them
+        # directly so the caller sees the actual cause (e.g. "pypylon SDK
+        # mismatch") rather than a confusing "driver module not found" message
+        # from _load_custom_driver.
+        if dtype == DTYPE_CAMERA:
+            from hardware.cameras import create_camera
+            return create_camera(cfg)
+        elif dtype == DTYPE_TEC:
+            from hardware.tec import create_tec
+            return create_tec(cfg)
+        elif dtype == DTYPE_FPGA:
+            from hardware.fpga import create_fpga
+            return create_fpga(cfg)
+        elif dtype == DTYPE_STAGE:
+            from hardware.stage import create_stage
+            return create_stage(cfg)
+        elif dtype == DTYPE_PROBER:
+            # Prober uses the stage factory with the mpi_prober driver key
+            from hardware.stage import create_stage
+            cfg_prober = dict(cfg, driver="mpi_prober")
+            return create_stage(cfg_prober)
+        elif dtype == DTYPE_TURRET:
+            from hardware.turret.factory import create_turret
+            return create_turret(cfg)
+        elif dtype == DTYPE_BIAS:
+            from hardware.bias import create_bias
+            return create_bias(cfg)
+        elif dtype == DTYPE_LDD:
+            from hardware.ldd.factory import create_ldd
+            return create_ldd(cfg)
+        else:
+            # Unknown type — try a hot-loaded custom driver from
+            # ~/.microsanj/drivers/<module>.py before giving up.
             return self._load_custom_driver(desc, cfg)
 
     def _driver_key(self, desc: DeviceDescriptor) -> str:

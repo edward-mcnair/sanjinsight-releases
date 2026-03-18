@@ -29,16 +29,82 @@ class PylonDriver(CameraDriver):
 
     @classmethod
     def preflight(cls) -> tuple:
+        """
+        Validate that pypylon is importable AND that the Pylon SDK it links
+        against is present and compatible.
+
+        A bare ``import pypylon.pylon`` succeeds even when the installed Pylon
+        SDK version doesn't match the pypylon wheel, because the Python import
+        only loads the pure-Python layer.  The mismatch only surfaces when the
+        first GenICam call (TlFactory.GetInstance) tries to load the SDK DLLs.
+        On Windows that causes a hard process crash — no Python exception, no
+        log output, nothing.
+
+        This preflight makes that call deliberately, while we are still on the
+        DM connect thread where exceptions (not crashes) are catchable, so any
+        SDK problem surfaces as a user-visible error instead of a silent kill.
+        """
         issues = []
+
+        # ── Step 1: can we import pypylon at all? ────────────────────────────
         try:
-            import pypylon.pylon  # noqa: F401
+            from pypylon import pylon as _pylon  # noqa: F401
         except ImportError:
             issues.append(
-                "pypylon not found — Basler camera support is not bundled.\n"
-                "Try reinstalling SanjINSIGHT.  If the problem persists, "
-                "contact Microsanj support."
+                "pypylon package not found.\n"
+                "Reinstall SanjINSIGHT — pypylon is bundled with the installer.\n"
+                "If the problem persists, contact Microsanj support."
             )
-        return (len(issues) == 0, issues)
+            return (False, issues)
+        except Exception as e:
+            issues.append(
+                f"pypylon failed to import: {e}\n"
+                "This usually means the Basler Pylon SDK DLLs are missing or "
+                "the installation is corrupt.  Reinstall the Basler Pylon SDK "
+                "(https://www.baslerweb.com) and then reinstall SanjINSIGHT."
+            )
+            return (False, issues)
+
+        # ── Step 2: probe TlFactory to catch SDK version mismatches ─────────
+        # This is the call that hard-crashes the process on a version mismatch.
+        # Running it here (still inside a try/except) means a mismatch surfaces
+        # as a Python RuntimeError rather than an unrecoverable native crash.
+        try:
+            from pypylon import pylon as _pylon
+            _factory = _pylon.TlFactory.GetInstance()
+        except Exception as e:
+            sdk_hint = (
+                "Version mismatch: the pypylon wheel was built against a "
+                "different Pylon SDK than what is installed.\n\n"
+                "Fix: uninstall the current Pylon SDK, install Pylon SDK 8.x "
+                "from https://www.baslerweb.com, then reinstall SanjINSIGHT "
+                "so pypylon is rebuilt against the correct SDK."
+            )
+            issues.append(
+                f"Pylon SDK initialisation failed: {e}\n\n{sdk_hint}"
+            )
+            return (False, issues)
+
+        # ── Step 3: confirm at least one camera is visible to the SDK ────────
+        try:
+            from pypylon import pylon as _pylon
+            _factory = _pylon.TlFactory.GetInstance()
+            _devices = _factory.EnumerateDevices()
+            if not _devices:
+                issues.append(
+                    "No Basler cameras found by the Pylon SDK.\n"
+                    "Check that the camera is powered and the USB/GigE cable "
+                    "is connected, then click Connect again.\n"
+                    "(The Basler Pylon Viewer can confirm the camera is "
+                    "visible at the OS level.)"
+                )
+                return (False, issues)
+        except Exception as e:
+            # EnumerateDevices failure is non-fatal at preflight — the open()
+            # call will give a clearer error with device-specific context.
+            log.warning("pypylon preflight EnumerateDevices warning: %s", e)
+
+        return (True, issues)
 
     def __init__(self, cfg: dict):
         super().__init__(cfg)
