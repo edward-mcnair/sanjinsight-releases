@@ -1,6 +1,6 @@
 # SanjINSIGHT — Developer Guide
 
-**Version**: 1.3.0
+**Version**: 1.4.0
 **Platform**: Windows 10/11 (64-bit); macOS/Linux supported for development
 **Stack**: Python 3.11 · PyQt5 · NumPy · PyInstaller · Inno Setup
 **Repository**: Private source (`edward-mcnair/sanjinsight`) · Public releases (`edward-mcnair/sanjinsight-releases`)
@@ -111,6 +111,7 @@ sanjinsight/
 │   └── movie_pipeline.py      ← Burst-mode high-speed capture
 │
 ├── ui/                        ← Qt5 UI components
+│   ├── charts.py              ← PyQtGraph chart widgets (calibration, analysis, transient, sessions)
 │   ├── app_signals.py         ← AppSignals singleton (application-wide Qt signals)
 │   ├── sidebar_nav.py         ← Collapsible sidebar navigation (Advanced mode)
 │   ├── wizard.py              ← Guided workflow wizard (Standard mode)
@@ -750,6 +751,46 @@ _AMBER      = "#f0a500"
 _RED        = "#e05252"
 _GREEN      = "#4caf50"
 ```
+
+### 6.7 Charts (`ui/charts.py`)
+
+All interactive data charts are in the `ui/charts` module backed by **PyQtGraph** (`pyqtgraph>=0.13.3`). The module is designed for graceful degradation: if PyQtGraph is not installed, every widget falls back to a plain `QLabel` placeholder without crashing.
+
+**Availability guard:**
+
+```python
+try:
+    import pyqtgraph as pg
+    pg.setConfigOption("antialias", True)
+    _PG_OK = True
+except ImportError:
+    pg = None
+    _PG_OK = False
+
+_PlotBase = pg.PlotWidget if _PG_OK else QWidget
+```
+
+**Available widgets:**
+
+| Class | Location | Description |
+|---|---|---|
+| `CalibrationQualityChart` | Calibration tab → Quality ✦ | R² histogram + C_T histogram + curve scatter |
+| `AnalysisHistogramChart` | Analysis panel | ΔT pixel distribution with threshold line |
+| `TransientTraceChart` | Transient tab | Time-resolved waveform with cursor line |
+| `SessionTrendChart` | Sessions panel | SNR and TEC temperature over saved sessions |
+| `dTSparklineWidget` | Main window (below content) | Rolling 2-minute dT stability strip |
+
+**PALETTE integration:**
+
+Each chart calls `_configure_plot(pw)` in `_apply_styles()`, which sets `pw.setBackground(PALETTE["bg"])`, axis pen colours, and grid alpha from the live `PALETTE` dict. Call `_apply_styles()` on each chart widget from `MainWindow._swap_visual_theme()` to re-theme on dark/light switch.
+
+**Adding a new chart:**
+
+1. Subclass `QWidget` (not `_PlotBase`); create internal `StyledPlotWidget` or `pg.PlotWidget` instances as children.
+2. Implement `update_data(result)` with a duck-typed `result` argument.
+3. Implement `_apply_styles()` that re-calls `_configure_plot()` on every internal plot.
+4. Guard all `pg.*` usage with `if not _PG_OK: return`.
+5. Add a `clear()` method that resets all plot items to empty datasets.
 
 ---
 
@@ -1637,6 +1678,9 @@ Tabs should **never block** the user from viewing data — they should hide or d
 | **SQLite for user DB** | Zero server dependency; stdlib `sqlite3`; works air-gapped |
 | **JSON Lines for audit log** | Human-readable, grep-able, append-only; matches existing `timeline.jsonl` pattern |
 | **FLIR driver key stays `"flir"` internally** | User-facing label is "Microsanj IR Camera" via QComboBox userData; `config.yaml` key unchanged for backwards compatibility |
+| **PyQtGraph for interactive charts** | Native QWidget, no web engine, OpenGL-accelerated, real-time capable; degrades gracefully to a `QLabel` placeholder when not installed. Chosen over matplotlib (slow redraws in Qt), Qt Charts (GPL, separate install), and Plotly/Bokeh (require Chromium). |
+| **`_PG_OK` flag + conditional base class** | `_PlotBase = pg.PlotWidget if _PG_OK else QWidget` evaluated once at import; all chart classes inherit from it. `pg.PlotWidget` is only referenced when PyQtGraph is available, so `import ui.charts` never crashes on a system without it. |
+| **`_CmdSignals.finished` + `_active_cmd_signals` set** | `setAutoDelete(False)` on `_CmdRunnable` + a strong Python reference held in the parent widget's `_active_cmd_signals` set until `finished` fires. Prevents the common PyQt5 pitfall where a `QObject` signal carrier is garbage-collected before its queued cross-thread delivery reaches the main thread. |
 
 ---
 
@@ -1648,6 +1692,7 @@ PyQt5-sip>=12.12       PyQt5 C extension
 numpy>=1.24            Numerical arrays (all image data)
 scipy>=1.10            Signal processing, linear regression
 matplotlib>=3.7        Plots (temperature, focus, histograms)
+pyqtgraph>=0.13.3      Interactive real-time charts (calibration, analysis, transient, sessions)
 Pillow>=10.0           Image processing, thumbnail generation
 pyyaml>=6.0            config.yaml parsing
 pyserial>=3.5          Serial port enumeration and communication

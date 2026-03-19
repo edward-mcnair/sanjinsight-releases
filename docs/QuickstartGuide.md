@@ -1,6 +1,6 @@
 # SanjINSIGHT — Quick Start Guide
 
-**Microsanj SanjINSIGHT v1.3.0**
+**Microsanj SanjINSIGHT v1.4.0**
 *Get from first launch to your first thermoreflectance measurement in minutes.*
 
 ---
@@ -215,7 +215,10 @@ AutoScan is the guided, single-screen workflow for new users and routine measure
    - **IR Std** (85–115 °C) — 7-point sweep for IR camera calibration
 3. Set **Avg frames/step** (20) and **Max settle time** (30 s). The estimated run time updates live below the preset buttons.
 4. Click **▶ Run Calibration**. The TEC steps through each temperature; the app waits for stability before capturing.
-5. Review the **C_T Map** and **R² Map**. High R² (close to 1.0, white) = reliable pixels.
+5. Review the result tabs:
+   - **C_T Map** — spatial distribution of the thermoreflectance coefficient.
+   - **R² Map** — fit quality per pixel (close to 1.0, white = reliable).
+   - **Quality ✦** — interactive chart panel showing R² and C_T histograms plus the calibration curve scatter plot and linear fit. A tight, linear scatter with high R² values (green bars) indicates a high-quality calibration.
 6. Click **💾 Save .cal** then **✓ Apply to Acquisitions** to enable ΔT display across all tabs.
 
 ### G — Compare Sessions

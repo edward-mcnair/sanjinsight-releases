@@ -10,6 +10,34 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.4.0] — 2026-03-19
+
+### Added
+
+- **Interactive chart suite** (`ui/charts.py` — new module) — five PyQtGraph-based chart widgets with full PALETTE theming and graceful fallback to placeholder labels when PyQtGraph is not installed:
+  - **`CalibrationQualityChart`** — three-panel chart in a new "Quality ✦" tab on the Calibration screen: R² histogram (green / amber / red bars by value), C_T coefficient histogram (×10⁻⁴ scale), and calibration curve scatter + linear fit. Wired to `CalibrationResult` via `update_data()`.
+  - **`AnalysisHistogramChart`** — dT pixel-distribution histogram with a vertical threshold line and a pass/fail verdict annotation; embedded in the Analysis tab between the summary stats and the hotspot table.
+  - **`TransientTraceChart`** — replaces the old QPainter-based `TransientCurve`; renders time-resolved waveforms with a draggable cursor line and zero-baseline rule. API-compatible (`update_data(values, times_s, cursor_idx)`) — no call-site changes required.
+  - **`SessionTrendChart`** — linked-axis scatter chart showing SNR (dB) and TEC temperature per saved session over time; embedded in the Sessions panel right column. Updates on every `_refresh()`.
+  - **`dTSparklineWidget`** — rolling 2-minute dT stability strip using a `collections.deque` buffer; time axis is "seconds ago" so the window always shows relative recency. Auto-appears in the main window the first time TEC data arrives.
+- **`CalibrationResult` curve data fields** — `temps_c: Optional[np.ndarray]` and `mean_signals: Optional[np.ndarray]` added to the `CalibrationResult` dataclass. Both are `Optional` so existing `.cal` files load without migration. `Calibration.fit()` now computes per-step spatial-mean ΔR/R and populates these fields for use by `CalibrationQualityChart`.
+- **`pyqtgraph>=0.13.3`** added to `requirements.txt` and both PyInstaller specs (`installer/sanjinsight.spec`, `installer/sanjinsight_mac.spec`).
+
+### Changed
+
+- **`TransientCurve` replaced by `TransientTraceChart`** — `acquisition/transient_tab.py` now imports `TransientTraceChart` from `ui/charts`. The public API is identical so no external callers are affected.
+
+### Fixed
+
+- **Monochromator command lifetime hazard** (`ui/tabs/wavelength_tab.py`) — `_CmdRunnable` previously used `setAutoDelete(True)` with a `_CmdSignals` QObject stored as a member. If the Python wrapper was garbage-collected before a queued cross-thread signal reached the main thread, the slot was silently dropped. Fixed by: (1) switching to `setAutoDelete(False)` with Python ref-counting managing lifetime; (2) adding a `finished = pyqtSignal()` to `_CmdSignals` that fires unconditionally at the end of `run()`; (3) storing a strong reference to the `signals` object in `WavelengthTab._active_cmd_signals` until `finished` fires.
+- **`_restore()` closure crash on widget close** (`ui/tabs/wavelength_tab.py`) — the 3-second timer that restores normal styles after a command error captured `self` strongly. If the `WavelengthTab` was destroyed before the timer fired, `self._apply_styles()` on the deleted C++ object crashed. Fixed by passing `self` as the context argument to `QTimer.singleShot(3000, self, _restore)` — PyQt5 auto-cancels the callback if the context object is deleted.
+- **Compare A vs B `AttributeError`** (`acquisition/data_tab.py`) — `_run_compare()` accessed `ma.label` and `mb.label` without checking that both `get_meta()` calls returned non-`None`. If a session was deleted between setting the compare slot and clicking Compare, the access crashed. Added `if ma is not None and mb is not None:` guard.
+- **DPI scaling in measurement strip** (`ui/widgets/measurement_strip.py`) — all QPainter layout constants (`_STRIP_HEIGHT`, `_MARGIN`, `_SUB_GAP`, `_CELL_GAP`, `_DIV_H_INSET`) now pass through a new `_s(px)` helper that multiplies by `_DPI_SCALE` from `ui.theme`, ensuring correct proportions on HiDPI / Retina displays.
+- **Tag registry corruption recovery** (`acquisition/metadata.py`) — `get_registry()` previously propagated a `json.JSONDecodeError` from a corrupt or truncated `tag_registry.json`. Now wraps the load in `try/except`; on failure the corrupt file is renamed to `tag_registry.json.bak` and a fresh empty registry is written, preventing a startup crash.
+- **Session schema forward-version warning** (`acquisition/session.py`) — loading a session written by a newer build of SanjINSIGHT now emits a `WARNING`-level log message naming the file path and the schema version mismatch instead of silently ignoring unknown fields.
+
+---
+
 ## [1.3.0] — 2026-03-14
 
 ### Added

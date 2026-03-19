@@ -17,9 +17,9 @@ Versioning scheme: Semantic Versioning  MAJOR.MINOR.PATCH
 """
 
 # ── Version number ────────────────────────────────────────────────────────────
-__version__    = "1.3.0"
-VERSION_TUPLE  = (1, 3, 0)          # for numeric comparisons
-BUILD_DATE     = "2026-03-14"       # set by CI/CD on release; update manually otherwise
+__version__    = "1.4.0"
+VERSION_TUPLE  = (1, 4, 0)          # for numeric comparisons
+BUILD_DATE     = "2026-03-19"       # set by CI/CD on release; update manually otherwise
 
 # ── Application identity ──────────────────────────────────────────────────────
 APP_NAME       = "SanjINSIGHT"

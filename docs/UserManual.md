@@ -1,7 +1,7 @@
 # SanjINSIGHT User Manual
 
-**Microsanj SanjINSIGHT v1.3.0**
-**Document revision: 2026-03-15**
+**Microsanj SanjINSIGHT v1.4.0**
+**Document revision: 2026-03-19**
 
 ---
 
@@ -18,20 +18,22 @@
 9. [Capture — Grid Scan](#9-capture--grid-scan)
 10. [Transient Capture](#10-transient-capture)
 11. [Calibration](#11-calibration)
-12. [Hardware Panels](#12-hardware-panels)
-13. [AI Assistant](#13-ai-assistant)
-14. [Compare Sessions](#14-compare-sessions)
-15. [3D Surface](#15-3d-surface)
-16. [Saving and Exporting Data](#16-saving-and-exporting-data)
-17. [Device Manager](#17-device-manager)
-18. [Settings](#18-settings)
-19. [User Accounts & Roles](#19-user-accounts--roles)
-20. [Operator Mode](#20-operator-mode)
-21. [Supported Hardware](#21-supported-hardware)
-22. [Configuration File Reference](#22-configuration-file-reference)
-23. [Keyboard Shortcuts](#23-keyboard-shortcuts)
-24. [Troubleshooting](#24-troubleshooting)
-25. [Technical Reference](#25-technical-reference)
+12. [Analysis Panel](#12-analysis-panel)
+13. [Sessions Panel](#13-sessions-panel)
+14. [Hardware Panels](#14-hardware-panels)
+15. [AI Assistant](#15-ai-assistant)
+16. [Compare Sessions](#16-compare-sessions)
+17. [3D Surface](#17-3d-surface)
+18. [Saving and Exporting Data](#18-saving-and-exporting-data)
+19. [Device Manager](#19-device-manager)
+20. [Settings](#20-settings)
+21. [User Accounts & Roles](#21-user-accounts--roles)
+22. [Operator Mode](#22-operator-mode)
+23. [Supported Hardware](#23-supported-hardware)
+24. [Configuration File Reference](#24-configuration-file-reference)
+25. [Keyboard Shortcuts](#25-keyboard-shortcuts)
+26. [Troubleshooting](#26-troubleshooting)
+27. [Technical Reference](#27-technical-reference)
 
 ---
 
@@ -362,7 +364,7 @@ The wizard can be re-opened at any time via **Help → Hardware Setup…** (Ctrl
 
 > **Skip Setup:** A **Skip Setup** button at the bottom-left of each wizard page closes the wizard without saving changes, using the existing `config.yaml` (or defaults on a fresh install).
 
-> **License Activation:** Immediately after the wizard closes on a fresh install, the **License Activation** prompt appears (see Section 18.7). You can activate your key there or choose **Continue in Demo Mode** and activate later.
+> **License Activation:** Immediately after the wizard closes on a fresh install, the **License Activation** prompt appears (see Section 20.7). You can activate your key there or choose **Continue in Demo Mode** and activate later.
 
 ---
 
@@ -814,7 +816,7 @@ Captures a rapid burst of ΔR/R frames to record a thermal transient as it evolv
 
 The output is a sequence of ΔR/R frames exportable as an image stack (TIFF) or NumPy array.
 
-> **20 mA Range Mode:** For IR camera FA and Movie mode, the bias source 20 mA limit must be unchecked (see §12.2 Stimulus → Bias Source sub-tab). Verify the DUT thermal budget before exceeding 20 mA.
+> **20 mA Range Mode:** For IR camera FA and Movie mode, the bias source 20 mA limit must be unchecked (see §14.2 Stimulus → Bias Source sub-tab). Verify the DUT thermal budget before exceeding 20 mA.
 
 ---
 
@@ -889,6 +891,7 @@ Or build a custom sequence:
 | **C_T Map** | Thermoreflectance coefficient per pixel. Diverging blue–red colormap. |
 | **R² Map** | Coefficient of determination per pixel (0–1). White = perfect linear fit; black = poor fit. |
 | **Residual Map** | RMS residual of the linear fit per pixel. Lower = better fit quality. |
+| **Quality ✦** | Interactive chart panel — see §11.5 below. |
 
 **Calibration File (Group Box)**
 
@@ -926,9 +929,130 @@ Click ▶ Run Calibration
   ✓ Apply to Acquisitions
 ```
 
+### 11.5 Calibration Quality Chart (Quality ✦ tab)
+
+The **Quality ✦** tab provides three interactive charts for assessing calibration reliability at a glance:
+
+**R² Histogram**
+
+Bars show the distribution of R² values across all valid pixels, coloured by quality:
+
+| Bar colour | R² range | Meaning |
+|---|---|---|
+| Green | ≥ 0.95 | Excellent fit — reliable ΔT data |
+| Amber | 0.80 – 0.95 | Acceptable; minor noise |
+| Red | < 0.80 | Poor fit — consider masking these pixels or recalibrating |
+
+A good calibration shows the majority of bars in the green region.
+
+**C_T Histogram**
+
+Shows the spread of thermoreflectance coefficient values across the imaged area (displayed in units of ×10⁻⁴ K⁻¹). A narrow, symmetric peak centred on the expected material value indicates uniform optical contact and consistent heating. A wide or bimodal distribution may indicate contamination, shadowing, or mixed materials in the field of view.
+
+**Calibration Curve**
+
+Scatter plot of mean ΔR/R (spatial average across all pixels, per temperature step) versus set temperature. The fitted linear trendline is overlaid. A tight linear scatter with low residuals confirms the assumed ΔR/R = C_T × ΔT model is valid for this sample. Significant nonlinearity or step-to-step scatter suggests: TEC not fully settled, sample drift, or illumination instability.
+
+> **Tip:** All three charts update automatically when a calibration finishes or a `.cal` file is loaded.
+
 ---
 
-## 12. Hardware Panels
+## 12. Analysis Panel
+
+### 12.1 Overview
+
+The **Analysis** panel (ANALYZE → Analysis, shortcut **Ctrl+5**) provides post-acquisition hotspot detection and statistical analysis. It receives data automatically after every acquisition (AutoScan, Capture, or Grid Scan) or can be loaded manually via the **Send to Analysis** button on any result panel.
+
+### 12.2 Controls
+
+| Control | Description |
+|---|---|
+| **Threshold (K)** | Temperature rise above which a pixel is classified as a hotspot. Only meaningful when a calibration is applied and a ΔT map is available. |
+| **▶ Run Analysis** (F8) | Executes the hotspot detection pipeline on the current result map. |
+| **■ Clear** | Clears the current analysis result. |
+
+### 12.3 Verdict Banner
+
+After analysis completes, a colour-coded verdict banner appears at the top of the panel:
+
+| Colour | Verdict | Meaning |
+|---|---|---|
+| Green | **PASS** | No pixels exceed the hotspot threshold |
+| Red | **FAIL** | One or more pixels exceed the threshold |
+| Amber | **REVIEW** | Analysis incomplete or threshold not set |
+
+### 12.4 Summary Statistics
+
+| Statistic | Description |
+|---|---|
+| **Max ΔT** | Peak temperature rise (°C) in the analysed region |
+| **Hotspot count** | Number of spatially connected hotspot regions above threshold |
+| **Mean ΔT** | Area-weighted mean temperature rise |
+| **SNR** | Signal-to-noise ratio of the ΔR/R map (dB) |
+| **Dark pixel fraction** | Fraction of pixels excluded due to insufficient illumination |
+
+### 12.5 ΔT Histogram Chart
+
+An interactive histogram chart is embedded below the summary statistics. It shows the distribution of temperature rise values across all pixels in the analysed area:
+
+- **Bars** — binned pixel count at each ΔT value
+- **Threshold line** — vertical red dashed line at the configured threshold temperature
+- **Verdict annotation** — PASS or FAIL label in the chart area
+
+The histogram makes it easy to see whether hotspot pixels represent a narrow spike above background or a broad elevated tail, which informs whether the threshold is set appropriately.
+
+> **Tip:** A FAIL result with only a tiny number of pixels above the threshold line may indicate a noisy pixel rather than a true device hotspot. Inspect the spatial map before concluding.
+
+### 12.6 Hotspot Table
+
+Below the histogram, a table lists each detected hotspot region with its peak ΔT, area (pixels), and centroid coordinates (x, y). Click any row to highlight the corresponding region on the map.
+
+---
+
+## 13. Sessions Panel
+
+### 13.1 Overview
+
+The **Sessions** panel (ANALYZE → Sessions) provides a searchable, card-based browser for all saved acquisition sessions stored in `~/.microsanj/sessions/`. Each session appears as a card showing its label, timestamp, thumbnail, PASS/FAIL badge, and key metrics.
+
+### 13.2 Session Cards
+
+Each card shows:
+- **Thumbnail** — false-colour preview of the ΔR/R map (or blank if no data was saved)
+- **Label** — editable name, shown in bold
+- **Timestamp** — date and time the session was saved
+- **Verdict badge** — PASS / FAIL / — colour chip
+- **SNR** and **ΔT peak** metrics if available
+
+Click a card to select it; double-click to open it in the Analysis panel.
+
+### 13.3 Session Trend Chart
+
+A **Session Trend** chart in the right column plots measurement metrics across all sessions in chronological order:
+
+- **Top panel** — SNR (dB) per session as a scatter plot. Green points = high quality; amber = moderate; red = low SNR.
+- **Bottom panel** — TEC temperature (°C) at acquisition time, where available.
+
+Both panels share a linked x-axis, so panning or zooming one panel moves the other in sync. The trend chart updates automatically whenever sessions are added, removed, or refreshed.
+
+**Reading the trend chart:**
+- A gradual downward trend in SNR over many sessions can indicate drift in illumination power, alignment, or camera noise floor.
+- A sudden SNR drop on a specific session suggests a one-off event (vibration, illumination interruption, sample movement).
+- TEC temperature variation visible in the bottom panel that correlates with SNR variation in the top panel suggests the calibration may need to be updated.
+
+### 13.4 Session Actions
+
+| Button | Action |
+|---|---|
+| **Open** | Load the session's ΔR/R and ΔT arrays into the Analysis panel |
+| **Set A / Set B** | Mark this session as comparison input A or B |
+| **Compare A vs B** | Open the Compare panel with sessions A and B loaded |
+| **Export** | Export session data in TIFF, HDF5, NumPy, or PDF format |
+| **Delete** | Permanently remove the session folder from disk *(confirmation required)* |
+
+---
+
+## 14. Hardware Panels
 
 All hardware panels are located in the collapsible **Hardware** group in the left sidebar. Each entry may contain multiple sub-tabs.
 
@@ -1040,7 +1164,7 @@ The **Prober** panel appears in the Hardware group when a supported probe statio
 
 ---
 
-## 13. AI Assistant
+## 15. AI Assistant
 
 ### 13.1 Overview
 
@@ -1112,7 +1236,7 @@ A compact readiness banner appears at the top of the Acquire tab independently o
 
 ---
 
-## 14. Compare Sessions
+## 16. Compare Sessions
 
 ### 14.1 Overview
 
@@ -1130,7 +1254,7 @@ A statistics bar below the maps shows Min, Max, Mean, Std, and SNR for each sess
 
 ---
 
-## 15. 3D Surface
+## 17. 3D Surface
 
 ### 15.1 Overview
 
@@ -1155,7 +1279,7 @@ To manually load a different dataset, use **Send to Analysis** from the AutoScan
 
 ---
 
-## 16. Saving and Exporting Data
+## 18. Saving and Exporting Data
 
 ### 16.1 Session Storage
 
@@ -1197,7 +1321,7 @@ Load a calibration with **📂 Load .cal** in the Calibration panel, then click 
 
 ---
 
-## 17. Device Manager
+## 19. Device Manager
 
 Open with **⚙** (top bar) or **Ctrl+D**.
 
@@ -1218,7 +1342,7 @@ The Device Manager shows the current connection state and driver details for eac
 
 ---
 
-## 18. Settings
+## 20. Settings
 
 Open with **Help → Settings** or **Ctrl+,**. The Settings panel is organised into collapsible sections.
 
@@ -1244,7 +1368,7 @@ Open with **Help → Settings** or **Ctrl+,**. The Settings panel is organised i
 
 ### 18.4 Users *(admin-only)*
 
-Embeds the full user management table. See Section 19.4 for details.
+Embeds the full user management table. See Section 21.4 for details.
 
 ### 18.5 Updates
 
@@ -1315,7 +1439,7 @@ On a fresh installation (or whenever no valid license key is stored), SanjINSIGH
 
 ---
 
-## 19. User Accounts & Roles
+## 21. User Accounts & Roles
 
 ### 19.1 Overview
 
@@ -1334,7 +1458,7 @@ Three user types map the natural roles in a lab or production environment. Each 
 
 **Administrator** is a privilege overlay — any user type can be granted admin rights. Admin does not change how the instrument AI talks to the user; it adds access to user management and global settings.
 
-> **Technician users** always land in the Operator Shell after login — a simplified interface designed for repeatably running approved scan profiles. See Section 20 for details.
+> **Technician users** always land in the Operator Shell after login — a simplified interface designed for repeatably running approved scan profiles. See Section 22 for details.
 
 > **AI persona:** The AI Assistant automatically switches context to match the logged-in user. Failure Analysts get evidence-first diagnostic guidance; Researchers get exploratory explanations. Technicians always get the simplified Lab Technician persona.
 
@@ -1420,7 +1544,7 @@ The log rotates at 5 MB and keeps 3 backups.
 
 ---
 
-## 20. Operator Mode
+## 22. Operator Mode
 
 ### 20.1 Overview
 
@@ -1449,7 +1573,7 @@ Operator Mode is a simplified interface for technicians who run repeatably again
 2. Select a scan profile from the left panel. Only profiles with the "Approved for Operators" badge appear.
 3. Scan or type the part serial number in the **Part ID** field. If a USB barcode scanner is connected, scanning the barcode and pressing Enter auto-starts the scan.
 4. Click **▶ START SCAN** (or press Enter if the Part ID field is focused).
-5. A full-screen verdict screen appears after each scan (see Section 20.3).
+5. A full-screen verdict screen appears after each scan (see Section 22.3).
 6. Results are logged automatically to the Shift Log and exported as a PDF report.
 
 > **START SCAN is disabled** until both a scan profile is selected and a non-empty Part ID is entered.
@@ -1519,11 +1643,11 @@ If an engineer needs temporary access at an operator station without logging the
 3. If credentials are valid, temporary access is granted.
 4. Access auto-reverts to the logged-in technician after **15 minutes**, or when the engineer clicks **End Override**.
 
-All supervisor override events are logged to the audit log (Section 19.7).
+All supervisor override events are logged to the audit log (Section 21.7).
 
 ---
 
-## 21. Supported Hardware
+## 23. Supported Hardware
 
 ### 21.1 Cameras
 
@@ -1647,7 +1771,7 @@ All supervisor override events are logged to the audit log (Section 19.7).
 
 ---
 
-## 22. Configuration File Reference
+## 24. Configuration File Reference
 
 `config.yaml` is located in the application installation directory. Edit it with a plain-text editor if you need to make changes outside the wizard.
 
@@ -1696,7 +1820,7 @@ logging:
 
 ---
 
-## 23. Keyboard Shortcuts
+## 25. Keyboard Shortcuts
 
 **Acquisition**
 
@@ -1736,7 +1860,7 @@ logging:
 
 ---
 
-## 24. Troubleshooting
+## 26. Troubleshooting
 
 ### Connected Devices button shows a red indicator after startup
 
@@ -1852,7 +1976,7 @@ Starting from v1.2.8, SanjINSIGHT validates all required software dependencies b
 
 ---
 
-## 25. Technical Reference
+## 27. Technical Reference
 
 ### 25.1 Acquisition Data Structures
 

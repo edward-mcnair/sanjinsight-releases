@@ -62,6 +62,7 @@ sanjinsight/
 │   └── export.py            # TIFF, HDF5, NumPy, CSV, MATLAB export
 │
 ├── ui/                      # UI components
+│   ├── charts.py            # PyQtGraph chart widgets (calibration, analysis, transient, sessions)
 │   ├── sidebar_nav.py       # Bootstrap-style collapsible sidebar
 │   ├── wizard.py            # Standard mode guided wizard
 │   ├── settings_tab.py      # Update preferences, about, support
