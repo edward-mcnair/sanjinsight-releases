@@ -130,6 +130,8 @@ class IC:
     EMISSIVITY    = "mdi.thermometer-lines"
     # IV Sweep / electrical
     IV_SWEEP      = "mdi.current-ac"
+    # Timing diagram
+    TIMING        = "mdi.timeline-clock-outline"
 
 
 # ── Sidebar navigation icon registry ─────────────────────────────────────────
@@ -164,6 +166,7 @@ NAV_ICONS: dict[str, str] = {
     "3D Surface":  IC.SURFACE_3D,
     "Emissivity":  IC.EMISSIVITY,
     "IV Sweep":    IC.IV_SWEEP,
+    "Timing":      IC.TIMING,
     "FPGA":        IC.FPGA,
     "Bias Source": IC.BIAS,
     "ROI":         IC.ROI,

@@ -294,6 +294,7 @@ from ui.tabs.stimulus_tab          import StimulusTab
 from ui.tabs.library_tab           import LibraryTab
 from ui.tabs.wavelength_tab        import WavelengthTab
 from ui.tabs.emissivity_cal_tab    import EmissivityCalTab
+from ui.tabs.timing_diagram_tab    import TimingDiagramTab
 from ui.widgets.bottom_drawer      import BottomDrawer, DrawerToggleBar
 from ui.widgets.measurement_strip  import MeasurementReadoutStrip
 from ai.metrics_service          import MetricsService
@@ -524,6 +525,7 @@ class MainWindow(QMainWindow):
         self._prober_tab   = ProberTab()                        # ← probe chuck
         self._wavelength_tab   = WavelengthTab()               # ← monochromator control
         self._emissivity_tab   = EmissivityCalTab()             # ← IR emissivity cal
+        self._timing_tab       = TimingDiagramTab()             # ← timing waveform viewer
 
         # ── Merged tabs ──────────────────────────────────────────────────
         # Each merged tab wraps multiple individual tabs into one sidebar entry.
@@ -611,6 +613,7 @@ class MainWindow(QMainWindow):
             NI("Compare",     _I["Compare"],           self._compare_tab),
             NI("3D Surface",  _I["3D Surface"],        self._surface_tab),
             NI("Emissivity",  _I["Emissivity"],        self._emissivity_tab),
+            NI("Timing",      _I["Timing"],            self._timing_tab),
         ])
         self._nav.add_collapsible("Hardware", _G["Hardware"], [
             NI("Camera",      _I["Camera"],            self._camera_ctrl_tab),
@@ -656,6 +659,11 @@ class MainWindow(QMainWindow):
                 self._wavelength_tab.set_driver(_mono_driver)
         except Exception:
             pass
+
+        # Wire hardware sources into Timing Diagram tab for Sync buttons
+        self._timing_tab.set_fpga_source(self._fpga_tab)
+        self._timing_tab.set_transient_source(self._transient_tab)
+        self._timing_tab.set_bias_source(self._bias_tab)
 
         self._nav.select_first()
 
@@ -762,6 +770,8 @@ class MainWindow(QMainWindow):
                         keywords=["3d", "surface", "plot", "topography", "three dimensional"]),
             PaletteItem("Emissivity",  "Analyze",  lambda: self._nav.navigate_to(self._emissivity_tab),
                         keywords=["emissivity", "ir", "infrared", "thermal", "blackbody", "calibration"]),
+            PaletteItem("Timing",      "Analyze",  lambda: self._nav.navigate_to(self._timing_tab),
+                        keywords=["timing", "diagram", "waveform", "pulse", "pulsed", "trigger", "transient mask", "double pulse", "rf"]),
             # HARDWARE
             PaletteItem("Camera",      "Hardware", lambda: self._nav.navigate_to(self._camera_ctrl_tab),
                         keywords=["camera", "sensor", "exposure", "gain", "roi", "autofocus"]),
