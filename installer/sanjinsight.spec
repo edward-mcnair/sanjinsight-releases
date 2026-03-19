@@ -26,6 +26,7 @@ _CRITICAL_PACKAGES = {
     'cv2':        'pip install opencv-python',
     'PyQt5':      'pip install PyQt5',
     'matplotlib': 'pip install matplotlib',
+    'pyqtgraph':  'pip install pyqtgraph',
     'scipy':      'pip install scipy',
     'h5py':       'pip install h5py',
     'yaml':       'pip install PyYAML',
@@ -98,6 +99,17 @@ hidden_imports = [
     'h5py.defs',
     'h5py.utils',
     'h5py._proxy',
+
+    # ── pyqtgraph (real-time charts) ─────────────────────────────────
+    # ui/charts.py imports via try/except so PyInstaller static analysis
+    # misses it; list every subpackage used at runtime.
+    'pyqtgraph',
+    'pyqtgraph.Qt',
+    'pyqtgraph.graphicsItems',
+    'pyqtgraph.widgets',
+    'pyqtgraph.opengl',
+    'pyqtgraph.exporters',
+    'pyqtgraph.colormap',
 
     # ── Config / serial ──────────────────────────────────────────────
     'yaml',
@@ -219,6 +231,9 @@ datas = [
 
     # h5py data files
     *collect_data_files('h5py'),
+
+    # pyqtgraph data files (colormap CSVs, Qt platform plugins)
+    *collect_data_files('pyqtgraph'),
 
     # llama_cpp data files (only when installed — gracefully skipped if absent)
     *( collect_data_files('llama_cpp')

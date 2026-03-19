@@ -77,6 +77,17 @@ hidden_imports = [
     'h5py.utils',
     'h5py._proxy',
 
+    # ── pyqtgraph (real-time charts) ─────────────────────────────────
+    # ui/charts.py imports via try/except so PyInstaller static analysis
+    # misses it; list every subpackage used at runtime.
+    'pyqtgraph',
+    'pyqtgraph.Qt',
+    'pyqtgraph.graphicsItems',
+    'pyqtgraph.widgets',
+    'pyqtgraph.opengl',
+    'pyqtgraph.exporters',
+    'pyqtgraph.colormap',
+
     # ── Config / serial ──────────────────────────────────────────────
     'yaml',
     'serial',
@@ -125,6 +136,7 @@ datas = [
     *collect_data_files('matplotlib'),
     *collect_data_files('PyQt5', include_py_files=False),
     *collect_data_files('h5py'),
+    *collect_data_files('pyqtgraph'),   # colormap CSVs, Qt platform plugins
 
     # llama_cpp data files (skipped gracefully if not installed)
     *( collect_data_files('llama_cpp')

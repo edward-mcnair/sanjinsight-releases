@@ -114,6 +114,12 @@ class CalibrationResult:
     # Mask: pixels where C_T is reliable
     mask:         Optional[np.ndarray] = None   # bool, shape (H, W)
 
+    # Per-step curve data — populated by Calibration.fit(); absent when loading
+    # older .cal files.  Used by CalibrationQualityChart to draw the actual
+    # temperature → mean-signal calibration curve.
+    temps_c:      Optional[np.ndarray] = None   # float64 (n_points,)  °C
+    mean_signals: Optional[np.ndarray] = None   # float64 (n_points,)  mean ΔR/R per step
+
     # Per-pixel min C_T threshold (pixels below are masked).
     # Sourced from SanjANALYZER baseline script (Filter Magnitude Cth = 3e-6 K⁻¹).
     MIN_CT = CTH_FILTER_MIN   # 3e-6 K⁻¹
@@ -431,6 +437,13 @@ class Calibration:
             (r2_map > min_r2)
         )
 
+        # Per-step mean ΔR/R (spatial average) — used by CalibrationQualityChart
+        # to draw the temperature → mean-signal curve.
+        mean_signals = np.array(
+            [float(drr_stack[i].mean()) for i in range(len(pts))],
+            dtype=np.float64,
+        )
+
         ts = time.time()
         return CalibrationResult(
             ct_map        = ct_map,
@@ -446,6 +459,8 @@ class Calibration:
             timestamp     = ts,
             timestamp_str = time.strftime("%Y-%m-%d %H:%M:%S",
                                           time.localtime(ts)),
+            temps_c       = temps,
+            mean_signals  = mean_signals,
             valid         = True,
         )
 

@@ -5,7 +5,7 @@ MeasurementReadoutStrip  —  compact horizontal strip showing live
 BT / dT / CT acquisition readouts.
 
 ┌──────────────────────────────────────────────────┐
-│ BT  29.4°C    dT  +1.24°C    CT  25.0°C         │
+│ BT  29.4°C    DT  +1.24°C    CT  25.0°C         │
 └──────────────────────────────────────────────────┘
 
 BT  — Base Temperature: TEC object temperature at the time of acquisition.
@@ -22,8 +22,10 @@ Public API
     strip.set_values(bt_c=None, dt_c=None)                  # shows N/A
     strip._apply_styles()                                    # called on theme change
 
-Height is fixed at 36 px.  The strip is transparent by default so it sits
-cleanly inside toolbars, status bars, or header widgets.
+Height is fixed at 36 px.  All text is painted directly in ``paintEvent`` —
+there are **no QLabel child widgets** — which eliminates the Qt/macOS Cocoa
+stylesheet grey-box artefact that appears whenever ``QLabel.setStyleSheet()``
+is applied on macOS.
 """
 
 from __future__ import annotations
@@ -33,74 +35,59 @@ from typing import Optional
 
 log = logging.getLogger(__name__)
 
-from PyQt5.QtWidgets import QWidget, QHBoxLayout, QLabel, QFrame, QSizePolicy
-from PyQt5.QtCore    import Qt
+from PyQt5.QtWidgets import QWidget, QSizePolicy
+from PyQt5.QtCore    import Qt, QRect
+from PyQt5.QtGui     import QPainter, QColor, QFont, QFontMetrics
 
-from ui.theme import FONT, PALETTE
+from ui.theme import FONT, PALETTE, _DPI_SCALE
 
 # ── Colour constants ─────────────────────────────────────────────────────────
-# dT positive (heating) → warm orange-amber; dT negative (cooling) → sky blue.
-# These are chosen to be legible on both dark and light backgrounds.
-_DT_POS_COLOR  = "#f5a623"   # amber/warm — heating
-_DT_NEG_COLOR  = "#5ac8fa"   # sky blue — cooling
-_DT_ZERO_COLOR = None        # falls back to PALETTE["textSub"]
+_DT_POS_COLOR = "#f5a623"   # amber/warm — heating; also used for BT label
+_DT_NEG_COLOR = "#5ac8fa"   # sky blue — cooling
 
-_STRIP_HEIGHT = 36
+# ── Layout constants (logical pixels, DPI-scaled) ─────────────────────────────
+def _s(px: int) -> int:
+    """Scale a logical-pixel constant by the platform DPI factor."""
+    return max(1, int(round(px * _DPI_SCALE)))
+
+_STRIP_HEIGHT = _s(36)
+_MARGIN       = _s(12)   # left / right padding
+_SUB_GAP      = _s( 5)   # gap between sublabel ("BT") and its value ("25.0 °C")
+_CELL_GAP     = _s(14)   # gap from end of value to divider (and divider to next sublabel)
+_DIV_H_INSET  = _s( 6)   # vertical inset for divider line
 
 
 class MeasurementReadoutStrip(QWidget):
     """
     Compact 36 px horizontal strip showing BT / dT / CT readouts.
 
+    All text is rendered directly via ``QPainter.drawText`` — there are no
+    ``QLabel`` child widgets.  This eliminates the macOS Cocoa system-background
+    paint that Qt applies beneath any ``QLabel`` that has ``setStyleSheet()``
+    called on it, producing grey boxes regardless of ``background: transparent``
+    or ``setAutoFillBackground(False)``.
+
     Parameters
     ----------
     parent : QWidget, optional
     show_ct : bool
         If False the CT cell is never shown regardless of the value passed
-        to update().  Default True (CT shown when ct_c is not None).
+        to ``set_values()``.  Default True.
     """
 
     def __init__(self, parent: QWidget | None = None, show_ct: bool = True):
         super().__init__(parent)
         self._show_ct = show_ct
-        self._setFixedHeight()
+        self.setFixedHeight(_STRIP_HEIGHT)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
-        self._root = QHBoxLayout(self)
-        self._root.setContentsMargins(10, 0, 10, 0)
-        self._root.setSpacing(0)
-
-        # ── BT cell ───────────────────────────────────────────────────
-        self._bt_sub, self._bt_val = self._make_cell("BT")
-        self._root.addWidget(self._bt_sub)
-        self._root.addSpacing(4)
-        self._root.addWidget(self._bt_val)
-
-        # ── Divider ───────────────────────────────────────────────────
-        self._root.addWidget(self._make_divider())
-
-        # ── dT cell ───────────────────────────────────────────────────
-        self._dt_sub, self._dt_val = self._make_cell("dT")
-        self._root.addWidget(self._dt_sub)
-        self._root.addSpacing(4)
-        self._root.addWidget(self._dt_val)
-
-        # ── CT cell (optional) ────────────────────────────────────────
-        self._ct_divider = self._make_divider()
-        self._ct_sub, self._ct_val = self._make_cell("CT")
-        self._root.addWidget(self._ct_divider)
-        self._root.addWidget(self._ct_sub)
-        self._root.addSpacing(4)
-        self._root.addWidget(self._ct_val)
-
-        # Initially hide CT
-        self._ct_divider.setVisible(False)
-        self._ct_sub.setVisible(False)
-        self._ct_val.setVisible(False)
-
-        self._root.addStretch()
-
-        self._apply_styles()
+        # ── Readout state — written by set_values(), read by paintEvent ───
+        self._bt_text  : str  = "N/A"
+        self._bt_color : str  = PALETTE.get("textSub", "#9696a8")
+        self._dt_text  : str  = "N/A"
+        self._dt_color : str  = PALETTE.get("textSub", "#9696a8")
+        self._ct_text  : str  = ""
+        self._ct_vis   : bool = False
 
     # ---------------------------------------------------------------- #
     #  Public API                                                       #
@@ -111,7 +98,7 @@ class MeasurementReadoutStrip(QWidget):
                    dt_c: Optional[float],
                    ct_c: Optional[float] = None) -> None:
         """
-        Refresh all readout cells.
+        Refresh all readout cells and schedule a repaint.
 
         Named ``set_values`` (not ``update``) to avoid shadowing
         ``QWidget.update()``, which Qt calls internally with zero args to
@@ -128,124 +115,134 @@ class MeasurementReadoutStrip(QWidget):
         ct_c : float or None
             Chuck Temperature in °C.  None → CT cell hidden.
         """
-        # ── BT ───────────────────────────────────────────────────────
+        # BT — label and value share amber so they read as one warm unit.
         if bt_c is None:
-            self._bt_val.setText("N/A")
-            self._bt_val.setStyleSheet(self._val_style("textSub"))
+            self._bt_text  = "N/A"
+            self._bt_color = PALETTE.get("textSub", "#9696a8")
         else:
-            self._bt_val.setText(f"{bt_c:.1f}°C")
-            self._bt_val.setStyleSheet(self._val_style("text"))
+            self._bt_text  = f"{bt_c:.1f} °C"
+            self._bt_color = _DT_POS_COLOR
 
-        # ── dT ───────────────────────────────────────────────────────
+        # dT
         if dt_c is None:
-            self._dt_val.setText("N/A")
-            self._dt_val.setStyleSheet(self._val_style("textSub"))
+            self._dt_text  = "N/A"
+            self._dt_color = PALETTE.get("textSub", "#9696a8")
         elif dt_c > 0.005:
-            self._dt_val.setText(f"+{dt_c:.2f}°C")
-            self._dt_val.setStyleSheet(
-                self._val_style_raw(_DT_POS_COLOR))
+            self._dt_text  = f"+{dt_c:.2f}°C"
+            self._dt_color = _DT_POS_COLOR
         elif dt_c < -0.005:
-            self._dt_val.setText(f"{dt_c:.2f}°C")
-            self._dt_val.setStyleSheet(
-                self._val_style_raw(_DT_NEG_COLOR))
+            self._dt_text  = f"{dt_c:.2f}°C"
+            self._dt_color = _DT_NEG_COLOR
         else:
             # Effectively zero — show as "±0.00°C" in neutral colour
-            self._dt_val.setText(f"±{abs(dt_c):.2f}°C")
-            self._dt_val.setStyleSheet(self._val_style("textSub"))
+            self._dt_text  = f"±{abs(dt_c):.2f}°C"
+            self._dt_color = PALETTE.get("textSub", "#9696a8")
 
-        # ── CT ───────────────────────────────────────────────────────
-        show_ct = self._show_ct and ct_c is not None
-        self._ct_divider.setVisible(show_ct)
-        self._ct_sub.setVisible(show_ct)
-        self._ct_val.setVisible(show_ct)
-        if show_ct:
-            self._ct_val.setText(f"{ct_c:.1f}°C")
-            self._ct_val.setStyleSheet(self._val_style("text"))
+        # CT
+        self._ct_vis = self._show_ct and ct_c is not None
+        if self._ct_vis:
+            self._ct_text = f"{ct_c:.1f}°C"
 
-    # ---------------------------------------------------------------- #
-    #  Theme                                                            #
-    # ---------------------------------------------------------------- #
+        self.update()
 
     def _apply_styles(self) -> None:
-        """Re-apply PALETTE-sourced styles.  Called on theme change."""
-        bg    = PALETTE.get("surface",  "#1c1c1e")
-        bdr   = PALETTE.get("border",   "#3a3a3a")
-        _dim  = PALETTE.get("textDim",  "#666666")
-        _sub  = PALETTE.get("textSub",  "#9a9a9a")
-        _text = PALETTE.get("text",     "#ffffff")
-
-        self.setStyleSheet(
-            f"MeasurementReadoutStrip {{"
-            f"  background:{bg};"
-            f"  border-top:1px solid {bdr};"
-            f"  border-bottom:1px solid {bdr};"
-            f"}}"
-        )
-
-        # Sub-labels
-        sub_style = (
-            f"color:{_dim}; "
-            f"font-size:{FONT['caption']}pt; "
-            f"letter-spacing:0.5px;"
-        )
-        for sub in (self._bt_sub, self._dt_sub, self._ct_sub):
-            sub.setStyleSheet(sub_style)
-
-        # Value labels — reset to neutral; set_values() will tint dT
-        val_style = (
-            f"font-family:Menlo,monospace; "
-            f"font-size:{FONT['body']}pt; "
-            f"color:{_text};"
-        )
-        for val in (self._bt_val, self._dt_val, self._ct_val):
-            val.setStyleSheet(val_style)
-
-        # Dividers
-        div_style = f"background:{bdr};"
-        for div in (self._ct_divider,):
-            div.setStyleSheet(div_style)
-        # The inline dividers are QFrames; style them directly
-        for child in self.findChildren(QFrame):
-            child.setStyleSheet(f"background:{bdr};")
+        """Called on theme change; PALETTE is read live in paintEvent."""
+        self.update()
 
     # ---------------------------------------------------------------- #
-    #  Helpers                                                          #
+    #  Paint                                                            #
     # ---------------------------------------------------------------- #
 
-    def _setFixedHeight(self) -> None:
-        self.setFixedHeight(_STRIP_HEIGHT)
+    def paintEvent(self, event) -> None:  # noqa: N802
+        """
+        Render the strip background and all cell text directly.
 
-    def _make_cell(self, label: str) -> tuple[QLabel, QLabel]:
-        """Return (sub_label, value_label) for one readout cell."""
-        sub = QLabel(label)
-        sub.setObjectName("sublabel")
-        sub.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
-        sub.setContentsMargins(8, 0, 0, 0)
+        Drawing directly with QPainter (rather than relying on child QLabel
+        widgets + stylesheets) gives us complete control over what appears on
+        screen and bypasses the macOS Cocoa layer that paints an opaque system
+        background behind styled QLabels.
+        """
+        p = QPainter(self)
+        p.setRenderHint(QPainter.TextAntialiasing)
 
-        val = QLabel("N/A")
-        val.setObjectName("readout_val")
-        val.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
-        val.setMinimumWidth(64)
+        h = self.height()
+        w = self.width()
 
-        return sub, val
+        # ── PALETTE colours (read live → theme changes are instant) ───────
+        bg   = QColor(PALETTE.get("surface",  "#1c1c1e"))
+        bdr  = QColor(PALETTE.get("border",   "#3a3a3a"))
+        dim  = QColor(PALETTE.get("textDim",  "#9696a8"))
+        text = QColor(PALETTE.get("text",     "#ffffff"))
 
-    def _make_divider(self) -> QFrame:
-        """Thin vertical separator between cells."""
-        div = QFrame()
-        div.setFrameShape(QFrame.VLine)
-        div.setFixedWidth(1)
-        div.setContentsMargins(8, 6, 8, 6)
-        _bdr = PALETTE.get("border", "#3a3a3a")
-        div.setStyleSheet(f"background:{_bdr};")
-        return div
+        # ── Fonts ─────────────────────────────────────────────────────────
+        # BT sublabel — bold, amber (matches its value so the pair reads
+        # as a single warm readout unit).
+        bt_sub_font = QFont()
+        bt_sub_font.setPointSize(FONT["caption"])
+        bt_sub_font.setBold(True)
 
-    def _val_style(self, pal_key: str) -> str:
-        color = PALETTE.get(pal_key, "#ffffff")
-        return self._val_style_raw(color)
+        # DT / CT sublabels — normal weight, dimmed.
+        dt_sub_font = QFont()
+        dt_sub_font.setPointSize(FONT["caption"])
+        dt_sub_font.setBold(False)
 
-    def _val_style_raw(self, color: str) -> str:
-        return (
-            f"font-family:Menlo,monospace; "
-            f"font-size:{FONT['body']}pt; "
-            f"color:{color};"
-        )
+        # Value text — monospace for stable column width as digits change.
+        val_font = QFont("Menlo")
+        val_font.setStyleHint(QFont.Monospace)
+        val_font.setPointSize(FONT["body"])
+
+        # ── Fill background ────────────────────────────────────────────────
+        p.fillRect(0, 0, w, h, bg)
+
+        # ── Drawing cursor ─────────────────────────────────────────────────
+        x = _MARGIN
+
+        def sub_w(txt: str, font: QFont) -> int:
+            return QFontMetrics(font).horizontalAdvance(txt)
+
+        def val_w(txt: str) -> int:
+            return QFontMetrics(val_font).horizontalAdvance(txt)
+
+        def draw_sub(txt: str, font: QFont, color: QColor) -> None:
+            p.setFont(font)
+            p.setPen(color)
+            p.drawText(QRect(x, 0, sub_w(txt, font), h),
+                       Qt.AlignVCenter | Qt.AlignLeft, txt)
+
+        def draw_val(txt: str, color: QColor) -> None:
+            p.setFont(val_font)
+            p.setPen(color)
+            p.drawText(QRect(x, 0, val_w(txt), h),
+                       Qt.AlignVCenter | Qt.AlignLeft, txt)
+
+        def draw_div() -> None:
+            p.setPen(bdr)
+            p.drawLine(x, _DIV_H_INSET, x, h - _DIV_H_INSET)
+
+        # ── BT cell ────────────────────────────────────────────────────────
+        draw_sub("BT", bt_sub_font, QColor(_DT_POS_COLOR))
+        x += sub_w("BT", bt_sub_font) + _SUB_GAP
+
+        draw_val(self._bt_text, QColor(self._bt_color))
+        x += val_w(self._bt_text) + _CELL_GAP
+
+        # ── Divider ────────────────────────────────────────────────────────
+        draw_div()
+        x += 1 + _CELL_GAP
+
+        # ── dT cell ────────────────────────────────────────────────────────
+        draw_sub("DT", dt_sub_font, dim)
+        x += sub_w("DT", dt_sub_font) + _SUB_GAP
+
+        draw_val(self._dt_text, QColor(self._dt_color))
+
+        # ── CT cell (optional) ─────────────────────────────────────────────
+        if self._ct_vis:
+            x += val_w(self._dt_text) + _CELL_GAP
+            draw_div()
+            x += 1 + _CELL_GAP
+
+            draw_sub("CT", dt_sub_font, dim)
+            x += sub_w("CT", dt_sub_font) + _SUB_GAP
+
+            draw_val(self._ct_text, text)

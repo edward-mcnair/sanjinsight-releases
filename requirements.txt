@@ -12,6 +12,7 @@ PyQt5-sip>=12.11.0
 numpy>=1.24.0
 opencv-python>=4.7.0          # cv2 — frame processing, image save
 matplotlib>=3.7.0             # 3D surface plots, analysis charts
+pyqtgraph>=0.13.3             # Real-time interactive charts (calibration, analysis, transient, sessions)
 
 # ── Data export ───────────────────────────────────────────────────────────────
 h5py>=3.8.0                   # HDF5 export format

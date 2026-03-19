@@ -526,7 +526,8 @@ class TransientTab(QWidget):
         # ── Mean ΔR/R vs time curve ───────────────────────────────────
         curve_box = QGroupBox("Mean ΔR/R vs Delay Time  (full-frame average)")
         cl = QVBoxLayout(curve_box)
-        self._curve = TransientCurve()
+        from ui.charts import TransientTraceChart
+        self._curve = TransientTraceChart()
         cl.addWidget(self._curve)
         lay.addWidget(curve_box)
 

@@ -432,9 +432,13 @@ class CalibrationTab(QWidget):
         cw.addLayout(cmap_row)
         cw.addWidget(self._ct_pane)
 
-        map_tabs.addTab(ct_wrapper,    " C_T Map ")
-        map_tabs.addTab(self._r2_pane, " R² Map ")
-        map_tabs.addTab(self._res_pane," Residual ")
+        # Quality chart tab — R² histogram + C_T histogram + calibration curve
+        from ui.charts import CalibrationQualityChart
+        self._quality_chart = CalibrationQualityChart(show_curve=True)
+        map_tabs.addTab(ct_wrapper,          " C_T Map ")
+        map_tabs.addTab(self._r2_pane,       " R² Map ")
+        map_tabs.addTab(self._res_pane,      " Residual ")
+        map_tabs.addTab(self._quality_chart, " Quality ✦ ")
         lay.addWidget(map_tabs, 1)
 
         # ---- Save / load ----
@@ -644,6 +648,7 @@ class CalibrationTab(QWidget):
         self._ct_pane.show_map(result.ct_map,  result.mask, cmap=cmap)
         self._r2_pane.show_map(result.r2_map,  result.mask, cmap="viridis")
         self._res_pane.show_map(result.residual_map, result.mask, cmap="Magmafall")
+        self._quality_chart.update_data(result)
 
         valid_pct = 100.0 * result.mask.mean() if result.mask is not None else 0
         ct_mean   = (float(result.ct_map[result.mask].mean())

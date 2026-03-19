@@ -36,7 +36,7 @@ from PyQt5.QtWidgets import (
     QSlider, QDoubleSpinBox, QSpinBox, QGroupBox, QProgressBar,
     QSizePolicy, QFrame,
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QObject, QRunnable, QThreadPool
+from PyQt5.QtCore import Qt, QThread, QTimer, pyqtSignal, QObject, QRunnable, QThreadPool
 
 from ui.theme import FONT, PALETTE, scaled_qss
 
@@ -53,20 +53,41 @@ _DEFAULT_MAX_NM = 900.0
 # on a potentially slow RS-232 transaction (10 s timeout on Windows).
 # ---------------------------------------------------------------------------
 
-class _CmdRunnable(QRunnable):
-    """Run ``fn()`` on the global thread pool; silently log exceptions."""
+class _CmdSignals(QObject):
+    """Carrier for signals from a QRunnable (which cannot inherit QObject).
 
-    def __init__(self, fn, label: str = ""):
+    ``finished`` is emitted after every run — success or failure — so callers
+    can release the strong reference that keeps this object alive.
+    """
+    failed   = pyqtSignal(str, str)   # (label, error_message)
+    finished = pyqtSignal()           # always emitted when run() ends
+
+
+class _CmdRunnable(QRunnable):
+    """Run ``fn()`` on the global thread pool; emit ``signals.failed`` on error.
+
+    Lifetime note: setAutoDelete is False so Python's reference-counting (not
+    Qt's C++ delete) owns the object.  The caller (WavelengthTab._start_cmd)
+    keeps a strong reference to ``signals`` in ``_active_cmd_signals`` until
+    the ``finished`` signal fires — this guarantees the queued signal delivery
+    reaches the main thread before the QObject is freed.
+    """
+
+    def __init__(self, fn, label: str = "", signals: _CmdSignals = None):
         super().__init__()
-        self.setAutoDelete(True)
-        self._fn    = fn
-        self._label = label
+        self.setAutoDelete(False)          # Python ref-counting owns lifetime
+        self._fn     = fn
+        self._label  = label
+        self.signals = signals or _CmdSignals()
 
     def run(self) -> None:
         try:
             self._fn()
         except Exception as exc:
             log.error("Monochromator command '%s' failed: %s", self._label, exc)
+            self.signals.failed.emit(self._label, str(exc))
+        finally:
+            self.signals.finished.emit()   # always fires; releases ref from pool
 
 
 # ---------------------------------------------------------------------------
@@ -142,6 +163,7 @@ class WavelengthTab(QWidget):
         self._driver = None
         self._min_nm = _DEFAULT_MIN_NM
         self._max_nm = _DEFAULT_MAX_NM
+        self._active_cmd_signals: set = set()  # keeps _CmdSignals alive until finished
 
         self._sweep_thread: QThread | None = None
         self._sweep_worker: _SweepWorker | None = None
@@ -393,6 +415,52 @@ class WavelengthTab(QWidget):
         self._apply_shutter_button_styles()
 
     # ------------------------------------------------------------------
+    # Command error feedback
+    # ------------------------------------------------------------------
+
+    def _on_cmd_error(self, label: str, message: str) -> None:
+        """
+        Flash the wavelength field red and show the error in the status bar.
+        Called from the main thread via queued signal connection.
+        """
+        danger  = PALETTE.get("danger",  "#ff453a")
+        textDim = PALETTE.get("textDim", "#8892aa")
+        body_pt = FONT["body"]
+
+        # Flash the wavelength readout and spinbox border red
+        err_qss = (
+            f"QDoubleSpinBox {{"
+            f"  border: 1px solid {danger};"
+            f"  border-radius: 3px;"
+            f"  font-size: {body_pt}pt;"
+            f"}}"
+        )
+        self._nm_spin.setStyleSheet(err_qss)
+        self._wl_readout.setStyleSheet(
+            f"font-family: Menlo, monospace; font-size: {FONT['readoutSm']}pt; "
+            f"color: {danger};"
+        )
+
+        # Show abbreviated message in the status label
+        short = message[:60] if len(message) > 60 else message
+        self._conn_lbl.setText(f"Cmd failed: {short}")
+        self._conn_lbl.setStyleSheet(f"color: {danger}; font-size: {FONT['label']}pt;")
+
+        # Restore normal styles after 3 seconds.
+        # Pass `self` as the context object so PyQt5 automatically cancels
+        # the callback if this widget is destroyed before the timer fires.
+        def _restore():
+            self._apply_styles()
+            if not (self._sweep_thread is not None and
+                    self._sweep_thread.isRunning()):
+                self._conn_lbl.setText(
+                    "Connected" if self._driver is not None else "Not connected")
+                self._conn_lbl.setStyleSheet(
+                    f"color: {textDim}; font-size: {FONT['label']}pt;")
+
+        QTimer.singleShot(3000, self, _restore)
+
+    # ------------------------------------------------------------------
     # Theme
     # ------------------------------------------------------------------
 
@@ -622,6 +690,21 @@ class WavelengthTab(QWidget):
         self._slider.blockSignals(blocked)
         self._wl_readout.setText(f"{nm:.1f} nm")
 
+    def _start_cmd(self, fn, label: str) -> None:
+        """Start a _CmdRunnable and wire its error signal to the UI feedback handler.
+
+        A strong Python reference to ``signals`` is held in
+        ``self._active_cmd_signals`` until the runnable's ``finished`` signal
+        fires.  This guarantees the queued ``failed`` delivery reaches the main
+        thread before the QObject is freed, regardless of GC timing.
+        """
+        sig = _CmdSignals()
+        self._active_cmd_signals.add(sig)
+        sig.failed.connect(self._on_cmd_error)
+        sig.finished.connect(lambda: self._active_cmd_signals.discard(sig))
+        runnable = _CmdRunnable(fn, label, signals=sig)
+        QThreadPool.globalInstance().start(runnable)
+
     def _on_set_clicked(self) -> None:
         """Send the current spinbox value to the driver (off main thread)."""
         nm = self._nm_spin.value()
@@ -633,9 +716,7 @@ class WavelengthTab(QWidget):
                 driver.set_wavelength(nm)
                 log.debug("Wavelength set to %.3f nm", nm)
 
-            QThreadPool.globalInstance().start(
-                _CmdRunnable(_cmd, f"set_wavelength({nm:.1f})")
-            )
+            self._start_cmd(_cmd, f"set_wavelength({nm:.1f})")
         self.wavelength_changed.emit(nm)
 
     # ------------------------------------------------------------------
@@ -648,9 +729,7 @@ class WavelengthTab(QWidget):
         self._apply_shutter_button_styles()
         if self._driver is not None:
             driver = self._driver
-            QThreadPool.globalInstance().start(
-                _CmdRunnable(lambda: driver.set_shutter(True), "set_shutter(open)")
-            )
+            self._start_cmd(lambda: driver.set_shutter(True), "set_shutter(open)")
 
     def _on_shutter_close(self) -> None:
         self._shutter_open_btn.setChecked(False)
@@ -658,9 +737,7 @@ class WavelengthTab(QWidget):
         self._apply_shutter_button_styles()
         if self._driver is not None:
             driver = self._driver
-            QThreadPool.globalInstance().start(
-                _CmdRunnable(lambda: driver.set_shutter(False), "set_shutter(close)")
-            )
+            self._start_cmd(lambda: driver.set_shutter(False), "set_shutter(close)")
 
     # ------------------------------------------------------------------
     # Slots — sweep

@@ -26,6 +26,7 @@ from .processing      import to_display, apply_colormap, setup_cmap_combo
 import config as cfg_mod
 from ui.icons import IC, make_icon_label, set_btn_icon
 from ui.theme import FONT, PALETTE, scaled_qss
+from ui.charts import SessionTrendChart
 
 
 # ------------------------------------------------------------------ #
@@ -413,6 +414,8 @@ class DataTab(QWidget):
             self._notes_edit.setStyleSheet(
                 f"background:{bg}; color:{txt}; border:1px solid {bdr}; "
                 f"font-size:{FONT['body']}pt; font-family:Menlo,monospace;")
+        if hasattr(self, "_trend_chart"):
+            self._trend_chart._apply_styles()
 
     # ---------------------------------------------------------------- #
     #  List panel (left)                                                #
@@ -611,11 +614,14 @@ class DataTab(QWidget):
         dw.addLayout(cmap_row)
         dw.addWidget(self._pane_drr)
 
-        img_tabs.addTab(self._pane_cold, " Cold ")
-        img_tabs.addTab(self._pane_hot,  " Hot ")
-        img_tabs.addTab(self._pane_diff, " Difference ")
-        img_tabs.addTab(drr_wrapper,     " ΔR/R ")
-        img_tabs.addTab(self._pane_cmp,  " Compare ")
+        self._trend_chart = SessionTrendChart()
+
+        img_tabs.addTab(self._pane_cold,      " Cold ")
+        img_tabs.addTab(self._pane_hot,       " Hot ")
+        img_tabs.addTab(self._pane_diff,      " Difference ")
+        img_tabs.addTab(drr_wrapper,          " ΔR/R ")
+        img_tabs.addTab(self._pane_cmp,       " Compare ")
+        img_tabs.addTab(self._trend_chart,    " Trends ✦ ")
 
         lay.addWidget(img_tabs, 1)
 
@@ -639,6 +645,7 @@ class DataTab(QWidget):
         """Called immediately after a new acquisition is saved."""
         self._add_card(session.meta)
         self._count_lbl.setText(str(self._mgr.count()))
+        self._trend_chart.update_sessions(list(self._mgr.all_metas()))
 
     def refresh(self):
         self._refresh()
@@ -660,6 +667,7 @@ class DataTab(QWidget):
             self._add_card(meta)
 
         self._count_lbl.setText(str(n))
+        self._trend_chart.update_sessions(list(self._mgr.all_metas()))
 
     def _add_card(self, meta: SessionMeta):
         if meta.uid in self._cards:
@@ -1020,8 +1028,9 @@ class DataTab(QWidget):
 
         ma = self._mgr.get_meta(self._compare_a)
         mb = self._mgr.get_meta(self._compare_b)
-        self._pane_cmp._title.setText(
-            f"A: {ma.label[:20]}  −  B: {mb.label[:20]}")
+        if ma is not None and mb is not None:
+            self._pane_cmp._title.setText(
+                f"A: {ma.label[:20]}  −  B: {mb.label[:20]}")
 
     # ---------------------------------------------------------------- #
     #  Folder management                                                #

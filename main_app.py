@@ -297,6 +297,7 @@ from ui.tabs.emissivity_cal_tab    import EmissivityCalTab
 from ui.tabs.timing_diagram_tab    import TimingDiagramTab
 from ui.widgets.bottom_drawer      import BottomDrawer, DrawerToggleBar
 from ui.widgets.measurement_strip  import MeasurementReadoutStrip
+from ui.charts                     import dTSparklineWidget
 from ai.metrics_service          import MetricsService
 from ai.diagnostic_engine        import DiagnosticEngine
 from ui.widgets.readiness_widget import ReadinessWidget
@@ -429,6 +430,13 @@ class MainWindow(QMainWindow):
         # Receives TEC status via _on_tec(); always visible when TECs are present.
         self._measurement_strip = MeasurementReadoutStrip()
         root.addWidget(self._measurement_strip)
+
+        # dT rolling sparkline — hidden by default; shown when TEC data arrives.
+        # Displays a 2-minute scrolling history of ΔT so the user can see
+        # thermal drift and stability at a glance without opening a separate tab.
+        self._dt_sparkline = dTSparklineWidget()
+        self._dt_sparkline.setVisible(False)
+        root.addWidget(self._dt_sparkline)
 
         # Content splitter: nav widget above, BottomDrawer (Console+Log) below.
         # BottomDrawer is collapsed to 0 by default; Ctrl+` toggles it.
@@ -993,6 +1001,9 @@ class MainWindow(QMainWindow):
             sp = getattr(status, "target_temp", None)
             dt = (bt - sp) if (bt is not None and sp is not None) else None
             self._measurement_strip.set_values(bt_c=bt, dt_c=dt)
+            self._dt_sparkline.push_dt(dt)
+            if not self._dt_sparkline.isVisible():
+                self._dt_sparkline.setVisible(True)
 
     def _on_fpga(self, status):
         self._fpga_tab.update_status(status)

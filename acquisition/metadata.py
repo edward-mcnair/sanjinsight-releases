@@ -214,15 +214,33 @@ class TagRegistry:
     # ── Persistence ───────────────────────────────────────────────────
 
     def _load(self) -> None:
+        if not os.path.exists(self._path):
+            return
         try:
-            if os.path.exists(self._path):
-                with open(self._path, encoding="utf-8") as f:
-                    data = json.load(f)
-                if isinstance(data, dict):
-                    # Support both flat {"tag": N} and wrapped {"counts": {...}}
-                    counts = data.get("counts", data)
-                    self._counts = {str(k): int(v) for k, v in counts.items()
-                                    if not k.startswith("_")}
+            with open(self._path, encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                # Support both flat {"tag": N} and wrapped {"counts": {...}}
+                counts = data.get("counts", data)
+                self._counts = {str(k): int(v) for k, v in counts.items()
+                                if not k.startswith("_")}
+        except json.JSONDecodeError as exc:
+            # Corrupt / truncated file — rename it so the user keeps their data
+            # and we start fresh rather than crashing or silently losing tags.
+            bak = self._path + ".bak"
+            try:
+                os.replace(self._path, bak)
+                log.warning(
+                    "TagRegistry: '%s' is corrupt (%s) — moved to '%s'; "
+                    "starting with an empty registry.",
+                    self._path, exc, bak,
+                )
+            except OSError:
+                log.warning(
+                    "TagRegistry: '%s' is corrupt (%s) — could not rename; "
+                    "starting with an empty registry.",
+                    self._path, exc,
+                )
         except Exception:
             log.debug("TagRegistry: could not load %s", self._path, exc_info=True)
 

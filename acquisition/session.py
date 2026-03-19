@@ -25,12 +25,15 @@ Usage:
 """
 
 from __future__ import annotations
+import logging
 import os, json, time
 import numpy as np
 from dataclasses import dataclass, field, asdict
 from typing import List, Optional
 
 from acquisition.schema_migrations import CURRENT_SCHEMA, migrate
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -103,7 +106,15 @@ class SessionMeta:
     @staticmethod
     def from_dict(d: dict, path: str = "") -> "SessionMeta":
         version = d.get("schema_version", 0)
-        if version < CURRENT_SCHEMA:
+        if version > CURRENT_SCHEMA:
+            log.warning(
+                "Session at '%s' was written by a newer version of SanjINSIGHT "
+                "(schema v%d, this build supports up to v%d). "
+                "Fields added in newer versions will be ignored. "
+                "Upgrade the software to read this session fully.",
+                path or "(unknown)", version, CURRENT_SCHEMA,
+            )
+        elif version < CURRENT_SCHEMA:
             d = migrate(d, from_version=version)
         m = SessionMeta(path=path)
         for k, v in d.items():
@@ -283,7 +294,11 @@ class Session:
         try:
             with open(p) as f:
                 return SessionMeta.from_dict(json.load(f), path=folder)
+        except json.JSONDecodeError as exc:
+            log.error("Session at '%s' has corrupt JSON: %s — skipping.", folder, exc)
+            return None
         except Exception:
+            log.debug("Could not load session meta from '%s'", folder, exc_info=True)
             return None
 
     def __repr__(self):

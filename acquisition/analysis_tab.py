@@ -680,6 +680,11 @@ class AnalysisTab(QWidget):
             self._stat_vals[key] = v
         lay.addWidget(stats_box)
 
+        # ΔT histogram — distribution of temperature values across the frame
+        from ui.charts import AnalysisHistogramChart
+        self._histogram = AnalysisHistogramChart()
+        lay.addWidget(self._histogram)
+
         # Hotspot table
         lay.addWidget(self._sub("Hotspot Detail"))
         self._table = HotspotTable()
@@ -779,6 +784,13 @@ class AnalysisTab(QWidget):
         self._banner.update_verdict(result)
         self._update_stats(result)
         self._table.update_hotspots(result.hotspots)
+        # Feed the ΔT map into the histogram chart
+        hist_result = type("_R", (), {
+            "dt_map":      self._dt_map,
+            "threshold_k": result.threshold_k,
+            "verdict":     result.verdict,
+        })()
+        self._histogram.update_result(hist_result)
 
         for b in [self._save_png_btn, self._save_csv_btn, self._add_rpt_btn]:
             b.setEnabled(True)
@@ -803,6 +815,7 @@ class AnalysisTab(QWidget):
         self._base_img = None
         self._canvas.clear()
         self._banner.reset()
+        self._histogram.clear()
         self._table.setRowCount(0)
         for v in self._stat_vals.values():
             v.setText("—")
