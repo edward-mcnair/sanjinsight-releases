@@ -25,7 +25,7 @@ log = logging.getLogger(__name__)
 from PyQt5.QtWidgets import (
     QWidget, QLabel, QPushButton, QDoubleSpinBox, QVBoxLayout,
     QHBoxLayout, QGridLayout, QGroupBox, QFrame, QComboBox,
-    QInputDialog, QMessageBox, QStackedWidget)
+    QInputDialog, QMessageBox, QStackedWidget, QButtonGroup, QRadioButton)
 from PyQt5.QtCore    import Qt, pyqtSignal
 
 from hardware.app_state import app_state
@@ -78,8 +78,10 @@ class FpgaTab(QWidget):
         self._frames_w = self._readout("FRAME COUNT", "--",     PALETTE["info"])
         self._sync_w   = self._readout("SYNC",        "UNKNOWN",PALETTE["textDim"])
         self._stim_w   = self._readout("STIMULUS",    "OFF",    PALETTE["textDim"])
+        self._trig_w   = self._readout("TRIGGER",     "CONT",   PALETTE["textDim"])
+        self._trig_w.setVisible(False)   # shown only for BNC 745
         for w in [self._freq_w, self._duty_w, self._frames_w,
-                  self._sync_w, self._stim_w]:
+                  self._sync_w, self._stim_w, self._trig_w]:
             sl.addWidget(w)
         root.addWidget(status_box)
 
@@ -270,7 +272,65 @@ class FpgaTab(QWidget):
 
         adv_panel.addWidget(adv_inner)
         root.addWidget(adv_panel)
+
+        # ── Trigger mode (BNC 745 / single-shot capable devices) ──────
+        # Hidden until set_fpga_driver() reveals it for a capable driver.
+        self._trigger_panel = CollapsiblePanel(
+            "Trigger Mode  (BNC 745)", start_collapsed=False)
+
+        trig_inner = QWidget()
+        trig_grid  = QGridLayout(trig_inner)
+        trig_grid.setContentsMargins(0, 0, 0, 0)
+        trig_grid.setSpacing(10)
+
+        trig_grid.addWidget(self._sub("Mode"), 0, 0)
+        mode_row = QHBoxLayout()
+        self._trig_mode_bg   = QButtonGroup()
+        self._trig_cont_rb   = QRadioButton("Continuous")
+        self._trig_single_rb = QRadioButton("Single-shot")
+        self._trig_cont_rb.setChecked(True)
+        self._trig_mode_bg.addButton(self._trig_cont_rb,   0)
+        self._trig_mode_bg.addButton(self._trig_single_rb, 1)
+        mode_row.addWidget(self._trig_cont_rb)
+        mode_row.addWidget(self._trig_single_rb)
+        mode_row.addStretch()
+        trig_grid.addLayout(mode_row, 0, 1)
+        self._trig_mode_bg.buttonClicked.connect(self._on_trig_mode_change)
+
+        trig_grid.addWidget(self._sub("Pulse Duration (µs)"), 1, 0)
+        pulse_row = QHBoxLayout()
+        self._pulse_dur_spin = QDoubleSpinBox()
+        self._pulse_dur_spin.setRange(0.1, 999_999.0)
+        self._pulse_dur_spin.setValue(100.0)
+        self._pulse_dur_spin.setDecimals(1)
+        self._pulse_dur_spin.setSingleStep(10.0)
+        self._pulse_dur_spin.setFixedWidth(120)
+        self._pulse_dur_spin.setToolTip(
+            "Override camera-channel pulse width in single-shot mode (BNC 745 Ch1).")
+        apply_pulse_btn = QPushButton("Set Width")
+        apply_pulse_btn.setFixedWidth(90)
+        apply_pulse_btn.clicked.connect(self._apply_pulse_duration)
+        pulse_row.addWidget(self._pulse_dur_spin)
+        pulse_row.addWidget(apply_pulse_btn)
+        pulse_row.addStretch()
+        trig_grid.addLayout(pulse_row, 1, 1)
+
+        self._arm_btn = QPushButton("▶  Arm Trigger")
+        self._arm_btn.setFixedWidth(130)
+        self._arm_btn.setEnabled(False)
+        self._arm_btn.setToolTip(
+            "Fire one single-shot pulse.\nSwitch to Single-shot mode first.")
+        self._arm_btn.clicked.connect(self._arm_trigger)
+        trig_grid.addWidget(self._arm_btn, 2, 1)
+
+        self._trigger_panel.addWidget(trig_inner)
+        self._trigger_panel.setVisible(False)
+        root.addWidget(self._trigger_panel)
+
         root.addStretch()
+
+        # Driver reference (set by main_app when a device connects)
+        self._fpga_driver = None
 
         # Initialise warning state from the spinbox default (50 %)
         self._on_duty_changed(self._duty_spin.value())
@@ -478,6 +538,72 @@ class FpgaTab(QWidget):
             self._stim_w._val.setStyleSheet(
                 f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; "
                 f"color:#444;")
+
+        # Trigger mode readout (BNC 745 only — hidden for NI-9637)
+        if self._trig_w.isVisible():
+            from hardware.fpga.base import FpgaTriggerMode
+            if status.trigger_mode == FpgaTriggerMode.SINGLE_SHOT:
+                label = "SINGLE ✦" if status.trigger_armed else "SINGLE"
+                color = PALETTE["warning"]
+            else:
+                label = "CONT"
+                color = PALETTE["textDim"]
+            self._trig_w._val.setText(label)
+            self._trig_w._val.setStyleSheet(
+                f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; "
+                f"color:{color};")
+
+    # ── Driver-aware wiring ───────────────────────────────────────────
+
+    def set_fpga_driver(self, driver) -> None:
+        """
+        Called by main_app when an FPGA device connects or disconnects.
+        Reveals / hides the trigger-mode panel based on driver capabilities.
+        """
+        self._fpga_driver = driver
+        capable = driver is not None and driver.supports_trigger_mode()
+        self._trigger_panel.setVisible(capable)
+        self._trig_w.setVisible(capable)
+        if not capable:
+            # Reset to continuous so state doesn't linger across reconnects
+            self._trig_cont_rb.setChecked(True)
+            self._arm_btn.setEnabled(False)
+
+    # ── Trigger mode controls (BNC 745) ──────────────────────────────
+
+    def _on_trig_mode_change(self) -> None:
+        from hardware.fpga.base import FpgaTriggerMode
+        single = self._trig_single_rb.isChecked()
+        self._arm_btn.setEnabled(single)
+        mode = FpgaTriggerMode.SINGLE_SHOT if single else FpgaTriggerMode.CONTINUOUS
+        drv = self._fpga_driver
+        if drv and drv.supports_trigger_mode():
+            try:
+                drv.set_trigger_mode(mode)
+            except Exception as exc:
+                log.error("set_trigger_mode failed: %s", exc)
+        elif self._hw:
+            try:
+                self._hw.fpga_set_trigger_mode(mode)
+            except Exception:
+                pass
+
+    def _apply_pulse_duration(self) -> None:
+        us = self._pulse_dur_spin.value()
+        drv = self._fpga_driver
+        if drv and drv.supports_trigger_mode():
+            try:
+                drv.set_pulse_duration(us)
+            except Exception as exc:
+                log.error("set_pulse_duration failed: %s", exc)
+
+    def _arm_trigger(self) -> None:
+        drv = self._fpga_driver
+        if drv and drv.supports_trigger_mode():
+            try:
+                drv.arm_trigger()
+            except Exception as exc:
+                log.error("arm_trigger failed: %s", exc)
 
     # ── Hardware commands ─────────────────────────────────────────────
 

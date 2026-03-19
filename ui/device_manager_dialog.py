@@ -1104,6 +1104,16 @@ class _DeviceProfilePanel(QWidget):
             pg.addWidget(ip_edit, r, 1)
             self._param_widgets["ip"] = ip_edit
             r += 1
+            # For TCP devices with a fixed port, show it as a read-only hint
+            if desc.tcp_port:
+                pg.addWidget(self._sublabel("TCP Port"), r, 0)
+                port_lbl = QLabel(
+                    f"{desc.tcp_port}  "
+                    f"<span style='color:#555'>(fixed — set via pivserver64.exe -p {desc.tcp_port})</span>"
+                    if desc.uid == "amcad_bilt" else str(desc.tcp_port))
+                port_lbl.setTextFormat(Qt.RichText)
+                pg.addWidget(port_lbl, r, 1)
+                r += 1
 
         # ── Camera Type picker (cameras only) ───────────────────────────────────
         if desc.device_type == DTYPE_CAMERA:
@@ -1146,6 +1156,22 @@ class _DeviceProfilePanel(QWidget):
             if ct == CONN_PCIE:
                 _conn_note = ("Connects via PCIe — no COM port required.\n"
                               "Resource name (e.g. RIO0) is assigned in NI MAX.")
+            elif desc.uid == "bnc_745":
+                # BNC 745 uses a VISA resource string, not a DAQmx device name
+                pg.addWidget(self._sublabel("VISA Address"), r, 0)
+                _saved_visa = entry.address or "GPIB::12"
+                visa_edit = QLineEdit(_saved_visa)
+                visa_edit.setPlaceholderText(
+                    "e.g. GPIB::12  |  USB0::0x0A33::...  |  ASRL/dev/ttyUSB0")
+                visa_edit.setToolTip(
+                    "PyVISA resource string for the BNC 745.\n"
+                    "Find it in NI MAX → Instruments, or run:\n"
+                    "  python -c \"import pyvisa; "
+                    "print(pyvisa.ResourceManager().list_resources())\"")
+                pg.addWidget(visa_edit, r, 1)
+                self._param_widgets["visa_address"] = visa_edit
+                r += 1
+                _conn_note = None
             elif desc.device_type == DTYPE_FPGA:
                 _conn_note = ("Connects via NI-DAQmx — no COM port required.\n"
                               "Device name (e.g. Dev1) is assigned in NI MAX.")
@@ -1248,9 +1274,10 @@ class _DeviceProfilePanel(QWidget):
             # Prefer userData so we always save the bare COM port name.
             entry.address = (pw["port"].currentData()
                              or pw["port"].currentText().split("  —  ")[0].strip())
-        if "baud"    in pw: entry.baud_rate  = int(pw["baud"].currentText())
-        if "ip"      in pw: entry.ip_address = pw["ip"].text().strip()
-        if "timeout" in pw: entry.timeout_s  = pw["timeout"].value()
+        if "baud"         in pw: entry.baud_rate  = int(pw["baud"].currentText())
+        if "ip"           in pw: entry.ip_address = pw["ip"].text().strip()
+        if "timeout"      in pw: entry.timeout_s  = pw["timeout"].value()
+        if "visa_address" in pw: entry.address    = pw["visa_address"].text().strip()
 
         # Persist connection parameters to user preferences so they survive
         # dialog close / app restart.

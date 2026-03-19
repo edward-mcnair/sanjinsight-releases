@@ -18,6 +18,7 @@ from PyQt5.QtCore    import Qt, pyqtSignal
 
 from hardware.app_state import app_state
 from ui.theme import FONT, PALETTE, scaled_qss
+from ui.widgets.collapsible_panel import CollapsiblePanel
 from ai.instrument_knowledge import (
     BIAS_VO_INT_MAX_V, BIAS_AUX_INT_MAX_V, BIAS_VO_EXT_MAX_V,
     SHUNT_20MA_OHM)
@@ -65,9 +66,16 @@ class BiasTab(QWidget):
         self._stack.addWidget(controls)
         self._stack.setCurrentIndex(1)  # show controls by default
 
-        # Status readouts
+        # Status readouts — drain channel (always visible)
         status_box = QGroupBox("Measured Output")
-        sl = QHBoxLayout(status_box)
+        from PyQt5.QtWidgets import QVBoxLayout as _VL
+        sv = _VL(status_box)
+        sv.setSpacing(4)
+        sv.setContentsMargins(6, 6, 6, 6)
+
+        drain_row = QWidget()
+        sl = QHBoxLayout(drain_row)
+        sl.setContentsMargins(0, 0, 0, 0)
         self._v_w      = self._readout("VOLTAGE",    "--",    "accent")
         self._i_w      = self._readout("CURRENT",    "--",    "warning")
         self._p_w      = self._readout("POWER",      "--",    "cta")
@@ -76,6 +84,23 @@ class BiasTab(QWidget):
         for w in [self._v_w, self._i_w, self._p_w,
                   self._comp_w, self._state_w]:
             sl.addWidget(w)
+        sv.addWidget(drain_row)
+
+        # Gate-channel readouts — shown only when AMCAD BILT is connected
+        self._gate_row = QWidget()
+        gl = QHBoxLayout(self._gate_row)
+        gl.setContentsMargins(0, 0, 0, 0)
+        self._gate_v_w = self._readout("GATE Vg", "--", "info")
+        self._gate_i_w = self._readout("GATE Ig", "--", "textDim")
+        _gate_lbl = QLabel("Gate")
+        _gate_lbl.setObjectName("sublabel")
+        _gate_lbl.setAlignment(Qt.AlignVCenter)
+        gl.addWidget(self._gate_v_w)
+        gl.addWidget(self._gate_i_w)
+        gl.addStretch()
+        self._gate_row.setVisible(False)
+        sv.addWidget(self._gate_row)
+
         root.addWidget(status_box)
 
         # ── Configuration presets ──────────────────────────────────────
@@ -264,7 +289,71 @@ class BiasTab(QWidget):
         self._mode_bg.buttonClicked.connect(lambda _: self._validate_level())
 
         root.addWidget(ctrl_box)
+
+        # ── AMCAD BILT pulse configuration (hidden until BILT connects) ─
+        self._bilt_panel = CollapsiblePanel(
+            "AMCAD BILT Pulse Configuration", start_collapsed=False)
+
+        bilt_inner = QWidget()
+        bg = QGridLayout(bilt_inner)
+        bg.setContentsMargins(0, 4, 0, 0)
+        bg.setSpacing(8)
+
+        # Column headers
+        for col, hdr in enumerate(["", "Bias (V)", "Pulse (V)",
+                                    "Width (µs)", "Delay (µs)"], start=0):
+            lbl = QLabel(hdr)
+            lbl.setObjectName("sublabel")
+            lbl.setAlignment(Qt.AlignCenter if col > 0 else Qt.AlignLeft)
+            bg.addWidget(lbl, 0, col)
+
+        def _bilt_spin(lo, hi, val, dec=3, step=0.1):
+            s = QDoubleSpinBox()
+            s.setRange(lo, hi)
+            s.setValue(val)
+            s.setDecimals(dec)
+            s.setSingleStep(step)
+            s.setFixedWidth(100)
+            return s
+
+        # Gate channel (ch1)
+        bg.addWidget(QLabel("Gate  (Ch 1)"), 1, 0)
+        self._g_bias_sp  = _bilt_spin(-40, 40,   -5.0)
+        self._g_pulse_sp = _bilt_spin(-40, 40,   -2.2)
+        self._g_width_sp = _bilt_spin(0.1, 999999, 110.0, dec=1, step=10)
+        self._g_delay_sp = _bilt_spin(0.0, 999999,   5.0, dec=1, step=1)
+        bg.addWidget(self._g_bias_sp,  1, 1)
+        bg.addWidget(self._g_pulse_sp, 1, 2)
+        bg.addWidget(self._g_width_sp, 1, 3)
+        bg.addWidget(self._g_delay_sp, 1, 4)
+
+        # Drain channel (ch2)
+        bg.addWidget(QLabel("Drain (Ch 2)"), 2, 0)
+        self._d_bias_sp  = _bilt_spin(-40, 40,    0.0)
+        self._d_pulse_sp = _bilt_spin(-40, 40,    1.0)
+        self._d_width_sp = _bilt_spin(0.1, 999999, 100.0, dec=1, step=10)
+        self._d_delay_sp = _bilt_spin(0.0, 999999,  10.0, dec=1, step=1)
+        bg.addWidget(self._d_bias_sp,  2, 1)
+        bg.addWidget(self._d_pulse_sp, 2, 2)
+        bg.addWidget(self._d_width_sp, 2, 3)
+        bg.addWidget(self._d_delay_sp, 2, 4)
+
+        apply_bilt_btn = QPushButton("Apply Pulse Config")
+        apply_bilt_btn.setFixedWidth(160)
+        apply_bilt_btn.setToolTip(
+            "Push Gate + Drain pulse parameters to the AMCAD BILT.\n"
+            "Does not enable output — click 'Output ON' after.")
+        apply_bilt_btn.clicked.connect(self._apply_bilt_pulse)
+        bg.addWidget(apply_bilt_btn, 3, 1, 1, 2)
+
+        self._bilt_panel.addWidget(bilt_inner)
+        self._bilt_panel.setVisible(False)
+        root.addWidget(self._bilt_panel)
+
         root.addStretch()
+
+        # Driver reference (set by main_app when a bias device connects)
+        self._bias_driver = None
 
         # Initialise to port defaults and show voltage presets
         self._on_port_change()
@@ -450,6 +539,46 @@ class BiasTab(QWidget):
             if bias:
                 bias.set_mode(mode)
 
+    # ── Driver-aware wiring ───────────────────────────────────────────
+
+    def set_bias_driver(self, driver) -> None:
+        """
+        Called by main_app when a bias device connects or disconnects.
+        Reveals BILT-specific controls and Gate readout row for AmcadBiltDriver.
+        """
+        from hardware.bias.amcad_bilt import AmcadBiltDriver
+        self._bias_driver = driver
+        is_bilt = isinstance(driver, AmcadBiltDriver)
+        self._bilt_panel.setVisible(is_bilt)
+        self._gate_row.setVisible(is_bilt)
+
+    def _apply_bilt_pulse(self) -> None:
+        """Push Gate + Drain pulse parameters to the AMCAD BILT driver."""
+        from hardware.bias.amcad_bilt import AmcadBiltDriver
+        drv = self._bias_driver
+        if not isinstance(drv, AmcadBiltDriver):
+            drv = app_state.bias
+        if not isinstance(drv, AmcadBiltDriver):
+            return
+        try:
+            drv.configure_pulse(
+                channel = 1,
+                bias_v  = self._g_bias_sp.value(),
+                pulse_v = self._g_pulse_sp.value(),
+                width_s = self._g_width_sp.value() * 1e-6,
+                delay_s = self._g_delay_sp.value() * 1e-6,
+            )
+            drv.configure_pulse(
+                channel = 2,
+                bias_v  = self._d_bias_sp.value(),
+                pulse_v = self._d_pulse_sp.value(),
+                width_s = self._d_width_sp.value() * 1e-6,
+                delay_s = self._d_delay_sp.value() * 1e-6,
+            )
+            log.info("BILT pulse config applied.")
+        except Exception as exc:
+            log.error("BILT configure_pulse failed: %s", exc)
+
     def _apply(self):
         self._set_level(self._level_spin.value())
         self._set_compliance(self._comp_spin.value())
@@ -566,3 +695,8 @@ class BiasTab(QWidget):
             self._state_w._val.setText("OFF ○")
             self._state_w._val.setStyleSheet(
                 f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:#444;")
+
+        # Gate-channel readout (AMCAD BILT only)
+        if self._gate_row.isVisible() and hasattr(status, "gate_voltage"):
+            self._gate_v_w._val.setText(f"{status.gate_voltage:.4f} V")
+            self._gate_i_w._val.setText(f"{status.gate_current*1000:.3f} mA")

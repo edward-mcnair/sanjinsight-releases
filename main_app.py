@@ -1187,6 +1187,12 @@ class MainWindow(QMainWindow):
         if "camera" in key:
             self._refresh_all_camera_selectors()
 
+        # Reveal driver-specific UI panels for BNC 745 / AMCAD BILT
+        if "fpga" in key:
+            self._fpga_tab.set_fpga_driver(app_state.fpga if ok else None)
+        elif "bias" in key:
+            self._bias_tab.set_bias_driver(app_state.bias if ok else None)
+
         # Re-evaluate required-device readiness after every hotplug event
         self._update_safe_mode()
 

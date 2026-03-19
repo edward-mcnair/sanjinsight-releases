@@ -467,6 +467,9 @@ class DeviceManager:
             return create_tec(cfg)
         elif dtype == DTYPE_FPGA:
             from hardware.fpga import create_fpga
+            # BNC 745 uses a VISA resource string stored in entry.address
+            if desc.uid == "bnc_745":
+                cfg["address"] = addr or "GPIB::12"
             return create_fpga(cfg)
         elif dtype == DTYPE_STAGE:
             from hardware.stage import create_stage
@@ -481,6 +484,10 @@ class DeviceManager:
             return create_turret(cfg)
         elif dtype == DTYPE_BIAS:
             from hardware.bias import create_bias
+            # AMCAD BILT uses TCP/SCPI: remap ip → host, use desc.tcp_port
+            if desc.uid == "amcad_bilt":
+                cfg["host"] = entry.ip_address or desc.default_ip
+                cfg["port"] = desc.tcp_port or 5035
             return create_bias(cfg)
         elif dtype == DTYPE_LDD:
             from hardware.ldd.factory import create_ldd
@@ -512,6 +519,8 @@ class DeviceManager:
             "keithley_2400":            "keithley",
             "keithley_2450":            "keithley",
             "rigol_dp832":              "visa",
+            "amcad_bilt":               "amcad_bilt",
+            "bnc_745":                  "bnc745",
         }
         return KEY_MAP.get(desc.uid, desc.uid)
 
