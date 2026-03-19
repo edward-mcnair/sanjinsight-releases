@@ -37,7 +37,7 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QDoubleSpinBox, QSpinBox, QGroupBox, QGridLayout, QProgressBar,
     QSlider, QComboBox, QSplitter, QSizePolicy, QFileDialog, QMessageBox,
-    QCheckBox)
+    QCheckBox, QRadioButton, QButtonGroup)
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui  import QImage, QPixmap, QPainter, QPen, QColor, QFont
 
@@ -243,14 +243,38 @@ class TransientTab(QWidget):
             "Duration of each power pulse in microseconds.\n"
             "The FPGA fires this pulse, then waits `delay` before camera capture.")
 
+        # ── Sweep Mode: Linear | Logarithmic ─────────────────────────
+        self._sweep_linear_rb = QRadioButton("Linear")
+        self._sweep_log_rb    = QRadioButton("Logarithmic")
+        self._sweep_linear_rb.setChecked(True)
+        self._sweep_mode_grp  = QButtonGroup(self)
+        self._sweep_mode_grp.addButton(self._sweep_linear_rb, 0)
+        self._sweep_mode_grp.addButton(self._sweep_log_rb,    1)
+        self._sweep_linear_rb.setToolTip(
+            "Delay points are evenly spaced: np.linspace(start, stop, n_steps)")
+        self._sweep_log_rb.setToolTip(
+            "Delay points are logarithmically spaced: np.geomspace(start, stop, n_steps)\n"
+            "Ideal for capturing fast transient onset with slower long-term tail.\n"
+            "Note: delay start must be > 0 for log spacing.")
+
+        sweep_mode_w = QWidget()
+        sweep_mode_h = QHBoxLayout(sweep_mode_w)
+        sweep_mode_h.setContentsMargins(0, 0, 0, 0)
+        sweep_mode_h.setSpacing(8)
+        sweep_mode_h.addWidget(self._sweep_linear_rb)
+        sweep_mode_h.addWidget(self._sweep_log_rb)
+        sweep_mode_h.addStretch()
+
         tl.addWidget(self._sub("Delays"),      0, 0)
         tl.addWidget(self._n_delays,           0, 1)
         tl.addWidget(self._sub("Delay start"), 1, 0)
         tl.addWidget(self._delay_start,        1, 1)
         tl.addWidget(self._sub("Delay end"),   2, 0)
         tl.addWidget(self._delay_end,          2, 1)
-        tl.addWidget(self._sub("Pulse width"), 3, 0)
-        tl.addWidget(self._pulse_us,           3, 1)
+        tl.addWidget(self._sub("Sweep mode"),  3, 0)
+        tl.addWidget(sweep_mode_w,             3, 1)
+        tl.addWidget(self._sub("Pulse width"), 4, 0)
+        tl.addWidget(self._pulse_us,           4, 1)
         lay.addWidget(tim_box)
 
         # ── Averaging ────────────────────────────────────────────────
@@ -375,6 +399,13 @@ class TransientTab(QWidget):
         self._run_btn.clicked.connect(self._run)
         self._abort_btn.clicked.connect(self._abort)
 
+        self._save_sweep_cb = QCheckBox("Save sweep data (.npy cube)")
+        self._save_sweep_cb.setChecked(False)
+        self._save_sweep_cb.setToolTip(
+            "After acquisition completes, save the full time-resolved ΔR/R cube\n"
+            "as a .npy file alongside the session directory.\n"
+            "File name: transient_cube_<timestamp>.npy")
+
         self._progress = QProgressBar()
         self._progress.setRange(0, 100)
         self._status_lbl = QLabel("Ready")
@@ -385,6 +416,7 @@ class TransientTab(QWidget):
 
         rl.addWidget(self._run_btn)
         rl.addWidget(self._abort_btn)
+        rl.addWidget(self._save_sweep_cb)
         rl.addWidget(self._progress)
         rl.addWidget(self._status_lbl)
         lay.addWidget(run_box)
@@ -562,6 +594,7 @@ class TransientTab(QWidget):
             pulse_dur_us     = self._pulse_us.value(),
             n_averages       = self._n_avg.value(),
             drift_correction = self._drift_cb.isChecked(),
+            delay_times_s    = self._build_delay_times(),
         )
 
         self._timer.start()
@@ -670,12 +703,42 @@ class TransientTab(QWidget):
 
             self._show_frame(0)
 
+        # ── Auto-save sweep cube if checkbox is set ───────────────────
+        if self._save_sweep_cb.isChecked() and result.delta_r_cube is not None:
+            self._auto_save_cube(result)
+
         try:
             from hardware.app_state import app_state
             app_state.active_modality = "thermoreflectance"
         except Exception:
             log.debug("TransientTab._on_complete: could not reset active_modality",
                       exc_info=True)
+
+    def _auto_save_cube(self, result) -> None:
+        """
+        Automatically save the ΔR/R cube to a .npy file alongside the session.
+
+        The file is written to the current working directory (or the session
+        folder if app_state exposes one) with a timestamp-based name.
+        Any error is logged but does not interrupt the UI.
+        """
+        import os
+        ts = int(time.time())
+        # Prefer session directory if available
+        try:
+            from hardware.app_state import app_state
+            session_dir = getattr(app_state, "session_dir", None) or "."
+        except Exception:
+            session_dir = "."
+        filename = os.path.join(session_dir, f"transient_cube_{ts}.npy")
+        try:
+            np.save(filename, result.delta_r_cube)
+            log.info("TransientTab: sweep cube saved → %s  shape=%s",
+                     filename, result.delta_r_cube.shape)
+            self._status_lbl.setText(
+                self._status_lbl.text() + f"\nCube saved → {os.path.basename(filename)}")
+        except Exception as exc:
+            log.warning("TransientTab._auto_save_cube: save failed: %s", exc)
 
     # ---------------------------------------------------------------- #
     #  Frame / slice display                                           #
@@ -807,6 +870,7 @@ class TransientTab(QWidget):
             pulse_dur_us     = self._pulse_us.value(),
             n_averages       = self._n_avg.value(),
             drift_correction = self._drift_cb.isChecked(),
+            delay_times_s    = self._build_delay_times(),
         )
         n_v = len(voltages)
 
@@ -923,3 +987,31 @@ class TransientTab(QWidget):
         l = QLabel(text)
         l.setObjectName("sublabel")
         return l
+
+    def _build_delay_times(self) -> Optional[np.ndarray]:
+        """
+        Build the delay time array in seconds using the current sweep mode.
+
+        Returns
+        -------
+        np.ndarray or None
+            None means the pipeline will fall back to np.linspace (same result
+            as Linear mode but computed internally).  We always return an array
+            so the mode is always explicit.
+        """
+        n      = self._n_delays.value()
+        start  = self._delay_start.value() / 1000.0  # ms → s
+        stop   = self._delay_end.value()   / 1000.0
+
+        if self._sweep_log_rb.isChecked():
+            # Logarithmic spacing — start must be > 0
+            if start <= 0.0:
+                # Clamp to a small positive value and warn
+                clamped = max(stop / 1e6, 1e-9)
+                log.warning(
+                    "Log sweep: delay start (%.4f ms) must be > 0; "
+                    "clamping to %.2e s", self._delay_start.value(), clamped)
+                start = clamped
+            return np.geomspace(start, stop, n)
+        else:
+            return np.linspace(start, stop, n)

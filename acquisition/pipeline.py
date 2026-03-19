@@ -133,22 +133,32 @@ class AcquisitionPipeline:
         result = pipeline.run(n_frames=100)
     """
 
-    def __init__(self, camera, fpga=None, bias=None):
+    def __init__(self, camera, fpga=None, bias=None,
+                 shadow_correct: bool = False):
         """
-        camera : CameraDriver — must be open and streaming.
-        fpga   : FpgaDriver | None — if provided, set_output() is called
-                 to switch the DUT drive between cold (False) and hot (True).
-        bias   : BiasDriver | None — if provided and fpga is None, enable()
-                 and disable() are called for hot/cold switching.
+        camera         : CameraDriver — must be open and streaming.
+        fpga           : FpgaDriver | None — if provided, set_output() is
+                         called to switch the DUT drive between cold (False)
+                         and hot (True).
+        bias           : BiasDriver | None — if provided and fpga is None,
+                         enable() / disable() are called for hot/cold
+                         switching.
+        shadow_correct : bool — if True, apply shading correction to the cold
+                         average before computing ΔR/R.  Uses
+                         image_filters.shadow_correct() in self-correction
+                         mode (large-Gaussian envelope division).  This
+                         reduces non-uniform illumination artefacts at the
+                         cost of a small amount of processing time.
         """
-        self._cam         = camera
-        self._fpga        = fpga
-        self._bias        = bias
-        self._state       = AcqState.IDLE
-        self._result      = None
-        self._thread      = None
-        self._abort_flag  = False
-        self._roi         = None
+        self._cam              = camera
+        self._fpga             = fpga
+        self._bias             = bias
+        self._shadow_correct   = shadow_correct
+        self._state            = AcqState.IDLE
+        self._result           = None
+        self._thread           = None
+        self._abort_flag       = False
+        self._roi              = None
 
         self.on_progress: Optional[Callable[[AcquisitionProgress], None]] = None
         self.on_complete: Optional[Callable[[AcquisitionResult],   None]] = None
@@ -424,8 +434,7 @@ class AcquisitionPipeline:
     # 0.5% of full scale ≈ 328 counts for a 16-bit camera.
     DARK_THRESHOLD_FRACTION: float = 0.005
 
-    @staticmethod
-    def _compute(result: AcquisitionResult):
+    def _compute(self, result: AcquisitionResult):
         """
         Compute thermoreflectance signal from averaged frames.
 
@@ -433,6 +442,14 @@ class AcquisitionPipeline:
 
         Where R is proportional to the camera intensity.
         Small values (typically 1e-4 to 1e-2) indicate temperature change.
+
+        Shadow correction (optional)
+        ----------------------------
+        When the pipeline was constructed with shadow_correct=True the cold
+        average is passed through image_filters.shadow_correct() before the
+        ΔR/R computation.  This removes non-uniform illumination (shading)
+        using a large-Gaussian envelope division, which can significantly
+        reduce low-spatial-frequency artefacts in the ΔR/R map.
 
         Dark-pixel masking
         ------------------
@@ -446,6 +463,22 @@ class AcquisitionPipeline:
         """
         cold = result.cold_avg.astype(np.float64)
         hot  = result.hot_avg.astype(np.float64)
+
+        # ── Optional shadow / shading correction ──────────────────────
+        if self._shadow_correct:
+            try:
+                from acquisition.image_filters import (
+                    shadow_correct as _shadow_correct,
+                )
+                cold = _shadow_correct(
+                    cold.astype(np.float32)
+                ).astype(np.float64)
+                log.debug("_compute: shadow correction applied to cold_avg.")
+            except Exception as exc:
+                log.warning(
+                    "_compute: shadow correction failed (%s); "
+                    "proceeding without it.", exc
+                )
 
         # ── Dark-pixel mask ───────────────────────────────────────────
         # Determine threshold from the original dtype (uint8 → 255, uint16 → 65535)

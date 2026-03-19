@@ -122,6 +122,14 @@ class IC:
     KEY           = "mdi.key-outline"
     # Hardware connection
     CONNECT       = "mdi.power-plug-outline"
+    # Wavelength / spectroscopy
+    WAVELENGTH    = "mdi.water-opacity"
+    MONOCHROMATOR = "mdi.ray-vertex"
+    SPECTRUM      = "mdi.chart-bell-curve-cumulative"
+    # Emissivity / IR calibration
+    EMISSIVITY    = "mdi.thermometer-lines"
+    # IV Sweep / electrical
+    IV_SWEEP      = "mdi.current-ac"
 
 
 # ── Sidebar navigation icon registry ─────────────────────────────────────────
@@ -140,6 +148,7 @@ NAV_ICONS: dict[str, str] = {
     # HARDWARE
     "Camera":      IC.CAMERA,
     "Stimulus":    IC.STIMULUS,
+    "Wavelength":  IC.WAVELENGTH,
     "Temperature": IC.TEMPERATURE,
     "Stage":       IC.STAGE,
     "Prober":      IC.PROBER,
@@ -153,6 +162,8 @@ NAV_ICONS: dict[str, str] = {
     "Movie":       IC.MOVIE,
     "Compare":     IC.COMPARE,
     "3D Surface":  IC.SURFACE_3D,
+    "Emissivity":  IC.EMISSIVITY,
+    "IV Sweep":    IC.IV_SWEEP,
     "FPGA":        IC.FPGA,
     "Bias Source": IC.BIAS,
     "ROI":         IC.ROI,

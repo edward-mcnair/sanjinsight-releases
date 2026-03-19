@@ -199,7 +199,8 @@ class TransientAcquisitionPipeline:
               delay_end_s:      float = 0.005,
               pulse_dur_us:     float = 500.0,
               n_averages:       int   = 50,
-              drift_correction: bool  = False) -> None:
+              drift_correction: bool  = False,
+              delay_times_s:    Optional[np.ndarray] = None) -> None:
         """
         Start transient acquisition in a background thread.
 
@@ -211,6 +212,10 @@ class TransientAcquisitionPipeline:
         drift_correction : If True, apply FFT phase-correlation drift
                            correction to each captured frame before
                            accumulating into the per-delay average.
+        delay_times_s    : Optional pre-computed delay array (seconds).
+                           When provided, overrides the linspace built from
+                           delay_start_s / delay_end_s / n_delays.  Use this
+                           to pass a logarithmically-spaced array from the UI.
         """
         if self._state == TransientAcqState.CAPTURING:
             raise RuntimeError("Transient acquisition already in progress.")
@@ -220,7 +225,8 @@ class TransientAcquisitionPipeline:
         self._thread = threading.Thread(
             target=self._run,
             args=(n_delays, delay_start_s, delay_end_s,
-                  pulse_dur_us, n_averages, drift_correction),
+                  pulse_dur_us, n_averages, drift_correction,
+                  delay_times_s),
             daemon=True)
         self._thread.start()
 
@@ -230,10 +236,12 @@ class TransientAcquisitionPipeline:
             delay_end_s:      float = 0.005,
             pulse_dur_us:     float = 500.0,
             n_averages:       int   = 50,
-            drift_correction: bool  = False) -> TransientResult:
+            drift_correction: bool  = False,
+            delay_times_s:    Optional[np.ndarray] = None) -> TransientResult:
         """Synchronous version — blocks until complete."""
         self.start(n_delays, delay_start_s, delay_end_s,
-                   pulse_dur_us, n_averages, drift_correction)
+                   pulse_dur_us, n_averages, drift_correction,
+                   delay_times_s)
         self._thread.join()
         return self._result
 
@@ -290,12 +298,16 @@ class TransientAcquisitionPipeline:
              delay_end_s:      float,
              pulse_dur_us:     float,
              n_averages:       int,
-             drift_correction: bool = False):
+             drift_correction: bool = False,
+             delay_times_s:    Optional[np.ndarray] = None):
         self._state = TransientAcqState.CAPTURING
         hw_triggered = self.uses_hw_trigger
         t_start = time.time()
 
-        delays = np.linspace(delay_start_s, delay_end_s, n_delays)
+        if delay_times_s is not None and len(delay_times_s) == n_delays:
+            delays = np.asarray(delay_times_s, dtype=np.float64)
+        else:
+            delays = np.linspace(delay_start_s, delay_end_s, n_delays)
 
         self._result = TransientResult(
             n_delays      = n_delays,

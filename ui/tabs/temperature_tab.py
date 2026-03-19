@@ -18,13 +18,14 @@ Advanced — Safety limits (collapsible, hidden by default)
 from __future__ import annotations
 
 import logging
+import time
 
 log = logging.getLogger(__name__)
 
 from PyQt5.QtWidgets import (
     QWidget, QLabel, QPushButton, QDoubleSpinBox, QVBoxLayout,
-    QHBoxLayout, QGroupBox)
-from PyQt5.QtCore    import Qt
+    QHBoxLayout, QGroupBox, QFrame)
+from PyQt5.QtCore    import Qt, QTimer
 
 from hardware.app_state    import app_state
 from ui.widgets.temp_plot  import TempPlot
@@ -35,11 +36,20 @@ from ui.theme import FONT, PALETTE, scaled_qss
 # Used for the stabilization time estimate shown in the UI.
 _TEC_RAMP_RATE_C_PER_MIN = 0.5
 
+# Chuck stability criteria matching config default
+_CHUCK_STAB_TOLERANCE_C  = 0.5   # °C band
+_CHUCK_STAB_DURATION_S   = 5.0   # seconds within band
+
 
 class TemperatureTab(QWidget):
-    def __init__(self, n_tecs: int, hw_service=None):
+    def __init__(self, n_tecs: int, hw_service=None, has_chuck: bool = False):
         super().__init__()
-        self._hw = hw_service
+        self._hw        = hw_service
+        self._has_chuck = has_chuck
+
+        # Chuck stability tracking (software-side, no HW flag from chuck driver)
+        self._chuck_in_band_since: float | None = None
+
         root = QVBoxLayout(self)
         root.setContentsMargins(10, 10, 10, 10)
         root.setSpacing(10)
@@ -50,6 +60,12 @@ class TemperatureTab(QWidget):
             p = self._build_tec(labels[i] if i < len(labels) else f"TEC {i+1}", i)
             root.addWidget(p)
             self._panels.append(p)
+
+        # ── Chuck Temperature (TCAT) section ─────────────────────────
+        self._chuck_box = self._build_chuck()
+        root.addWidget(self._chuck_box)
+        # Show/hide based on whether chuck controller is configured
+        self._chuck_box.setVisible(True)   # always render; update_chuck hides content if N/A
 
         root.addStretch()
 
@@ -247,6 +263,202 @@ class TemperatureTab(QWidget):
 
         return box
 
+    # ---------------------------------------------------------------- #
+    #  Chuck Temperature (TCAT) section                                #
+    # ---------------------------------------------------------------- #
+
+    def _build_chuck(self) -> QGroupBox:
+        """Build the Chuck Temperature (TCAT) display group."""
+        box = QGroupBox("Chuck Temperature (TCAT)")
+        main = QVBoxLayout(box)
+        main.setContentsMargins(10, 8, 10, 10)
+        main.setSpacing(8)
+
+        # ── "Not configured" placeholder (shown when no chuck controller) ─
+        _dim = PALETTE.get("textDim", "#999999")
+        nc_lbl = QLabel("Not configured")
+        nc_lbl.setAlignment(Qt.AlignCenter)
+        nc_lbl.setStyleSheet(
+            f"color:{_dim}; font-size:{FONT['body']}pt; padding:8px;")
+        box._not_configured_lbl = nc_lbl
+        main.addWidget(nc_lbl)
+
+        # ── Live readout row ──────────────────────────────────────────
+        readout_row = QHBoxLayout()
+        readout_row.setSpacing(16)
+
+        # Current temperature display
+        cur_w  = self._readout_widget("CHUCK TEMP", "--", "accent")
+        box._chuck_actual_lbl = cur_w._val
+        readout_row.addWidget(cur_w)
+
+        # Target temperature display (only meaningful when ATEC302 connected)
+        tgt_w  = self._readout_widget("TARGET", "--", "warning")
+        box._chuck_target_lbl = tgt_w._val
+        readout_row.addWidget(tgt_w)
+
+        # Stabilized indicator
+        stab_w = QWidget()
+        stab_v = QVBoxLayout(stab_w)
+        stab_v.setAlignment(Qt.AlignCenter)
+        stab_sub = QLabel("STABLE")
+        stab_sub.setObjectName("sublabel")
+        stab_sub.setAlignment(Qt.AlignCenter)
+        stab_dot = QLabel("○")
+        stab_dot.setAlignment(Qt.AlignCenter)
+        _dim2 = PALETTE.get("textDim", "#999999")
+        stab_dot.setStyleSheet(
+            f"font-size:{FONT['readoutLg']}pt; color:{_dim2};")
+        stab_v.addWidget(stab_sub)
+        stab_v.addWidget(stab_dot)
+        box._chuck_stab_dot = stab_dot
+        readout_row.addWidget(stab_w)
+
+        readout_row.addStretch()
+
+        # ── Target spinbox (only shown when chuck controller active) ──
+        tgt_ctrl_w = QWidget()
+        tgt_ctrl_h = QHBoxLayout(tgt_ctrl_w)
+        tgt_ctrl_h.setContentsMargins(0, 0, 0, 0)
+        tgt_ctrl_h.setSpacing(6)
+        tgt_ctrl_h.addWidget(QLabel("Target (°C)"))
+        chuck_spin = QDoubleSpinBox()
+        chuck_spin.setRange(-65, 250)
+        chuck_spin.setValue(25.0)
+        chuck_spin.setSingleStep(1.0)
+        chuck_spin.setDecimals(1)
+        chuck_spin.setFixedWidth(80)
+        box._chuck_spin = chuck_spin
+        tgt_ctrl_h.addWidget(chuck_spin)
+        set_btn = QPushButton("Set")
+        set_btn.setFixedWidth(50)
+        tgt_ctrl_h.addWidget(set_btn)
+        set_btn.clicked.connect(lambda _: self._chuck_set_target(chuck_spin.value()))
+        box._chuck_set_btn = set_btn
+        readout_row.addWidget(tgt_ctrl_w)
+
+        # ── Horizontal separator ──────────────────────────────────────
+        sep = QFrame()
+        sep.setFrameShape(QFrame.HLine)
+        _bdr = PALETTE.get("border", "#3a3a3a")
+        sep.setStyleSheet(f"color:{_bdr};")
+        box._chuck_sep = sep
+
+        # ── Assemble: separator first, then the row ───────────────────
+        main.addWidget(sep)
+        main.addLayout(readout_row)
+
+        # Store references for show/hide
+        box._readout_row_w = readout_row   # layout — toggle via widgets visibility
+        box._tgt_ctrl_w    = tgt_ctrl_w
+
+        # Initial state: hide live content, show "not configured"
+        sep.setVisible(False)
+        tgt_ctrl_w.setVisible(False)
+        cur_w.setVisible(False)
+        tgt_w.setVisible(False)
+        stab_w.setVisible(False)
+
+        # Keep references
+        box._cur_readout_w  = cur_w
+        box._tgt_readout_w  = tgt_w
+        box._stab_readout_w = stab_w
+
+        return box
+
+    def _chuck_set_target(self, val: float) -> None:
+        """Send new target temperature to the chuck controller."""
+        try:
+            chuck = getattr(app_state, "chuck", None)
+            if chuck is not None:
+                chuck.set_target(val)
+        except Exception:
+            log.debug("TemperatureTab._chuck_set_target: could not set chuck target",
+                      exc_info=True)
+
+    def update_chuck(self, temp_c: float | None, stable: bool = False) -> None:
+        """
+        Update the Chuck Temperature (TCAT) display.
+
+        Parameters
+        ----------
+        temp_c : float or None
+            Current chuck temperature in °C.  Pass None to show "not configured".
+        stable : bool
+            True when the chuck reports it is within tolerance.
+            If the chuck driver does not report a stable flag, callers may pass
+            the result of the software-side stability check instead.
+        """
+        box = self._chuck_box
+
+        if temp_c is None:
+            # No chuck controller available — show placeholder
+            box._not_configured_lbl.setVisible(True)
+            box._chuck_sep.setVisible(False)
+            box._cur_readout_w.setVisible(False)
+            box._tgt_readout_w.setVisible(False)
+            box._stab_readout_w.setVisible(False)
+            box._tgt_ctrl_w.setVisible(False)
+            self._chuck_in_band_since = None
+            return
+
+        # Chuck is available — hide placeholder, show live content
+        box._not_configured_lbl.setVisible(False)
+        box._chuck_sep.setVisible(True)
+        box._cur_readout_w.setVisible(True)
+        box._tgt_readout_w.setVisible(True)
+        box._stab_readout_w.setVisible(True)
+
+        # Show target spinbox only when a chuck controller is configured
+        box._tgt_ctrl_w.setVisible(True)
+
+        # ── Temperature readout ───────────────────────────────────────
+        box._chuck_actual_lbl.setText(f"{temp_c:.2f} °C")
+
+        # Update target label from spinbox value
+        box._chuck_target_lbl.setText(f"{box._chuck_spin.value():.1f} °C")
+
+        # ── Software-side stability check ─────────────────────────────
+        # If the caller already resolved stability (e.g. from HW flag), use it.
+        # Otherwise compute from tolerance + duration window.
+        target = box._chuck_spin.value()
+        within_band = abs(temp_c - target) <= _CHUCK_STAB_TOLERANCE_C
+        if within_band:
+            if self._chuck_in_band_since is None:
+                self._chuck_in_band_since = time.monotonic()
+            elapsed = time.monotonic() - self._chuck_in_band_since
+            sw_stable = elapsed >= _CHUCK_STAB_DURATION_S
+        else:
+            self._chuck_in_band_since = None
+            sw_stable = False
+
+        # Hardware flag takes precedence if True; SW check is the fallback
+        is_stable = stable or sw_stable
+
+        # ── Stability indicator dot ───────────────────────────────────
+        if is_stable:
+            _grn = PALETTE.get("success", "#32d74b")
+            box._chuck_stab_dot.setText("●")
+            box._chuck_stab_dot.setStyleSheet(
+                f"font-size:{FONT['readoutLg']}pt; color:{_grn};")
+            box._chuck_stab_dot.setToolTip(
+                f"Chuck stable: within ±{_CHUCK_STAB_TOLERANCE_C}°C "
+                f"for ≥{_CHUCK_STAB_DURATION_S:.0f}s")
+        else:
+            _dim = PALETTE.get("textDim", "#999999")
+            box._chuck_stab_dot.setText("○")
+            box._chuck_stab_dot.setStyleSheet(
+                f"font-size:{FONT['readoutLg']}pt; color:{_dim};")
+            if within_band and self._chuck_in_band_since is not None:
+                remaining = _CHUCK_STAB_DURATION_S - (
+                    time.monotonic() - self._chuck_in_band_since)
+                box._chuck_stab_dot.setToolTip(
+                    f"Settling — {remaining:.0f}s until stable")
+            else:
+                diff = temp_c - target
+                box._chuck_stab_dot.setToolTip(
+                    f"Settling — Δ{diff:+.2f}°C from target")
+
     def _apply_styles(self) -> None:
         P    = PALETTE
         acc  = P.get("accent",  "#00d4aa")
@@ -313,6 +525,36 @@ class TemperatureTab(QWidget):
                     lbl.setStyleSheet(
                         f"font-family:Menlo,monospace; font-size:{FONT['readoutLg']}pt; "
                         f"color:{P.get(pal_key,'#00d4aa')};")
+
+        # ── Chuck box ─────────────────────────────────────────────────
+        chuck = getattr(self, "_chuck_box", None)
+        if chuck:
+            # "Not configured" label
+            nc = getattr(chuck, "_not_configured_lbl", None)
+            if nc:
+                nc.setStyleSheet(
+                    f"color:{P.get('textDim','#999999')}; "
+                    f"font-size:{FONT['body']}pt; padding:8px;")
+            # Separator colour
+            sep = getattr(chuck, "_chuck_sep", None)
+            if sep:
+                sep.setStyleSheet(f"color:{P.get('border','#3a3a3a')};")
+            # Readout labels
+            for attr, pal_key in [
+                ("_chuck_actual_lbl", "accent"),
+                ("_chuck_target_lbl", "warning"),
+            ]:
+                lbl = getattr(chuck, attr, None)
+                if lbl:
+                    lbl.setStyleSheet(
+                        f"font-family:Menlo,monospace; font-size:{FONT['readoutLg']}pt; "
+                        f"color:{P.get(pal_key,'#00d4aa')};")
+            # Stability dot — colour preserved by update_chuck; just reset font
+            dot = getattr(chuck, "_chuck_stab_dot", None)
+            if dot:
+                _dim3 = P.get("textDim", "#999999")
+                dot.setStyleSheet(
+                    f"font-size:{FONT['readoutLg']}pt; color:{_dim3};")
 
     def _readout_widget(self, label, initial, pal_key):
         """Create a readout widget.  pal_key is a PALETTE key (e.g. "accent")."""

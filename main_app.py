@@ -292,7 +292,10 @@ from ui.tabs.transient_capture_tab import TransientCaptureTab
 from ui.tabs.camera_control_tab    import CameraControlTab
 from ui.tabs.stimulus_tab          import StimulusTab
 from ui.tabs.library_tab           import LibraryTab
+from ui.tabs.wavelength_tab        import WavelengthTab
+from ui.tabs.emissivity_cal_tab    import EmissivityCalTab
 from ui.widgets.bottom_drawer      import BottomDrawer, DrawerToggleBar
+from ui.widgets.measurement_strip  import MeasurementReadoutStrip
 from ai.metrics_service          import MetricsService
 from ai.diagnostic_engine        import DiagnosticEngine
 from ui.widgets.readiness_widget import ReadinessWidget
@@ -421,6 +424,11 @@ class MainWindow(QMainWindow):
         self._cam_bar.camera_changed.connect(self._on_camera_bar_changed)
         root.addWidget(self._cam_bar)
 
+        # Live BT/dT/CT measurement readout strip — sits between camera bar and content.
+        # Receives TEC status via _on_tec(); always visible when TECs are present.
+        self._measurement_strip = MeasurementReadoutStrip()
+        root.addWidget(self._measurement_strip)
+
         # Content splitter: nav widget above, BottomDrawer (Console+Log) below.
         # BottomDrawer is collapsed to 0 by default; Ctrl+` toggles it.
         self._content_splitter = QSplitter(Qt.Vertical)
@@ -514,6 +522,8 @@ class MainWindow(QMainWindow):
         self._movie_tab    = MovieTab()                          # ← burst capture
         self._transient_tab = TransientTab()                    # ← time-resolved
         self._prober_tab   = ProberTab()                        # ← probe chuck
+        self._wavelength_tab   = WavelengthTab()               # ← monochromator control
+        self._emissivity_tab   = EmissivityCalTab()             # ← IR emissivity cal
 
         # ── Merged tabs ──────────────────────────────────────────────────
         # Each merged tab wraps multiple individual tabs into one sidebar entry.
@@ -600,10 +610,12 @@ class MainWindow(QMainWindow):
             NI("Sessions",    _I["Sessions"],          self._data_tab),
             NI("Compare",     _I["Compare"],           self._compare_tab),
             NI("3D Surface",  _I["3D Surface"],        self._surface_tab),
+            NI("Emissivity",  _I["Emissivity"],        self._emissivity_tab),
         ])
         self._nav.add_collapsible("Hardware", _G["Hardware"], [
             NI("Camera",      _I["Camera"],            self._camera_ctrl_tab),
             NI("Stimulus",    _I["Stimulus"],          self._stimulus_tab),
+            NI("Wavelength",  _I["Wavelength"],        self._wavelength_tab),
             NI("Temperature", _I["Temperature"],       self._temp_tab),
             NI("Stage",       _I["Stage"],             self._stage_tab),
             NI("Prober",      _I["Prober"],            self._prober_tab),
@@ -631,6 +643,19 @@ class MainWindow(QMainWindow):
         if not _hw_cfg.get("stage", {}).get("enabled", False):
             self._nav.set_item_visible("Stage", False)
         # Prober: always shown (was previously behind "Show more…" toggle)
+        # Wavelength: hidden unless monochromator is enabled
+        if not _hw_cfg.get("monochromator", {}).get("enabled", False):
+            self._nav.set_item_visible("Wavelength", False)
+        # Emissivity: always shown (applies to both real + simulated IR cameras)
+
+        # Wire monochromator driver into WavelengthTab if available
+        try:
+            from hardware.monochromator.factory import build_monochromator
+            _mono_driver = build_monochromator(_hw_cfg.get("monochromator", {}))
+            if _mono_driver is not None:
+                self._wavelength_tab.set_driver(_mono_driver)
+        except Exception:
+            pass
 
         self._nav.select_first()
 
@@ -735,11 +760,15 @@ class MainWindow(QMainWindow):
                         keywords=["compare", "comparison", "overlay", "diff", "side by side"]),
             PaletteItem("3D Surface",  "Analyze",  lambda: self._nav.navigate_to(self._surface_tab),
                         keywords=["3d", "surface", "plot", "topography", "three dimensional"]),
+            PaletteItem("Emissivity",  "Analyze",  lambda: self._nav.navigate_to(self._emissivity_tab),
+                        keywords=["emissivity", "ir", "infrared", "thermal", "blackbody", "calibration"]),
             # HARDWARE
             PaletteItem("Camera",      "Hardware", lambda: self._nav.navigate_to(self._camera_ctrl_tab),
                         keywords=["camera", "sensor", "exposure", "gain", "roi", "autofocus"]),
             PaletteItem("Stimulus",    "Hardware", lambda: self._nav.navigate_to(self._stimulus_tab),
-                        keywords=["stimulus", "fpga", "modulation", "lock-in", "bias", "voltage"]),
+                        keywords=["stimulus", "fpga", "modulation", "lock-in", "bias", "voltage", "iv", "sweep"]),
+            PaletteItem("Wavelength",  "Hardware", lambda: self._nav.navigate_to(self._wavelength_tab),
+                        keywords=["wavelength", "monochromator", "spectrum", "nanometer", "nm", "shutter", "newport"]),
             PaletteItem("Temperature", "Hardware", lambda: self._nav.navigate_to(self._temp_tab),
                         keywords=["temperature", "tec", "thermoelectric", "heat"]),
             PaletteItem("Stage",       "Hardware", lambda: self._nav.navigate_to(self._stage_tab),
@@ -948,6 +977,12 @@ class MainWindow(QMainWindow):
         tip = (f"TEC {index+1}: {status.actual_temp:.1f}°C → {status.target_temp:.1f}°C"
                if ok else f"TEC {index+1} error: {status.error}")
         self._header.set_connected(key, ok, tip)
+        # Update live BT/dT readout strip from primary TEC (index 0)
+        if index == 0 and ok:
+            bt = getattr(status, "actual_temp", None)
+            sp = getattr(status, "target_temp", None)
+            dt = (bt - sp) if (bt is not None and sp is not None) else None
+            self._measurement_strip.update(bt_c=bt, dt_c=dt)
 
     def _on_fpga(self, status):
         self._fpga_tab.update_status(status)

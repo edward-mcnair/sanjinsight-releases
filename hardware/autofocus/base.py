@@ -109,8 +109,6 @@ class AutofocusDriver(ABC):
         Sweep Z from z_start to z_end in z_step increments.
         Scores each position, returns AfResult with all data.
         """
-        from .metrics import find_peak
-
         result = AfResult(state=AfState.RUNNING)
         t0     = time.time()
 
@@ -155,8 +153,11 @@ class AutofocusDriver(ABC):
         result.duration_s = time.time() - t0
 
         if result.z_positions:
-            # Fit parabola for sub-step precision
-            result.best_z = find_peak(result.z_positions, result.scores)
+            # Use sub-pixel Gaussian fit for best-Z determination.
+            # Falls back to parabola fit then argmax if fit fails.
+            from .metrics import estimate_best_z_subpixel
+            result.best_z = estimate_best_z_subpixel(
+                result.z_positions, result.scores)
             result.state  = AfState.COMPLETE
         else:
             result.state   = AfState.FAILED

@@ -104,8 +104,9 @@ class HillClimbAutofocus(AutofocusDriver):
         result.duration_s = time.time() - t0
 
         if result.state != AfState.ABORTED:
-            from .metrics import find_peak
-            result.best_z = find_peak(result.z_positions, result.scores)
+            from .metrics import estimate_best_z_subpixel
+            result.best_z = estimate_best_z_subpixel(
+                result.z_positions, result.scores)
             result.state  = AfState.COMPLETE
 
             if move_best and self._stage:

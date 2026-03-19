@@ -14,9 +14,21 @@ hardware:
     enabled: true
     driver: "simulated"   # simulated | meerstetter
     port: "COM3"          # Change to match your system (e.g. COM4, /dev/ttyUSB0)
+    # TEC-1089 production defaults (Meerstetter SN 9376, HW 2.1)
     baudrate: 57600
     address: 2            # Device address set on the unit (default: 2)
-    timeout: 1.0
+    timeout: 10.0
+    pid_kp: 35.0          # Proportional gain
+    pid_ti: 5.0           # Integral time constant (s)
+    pid_td: 0.5           # Derivative time constant (s)
+    max_current_a: 9.25   # Maximum TEC output current (A)
+    max_delta_t: 68.0     # Maximum ΔT across TEC module (°C)
+    control_cycle_hz: 10.0        # PID control loop rate (Hz)
+    switching_freq_khz: 300.0     # H-bridge switching frequency (kHz)
+    stability_tolerance_c: 1.0    # °C band for "temperature stable" flag
+    stability_duration_s: 10.0    # Seconds within tolerance before stable
+    ntc_r25_ohm: 10000            # NTC thermistor resistance at 25°C (Ω)
+    ntc_source_current_ua: 50.0   # NTC excitation source current (µA)
     initial_temp: 25.0    # simulated driver starting temperature
     # ── Safety limits ──────────────────────────────────────────────
     # TEC output is immediately disabled if temperature exceeds these limits.
@@ -178,6 +190,18 @@ hardware:
     # --- Generic VISA settings ---
     # address: "TCPIP::192.168.1.10::INSTR"
     # channel: 1
+
+  monochromator:
+    enabled: false          # Set true when a Newport Cornerstone (or compatible) is connected
+    driver: "simulated"     # simulated | cornerstone
+    # --- Newport Cornerstone 74000 / 260 / 74004 settings ---
+    # port:       "COM3"    # Windows: COMx, macOS/Linux: /dev/tty.usbserial-xxxx
+    # baudrate:   9600      # Factory default; check rear panel DIP switches
+    # timeout_s:  5.0       # Serial read timeout (seconds)
+    # --- Sweep defaults ---
+    default_wavelength_nm:   532.0     # Initial wavelength after connect (nm)
+    step_size_nm:             5.0      # Default sweep step size (nm)
+    dwell_ms:              1000.0      # Default dwell per wavelength step (ms)
 
 logging:
   level: "INFO"           # DEBUG, INFO, WARNING, ERROR

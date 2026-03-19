@@ -34,11 +34,30 @@ class MeerstetterDriver(TecDriver):
             )
         return (len(issues) == 0, issues)
 
+    # ── TEC-1089 MeCom parameter IDs (Meerstetter application note) ──────────
+    # PID parameters
+    _PARAM_PID_KP              = 3010   # Proportional gain
+    _PARAM_PID_TI              = 3011   # Integral time constant (s)
+    _PARAM_PID_TD              = 3012   # Derivative time constant (s)
+    # Current limit
+    _PARAM_MAX_CURRENT         = 2030   # Maximum current (A)
+    # Stability window (software-side; hardware flag 1200 is primary)
+    _PARAM_STABILITY_WINDOW    = 3100   # Temperature stability window (°C)
+
     def __init__(self, cfg: dict):
         super().__init__(cfg)
         self._port    = cfg.get("port",    "COM3")
         self._address = cfg.get("address", 2)
-        self._timeout = cfg.get("timeout", 1.0)
+        self._timeout = cfg.get("timeout", 10.0)
+
+        # PID and current parameters — read from config with production defaults
+        self._pid_kp             = float(cfg.get("pid_kp",              35.0))
+        self._pid_ti             = float(cfg.get("pid_ti",               5.0))
+        self._pid_td             = float(cfg.get("pid_td",               0.5))
+        self._max_current_a      = float(cfg.get("max_current_a",        9.25))
+        self._stability_tol_c    = float(cfg.get("stability_tolerance_c", 1.0))
+        self._stability_dur_s    = float(cfg.get("stability_duration_s", 10.0))
+
         self._tec       = None
         self._target    = 25.0
         self._port_lock = PortLock(self._port)
@@ -72,6 +91,47 @@ class MeerstetterDriver(TecDriver):
             raise RuntimeError(
                 f"Meerstetter connect failed on {self._port}: {e}\n"
                 f"Check port name and that nothing else is using it.")
+
+        # Apply production defaults from config after successful connect
+        try:
+            self._apply_config_params()
+        except Exception:
+            log.warning(
+                "MeerstetterDriver: failed to apply config parameters on connect — "
+                "controller will use its stored firmware defaults. "
+                "This is non-fatal; check parameter IDs if values are unexpected.",
+                exc_info=True)
+
+    def _apply_config_params(self) -> None:
+        """
+        Push PID gains, current limit, and stability window from config to the
+        TEC-1089 over MeCom.  Called once after a successful connect().
+
+        Parameter IDs follow the Meerstetter TEC-1089 firmware parameter table.
+        Each write is attempted individually so a single unsupported parameter
+        does not abort the rest.
+        """
+        params = [
+            (self._PARAM_PID_KP,           self._pid_kp,          "PID Kp"),
+            (self._PARAM_PID_TI,           self._pid_ti,          "PID Ti"),
+            (self._PARAM_PID_TD,           self._pid_td,          "PID Td"),
+            (self._PARAM_MAX_CURRENT,      self._max_current_a,   "Max current (A)"),
+            (self._PARAM_STABILITY_WINDOW, self._stability_tol_c, "Stability window (°C)"),
+        ]
+        with self._api_lock:
+            for param_id, value, name in params:
+                try:
+                    self._tec.set_parameter(
+                        parameter_id=param_id,
+                        value=value,
+                        address=self._address,
+                        instance=1,
+                    )
+                    log.debug("TEC-1089 param %d (%s) → %s", param_id, name, value)
+                except Exception as exc:
+                    log.warning(
+                        "TEC-1089 param %d (%s) write failed: %s — skipping",
+                        param_id, name, exc)
 
     def disconnect(self) -> None:
         if self._tec:

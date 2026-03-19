@@ -16,7 +16,7 @@ from ui.icons import IC, make_icon
 
 
 class StimulusTab(QWidget):
-    """Stimulus control: FPGA modulation + Bias source as sub-tabs."""
+    """Stimulus control: FPGA modulation + Bias source + IV Sweep as sub-tabs."""
 
     # Pass-through signals from inner tabs
     open_device_manager = pyqtSignal()
@@ -26,6 +26,9 @@ class StimulusTab(QWidget):
         self._fpga_tab = fpga_tab
         self._bias_tab = bias_tab
 
+        from ui.tabs.iv_sweep_tab import IVSweepTab
+        self._iv_sweep_tab = IVSweepTab()
+
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
@@ -33,8 +36,9 @@ class StimulusTab(QWidget):
         self._tabs = QTabWidget()
         self._tabs.setDocumentMode(True)
         self._tabs.setStyleSheet(self._tab_qss())
-        self._tabs.addTab(fpga_tab, "  Modulation")
-        self._tabs.addTab(bias_tab, "  Bias Source")
+        self._tabs.addTab(fpga_tab,              "  Modulation")
+        self._tabs.addTab(bias_tab,              "  Bias Source")
+        self._tabs.addTab(self._iv_sweep_tab,    "  IV Sweep")
         self._apply_tab_icons()
 
         root.addWidget(self._tabs, 1)
@@ -48,35 +52,36 @@ class StimulusTab(QWidget):
 
     def update_status(self, status) -> None:
         """Delegate to whichever inner tab cares about this status object."""
-        if hasattr(self._fpga_tab, "update_status"):
-            try:
-                self._fpga_tab.update_status(status)
-            except Exception:
-                pass
-        if hasattr(self._bias_tab, "update_status"):
-            try:
-                self._bias_tab.update_status(status)
-            except Exception:
-                pass
+        for tab in (self._fpga_tab, self._bias_tab, self._iv_sweep_tab):
+            if hasattr(tab, "update_status"):
+                try:
+                    tab.update_status(status)
+                except Exception:
+                    pass
 
     def set_hardware_available(self, available: bool) -> None:
         for tab in (self._fpga_tab, self._bias_tab):
             if hasattr(tab, "set_hardware_available"):
                 tab.set_hardware_available(available)
 
+    def set_bias_driver(self, bias_driver, camera_driver=None, pipeline=None) -> None:
+        """Wire bias/camera drivers into the IV Sweep sub-tab."""
+        self._iv_sweep_tab.set_drivers(bias_driver, camera_driver, pipeline)
+
     # ── Theme ─────────────────────────────────────────────────────────
 
     def _apply_styles(self) -> None:
         self._tabs.setStyleSheet(self._tab_qss())
         self._apply_tab_icons()
-        for sub in (self._fpga_tab, self._bias_tab):
+        for sub in (self._fpga_tab, self._bias_tab, self._iv_sweep_tab):
             if hasattr(sub, "_apply_styles"):
                 sub._apply_styles()
 
     def _apply_tab_icons(self) -> None:
         icons = [
-            make_icon(IC.FPGA,  color=PALETTE.get("textDim", "#8892aa"), size=14),
-            make_icon(IC.BIAS,  color=PALETTE.get("textDim", "#8892aa"), size=14),
+            make_icon(IC.FPGA,     color=PALETTE.get("textDim", "#8892aa"), size=14),
+            make_icon(IC.BIAS,     color=PALETTE.get("textDim", "#8892aa"), size=14),
+            make_icon(IC.IV_SWEEP, color=PALETTE.get("textDim", "#8892aa"), size=14),
         ]
         self._tabs.setIconSize(QSize(14, 14))
         for i, icon in enumerate(icons):
