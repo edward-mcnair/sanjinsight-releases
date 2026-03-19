@@ -1,6 +1,6 @@
 # SanjINSIGHT User Manual
 
-**Microsanj SanjINSIGHT v1.4.0**
+**Microsanj SanjINSIGHT v1.4.0-beta.1**
 **Document revision: 2026-03-19**
 
 ---
@@ -1107,6 +1107,27 @@ The label color escalates based on severity:
 
 **Start / Stop** — Begin or halt FPGA modulation. Modulation must be running (L1 check) for lock-in acquisition.
 
+#### BNC 745 Trigger Mode
+
+When a **BNC Model 745** digital delay generator is connected, a **Trigger Mode** panel appears below the Quick Controls. This panel is hidden when using the NI-9637.
+
+| Control | Description |
+|---|---|
+| **Continuous** | T0 free-runs at the configured frequency — standard lock-in operation |
+| **Single-shot** | T0 fires once per **▶ Arm Trigger** click — for pulsed IV / transient measurements |
+| **Pulse Duration (µs)** | Directly sets the camera-channel (Ch 1) pulse width, overriding the duty-cycle derived width |
+| **▶ Arm Trigger** | Fire one single-shot pulse. Enabled only in Single-shot mode |
+
+A **TRIGGER** readout appears in the status bar alongside FREQUENCY and SYNC:
+
+| Status | Meaning |
+|---|---|
+| **CONT** | Continuous (free-running) mode |
+| **SINGLE** | Single-shot mode, idle |
+| **SINGLE ✦** | Single-shot mode, pulse armed/firing |
+
+> **Workflow for pulsed IV measurements:** set Mode → Single-shot, configure Pulse Duration to match the AMCAD BILT Drain channel width, then click **▶ Arm Trigger** once per measurement point. Use Continuous mode for standard lock-in thermoreflectance.
+
 ---
 
 **Bias Source sub-tab** — Controls the electrical output to the device under test (DUT).
@@ -1128,6 +1149,43 @@ When **VO EXT** is selected, a safety warning appears:
 - **Unchecked** — Removes the 20 mA limit. Required for IR camera FA (Fault Analysis) and Movie mode, which needs > 20 mA. Always verify the device thermal budget before unchecking.
 
 > **Compliance limit:** Always set the Compliance Limit to the maximum safe current (or voltage) for your DUT before enabling output.
+
+#### AMCAD BILT Pulsed I-V System
+
+When an **AMCAD BILT** is connected, the Bias Source sub-tab gains two additional elements:
+
+**Gate channel readout row** — A second row appears in the Measured Output status header showing Gate (Ch 1) measurements alongside the standard Drain (Ch 2) readouts.
+
+| Readout | Description |
+|---|---|
+| **GATE Vg** | Gate channel measured voltage |
+| **GATE Ig** | Gate channel measured current |
+
+**AMCAD BILT Pulse Configuration panel** (collapsible) — Configures independent bias and pulse parameters for Gate (Ch 1) and Drain (Ch 2).
+
+| Parameter | Description |
+|---|---|
+| **Bias (V)** | DC bias voltage applied outside the pulse window |
+| **Pulse (V)** | Voltage during the pulse window |
+| **Width (µs)** | Pulse duration in microseconds |
+| **Delay (µs)** | Delay from trigger rising edge to pulse start |
+
+Default values (from PIV1.txt):
+
+| Parameter | Gate (Ch 1) | Drain (Ch 2) |
+|---|---|---|
+| Bias | −5.0 V | 0.0 V |
+| Pulse | −2.2 V | +1.0 V |
+| Width | 110 µs | 100 µs |
+| Delay | 5 µs | 10 µs |
+
+Click **Apply Pulse Config** to push the settings to the BILT hardware. This does not enable output — click **Output ON** afterwards to begin pulsing.
+
+> **pivserver64.exe** must be running on the Windows instrument PC before connecting the BILT. Launch it from the AMCAD installation directory:
+> ```
+> pivserver64.exe -p 5035
+> ```
+> If the connection is refused, add a Windows Firewall inbound rule for TCP port 5035 on the instrument PC (Control Panel → Windows Defender Firewall → Advanced Settings → Inbound Rules → New Rule).
 
 ### 12.3 Temperature Panel (Ctrl+3)
 
@@ -1683,12 +1741,25 @@ All supervisor override events are logged to the audit log (Section 21.7).
 |---|---|---|---|---|
 | NI 9637 | National Instruments | PCIe / cRIO / Ethernet | `ni9637` | NI-RIO 19.0+; compiled `.lvbitx` bitfile |
 | NI USB-6001 | National Instruments | USB | `ni9637` | NI-RIO 19.0+; compiled `.lvbitx` bitfile |
+| BNC Model 745 | Berkeley Nucleonics | GPIB / USB / Serial | `bnc745` | PyVISA + NI-VISA (GPIB) or `pyvisa-py` (USB/Serial) |
 | Simulated | — | — | `simulated` | None |
 
 > **NI-RIO download:** [ni.com → NI-RIO](https://www.ni.com/en/support/downloads/drivers/download.ni-rio.html)
 > The compiled bitfile (`.lvbitx`) is provided by Microsanj on the instrument USB key. The bitfile must match the NI-RIO version installed on the PC — if you upgrade NI-RIO, request a recompiled bitfile from Microsanj support.
 
+> **BNC 745:** Replaces the NI-9637 in PT-100B transient test setups. Communicates via PyVISA — install with `pip install pyvisa pyvisa-py`. For GPIB connections, NI-VISA and a NI-GPIB-USB-HS adapter are recommended. Configure the VISA resource string in Device Manager (e.g. `GPIB::12` or `USB0::0x0A33::0x0021::...`). Supports continuous lock-in mode and single-shot transient mode.
+
 ### 21.4 Bias Sources
+
+#### AMCAD BILT Pulsed I-V System
+
+| Model | Manufacturer | Connection | Driver | Required Software |
+|---|---|---|---|---|
+| BILT (any module) | AMCAD Engineering | TCP/IP (Ethernet) | `amcad_bilt` | `pivserver64.exe` running on instrument PC |
+
+The AMCAD BILT is a two-channel (Gate + Drain) pulsed voltage/current source for transistor characterisation. SanjINSIGHT communicates with it via TCP/SCPI to the companion `pivserver64.exe` Windows process (included with the AMCAD software package).
+
+**Setup:** Start `pivserver64.exe -p 5035` on the instrument PC, then configure the IP address in Device Manager. If connection is blocked, add a Windows Firewall inbound rule for TCP port 5035. Default pulse parameters match the PIV1.txt configuration shipped with the Microsanj PT-100B kit.
 
 #### Keithley SourceMeters (SCPI command set)
 
@@ -1768,6 +1839,8 @@ All supervisor override events are logged to the audit log (Section 21.7).
 | FLIR Spinnaker SDK | 3.x | **Latest** | Required for the Microsanj IR Camera. Download from [flir.com/spinnaker-sdk](https://www.flir.com/products/spinnaker-sdk/). After installing, run `pip install spinnaker_python` (wheel is included inside the SDK package). |
 | Thorlabs Kinesis | 1.14 | Latest | Required for Thorlabs USB stages |
 | FTDI VCP Driver | 2.12 | Latest | Auto-installed by Windows Update on most systems |
+| PyVISA | 1.13 | **Latest** | Required for BNC 745 (GPIB/USB/Serial). Install: `pip install pyvisa pyvisa-py` |
+| AMCAD PIV software | 2019+ | Latest | Includes `pivserver64.exe` required for AMCAD BILT |
 
 ---
 

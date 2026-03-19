@@ -1,6 +1,6 @@
 # SanjINSIGHT — Developer Guide
 
-**Version**: 1.4.0
+**Version**: 1.4.0-beta.1
 **Platform**: Windows 10/11 (64-bit); macOS/Linux supported for development
 **Stack**: Python 3.11 · PyQt5 · NumPy · PyInstaller · Inno Setup
 **Repository**: Private source (`edward-mcnair/sanjinsight`) · Public releases (`edward-mcnair/sanjinsight-releases`)
@@ -468,7 +468,21 @@ class FpgaDriver(ABC):
     def get_status(self) -> FpgaStatus: ...
 ```
 
-**Implementations**: `ni9637.py` (NI CompactRIO via nifpga), `simulated.py`.
+**Implementations**:
+
+| Module | Driver key | Hardware | Protocol |
+|---|---|---|---|
+| `ni9637.py` | `ni9637` | NI 9637 / USB-6001 | NI-RIO / NI-DAQmx |
+| `bnc745.py` | `bnc745` | BNC Model 745 | VISA (GPIB / USB / Serial) |
+| `simulated.py` | `simulated` | — | — |
+
+**BNC 745 extended interface** — implements `supports_trigger_mode() → True` and:
+```python
+def set_trigger_mode(self, mode: FpgaTriggerMode) -> None: ...  # CONTINUOUS | SINGLE_SHOT
+def arm_trigger(self) -> None: ...         # fires one pulse (*TRG)
+def set_pulse_duration(self, us: float) -> None: ...  # Ch1 width override
+```
+`FpgaTab.set_fpga_driver(driver)` reveals the Trigger Mode panel for any driver where `supports_trigger_mode()` is `True`.
 
 #### Bias Source (`hardware/bias/base.py — BiasDriver`)
 
@@ -483,7 +497,23 @@ class BiasDriver(ABC):
     def get_status(self) -> BiasStatus: ...
 ```
 
-**Implementations**: `keithley.py` (VISA), `visa_generic.py` (SCPI), `simulated.py`.
+**Implementations**:
+
+| Module | Driver key | Hardware | Protocol |
+|---|---|---|---|
+| `keithley.py` | `keithley` | Keithley 24xx / 26xx | VISA (GPIB / USB / Ethernet) |
+| `visa_generic.py` | `visa_generic` | Any SCPI instrument | VISA |
+| `rigol_dp832.py` | `rigol_dp832` | Rigol DP832 / DP831 | VISA |
+| `amcad_bilt.py` | `amcad_bilt` | AMCAD BILT pulsed I-V | TCP/SCPI → pivserver64.exe |
+| `simulated.py` | `simulated` | — | — |
+
+**AMCAD BILT extended interface** — adds beyond the base `BiasDriver`:
+```python
+def configure_pulse(self, *, channel: int, bias_v: float,
+                    pulse_v: float, width_s: float, delay_s: float) -> None: ...
+def apply_defaults(self) -> None:  # push PIV1.txt defaults to hardware
+```
+`BiasTab.set_bias_driver(driver)` reveals the BILT Pulse Configuration panel for `AmcadBiltDriver` instances. Gate (Ch 1) and Drain (Ch 2) are configured independently. `connect()` calls `apply_defaults()` automatically on first connection.
 
 #### Stage (`hardware/stage/base.py — StageDriver`)
 
@@ -551,6 +581,27 @@ Connection timeout: 12 seconds (configurable in `config.yaml`).
 ```
 
 The pre-flight step ensures optional SDK dependencies are checked and reported as actionable user messages *before* any hardware I/O is attempted. See section 4.3 for the full driver coverage table.
+
+**`_driver_key()` KEY_MAP** — maps device registry UID to the short factory key:
+
+| Registry UID | Factory key | Factory |
+|---|---|---|
+| `ni_9637` / `ni_usb_6001` | `ni9637` | `create_fpga()` |
+| `bnc_745` | `bnc745` | `create_fpga()` |
+| `keithley_2400` / `keithley_2450` | `keithley` | `create_bias()` |
+| `rigol_dp832` | `visa` | `create_bias()` |
+| `amcad_bilt` | `amcad_bilt` | `create_bias()` |
+
+**Special cfg remapping** — two devices need non-standard config keys before reaching their factory:
+- **BNC 745**: `cfg["address"] = entry.address` (VISA resource string stored in `DeviceEntry.address`)
+- **AMCAD BILT**: `cfg["host"] = entry.ip_address`, `cfg["port"] = desc.tcp_port` (TCP port 5035 from `DeviceDescriptor.tcp_port`; distinct from serial COM port in `cfg["port"]`)
+
+**UI driver wiring** — after every hotplug event `main_app._on_device_hotplug()` calls:
+```python
+self._fpga_tab.set_fpga_driver(app_state.fpga if ok else None)
+self._bias_tab.set_bias_driver(app_state.bias if ok else None)
+```
+This is what reveals the BNC 745 Trigger Mode panel and the AMCAD BILT Pulse Configuration panel at runtime.
 
 ---
 
@@ -1390,7 +1441,7 @@ main_app.MainWindow.__init__()
 ### 17.1 GitHub Actions (`.github/workflows/build-installer.yml`)
 
 **Triggers:**
-- `git push origin v1.3.0` — builds + creates GitHub Release on `sanjinsight-releases`
+- `git push origin v1.4.0-beta.1` — builds + creates GitHub Release on `sanjinsight-releases`
 - Manual **Run workflow** in Actions UI — builds only (artifact available for 1 day)
 
 **Steps:**
@@ -1407,18 +1458,20 @@ main_app.MainWindow.__init__()
 
 ```bash
 # 1. Update version
-# Edit version.py: VERSION_TUPLE = (1, 3, 0), BUILD_DATE = "2026-03-14"
+# Edit version.py: __version__, PRERELEASE, VERSION_TUPLE, BUILD_DATE
+# Beta example:  __version__ = "1.4.0-beta.2",  PRERELEASE = "beta.2"
+# GA example:    __version__ = "1.4.0",          PRERELEASE = ""
 
-# 2. Update CHANGELOG.md: add ## [1.3.0] — 2026-03-14 section
+# 2. Update CHANGELOG.md: add ## [1.4.0-beta.2] — YYYY-MM-DD section
 
 # 3. Commit
 git add version.py CHANGELOG.md
-git commit -m "chore: bump to v1.3.0"
+git commit -m "chore: bump to v1.4.0-beta.2"
 
 # 4. Tag and push — this triggers CI
-git tag v1.3.0
+git tag v1.4.0-beta.2
 git push origin main
-git push origin v1.3.0
+git push origin v1.4.0-beta.2
 
 # 5. CI builds installer and publishes release automatically
 # 6. Verify at https://github.com/edward-mcnair/sanjinsight-releases/releases
@@ -1719,5 +1772,5 @@ pytest>=7.4            Test runner
 
 ---
 
-*This document was last updated for SanjINSIGHT v1.4.0 (2026-03-19).
+*This document was last updated for SanjINSIGHT v1.4.0-beta.1 (2026-03-19).
 Update it whenever significant architectural changes are made.*

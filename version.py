@@ -6,19 +6,24 @@ Rules
 * This is the ONLY file that defines the version number.
 * All other code imports from here — never hardcode a version string elsewhere.
 * Bump this before every release commit, then tag the commit in Git:
-      git tag -a v1.0.0 -m "Release 1.0.0"
-      git push origin v1.0.0
+      git tag -a v1.4.0-beta.1 -m "Beta 1.4.0-beta.1"
+      git push origin v1.4.0-beta.1
 * The GitHub release pipeline reads this tag to publish the installer.
 
-Versioning scheme: Semantic Versioning  MAJOR.MINOR.PATCH
-  MAJOR — breaking change or major new capability
-  MINOR — new features, backwards-compatible
-  PATCH — bug fixes only
+Versioning scheme: Semantic Versioning  MAJOR.MINOR.PATCH[-PRERELEASE]
+  MAJOR      — breaking change or major new capability
+  MINOR      — new features, backwards-compatible
+  PATCH      — bug fixes only
+  PRERELEASE — "beta.N" while the product is in active beta testing.
+               Omit for general-availability (GA) releases.
+               Beta releases sort BEFORE the corresponding GA release:
+                 1.4.0-beta.1  <  1.4.0-beta.2  <  1.4.0
 """
 
 # ── Version number ────────────────────────────────────────────────────────────
-__version__    = "1.4.0"
-VERSION_TUPLE  = (1, 4, 0)          # for numeric comparisons
+__version__    = "1.4.0-beta.1"
+PRERELEASE     = "beta.1"           # empty string "" for GA releases
+VERSION_TUPLE  = (1, 4, 0)          # numeric-only, for < / > comparisons
 BUILD_DATE     = "2026-03-19"       # set by CI/CD on release; update manually otherwise
 
 # ── Application identity ──────────────────────────────────────────────────────
@@ -43,29 +48,49 @@ SUPPORT_EMAIL       = "software-support@microsanj.com"
 
 # ── Helper ────────────────────────────────────────────────────────────────────
 
+import re as _re  # used by is_newer(); import at module level to avoid repeated lazy imports
+
+
+def is_prerelease() -> bool:
+    """Return True if this build carries a pre-release identifier (beta, rc, etc.)."""
+    return bool(PRERELEASE)
+
+
 def version_string() -> str:
-    """Human-readable version:  v1.0.0"""
+    """Human-readable version:  v1.4.0-beta.1"""
     return f"v{__version__}"
 
 
 def full_version_string() -> str:
-    """Long form for About dialogs:  SanjINSIGHT v1.0.0  (built 2026-02-28)"""
+    """Long form for About dialogs:  SanjINSIGHT v1.4.0-beta.1  (built 2026-03-19)"""
     return f"{APP_NAME} {version_string()}  (built {BUILD_DATE})"
 
 
 def parse_version(s: str) -> tuple:
     """
-    Parse a version string like '1.2.3' or 'v1.2.3' into a comparable tuple.
+    Parse a version string like '1.2.3', 'v1.2.3', or '1.2.3-beta.1' into a
+    comparable numeric tuple (MAJOR, MINOR, PATCH).  Pre-release suffixes are
+    ignored for numeric comparison — use is_newer() for update checks.
     Returns (0, 0, 0) if the string is malformed.
     """
-    import re
     s = s.lstrip("v").strip()
-    m = re.match(r"^(\d+)\.(\d+)\.(\d+)", s)
+    m = _re.match(r"^(\d+)\.(\d+)\.(\d+)", s)
     if m:
         return (int(m.group(1)), int(m.group(2)), int(m.group(3)))
     return (0, 0, 0)
 
 
 def is_newer(remote_version: str) -> bool:
-    """Return True if remote_version is strictly newer than the running version."""
-    return parse_version(remote_version) > VERSION_TUPLE
+    """
+    Return True if remote_version is strictly newer than the running version.
+    A GA release (1.4.0) is considered newer than the equivalent beta (1.4.0-beta.N)
+    because the numeric tuples are equal but the GA has no pre-release suffix.
+    """
+    remote_tuple = parse_version(remote_version)
+    if remote_tuple > VERSION_TUPLE:
+        return True
+    # Same numeric version: a GA remote is newer than our beta
+    if remote_tuple == VERSION_TUPLE and PRERELEASE:
+        remote_pre = _re.search(r"-(.+)$", remote_version.lstrip("v"))
+        return remote_pre is None   # remote has no pre-release → it's GA → newer
+    return False

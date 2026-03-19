@@ -10,6 +10,34 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.4.0-beta.1] — 2026-03-19
+
+### Added
+
+- **AMCAD BILT pulsed I-V system driver** (`hardware/bias/amcad_bilt.py`) — TCP/SCPI driver communicating with `pivserver64.exe` on the instrument PC. Implements the full `BiasDriver` interface; `configure_pulse()` method sets per-channel bias, pulse voltage, width, and delay for Gate (Ch 1) and Drain (Ch 2).
+- **BNC Model 745 digital delay generator driver** (`hardware/fpga/bnc745.py`) — PyVISA driver implementing `FpgaDriver` with continuous and single-shot trigger modes. Replaces the NI-9637 as the precision timing source in PT-100B test setups.
+- **AMCAD BILT Pulse Configuration panel** in Stimulus → Bias Source tab — collapsible panel with Gate and Drain channel spinboxes (bias V, pulse V, width µs, delay µs) and an **Apply Pulse Config** button; appears only when an AMCAD BILT is connected.
+- **Gate channel readout row** (Vg / Ig) in the Bias Source status header; shown only when AMCAD BILT is connected.
+- **Trigger Mode panel** in Stimulus → Modulation tab — Continuous/Single-shot radio buttons, Pulse Duration spinbox (µs), and **▶ Arm Trigger** button for BNC 745; hidden for NI-9637.
+- **TRIGGER readout** in the FPGA status bar (CONT / SINGLE / SINGLE ✦); hidden for NI-9637.
+- `BiasTab.set_bias_driver(driver)` — called by `main_app` on hotplug events; reveals BILT-specific UI for `AmcadBiltDriver` instances.
+- `FpgaTab.set_fpga_driver(driver)` — called by `main_app` on hotplug events; reveals trigger-mode UI for drivers that return `supports_trigger_mode() = True`.
+- `hardware/device_manager.py` KEY_MAP entries: `amcad_bilt` → `"amcad_bilt"`, `bnc_745` → `"bnc745"`.
+- Device Manager dialog: TCP port display for CONN_ETHERNET devices with `desc.tcp_port`; VISA address text field for BNC 745 (replaces NI-DAQmx note).
+- `MONO_FONT` constant in `ui/theme.py` — cross-platform monospace CSS family string `'Menlo','Consolas','Courier New',monospace`.
+
+### Changed
+
+- **Versioning scheme switched to beta** — releases now use `MAJOR.MINOR.PATCH-beta.N` pre-release identifiers. `version.py` gains `PRERELEASE`, `is_prerelease()`, and an updated `is_newer()` that treats a GA release as newer than an equivalent beta.
+- AMCAD BILT TCP connection error message now explicitly lists Windows Firewall (port 5035) as a diagnostic step.
+- BNC 745 VISA address placeholder updated to include Windows serial format `ASRL1::INSTR` alongside the Linux `/dev/ttyUSB0` example.
+
+### Fixed
+
+- **Monospace font fallback on Windows** (146 replacements across 29 files) — all inline stylesheets now use `'Menlo','Consolas','Courier New',monospace` so Windows users get Consolas rather than bare Courier New.
+
+---
+
 ## [1.4.0] — 2026-03-19
 
 ### Added
