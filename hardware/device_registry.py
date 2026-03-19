@@ -290,6 +290,34 @@ DEVICE_REGISTRY: dict[str, DeviceDescriptor] = {
                          "Lower modulation bandwidth than CompactRIO.",
     ),
 
+    "bnc_745": DeviceDescriptor(
+        uid            = "bnc_745",
+        display_name   = "BNC Model 745 Digital Delay Generator",
+        manufacturer   = "Berkeley Nucleonics Corporation",
+        device_type    = DTYPE_FPGA,
+        connection_type= CONN_USB,
+        driver_module  = "hardware.fpga.bnc745",
+        driver_version = "builtin",
+        hot_loadable   = True,
+        usb_vid        = 0x0A33,   # BNC USB vendor ID
+        usb_pid        = 0x0021,   # BNC 745 OEM
+        serial_patterns= ["BNC", "745", "Berkeley Nucleonics", "MOD745"],
+        default_timeout= 5.0,
+        description    = (
+            "BNC Model 745 multi-channel digital delay/pulse generator. "
+            "Used in PT-100B transient test setups as the precision timing "
+            "source for camera and bias synchronisation. Replaces the NI-9637 "
+            "FPGA in setups without CompactRIO hardware.  "
+            "Communicates via GPIB, USB, or Serial using PyVISA. "
+            "Supports continuous lock-in mode and single-shot transient mode."),
+        datasheet_url  = "https://www.berkeleynucleonics.com/model-745",
+        notes          = (
+            "Requires pyvisa + VISA backend (NI-VISA recommended on Windows). "
+            "LabVIEW heritage: MOD745.lvlib driver (BNC_745_OEM). "
+            "Channel 1 = camera trigger, Channel 2 = auxiliary gate. "
+            "Single-shot transient mode: set_trigger_mode(SINGLE_SHOT) + arm_trigger()."),
+    ),
+
     # ---------------------------------------------------------------- #
     #  Stage Controllers                                                #
     # ---------------------------------------------------------------- #
@@ -391,6 +419,34 @@ DEVICE_REGISTRY: dict[str, DeviceDescriptor] = {
         serial_patterns= ["Rigol", "DP832"],
         description    = "Triple-output programmable DC power supply. "
                          "Used as lower-cost bias source for less demanding applications.",
+    ),
+
+    "amcad_bilt": DeviceDescriptor(
+        uid            = "amcad_bilt",
+        display_name   = "AMCAD BILT Pulsed I-V System",
+        manufacturer   = "AMCAD Engineering",
+        device_type    = DTYPE_BIAS,
+        connection_type= CONN_ETHERNET,
+        driver_module  = "hardware.bias.amcad_bilt",
+        driver_version = "builtin",
+        hot_loadable   = False,
+        tcp_port       = 5035,          # pivserver64.exe default port
+        tcp_banner     = "PIV",         # AMCAD pivserver banner
+        default_ip     = "127.0.0.1",
+        default_timeout= 5.0,
+        description    = (
+            "AMCAD BILT pulsed I-V system — two-channel (Gate + Drain) "
+            "pulsed voltage/current source for transistor characterisation. "
+            "Communicates via TCP/SCPI to pivserver64.exe running on the "
+            "instrument PC.  Typical use: pulsed thermoreflectance measurements "
+            "with µs-scale gate and drain pulses.  "
+            "Default port: 5035 (set via pivserver64.exe -p <port>)."),
+        datasheet_url  = "https://www.amcad-engineering.com/products/bilt/",
+        notes          = (
+            "Requires pivserver64.exe (Windows) running on instrument PC. "
+            "Default pulse parameters loaded from PIV1.txt via amcad_bilt.py. "
+            "Gate ch1: bias=-5 V, pulse=-2.2 V, width=110 µs, delay=5 µs. "
+            "Drain ch2: bias=0 V, pulse=+1 V, width=100 µs, delay=10 µs."),
     ),
 
     # ---------------------------------------------------------------- #

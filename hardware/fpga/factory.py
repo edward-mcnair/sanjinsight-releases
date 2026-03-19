@@ -9,6 +9,7 @@ from .base import FpgaDriver
 
 _DRIVERS = {
     "ni9637":    ("hardware.fpga.ni9637",    "Ni9637Driver"),
+    "bnc745":    ("hardware.fpga.bnc745",    "Bnc745Driver"),
     "simulated": ("hardware.fpga.simulated", "SimulatedFpga"),
 }
 
@@ -17,6 +18,13 @@ _INSTALL_HINTS: dict = {
         "pip install nifpga\n"
         "Also install NI-RIO drivers: "
         "https://www.ni.com/en/support/downloads/drivers/download.ni-rio.html"
+    ),
+    "bnc745": (
+        "pip install pyvisa pyvisa-py\n"
+        "For GPIB on Windows also install NI-VISA from ni.com.\n"
+        "For USB without NI-VISA:  pip install pyvisa-py pyserial\n"
+        "BNC 745 USB VID=0x0A33 — check VISA address with NI MAX or "
+        "python -c \"import pyvisa; print(pyvisa.ResourceManager().list_resources())\""
     ),
 }
 

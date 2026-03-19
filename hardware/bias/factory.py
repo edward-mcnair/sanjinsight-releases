@@ -11,6 +11,7 @@ _DRIVERS = {
     "keithley":     ("hardware.bias.keithley",     "KeithleyDriver"),
     "visa_generic": ("hardware.bias.visa_generic",  "VisaGenericDriver"),
     "rigol_dp832":  ("hardware.bias.rigol_dp832",   "RigolDP832Driver"),
+    "amcad_bilt":   ("hardware.bias.amcad_bilt",    "AmcadBiltDriver"),
     "simulated":    ("hardware.bias.simulated",     "SimulatedBias"),
 }
 
@@ -30,6 +31,12 @@ _INSTALL_HINTS: dict = {
         "pip install pydp832\n"
         "GitHub: https://github.com/tspspi/pydp832\n"
         "Or use driver: 'visa_generic' with pyvisa if NI-VISA is already installed."
+    ),
+    "amcad_bilt": (
+        "No Python packages required — uses stdlib socket.\n"
+        "Ensure pivserver64.exe is running on the instrument PC:\n"
+        "  pivserver64.exe -p 5035\n"
+        "See hardware/bias/amcad_bilt.py for full setup instructions."
     ),
 }
 
