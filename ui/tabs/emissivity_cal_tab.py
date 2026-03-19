@@ -528,7 +528,12 @@ class EmissivityCalTab(QWidget):
             from hardware.app_state import app_state
             app_state.active_emissivity_cal = self._result
         except Exception:
-            pass
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                "EmissivityCalTab: could not set app_state.active_emissivity_cal "
+                "— app_state may not have this attribute in this build",
+                exc_info=True
+            )
         self.calibration_applied.emit(self._result)
         self._set_status(
             f"✓ Applied to session — ε = {self._result.emissivity:.4f}",

@@ -248,6 +248,18 @@ class TransientAcquisitionPipeline:
     def abort(self) -> None:
         self._abort_flag = True
 
+    def _restore_fpga_continuous(self) -> None:
+        """Restore FPGA to CONTINUOUS trigger mode after transient sweep ends."""
+        if self._fpga is None:
+            return
+        try:
+            from hardware.fpga.base import FpgaTriggerMode
+            self._fpga.set_trigger_mode(FpgaTriggerMode.CONTINUOUS)
+        except Exception:
+            log.warning(
+                "TransientAcquisitionPipeline: failed to restore "
+                "FPGA to CONTINUOUS trigger mode", exc_info=True)
+
     @property
     def uses_hw_trigger(self) -> bool:
         """True if the connected FPGA supports hardware trigger mode."""
@@ -347,13 +359,15 @@ class TransientAcquisitionPipeline:
 
             # ── Per-delay accumulation ───────────────────────────────────
             # raw_accum[i] accumulates the averaged frame for delay i
-            h, w = reference.shape
+            # Use [:2] to support both 2-D (H, W) and 3-D (H, W, C) frames.
+            h, w = reference.shape[:2]
             raw_accum = np.zeros((n_delays, h, w), dtype=np.float64)
 
             for di, delay_s in enumerate(delays):
                 if self._abort_flag:
                     self._state = TransientAcqState.ABORTED
                     self._set_power(False)
+                    self._restore_fpga_continuous()   # M-7: restore on abort
                     return
 
                 acc = np.zeros((h, w), dtype=np.float64)
@@ -361,6 +375,7 @@ class TransientAcquisitionPipeline:
                     if self._abort_flag:
                         self._state = TransientAcqState.ABORTED
                         self._set_power(False)
+                        self._restore_fpga_continuous()   # M-7: restore on abort
                         return
 
                     self._emit(
@@ -395,15 +410,9 @@ class TransientAcquisitionPipeline:
             # ── Power OFF (ensure) ───────────────────────────────────────
             self._set_power(False)
 
-            # Restore FPGA to continuous mode
+            # Restore FPGA to continuous mode (helper handles hw_triggered check)
             if hw_triggered:
-                try:
-                    from hardware.fpga.base import FpgaTriggerMode
-                    self._fpga.set_trigger_mode(FpgaTriggerMode.CONTINUOUS)
-                except Exception:
-                    log.warning("TransientAcquisitionPipeline._run: "
-                                "failed to restore FPGA to CONTINUOUS trigger mode",
-                                exc_info=True)
+                self._restore_fpga_continuous()
 
             # ── Processing — compute ΔR/R cube ───────────────────────────
             self._state = TransientAcqState.PROCESSING
@@ -412,7 +421,11 @@ class TransientAcquisitionPipeline:
                        avg_done=0, n_averages=n_averages,
                        message="Computing ΔR/R cube...")
 
-            dtype_max  = float(np.iinfo(np.uint16).max)
+            # Infer camera bit-depth from the actual reference frame values.
+            # _grab_one() casts to float32 so dtype is always float32, but
+            # the *values* still reflect the original uint8/uint16 range.
+            ref_peak  = float(reference.max())
+            dtype_max = 65535.0 if ref_peak > 256.0 else 255.0 if ref_peak > 1.0 else 1.0
             threshold  = self.DARK_THRESHOLD_FRACTION * dtype_max
             dark_mask  = reference < threshold
             ref_safe   = np.where(dark_mask, 1.0, reference)
@@ -443,8 +456,7 @@ class TransientAcquisitionPipeline:
             try:
                 self._set_power(False)
                 if hw_triggered:
-                    from hardware.fpga.base import FpgaTriggerMode
-                    self._fpga.set_trigger_mode(FpgaTriggerMode.CONTINUOUS)
+                    self._restore_fpga_continuous()
             except Exception:
                 log.warning("TransientAcquisitionPipeline._run: "
                             "cleanup after error also failed", exc_info=True)

@@ -8,11 +8,15 @@ single "Stimulus" entry.  Each sub-tab preserves its full existing UI.
 """
 from __future__ import annotations
 
+import logging
+
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QTabWidget
 from PyQt5.QtCore    import pyqtSignal, QSize
 
 from ui.theme import FONT, PALETTE
 from ui.icons import IC, make_icon
+
+log = logging.getLogger(__name__)
 
 
 class StimulusTab(QWidget):
@@ -57,7 +61,9 @@ class StimulusTab(QWidget):
                 try:
                     tab.update_status(status)
                 except Exception:
-                    pass
+                    log.warning(
+                        "StimulusTab.update_status: %s.update_status() raised",
+                        type(tab).__name__, exc_info=True)
 
     def set_hardware_available(self, available: bool) -> None:
         for tab in (self._fpga_tab, self._bias_tab):

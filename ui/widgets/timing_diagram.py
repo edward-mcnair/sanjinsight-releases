@@ -199,6 +199,13 @@ class TimingDiagramWidget(QWidget):
             fall = rise + pw_n
             pulses.append((rise, fall))
 
+        # Nothing to draw without at least one pulse — draw only the time axis
+        # and return to avoid IndexError on pulses[0] accesses below.
+        if not pulses:
+            self._label(p, "Strig", 0)
+            self._time_axis(p, pr.period_us)
+            return
+
         # Blanking widths in normalised coords
         period_ns    = pr.period_us * 1000.0
         per_slot_ns  = period_ns / max(pr.n_pulses, 1)

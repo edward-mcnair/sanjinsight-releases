@@ -177,6 +177,9 @@ class TransientTab(QWidget):
         self._sweep_abort_flag: bool                    = False
         self._sweep_status: Optional[str]               = None  # thread → timer
         self._sweep_complete_result: Optional[TransientResult] = None
+        # Lock protecting _sweep_complete_result and _sweep_status shared
+        # between the worker thread and the QTimer poll slot (M-4 fix).
+        self._sweep_lock: threading.Lock                = threading.Lock()
 
         # Poll timer
         self._timer = QTimer()
@@ -632,15 +635,17 @@ class TransientTab(QWidget):
     # ---------------------------------------------------------------- #
 
     def _poll(self):
-        # ── Sweep thread status/completion (thread-safe reads) ────────
-        sweep_msg = self._sweep_status
+        # ── Sweep thread status/completion (lock-protected reads) ─────
+        with self._sweep_lock:
+            sweep_msg  = self._sweep_status
+            sweep_done = self._sweep_complete_result
+            if sweep_msg  is not None: self._sweep_status          = None
+            if sweep_done is not None: self._sweep_complete_result = None
+
         if sweep_msg is not None:
-            self._sweep_status = None
             self._status_lbl.setText(sweep_msg)
 
-        sweep_done = self._sweep_complete_result
         if sweep_done is not None:
-            self._sweep_complete_result = None
             self._on_complete(sweep_done)
             return
 
@@ -722,14 +727,22 @@ class TransientTab(QWidget):
         folder if app_state exposes one) with a timestamp-based name.
         Any error is logged but does not interrupt the UI.
         """
-        import os
+        import os, pathlib
         ts = int(time.time())
-        # Prefer session directory if available
+        # Prefer session directory if available; fall back to ~/microsanj/sweeps
+        # (never "." — on Windows the install dir may require elevation, W-2 fix).
         try:
             from hardware.app_state import app_state
-            session_dir = getattr(app_state, "session_dir", None) or "."
+            session_dir = getattr(app_state, "session_dir", None) or ""
         except Exception:
-            session_dir = "."
+            session_dir = ""
+        if not session_dir:
+            fallback = pathlib.Path.home() / "microsanj" / "sweeps"
+            try:
+                fallback.mkdir(parents=True, exist_ok=True)
+            except Exception:
+                pass
+            session_dir = str(fallback)
         filename = os.path.join(session_dir, f"transient_cube_{ts}.npy")
         try:
             np.save(filename, result.delta_r_cube)
@@ -920,8 +933,9 @@ class TransientTab(QWidget):
                     f"Voltage series  {n_v} steps  "
                     f"({voltages[0]:.3f}–{voltages[-1]:.3f} V)  "
                     f"displayed: last step {voltages[-1]:.3f} V")
-                # Post completion to main thread via timer
-                self._sweep_complete_result = last_result
+                # Post completion to main thread via timer (lock-protected write)
+                with self._sweep_lock:
+                    self._sweep_complete_result = last_result
 
         self._vsweep_thread = threading.Thread(target=worker, daemon=True)
         self._vsweep_thread.start()

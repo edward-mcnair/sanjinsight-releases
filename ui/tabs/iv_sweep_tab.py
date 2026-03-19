@@ -45,7 +45,7 @@ class _SweepWorker(QObject):
         try:
             result = self._sweeper.run(
                 self._config,
-                on_progress=lambda cur, tot: self.progress.emit(cur, tot),
+                on_progress=lambda cur, tot, *_: self.progress.emit(cur, tot),
             )
             self.finished.emit(result)
         except Exception as exc:
@@ -350,6 +350,10 @@ class IVSweepTab(QWidget):
     def _cleanup_thread(self):
         self._run_btn.setEnabled(self._bias_driver is not None)
         self._stop_btn.setEnabled(False)
+        # Always quit+wait before nulling — prevents QThread leak/crash
+        if self._thread is not None:
+            self._thread.quit()
+            self._thread.wait()
         self._worker = None
         self._thread = None
 
@@ -377,14 +381,29 @@ class IVSweepTab(QWidget):
             log.exception("IV sweep CSV export failed")
 
     def _auto_save(self, result):
-        save_dir = self._save_path_lbl.text()
-        if save_dir.startswith("Default:"):
-            import pathlib
-            save_dir = str(pathlib.Path.home() / "microsanj_sweeps")
+        import pathlib, time as _time
+        save_dir_str = self._save_path_lbl.text()
+        if save_dir_str.startswith("Default:"):
+            save_dir = pathlib.Path.home() / "microsanj_sweeps"
+        else:
+            save_dir = pathlib.Path(save_dir_str)
+
+        # Ensure directory exists before writing
+        try:
+            save_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as exc:
+            log.warning("IV sweep auto-save: cannot create directory %s: %s",
+                        save_dir, exc)
+            return
+
+        # Build a timestamped base path *inside* the directory
+        ts      = _time.strftime("%Y%m%d_%H%M%S")
+        base    = str(save_dir / f"iv_{ts}")
+
         try:
             from hardware.bias.iv_sweep import IVSweeper
-            IVSweeper(None, None, None).save_result(result, save_dir)
-            log.info("IV sweep auto-saved to %s", save_dir)
+            saved = IVSweeper(None, None, None).save_result(result, base)
+            log.info("IV sweep auto-saved to %s", saved)
         except Exception as exc:
             log.warning("IV sweep auto-save failed: %s", exc)
 

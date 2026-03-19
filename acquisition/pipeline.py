@@ -481,8 +481,15 @@ class AcquisitionPipeline:
                 )
 
         # ── Dark-pixel mask ───────────────────────────────────────────
-        # Determine threshold from the original dtype (uint8 → 255, uint16 → 65535)
-        dtype_max  = float(np.iinfo(result.cold_avg.dtype).max)                      if np.issubdtype(result.cold_avg.dtype, np.integer) else 1.0
+        # cold_avg is float32 (averaged and cast by _capture_phase), so
+        # np.issubdtype → integer check would always return False and
+        # dtype_max would be 1.0, making the threshold 0.005 counts — far
+        # too low.  Instead infer range from the actual peak value so we
+        # work correctly with both uint8 (≤255) and uint16 (≤65535) cameras.
+        cold_peak  = float(cold.max())
+        dtype_max  = (65535.0 if cold_peak > 256.0
+                      else 255.0  if cold_peak > 1.0
+                      else 1.0)
         threshold  = AcquisitionPipeline.DARK_THRESHOLD_FRACTION * dtype_max
         dark_mask  = cold < threshold          # True where pixel is too dark
 

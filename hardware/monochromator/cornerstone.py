@@ -78,7 +78,9 @@ class CornerstoneMonochromator(MonochromatorDriver):
         self._lock     = threading.Lock()
         self._min_nm   = 0.0           # populated from MONO-WMIN? on connect
         self._max_nm   = 9999.0        # populated from MONO-WMAX? on connect
-        self._cancel_sweep = False
+        # Use a threading.Event so that _cancel_sweep is set/cleared atomically
+        # from any thread without needing the lock (L-8 fix).
+        self._cancel_sweep = threading.Event()
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -98,7 +100,22 @@ class CornerstoneMonochromator(MonochromatorDriver):
         return (len(issues) == 0, issues)
 
     def connect(self) -> None:
-        """Open the serial port and reset the monochromator."""
+        """Open the serial port and reset the monochromator.
+
+        .. warning::
+            This method blocks for up to ``_RESET_TIMEOUT`` seconds (30 s by
+            default) while the MONO-RESET homing sequence runs.  Always call
+            ``connect()`` from a background thread — never from a UI slot or
+            the main event loop.
+        """
+        # W-1 — reject /dev/tty* port names on Windows where only COMx is valid
+        import sys as _sys
+        if _sys.platform == "win32" and self._port.startswith("/dev/"):
+            raise RuntimeError(
+                f"Invalid serial port {self._port!r} on Windows.\n\n"
+                f"Windows serial ports are named 'COMx' (e.g. 'COM5').\n"
+                f"Update hardware.monochromator.port in config.yaml."
+            )
         try:
             import serial
         except ImportError:
@@ -171,7 +188,7 @@ class CornerstoneMonochromator(MonochromatorDriver):
 
     def disconnect(self) -> None:
         """Close shutter, cancel any running sweep, and close the port."""
-        self._cancel_sweep = True
+        self._cancel_sweep.set()
         with self._lock:
             if self._serial and self._serial.is_open:
                 try:
@@ -289,10 +306,10 @@ class CornerstoneMonochromator(MonochromatorDriver):
         total = len(steps)
 
         dwell_s = dwell_ms / 1000.0
-        self._cancel_sweep = False
+        self._cancel_sweep.clear()
 
         for i, target_nm in enumerate(steps):
-            if self._cancel_sweep:
+            if self._cancel_sweep.is_set():
                 log.debug("Sweep cancelled at step %d/%d", i, total)
                 break
 

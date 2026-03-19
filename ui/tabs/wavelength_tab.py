@@ -36,7 +36,7 @@ from PyQt5.QtWidgets import (
     QSlider, QDoubleSpinBox, QSpinBox, QGroupBox, QProgressBar,
     QSizePolicy, QFrame,
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QObject
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QObject, QRunnable, QThreadPool
 
 from ui.theme import FONT, PALETTE, scaled_qss
 
@@ -45,6 +45,28 @@ log = logging.getLogger(__name__)
 # Default wavelength range shown in the UI before the driver reports its limits
 _DEFAULT_MIN_NM = 300.0
 _DEFAULT_MAX_NM = 900.0
+
+
+# ---------------------------------------------------------------------------
+# Fire-and-forget runnable for single blocking driver commands (set_wavelength,
+# set_shutter).  Runs on the global QThreadPool so we never block the UI thread
+# on a potentially slow RS-232 transaction (10 s timeout on Windows).
+# ---------------------------------------------------------------------------
+
+class _CmdRunnable(QRunnable):
+    """Run ``fn()`` on the global thread pool; silently log exceptions."""
+
+    def __init__(self, fn, label: str = ""):
+        super().__init__()
+        self.setAutoDelete(True)
+        self._fn    = fn
+        self._label = label
+
+    def run(self) -> None:
+        try:
+            self._fn()
+        except Exception as exc:
+            log.error("Monochromator command '%s' failed: %s", self._label, exc)
 
 
 # ---------------------------------------------------------------------------
@@ -601,15 +623,19 @@ class WavelengthTab(QWidget):
         self._wl_readout.setText(f"{nm:.1f} nm")
 
     def _on_set_clicked(self) -> None:
-        """Send the current spinbox value to the driver."""
+        """Send the current spinbox value to the driver (off main thread)."""
         nm = self._nm_spin.value()
         self._wl_readout.setText(f"{nm:.1f} nm")
         if self._driver is not None:
-            try:
-                self._driver.set_wavelength(nm)
+            driver = self._driver
+
+            def _cmd():
+                driver.set_wavelength(nm)
                 log.debug("Wavelength set to %.3f nm", nm)
-            except Exception as exc:
-                log.error("set_wavelength failed: %s", exc)
+
+            QThreadPool.globalInstance().start(
+                _CmdRunnable(_cmd, f"set_wavelength({nm:.1f})")
+            )
         self.wavelength_changed.emit(nm)
 
     # ------------------------------------------------------------------
@@ -621,20 +647,20 @@ class WavelengthTab(QWidget):
         self._shutter_close_btn.setChecked(False)
         self._apply_shutter_button_styles()
         if self._driver is not None:
-            try:
-                self._driver.set_shutter(True)
-            except Exception as exc:
-                log.error("set_shutter(open) failed: %s", exc)
+            driver = self._driver
+            QThreadPool.globalInstance().start(
+                _CmdRunnable(lambda: driver.set_shutter(True), "set_shutter(open)")
+            )
 
     def _on_shutter_close(self) -> None:
         self._shutter_open_btn.setChecked(False)
         self._shutter_close_btn.setChecked(True)
         self._apply_shutter_button_styles()
         if self._driver is not None:
-            try:
-                self._driver.set_shutter(False)
-            except Exception as exc:
-                log.error("set_shutter(close) failed: %s", exc)
+            driver = self._driver
+            QThreadPool.globalInstance().start(
+                _CmdRunnable(lambda: driver.set_shutter(False), "set_shutter(close)")
+            )
 
     # ------------------------------------------------------------------
     # Slots — sweep
@@ -716,7 +742,12 @@ class WavelengthTab(QWidget):
         self._run_btn.setEnabled(True)
         self._stop_btn.setEnabled(False)
         self._set_btn.setEnabled(True)
+        # quit()+wait() before deleteLater() — thread has already finished (this
+        # slot is connected to QThread.finished), but calling both is safe and
+        # prevents a race if the connection fires before the thread fully exits.
         if self._sweep_thread is not None:
+            self._sweep_thread.quit()
+            self._sweep_thread.wait()
             self._sweep_thread.deleteLater()
             self._sweep_thread = None
         if self._sweep_worker is not None:

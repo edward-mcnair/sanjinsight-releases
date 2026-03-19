@@ -992,7 +992,7 @@ class MainWindow(QMainWindow):
             bt = getattr(status, "actual_temp", None)
             sp = getattr(status, "target_temp", None)
             dt = (bt - sp) if (bt is not None and sp is not None) else None
-            self._measurement_strip.update(bt_c=bt, dt_c=dt)
+            self._measurement_strip.set_values(bt_c=bt, dt_c=dt)
 
     def _on_fpga(self, status):
         self._fpga_tab.update_status(status)

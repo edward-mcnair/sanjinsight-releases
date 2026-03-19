@@ -20,14 +20,33 @@ import warnings
 from typing import Optional
 
 import numpy as np
-from scipy.ndimage import (
-    gaussian_filter,
-    generic_filter,
-    map_coordinates,
-    shift as nd_shift,
-)
 
 log = logging.getLogger(__name__)
+
+# scipy is an optional runtime dependency (bundled in the installer but may be
+# absent in lightweight developer or Windows test environments).  Guard the
+# top-level import so that importing image_filters never hard-crashes the
+# acquisition subsystem; each function that needs scipy imports it locally
+# and falls back gracefully when it is missing (W-3 fix).
+try:
+    from scipy.ndimage import (
+        gaussian_filter,
+        generic_filter,
+        map_coordinates,
+        shift as nd_shift,
+    )
+    _SCIPY_AVAILABLE = True
+except ImportError:
+    gaussian_filter = None   # type: ignore[assignment]
+    generic_filter  = None   # type: ignore[assignment]
+    map_coordinates = None   # type: ignore[assignment]
+    nd_shift        = None   # type: ignore[assignment]
+    _SCIPY_AVAILABLE = False
+    log.warning(
+        "acquisition.image_filters: scipy not available — "
+        "shadow correction, bilinear stitch, and subpixel alignment will "
+        "raise ImportError when called.  Install scipy to enable these features."
+    )
 
 
 # ── NaN helpers ────────────────────────────────────────────────────────────────

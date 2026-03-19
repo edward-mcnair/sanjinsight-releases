@@ -47,7 +47,12 @@ import numpy as np
 from dataclasses import dataclass
 from typing import List, Optional
 
-from ai.instrument_knowledge import CTH_FILTER_MIN
+try:
+    from ai.instrument_knowledge import CTH_FILTER_MIN
+except ImportError:
+    # ai package not available (e.g. lightweight deployment) — use physics default.
+    # Minimum meaningful thermoreflectance coefficient for silicon at 532 nm.
+    CTH_FILTER_MIN = 1e-5   # 1/K
 
 
 @dataclass
@@ -516,7 +521,9 @@ class Calibration:
 
         X     = np.column_stack([np.ones(n), dTs])          # (n, 2)
         XtX   = X.T @ X                                      # (2, 2) — scalar
-        XtX_inv = np.linalg.inv(XtX)                         # (2, 2)
+        # Use pinv instead of inv — handles degenerate calibration data
+        # (e.g. all identical temperatures) without raising LinAlgError.
+        XtX_inv = np.linalg.pinv(XtX)                        # (2, 2)
 
         # Xᵀ Y  — shape (2, H, W).
         # ln_drr: (n, H, W) → treat NaN as 0 in sum, track counts separately.

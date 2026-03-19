@@ -18,9 +18,9 @@ CT  — Chuck Temperature: TCAT fixture temperature.  Shown only when a chuck
 Public API
 ----------
     strip = MeasurementReadoutStrip(parent)
-    strip.update(bt_c=29.4, dt_c=+1.24, ct_c=25.0)   # ct_c=None hides CT cell
-    strip.update(bt_c=None, dt_c=None)                  # shows N/A
-    strip._apply_styles()                                # called on theme change
+    strip.set_values(bt_c=29.4, dt_c=+1.24, ct_c=25.0)   # ct_c=None hides CT cell
+    strip.set_values(bt_c=None, dt_c=None)                  # shows N/A
+    strip._apply_styles()                                    # called on theme change
 
 Height is fixed at 36 px.  The strip is transparent by default so it sits
 cleanly inside toolbars, status bars, or header widgets.
@@ -106,12 +106,17 @@ class MeasurementReadoutStrip(QWidget):
     #  Public API                                                       #
     # ---------------------------------------------------------------- #
 
-    def update(self,
-               bt_c: Optional[float],
-               dt_c: Optional[float],
-               ct_c: Optional[float] = None) -> None:
+    def set_values(self,
+                   bt_c: Optional[float],
+                   dt_c: Optional[float],
+                   ct_c: Optional[float] = None) -> None:
         """
         Refresh all readout cells.
+
+        Named ``set_values`` (not ``update``) to avoid shadowing
+        ``QWidget.update()``, which Qt calls internally with zero args to
+        schedule a repaint — overriding it causes ``TypeError`` on every
+        internal repaint.
 
         Parameters
         ----------
@@ -186,7 +191,7 @@ class MeasurementReadoutStrip(QWidget):
         for sub in (self._bt_sub, self._dt_sub, self._ct_sub):
             sub.setStyleSheet(sub_style)
 
-        # Value labels — reset to neutral; update() will tint dT
+        # Value labels — reset to neutral; set_values() will tint dT
         val_style = (
             f"font-family:Menlo,monospace; "
             f"font-size:{FONT['body']}pt; "

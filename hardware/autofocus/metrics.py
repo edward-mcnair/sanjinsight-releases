@@ -48,7 +48,7 @@ def score(image: np.ndarray, metric: str = "laplacian") -> float:
         "normalized":        _normalized_laplacian,
         "fft":               _fft_power,
         "brenner":           _brenner,
-        "subpixel_weighted": _subpixel_weighted,
+        "subpixel_weighted": focus_metric_subpixel_weighted,
     }.get(metric, _laplacian)
 
     return float(fn(img))

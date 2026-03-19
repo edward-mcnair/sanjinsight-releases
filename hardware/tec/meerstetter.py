@@ -67,15 +67,18 @@ class MeerstetterDriver(TecDriver):
         self._api_lock  = threading.Lock()
 
     def connect(self) -> None:
+        # Acquire port lock first; release it on any failure (try/finally ensures
+        # the lock is released even on BaseException such as KeyboardInterrupt — L-5 fix).
+        self._port_lock.acquire()
+        _connected_ok = False
         try:
-            self._port_lock.acquire()
             from mecom import MeComAPI, MeComQuerySet, MeComQuery
             self._tec = MeComAPI(self._port)
             self._tec.identify()
             self._connected = True
+            _connected_ok = True
             log.info("Meerstetter TEC-1089 connected on %s", self._port)
         except ImportError:
-            self._port_lock.release()
             raise RuntimeError(
                 "pyMeCom library not found.\n\n"
                 "pyMeCom provides the MeCom serial protocol used to talk to "
@@ -87,10 +90,13 @@ class MeerstetterDriver(TecDriver):
                 "After installing, restart the application."
             )
         except Exception as e:
-            self._port_lock.release()
             raise RuntimeError(
                 f"Meerstetter connect failed on {self._port}: {e}\n"
                 f"Check port name and that nothing else is using it.")
+        finally:
+            # Release on any exception path; keep held on success (released by disconnect())
+            if not _connected_ok:
+                self._port_lock.release()
 
         # Apply production defaults from config after successful connect
         try:
@@ -145,17 +151,26 @@ class MeerstetterDriver(TecDriver):
 
     def enable(self) -> None:
         # Parameter 2010: Output Enable (1 = on)
+        if self._tec is None:
+            log.warning("MeerstetterDriver.enable() called before connect()")
+            return
         with self._api_lock:
             self._tec.set_parameter(parameter_id=2010, value=1,
                                     address=self._address, instance=1)
 
     def disable(self) -> None:
+        if self._tec is None:
+            log.warning("MeerstetterDriver.disable() called before connect()")
+            return
         with self._api_lock:
             self._tec.set_parameter(parameter_id=2010, value=0,
                                     address=self._address, instance=1)
 
     def set_target(self, temperature_c: float) -> None:
         self._target = temperature_c
+        if self._tec is None:
+            log.warning("MeerstetterDriver.set_target() called before connect()")
+            return
         # Parameter 3000: Target Object Temperature
         with self._api_lock:
             self._tec.set_parameter(parameter_id=3000, value=temperature_c,

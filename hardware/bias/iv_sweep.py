@@ -20,12 +20,15 @@ Usage
 from __future__ import annotations
 
 import json
+import logging
 import time
 import threading
 from dataclasses import dataclass, field, asdict
 from typing import Callable, List, Optional
 
 import numpy as np
+
+log = logging.getLogger(__name__)
 
 from hardware.bias.base import BiasDriver
 
@@ -294,7 +297,8 @@ class IVSweeper:
                         try:
                             on_frame(step_idx, frame)
                         except Exception:
-                            pass
+                            log.warning("IVSweeper: on_frame callback raised at "
+                                        "step %d", step_idx, exc_info=True)
 
                 # ── 4. Return to quiescent (pulsed mode) ─────────────────── #
                 if config.return_to_quiescent and step_idx < total - 1:
@@ -307,7 +311,8 @@ class IVSweeper:
                     try:
                         on_progress(step_idx + 1, total, setpoint, v, i)
                     except Exception:
-                        pass
+                        log.warning("IVSweeper: on_progress callback raised at "
+                                    "step %d", step_idx, exc_info=True)
 
         finally:
             # Always return to quiescent and leave output on (caller decides
@@ -352,6 +357,8 @@ class IVSweeper:
             return data.astype(np.float32)
 
         except Exception:
+            log.warning("IVSweeper._capture_frame: frame capture failed",
+                        exc_info=True)
             return None
 
     # ── Persistence ───────────────────────────────────────────────────────── #
