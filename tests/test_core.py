@@ -703,3 +703,292 @@ class TestProcessing:
         data = np.zeros((32, 32), dtype=np.float32)
         disp = to_display(data, mode="auto")
         assert disp.shape == (32, 32)
+
+
+# ================================================================== #
+#  9. UpdateChecker                                                    #
+# ================================================================== #
+
+class TestUpdateChecker:
+    """
+    Unit tests for updater.py — all network calls are mocked.
+
+    Tests cover:
+        • on_update fires when remote version is strictly newer
+        • on_no_update fires when remote version equals running version
+        • on_no_update fires when remote version is older than running version
+        • on_error fires on HTTP / network failure
+        • on_error fires when API response is missing tag_name
+        • on_error fires on malformed JSON
+        • download_url falls back to RELEASES_PAGE_URL when no .exe asset
+        • download_url is set from .exe asset when present
+        • check_sync() returns UpdateInfo on newer, None on up-to-date
+        • should_check_now() respects auto_check=False
+        • should_check_now() returns True for frequency='always'
+        • should_check_now() respects daily / weekly intervals
+    """
+
+    def _make_api_response(self, tag: str, has_exe: bool = True,
+                           prerelease: bool = False) -> bytes:
+        """Build a minimal GitHub Releases API payload."""
+        assets = []
+        if has_exe:
+            assets.append({
+                "name": f"SanjINSIGHT-Setup-{tag.lstrip('v')}.exe",
+                "browser_download_url": f"https://example.com/SanjINSIGHT-Setup-{tag.lstrip('v')}.exe",
+            })
+        payload = {
+            "tag_name": tag,
+            "body": "Release notes here.",
+            "html_url": f"https://github.com/test/releases/tag/{tag}",
+            "prerelease": prerelease,
+            "assets": assets,
+        }
+        return json.dumps(payload).encode("utf-8")
+
+    def _mock_urlopen(self, tag: str, **kwargs):
+        """Return a context-manager mock that yields the API response."""
+        from unittest.mock import MagicMock, patch
+        import io
+        body = self._make_api_response(tag, **kwargs)
+        cm = MagicMock()
+        cm.__enter__ = MagicMock(return_value=io.BytesIO(body))
+        cm.__exit__  = MagicMock(return_value=False)
+        return cm
+
+    # ── on_update / on_no_update ──────────────────────────────────
+
+    def test_on_update_fires_when_remote_is_newer(self):
+        from unittest.mock import patch, MagicMock
+        import io
+        from updater import UpdateChecker
+
+        received = []
+        checker = UpdateChecker(on_update=received.append)
+
+        body = self._make_api_response("v99.0.0")
+        cm = MagicMock()
+        cm.__enter__ = MagicMock(return_value=io.BytesIO(body))
+        cm.__exit__  = MagicMock(return_value=False)
+        with patch("urllib.request.urlopen", return_value=cm):
+            result = checker.check_sync()
+
+        assert result is not None
+        assert result.version == "99.0.0"
+        assert len(received) == 1
+        assert received[0].version == "99.0.0"
+
+    def test_on_no_update_fires_when_running_is_newer(self):
+        from unittest.mock import patch, MagicMock
+        import io
+        from updater import UpdateChecker
+
+        no_update_called = []
+        checker = UpdateChecker(
+            on_update=lambda info: (_ for _ in ()).throw(AssertionError("on_update should not fire")),
+            on_no_update=lambda: no_update_called.append(True),
+        )
+
+        # Tag older than any real version
+        body = self._make_api_response("v0.0.1")
+        cm = MagicMock()
+        cm.__enter__ = MagicMock(return_value=io.BytesIO(body))
+        cm.__exit__  = MagicMock(return_value=False)
+        with patch("urllib.request.urlopen", return_value=cm):
+            result = checker.check_sync()
+
+        assert result is None
+        assert len(no_update_called) == 1
+
+    def test_on_no_update_fires_when_same_version(self):
+        from unittest.mock import patch, MagicMock
+        import io
+        from updater import UpdateChecker
+        from version import __version__
+
+        no_update_called = []
+        checker = UpdateChecker(
+            on_update=lambda info: (_ for _ in ()).throw(AssertionError("on_update should not fire")),
+            on_no_update=lambda: no_update_called.append(True),
+        )
+
+        body = self._make_api_response(f"v{__version__}")
+        cm = MagicMock()
+        cm.__enter__ = MagicMock(return_value=io.BytesIO(body))
+        cm.__exit__  = MagicMock(return_value=False)
+        with patch("urllib.request.urlopen", return_value=cm):
+            result = checker.check_sync()
+
+        assert result is None
+        assert len(no_update_called) == 1
+
+    # ── on_error ─────────────────────────────────────────────────
+
+    def test_on_error_fires_on_network_failure(self):
+        from unittest.mock import patch
+        import urllib.error
+        from updater import UpdateChecker
+
+        errors = []
+        checker = UpdateChecker(on_update=lambda i: None, on_error=errors.append)
+
+        with patch("urllib.request.urlopen",
+                   side_effect=urllib.error.URLError("Connection refused")):
+            result = checker.check_sync()
+
+        assert result is None
+        assert len(errors) == 1
+        assert "Network error" in errors[0]
+
+    def test_on_error_fires_on_malformed_json(self):
+        from unittest.mock import patch, MagicMock
+        import io
+        from updater import UpdateChecker
+
+        errors = []
+        checker = UpdateChecker(on_update=lambda i: None, on_error=errors.append)
+
+        cm = MagicMock()
+        cm.__enter__ = MagicMock(return_value=io.BytesIO(b"not json {{"))
+        cm.__exit__  = MagicMock(return_value=False)
+        with patch("urllib.request.urlopen", return_value=cm):
+            result = checker.check_sync()
+
+        assert result is None
+        assert len(errors) == 1
+        assert "Malformed" in errors[0]
+
+    def test_on_error_fires_when_tag_name_missing(self):
+        from unittest.mock import patch, MagicMock
+        import io
+        from updater import UpdateChecker
+
+        errors = []
+        checker = UpdateChecker(on_update=lambda i: None, on_error=errors.append)
+
+        body = json.dumps({"assets": []}).encode("utf-8")
+        cm = MagicMock()
+        cm.__enter__ = MagicMock(return_value=io.BytesIO(body))
+        cm.__exit__  = MagicMock(return_value=False)
+        with patch("urllib.request.urlopen", return_value=cm):
+            result = checker.check_sync()
+
+        assert result is None
+        assert len(errors) == 1
+        assert "tag_name" in errors[0]
+
+    # ── download_url resolution ───────────────────────────────────
+
+    def test_download_url_set_from_exe_asset(self):
+        from unittest.mock import patch, MagicMock
+        import io
+        from updater import UpdateChecker
+
+        received = []
+        checker = UpdateChecker(on_update=received.append)
+
+        body = self._make_api_response("v99.0.0", has_exe=True)
+        cm = MagicMock()
+        cm.__enter__ = MagicMock(return_value=io.BytesIO(body))
+        cm.__exit__  = MagicMock(return_value=False)
+        with patch("urllib.request.urlopen", return_value=cm):
+            checker.check_sync()
+
+        assert len(received) == 1
+        assert received[0].download_url.endswith(".exe")
+
+    def test_download_url_falls_back_to_releases_page(self):
+        from unittest.mock import patch, MagicMock
+        import io
+        from updater import UpdateChecker
+        from version import RELEASES_PAGE_URL
+
+        received = []
+        checker = UpdateChecker(on_update=received.append)
+
+        body = self._make_api_response("v99.0.0", has_exe=False)
+        cm = MagicMock()
+        cm.__enter__ = MagicMock(return_value=io.BytesIO(body))
+        cm.__exit__  = MagicMock(return_value=False)
+        with patch("urllib.request.urlopen", return_value=cm):
+            checker.check_sync()
+
+        assert len(received) == 1
+        assert received[0].download_url == RELEASES_PAGE_URL
+
+    # ── should_check_now() ────────────────────────────────────────
+
+    def test_should_check_now_false_when_auto_check_disabled(self):
+        from updater import should_check_now
+
+        class FakePrefs:
+            def get_pref(self, key, default=None):
+                if key == "updates.auto_check":
+                    return False
+                return default
+
+        assert should_check_now(FakePrefs()) is False
+
+    def test_should_check_now_true_for_frequency_always(self):
+        from updater import should_check_now
+        import datetime
+
+        class FakePrefs:
+            def get_pref(self, key, default=None):
+                return {"updates.auto_check": True,
+                        "updates.frequency": "always",
+                        "updates.last_check_date": datetime.date.today().isoformat(),
+                        }.get(key, default)
+
+        # Even if we checked today, "always" means always
+        assert should_check_now(FakePrefs()) is True
+
+    def test_should_check_now_daily_respects_interval(self):
+        from updater import should_check_now
+        import datetime
+
+        today = datetime.date.today()
+        yesterday = (today - datetime.timedelta(days=1)).isoformat()
+        two_hours_ago_str = today.isoformat()  # same calendar day
+
+        class FakePrefsCheckedToday:
+            def get_pref(self, key, default=None):
+                return {"updates.auto_check": True,
+                        "updates.frequency": "daily",
+                        "updates.last_check_date": two_hours_ago_str,
+                        }.get(key, default)
+
+        class FakePrefsCheckedYesterday:
+            def get_pref(self, key, default=None):
+                return {"updates.auto_check": True,
+                        "updates.frequency": "daily",
+                        "updates.last_check_date": yesterday,
+                        }.get(key, default)
+
+        assert should_check_now(FakePrefsCheckedToday()) is False
+        assert should_check_now(FakePrefsCheckedYesterday()) is True
+
+    def test_should_check_now_weekly_respects_interval(self):
+        from updater import should_check_now
+        import datetime
+
+        today = datetime.date.today()
+        three_days_ago = (today - datetime.timedelta(days=3)).isoformat()
+        eight_days_ago = (today - datetime.timedelta(days=8)).isoformat()
+
+        class FakePrefsRecent:
+            def get_pref(self, key, default=None):
+                return {"updates.auto_check": True,
+                        "updates.frequency": "weekly",
+                        "updates.last_check_date": three_days_ago,
+                        }.get(key, default)
+
+        class FakePrefsOld:
+            def get_pref(self, key, default=None):
+                return {"updates.auto_check": True,
+                        "updates.frequency": "weekly",
+                        "updates.last_check_date": eight_days_ago,
+                        }.get(key, default)
+
+        assert should_check_now(FakePrefsRecent()) is False
+        assert should_check_now(FakePrefsOld()) is True

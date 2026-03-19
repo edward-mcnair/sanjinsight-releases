@@ -1719,5 +1719,5 @@ pytest>=7.4            Test runner
 
 ---
 
-*This document was last updated for SanjINSIGHT v1.3.0 (2026-03-14).
+*This document was last updated for SanjINSIGHT v1.4.0 (2026-03-19).
 Update it whenever significant architectural changes are made.*
