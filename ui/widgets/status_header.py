@@ -874,7 +874,7 @@ class StatusHeader(QWidget):
         if self._svg_white is None and self._svg_black is None:
             fallback = QLabel("MICROSANJ")
             fallback.setStyleSheet(
-                f"font-family:Menlo,monospace; font-size:{FONT['body']}pt; "
+                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['body']}pt; "
                 "letter-spacing:3px; background:transparent;")
             logo_col_lay.addWidget(fallback)
             self._logo_fallback = fallback
@@ -1042,7 +1042,7 @@ class StatusHeader(QWidget):
             self._svg_black.setVisible(not dark)
         if self._logo_fallback is not None:
             self._logo_fallback.setStyleSheet(
-                f"font-family:Menlo,monospace; font-size:{FONT['body']}pt; "
+                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['body']}pt; "
                 f"color:{text}; letter-spacing:3px; background:transparent;")
 
         # Connected Devices button

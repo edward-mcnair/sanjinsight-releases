@@ -255,7 +255,7 @@ class AIPanelWidget(QWidget):
         self._display.setStyleSheet(
             f"QTextEdit {{ background:{_BG2()}; color:{_TEXT()}; "
             f"border:1px solid {_BORDER()}; border-radius:4px; "
-            f"font-size:{FONT['label']}pt; font-family:Menlo,monospace; padding:6px; }}"
+            f"font-size:{FONT['label']}pt; font-family:'Menlo','Consolas','Courier New',monospace; padding:6px; }}"
         )
         self._display.setPlaceholderText(
             "AI not connected yet.\n\n"
@@ -600,7 +600,7 @@ class AIPanelWidget(QWidget):
         self._display.setStyleSheet(
             f"QTextEdit {{ background:{_BG2()}; color:{_TEXT()}; "
             f"border:1px solid {_BORDER()}; border-radius:4px; "
-            f"font-size:{FONT['label']}pt; font-family:Menlo,monospace; padding:6px; }}")
+            f"font-size:{FONT['label']}pt; font-family:'Menlo','Consolas','Courier New',monospace; padding:6px; }}")
 
         # Input row
         self._input.setStyleSheet(

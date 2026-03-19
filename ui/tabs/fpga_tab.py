@@ -435,7 +435,7 @@ class FpgaTab(QWidget):
         val = QLabel(initial)
         val.setAlignment(Qt.AlignCenter)
         val.setStyleSheet(
-            f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:{color};")
+            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readout']}pt; color:{color};")
         v.addWidget(sub)
         v.addWidget(val)
         w._val = val
@@ -506,7 +506,7 @@ class FpgaTab(QWidget):
         if status.error:
             self._sync_w._val.setText("ERROR")
             self._sync_w._val.setStyleSheet(
-                f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; "
+                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readout']}pt; "
                 f"color:{PALETTE['danger']};")
             self._sync_hint_lbl.setVisible(False)
             return
@@ -518,25 +518,25 @@ class FpgaTab(QWidget):
         if status.sync_locked:
             self._sync_w._val.setText("LOCKED ✓")
             self._sync_w._val.setStyleSheet(
-                f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; "
+                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readout']}pt; "
                 f"color:{PALETTE['accent']};")
             self._sync_hint_lbl.setVisible(False)
         else:
             self._sync_w._val.setText("UNLOCKED")
             self._sync_w._val.setStyleSheet(
-                f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; "
+                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readout']}pt; "
                 f"color:{PALETTE['warning']};")
             self._sync_hint_lbl.setVisible(True)
 
         if status.stimulus_on:
             self._stim_w._val.setText("ON ●")
             self._stim_w._val.setStyleSheet(
-                f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; "
+                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readout']}pt; "
                 f"color:{PALETTE['warning']};")
         else:
             self._stim_w._val.setText("OFF ○")
             self._stim_w._val.setStyleSheet(
-                f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; "
+                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readout']}pt; "
                 f"color:#444;")
 
         # Trigger mode readout (BNC 745 only — hidden for NI-9637)
@@ -550,7 +550,7 @@ class FpgaTab(QWidget):
                 color = PALETTE["textDim"]
             self._trig_w._val.setText(label)
             self._trig_w._val.setStyleSheet(
-                f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; "
+                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readout']}pt; "
                 f"color:{color};")
 
     # ── Driver-aware wiring ───────────────────────────────────────────

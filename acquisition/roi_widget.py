@@ -273,7 +273,7 @@ class RoiSelector(QWidget):
         bar = QHBoxLayout()
         self._info = QLabel("No ROI — full frame")
         self._info.setStyleSheet(
-            scaled_qss("font-family:Menlo,monospace; font-size:9pt; color:#555;"))
+            scaled_qss("font-family:'Menlo','Consolas','Courier New',monospace; font-size:9pt; color:#555;"))
         bar.addWidget(self._info)
         bar.addStretch()
 

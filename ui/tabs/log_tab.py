@@ -37,7 +37,7 @@ class LogTab(QWidget):
         sub = PALETTE.get("textSub", "#6a6a6a")
         self._log.setStyleSheet(
             f"background:{bg}; color:{dim}; "
-            f"font-family:Menlo,monospace; font-size:{FONT['heading']}pt; "
+            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['heading']}pt; "
             f"border:none;")
         self._ts_color = sub   # used by append()
 

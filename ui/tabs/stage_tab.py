@@ -253,7 +253,7 @@ class StageTab(QWidget):
         val = QLabel(initial)
         val.setAlignment(Qt.AlignCenter)
         val.setStyleSheet(
-            f"font-family:Menlo,monospace; font-size:{FONT['readoutLg']}pt; color:{color};")
+            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readoutLg']}pt; color:{color};")
         v.addWidget(sub)
         v.addWidget(val)
         w._val = val
@@ -334,7 +334,7 @@ class StageTab(QWidget):
         if status.error:
             self._st_w._val.setText("ERROR")
             self._st_w._val.setStyleSheet(
-                f"font-family:Menlo,monospace; font-size:{FONT['readoutLg']}pt; color:{PALETTE['danger']};")
+                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readoutLg']}pt; color:{PALETTE['danger']};")
             return
 
         p = status.position
@@ -350,12 +350,12 @@ class StageTab(QWidget):
         if status.moving:
             self._st_w._val.setText("MOVING ↔")
             self._st_w._val.setStyleSheet(
-                f"font-family:Menlo,monospace; font-size:{FONT['readoutLg']}pt; color:{PALETTE['warning']};")
+                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readoutLg']}pt; color:{PALETTE['warning']};")
         elif status.homed:
             self._st_w._val.setText("READY ✓")
             self._st_w._val.setStyleSheet(
-                f"font-family:Menlo,monospace; font-size:{FONT['readoutLg']}pt; color:{PALETTE['success']};")
+                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readoutLg']}pt; color:{PALETTE['success']};")
         else:
             self._st_w._val.setText("NOT HOMED")
             self._st_w._val.setStyleSheet(
-                f"font-family:Menlo,monospace; font-size:{FONT['readoutLg']}pt; color:{PALETTE['textDim']};")
+                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readoutLg']}pt; color:{PALETTE['textDim']};")

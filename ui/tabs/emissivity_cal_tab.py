@@ -72,7 +72,7 @@ def _stat_widget(label: str, value: str = "—") -> tuple:
     val = QLabel(value)
     val.setAlignment(Qt.AlignCenter)
     val.setStyleSheet(
-        f"font-family:Menlo,monospace; font-size:17pt; "
+        f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:17pt; "
         f"color:{PALETTE.get('accent', '#00d4aa')};")
 
     vl.addWidget(lbl)
@@ -228,7 +228,7 @@ class EmissivityCalTab(QWidget):
         # Residuals label
         self._resid_lbl = QLabel("")
         self._resid_lbl.setStyleSheet(
-            f"font-family:Menlo,monospace; font-size:{FONT.get('label',11)}pt; "
+            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT.get('label',11)}pt; "
             f"color:{PALETTE.get('textDim', '#8892aa')}; padding-left:4px;")
         self._resid_lbl.setWordWrap(True)
         fit_outer.addWidget(self._resid_lbl)
@@ -482,7 +482,7 @@ class EmissivityCalTab(QWidget):
             PALETTE.get("danger",   "#ff4444")
         )
         self._r2_val.setStyleSheet(
-            f"font-family:Menlo,monospace; font-size:17pt; color:{r2_color};")
+            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:17pt; color:{r2_color};")
 
         # Residuals summary
         if result.residuals:
@@ -507,7 +507,7 @@ class EmissivityCalTab(QWidget):
         for val in (self._eps_val, self._r2_val, self._tbg_val, self._npt_val):
             val.setText("—")
             val.setStyleSheet(
-                f"font-family:Menlo,monospace; font-size:17pt; "
+                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:17pt; "
                 f"color:{PALETTE.get('accent', '#00d4aa')};")
         self._resid_lbl.setText("")
         n = self._cal.n_points

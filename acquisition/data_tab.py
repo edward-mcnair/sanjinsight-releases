@@ -85,7 +85,7 @@ class NotesDialog(QDialog):
         self._edit.setPlainText(initial_text)
         self._edit.setStyleSheet(
             f"background:{PALETTE.get('bg','#242424')}; color:{PALETTE.get('text','#ebebeb')}; border:1px solid {PALETTE.get('border','#484848')}; "
-            f"font-size:{FONT['heading']}pt; font-family:Menlo,monospace;")
+            f"font-size:{FONT['heading']}pt; font-family:'Menlo','Consolas','Courier New',monospace;")
         self._edit.setMinimumHeight(120)
         lay.addWidget(self._edit)
 
@@ -342,7 +342,7 @@ class DataImagePane(QWidget):
         self._stats = QLabel("")
         self._stats.setAlignment(Qt.AlignCenter)
         self._stats.setStyleSheet(
-            f"font-family:Menlo,monospace; font-size:{FONT['label']}pt; color:#444;")
+            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['label']}pt; color:#444;")
         lay.addWidget(self._lbl)
         lay.addWidget(self._title)
         lay.addWidget(self._stats)
@@ -413,7 +413,7 @@ class DataTab(QWidget):
         if hasattr(self, "_notes_edit"):
             self._notes_edit.setStyleSheet(
                 f"background:{bg}; color:{txt}; border:1px solid {bdr}; "
-                f"font-size:{FONT['body']}pt; font-family:Menlo,monospace;")
+                f"font-size:{FONT['body']}pt; font-family:'Menlo','Consolas','Courier New',monospace;")
         if hasattr(self, "_trend_chart"):
             self._trend_chart._apply_styles()
 
@@ -440,7 +440,7 @@ class DataTab(QWidget):
 
         self._count_lbl = QLabel("0")
         self._count_lbl.setStyleSheet(
-            f"font-family:Menlo,monospace; font-size:{FONT['heading']}pt; color:#444;")
+            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['heading']}pt; color:#444;")
         hdr.addWidget(self._count_lbl)
         lay.addLayout(hdr)
 
@@ -514,7 +514,7 @@ class DataTab(QWidget):
             ml.addWidget(self._sub(lbl), r, 0)
             val = QLabel("—")
             val.setStyleSheet(
-                f"font-family:Menlo,monospace; font-size:{FONT['heading']}pt; color:#aaa;")
+                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['heading']}pt; color:#aaa;")
             val.setWordWrap(True)
             ml.addWidget(val, r, 1)
             self._meta_fields[key] = val
@@ -527,7 +527,7 @@ class DataTab(QWidget):
         self._notes_edit.setFixedHeight(72)
         self._notes_edit.setStyleSheet(
             f"background:{PALETTE.get('bg','#242424')}; color:{PALETTE.get('text','#ebebeb')}; border:1px solid {PALETTE.get('border','#484848')}; "
-            f"font-size:{FONT['body']}pt; font-family:Menlo,monospace;")
+            f"font-size:{FONT['body']}pt; font-family:'Menlo','Consolas','Courier New',monospace;")
         self._notes_edit.focusOutEvent = self._notes_focus_out
         ml.addWidget(self._notes_edit, notes_row, 1)
         top.addWidget(meta_box, 1)
@@ -568,7 +568,7 @@ class DataTab(QWidget):
         self._cmp_b_lbl = QLabel("B: —")
         for l in [self._cmp_a_lbl, self._cmp_b_lbl]:
             l.setStyleSheet(
-                f"font-family:Menlo,monospace; font-size:{FONT['label']}pt; color:#666;")
+                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['label']}pt; color:#666;")
             l.setWordWrap(True)
 
         for b in [self._cmp_a_btn, self._cmp_b_btn]:

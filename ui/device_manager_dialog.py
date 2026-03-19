@@ -724,7 +724,7 @@ class _DeviceProfilePanel(QWidget):
             kl.setFixedWidth(110)
             vl = QLabel(str(v))
             vl.setStyleSheet(
-                f"font-family:Menlo,monospace; font-size:8.5pt; "
+                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:8.5pt; "
                 f"color:{'#ff5555' if k == 'Last Error' else PALETTE.get('textSub','#6a6a6a')}; "
                 f"word-break:break-all;")
             vl.setWordWrap(True)
@@ -1162,7 +1162,7 @@ class _DeviceProfilePanel(QWidget):
                 _saved_visa = entry.address or "GPIB::12"
                 visa_edit = QLineEdit(_saved_visa)
                 visa_edit.setPlaceholderText(
-                    "e.g. GPIB::12  |  USB0::0x0A33::...  |  ASRL/dev/ttyUSB0")
+                    "e.g. GPIB::12  |  USB0::0x0A33::...  |  ASRL1::INSTR (Win) / ASRL/dev/ttyUSB0 (Linux)")
                 visa_edit.setToolTip(
                     "PyVISA resource string for the BNC 745.\n"
                     "Find it in NI MAX → Instruments, or run:\n"
@@ -1567,7 +1567,7 @@ class _DriverCard(QFrame):
         ver_badge.setStyleSheet(
             f"background:{ver_bg}; color:{ver_color}; "
             f"border:1px solid {ver_color}44; border-radius:3px; "
-            f"font-size:8.5pt; font-family:Menlo,monospace;"
+            f"font-size:8.5pt; font-family:'Menlo','Consolas','Courier New',monospace;"
             f" padding:1px 6px;")
         top.addWidget(name, 1)
         top.addWidget(ver_badge)

@@ -63,7 +63,7 @@ class VerdictBanner(QWidget):
 
         self._icon  = QLabel("—")
         self._icon.setStyleSheet(scaled_qss(
-            "font-size:36pt; font-weight:bold; font-family:Menlo,monospace;"))
+            "font-size:36pt; font-weight:bold; font-family:'Menlo','Consolas','Courier New',monospace;"))
         self._icon.setAlignment(Qt.AlignCenter)
 
         self._sub = QLabel("Run analysis to see verdict")
@@ -95,7 +95,7 @@ class VerdictBanner(QWidget):
         self._icon.setText(verdict if verdict != "NONE" else "—")
         self._icon.setStyleSheet(scaled_qss(
             f"font-size:36pt; font-weight:bold; "
-            f"font-family:Menlo,monospace; color:{fg};"))
+            f"font-family:'Menlo','Consolas','Courier New',monospace; color:{fg};"))
         self._sub.setText(subtitle)
         self._sub.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{fg}88;")
 
@@ -227,7 +227,7 @@ class HotspotTable(QTableWidget):
             QTableWidget {{
                 background:{PALETTE.get('bg','#242424')}; alternate-background-color:{PALETTE.get('surface','#2d2d2d')};
                 gridline-color:{PALETTE.get('border2','#3d3d3d')}; border:none;
-                font-family:Menlo,monospace; font-size:{FONT['label']}pt;
+                font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['label']}pt;
             }}
             QHeaderView::section {{
                 background:{PALETTE.get('surface','#2d2d2d')}; color:{PALETTE.get('textSub','#6a6a6a')};
@@ -393,11 +393,11 @@ class AnalysisTab(QWidget):
             if cur_text == "No data":
                 self._source_lbl.setStyleSheet(
                     f"background:{su2}; color:{dim}; padding:0 10px; "
-                    f"border-radius:3px; font-family:Menlo,monospace; font-size:{FONT['label']}pt;")
+                    f"border-radius:3px; font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['label']}pt;")
             else:
                 self._source_lbl.setStyleSheet(
                     f"background:{su2}; color:{acc}; padding:0 10px; "
-                    f"border-radius:3px; font-family:Menlo,monospace; font-size:{FONT['label']}pt;")
+                    f"border-radius:3px; font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['label']}pt;")
         # Auto-run checkbox
         if hasattr(self, "_auto_cb"):
             self._auto_cb.setStyleSheet(
@@ -474,7 +474,7 @@ class AnalysisTab(QWidget):
         l.setFixedHeight(24)
         l.setStyleSheet(
             f"background:{bg}; color:{fg}; padding:0 10px; "
-            f"border-radius:3px; font-family:Menlo,monospace; font-size:{FONT['label']}pt;")
+            f"border-radius:3px; font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['label']}pt;")
         return l
 
     # ---------------------------------------------------------------- #
@@ -675,7 +675,7 @@ class AnalysisTab(QWidget):
             v = QLabel("—")
             v.setAlignment(Qt.AlignRight)
             v.setStyleSheet(
-                f"font-family:Menlo,monospace; font-size:{FONT['body']}pt; color:{PALETTE.get('textDim','#999999')};")
+                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['body']}pt; color:{PALETTE.get('textDim','#999999')};")
             sg.addWidget(v, r, 1)
             self._stat_vals[key] = v
         lay.addWidget(stats_box)
@@ -738,7 +738,7 @@ class AnalysisTab(QWidget):
         self._source_lbl.setText(source_label)
         self._source_lbl.setStyleSheet(
             f"background:{PALETTE.get('surface2','#3d3d3d')}; color:{PALETTE.get('accent','#00d4aa')}; padding:0 10px; "
-            f"border-radius:3px; font-family:Menlo,monospace; font-size:{FONT['label']}pt;")
+            f"border-radius:3px; font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['label']}pt;")
         if dt_map is not None or drr_map is not None:
             self._data_stack.setCurrentIndex(1)
         if self._auto_cb.isChecked():
@@ -824,7 +824,7 @@ class AnalysisTab(QWidget):
         self._source_lbl.setText("No data")
         self._source_lbl.setStyleSheet(
             f"background:{PALETTE.get('surface2','#3d3d3d')}; color:{PALETTE.get('textDim','#999999')}; padding:0 10px; "
-            f"border-radius:3px; font-family:Menlo,monospace; font-size:{FONT['label']}pt;")
+            f"border-radius:3px; font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['label']}pt;")
 
     # ---------------------------------------------------------------- #
     #  Stats update                                                     #
@@ -847,7 +847,7 @@ class AnalysisTab(QWidget):
         c = colors.get(r.verdict, PALETTE.get('textDim', '#999999'))
         for key in ["hotspots", "peak", "area_frac"]:
             self._stat_vals[key].setStyleSheet(
-                f"font-family:Menlo,monospace; font-size:{FONT['body']}pt; color:{c};")
+                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['body']}pt; color:{c};")
 
     # ---------------------------------------------------------------- #
     #  Presets                                                          #

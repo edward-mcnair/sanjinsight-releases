@@ -112,7 +112,7 @@ class MapPane(QWidget):
         self._stat = QLabel("")
         self._stat.setAlignment(Qt.AlignCenter)
         self._stat.setStyleSheet(
-            f"font-family:Menlo,monospace; font-size:{FONT['label']}pt; color:#444;")
+            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['label']}pt; color:#444;")
 
         lay.addWidget(self._img_lbl)
         lay.addWidget(self._title_lbl)
@@ -354,7 +354,7 @@ class CalibrationTab(QWidget):
 
         self._step_lbl = QLabel("Ready")
         self._step_lbl.setStyleSheet(
-            f"font-family:Menlo,monospace; font-size:{FONT['heading']}pt; color:#555;")
+            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['heading']}pt; color:#555;")
         self._step_lbl.setWordWrap(True)
 
         rl.addWidget(self._run_btn)
@@ -397,7 +397,7 @@ class CalibrationTab(QWidget):
             val = QLabel("—")
             val.setAlignment(Qt.AlignCenter)
             val.setStyleSheet(scaled_qss(
-                "font-family:Menlo,monospace; font-size:18pt; color:#00d4aa;"))
+                "font-family:'Menlo','Consolas','Courier New',monospace; font-size:18pt; color:#00d4aa;"))
             v.addWidget(sub)
             v.addWidget(val)
             w2._val = val
@@ -454,7 +454,7 @@ class CalibrationTab(QWidget):
         self._apply_btn.setEnabled(False)
         self._file_lbl = QLabel("None loaded")
         self._file_lbl.setStyleSheet(
-            f"font-family:Menlo,monospace; font-size:{FONT['label']}pt; color:#555;")
+            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['label']}pt; color:#555;")
         for b in [self._save_btn, self._load_btn, self._apply_btn]:
             b.setFixedHeight(30)
             fl.addWidget(b)
@@ -491,7 +491,7 @@ class CalibrationTab(QWidget):
         _color = ("#00d4aa" if prog.state == "complete" else
                   "#ff6666" if prog.state in ("error", "aborted") else "#ffaa44")
         self._stats["state"]._val.setStyleSheet(scaled_qss(
-            f"font-family:Menlo,monospace; font-size:18pt; color:{_color};"))
+            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:18pt; color:{_color};"))
 
         if prog.result and prog.result.valid:
             self._show_result(prog.result)
@@ -659,7 +659,7 @@ class CalibrationTab(QWidget):
         self._stats["ct_mean"]._val.setText(f"{ct_mean:.3e}")
         self._stats["state"]._val.setText("COMPLETE ✓")
         self._stats["state"]._val.setStyleSheet(scaled_qss(
-            "font-family:Menlo,monospace; font-size:18pt; color:#00d4aa;"))
+            "font-family:'Menlo','Consolas','Courier New',monospace; font-size:18pt; color:#00d4aa;"))
 
     def _redisplay(self):
         if self._result and self._result.valid:
@@ -683,7 +683,7 @@ class CalibrationTab(QWidget):
         self._file_lbl.setText(os.path.basename(saved))
         self._stats["saved"]._val.setText("Saved ✓")
         self._stats["saved"]._val.setStyleSheet(scaled_qss(
-            "font-family:Menlo,monospace; font-size:18pt; color:#00d4aa;"))
+            "font-family:'Menlo','Consolas','Courier New',monospace; font-size:18pt; color:#00d4aa;"))
 
     def _load(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -704,7 +704,7 @@ class CalibrationTab(QWidget):
             self._stats["valid_px"]._val.setText(f"{valid_pct:.1f}%")
             self._stats["saved"]._val.setText("Loaded ✓")
             self._stats["saved"]._val.setStyleSheet(scaled_qss(
-                "font-family:Menlo,monospace; font-size:18pt; color:#00d4aa;"))
+                "font-family:'Menlo','Consolas','Courier New',monospace; font-size:18pt; color:#00d4aa;"))
         except Exception as e:
             QMessageBox.critical(self, "Load Failed", str(e))
 
@@ -715,7 +715,7 @@ class CalibrationTab(QWidget):
             app_state.active_calibration = self._result
             self._stats["saved"]._val.setText("Applied ✓")
             self._stats["saved"]._val.setStyleSheet(scaled_qss(
-                "font-family:Menlo,monospace; font-size:18pt; color:#00d4aa;"))
+                "font-family:'Menlo','Consolas','Courier New',monospace; font-size:18pt; color:#00d4aa;"))
         except Exception as e:
             QMessageBox.warning(self, "Apply Failed", str(e))
 

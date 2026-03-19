@@ -295,7 +295,7 @@ class RecipeTab(QWidget):
         self._list = QListWidget()
         self._list.setStyleSheet(f"""
             QListWidget {{ background:#141414; color:#ccc; border:1px solid #2a2a2a;
-                          font-size:{FONT['label']}pt; font-family:Menlo,monospace; }}
+                          font-size:{FONT['label']}pt; font-family:'Menlo','Consolas','Courier New',monospace; }}
             QListWidget::item:selected {{ background:#0d3a52; color:#fff; }}
             QListWidget::item:hover    {{ background:#1a2a2a; }}
         """)
@@ -533,7 +533,7 @@ class RecipeTab(QWidget):
         if hasattr(self, "_list"):
             self._list.setStyleSheet(f"""
                 QListWidget {{ background:{su2}; color:{txt}; border:1px solid {bdr};
-                              font-size:{FONT['label']}pt; font-family:Menlo,monospace; }}
+                              font-size:{FONT['label']}pt; font-family:'Menlo','Consolas','Courier New',monospace; }}
                 QListWidget::item:selected {{ background:{P.get('info','#0d3a52')}; color:{P.get('bg','#12151f')}; }}
                 QListWidget::item:hover    {{ background:{P.get('surfaceHover','#262a38')}; }}
             """)
@@ -770,7 +770,7 @@ class RecipeTab(QWidget):
         lst = QListWidget()
         lst.setStyleSheet(f"""
             QListWidget {{ background:#141414; color:#ccc; border:1px solid #2a2a2a;
-                          font-size:{FONT['label']}pt; font-family:Menlo,monospace; }}
+                          font-size:{FONT['label']}pt; font-family:'Menlo','Consolas','Courier New',monospace; }}
             QListWidget::item:selected {{ background:#0d3a52; color:#fff; }}
             QListWidget::item:hover    {{ background:#1a2a2a; }}
         """)

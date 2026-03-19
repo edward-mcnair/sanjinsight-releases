@@ -164,7 +164,7 @@ class _ProfileCard(QFrame):
         wl_lbl.setStyleSheet(f"font-size:{FONT['caption']}pt; color:{PALETTE.get('textSub','#6a6a6a')};")
         ct_lbl = QLabel(f"C_T  {profile.ct_value:.2e}")
         ct_lbl.setStyleSheet(
-            f"font-family:Menlo,monospace; font-size:{FONT['sublabel']}pt; color:{accent};")
+            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['sublabel']}pt; color:{accent};")
         bot.addWidget(cat_lbl)
         bot.addWidget(wl_lbl)
         bot.addStretch(1)
@@ -246,7 +246,7 @@ class _ProfileRow(QFrame):
 
         ct_lbl = QLabel(f"C_T  {profile.ct_value:.2e}")
         ct_lbl.setStyleSheet(
-            f"font-family:Menlo,monospace; font-size:{FONT['label']}pt; color:{accent};")
+            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['label']}pt; color:{accent};")
         ct_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         lay.addWidget(ct_lbl)
 
@@ -545,7 +545,7 @@ class Step2Focus(QWidget):
         self._af_btn.clicked.connect(self._run_autofocus)
         self._focus_metric = QLabel("Score: —")
         self._focus_metric.setStyleSheet(
-            f"font-family:Menlo,monospace; font-size:{FONT['label']}pt; color:{PALETTE.get('textSub','#6a6a6a')};"
+            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['label']}pt; color:{PALETTE.get('textSub','#6a6a6a')};"
             " padding-left:2px;")
         afl.addWidget(af_title)
         afl.addWidget(self._af_btn)
@@ -621,7 +621,7 @@ class Step2Focus(QWidget):
         # Current Z readout
         self._z_pos_lbl = QLabel("Z: —")
         self._z_pos_lbl.setStyleSheet(
-            f"font-family:Menlo,monospace; font-size:{FONT['label']}pt; color:{PALETTE.get('textSub','#6a6a6a')};"
+            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['label']}pt; color:{PALETTE.get('textSub','#6a6a6a')};"
             " padding-left:2px;")
         manl.addWidget(self._z_pos_lbl)
 
@@ -703,7 +703,7 @@ class Step2Focus(QWidget):
             ok    = getattr(result, "converged", True)
             self._focus_metric.setText(f"Score: {score:.1f}")
             self._focus_metric.setStyleSheet(
-                f"font-family:Menlo,monospace; font-size:{FONT['label']}pt;"
+                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['label']}pt;"
                 f" color:{'#00d4aa' if ok else '#ff8800'};"
                 f" padding-left:2px;")
         self._update_z_readout()
@@ -806,7 +806,7 @@ class Step3Acquire(QWidget):
         self._status = QLabel("")
         self._status.setAlignment(Qt.AlignCenter)
         self._status.setStyleSheet(
-            f"font-family:Menlo,monospace; font-size:{FONT['heading']}pt; color:{PALETTE.get('textSub','#6a6a6a')};")
+            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['heading']}pt; color:{PALETTE.get('textSub','#6a6a6a')};")
         lay.addWidget(self._status)
 
         # Profile info summary
@@ -859,7 +859,7 @@ class Step3Acquire(QWidget):
         self._progress.setVisible(False)
         self._status.setText(f"Error: {msg}")
         self._status.setStyleSheet(
-            f"font-family:Menlo,monospace; font-size:{FONT['heading']}pt; color:#ff4444;")
+            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['heading']}pt; color:#ff4444;")
 
 
 # ------------------------------------------------------------------ #
@@ -887,7 +887,7 @@ class _VerdictBig(QWidget):
         ol.setAlignment(Qt.AlignVCenter)
         self._verdict_lbl = QLabel("—")
         self._verdict_lbl.setStyleSheet(
-            scaled_qss("font-size:50pt; font-weight:bold; font-family:Menlo,monospace;"))
+            scaled_qss("font-size:50pt; font-weight:bold; font-family:'Menlo','Consolas','Courier New',monospace;"))
         self._sub_lbl = QLabel("")
         self._sub_lbl.setStyleSheet(scaled_qss("font-size:15pt;"))
         ol.addWidget(self._verdict_lbl)
@@ -901,7 +901,7 @@ class _VerdictBig(QWidget):
         self._verdict_lbl.setText(verdict)
         self._verdict_lbl.setStyleSheet(
             scaled_qss(f"font-size:50pt; font-weight:bold; "
-                       f"font-family:Menlo,monospace; color:{fg};"))
+                       f"font-family:'Menlo','Consolas','Courier New',monospace; color:{fg};"))
         if verdict in ("WARNING", "FAIL") and hotspots > 0:
             hs = "hotspot" if hotspots == 1 else "hotspots"
             sub = f"{hotspots} {hs} detected  ·  peak {peak:.1f} °C"
@@ -969,7 +969,7 @@ class Step4Results(QWidget):
             v = QLabel("—")
             v.setAlignment(Qt.AlignRight)
             v.setStyleSheet(
-                f"font-family:Menlo,monospace; font-size:{FONT['heading']}pt; color:{PALETTE.get('textSub','#6a6a6a')};")
+                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['heading']}pt; color:{PALETTE.get('textSub','#6a6a6a')};")
             sg.addWidget(v, r, 1)
             self._stat_v[key] = v
         sl.addWidget(stats_box)
@@ -1024,7 +1024,7 @@ class Step4Results(QWidget):
         c = colors.get(r.verdict, PALETTE.get('textSub', '#6a6a6a'))
         for k in ["hotspots", "peak", "area"]:
             self._stat_v[k].setStyleSheet(
-                f"font-family:Menlo,monospace; font-size:{FONT['heading']}pt; color:{c};")
+                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['heading']}pt; color:{c};")
 
     def resizeEvent(self, e):
         super().resizeEvent(e)

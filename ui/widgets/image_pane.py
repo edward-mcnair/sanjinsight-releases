@@ -35,7 +35,7 @@ class ImagePane(QWidget):
         self._title.setStyleSheet(f"font-size:{FONT['body']}pt; color:#666; letter-spacing:1px;")
         self._stats = QLabel("")
         self._stats.setAlignment(Qt.AlignCenter)
-        self._stats.setStyleSheet(f"font-family:Menlo,monospace; font-size:{FONT['body']}pt; color:#666;")
+        self._stats.setStyleSheet(f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['body']}pt; color:#666;")
         layout.addWidget(self._lbl)
         layout.addWidget(self._title)
         layout.addWidget(self._stats)

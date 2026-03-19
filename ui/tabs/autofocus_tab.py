@@ -205,7 +205,7 @@ class AutofocusTab(QWidget):
         val.setAlignment(Qt.AlignCenter)
         color = PALETTE.get(pal_key, "#00d4aa")
         val.setStyleSheet(
-            f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:{color};")
+            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readout']}pt; color:{color};")
         v.addWidget(sub)
         v.addWidget(val)
         w._val      = val
@@ -217,7 +217,7 @@ class AutofocusTab(QWidget):
         for rw in (self._state_w, self._best_z_w, self._score_w, self._time_w):
             color = PALETTE.get(rw._pal_key, "#00d4aa")
             rw._val.setStyleSheet(
-                f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:{color};")
+                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readout']}pt; color:{color};")
         set_btn_icon(self._run_btn,   "fa5s.play", PALETTE.get("accent", "#00d4aa"))
         set_btn_icon(self._abort_btn, "fa5s.stop", PALETTE.get("danger", "#ff453a"))
 
@@ -345,7 +345,7 @@ class AutofocusTab(QWidget):
 
         self._state_w._val.setText("RUNNING")
         self._state_w._val.setStyleSheet(
-            f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:{PALETTE['warning']};")
+            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readout']}pt; color:{PALETTE['warning']};")
 
     def update_complete(self, result):
         self._set_busy(False)
@@ -357,14 +357,14 @@ class AutofocusTab(QWidget):
         if result.state == AfState.COMPLETE:
             self._state_w._val.setText("COMPLETE ✓")
             self._state_w._val.setStyleSheet(
-                f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:{PALETTE['success']};")
+                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readout']}pt; color:{PALETTE['success']};")
             self._best_z_w._val.setText(f"{result.best_z:.2f} μm")
             self._score_w._val.setText(f"{result.best_score:.4f}")
             self._time_w._val.setText(f"{result.duration_s:.1f} s")
         else:
             self._state_w._val.setText(result.state.name)
             self._state_w._val.setStyleSheet(
-                f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:{PALETTE['danger']};")
+                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readout']}pt; color:{PALETTE['danger']};")
 
     def log(self, msg):
         ts = time.strftime("%H:%M:%S")

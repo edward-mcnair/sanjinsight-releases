@@ -117,7 +117,7 @@ class ReadinessWidget(QWidget):
         self._title = QLabel("Checking instrument state…")
         self._title.setAlignment(Qt.AlignVCenter)
         self._title.setStyleSheet(
-            f"font-family: Menlo, monospace; "
+            f"font-family:'Menlo','Consolas','Courier New',monospace; "
             f"font-size: {FONT['label']}pt; font-weight: bold;")
         self._title.setToolTip(
             "Shows whether the instrument meets all acquisition prerequisites.\n"
@@ -196,7 +196,7 @@ class ReadinessWidget(QWidget):
         self._dot.setStyleSheet(f"color: {fg}; font-size: {FONT['label']}pt;")
         self._dot.setText(dot)
         self._title.setStyleSheet(
-            f"font-family: Menlo, monospace; "
+            f"font-family:'Menlo','Consolas','Courier New',monospace; "
             f"font-size: {FONT['label']}pt; font-weight: bold; color: {fg};")
         self._title.setText(title)
 
@@ -220,7 +220,7 @@ class ReadinessWidget(QWidget):
         lbl = QLabel(f"✗  {message}")
         lbl.setStyleSheet(
             f"color: {PALETTE['text']}; "
-            f"font-family: Menlo, monospace; font-size: {FONT['sublabel']}pt;")
+            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size: {FONT['sublabel']}pt;")
         lbl.setWordWrap(True)
         row.addWidget(lbl, 1)
 

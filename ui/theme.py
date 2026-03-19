@@ -256,6 +256,10 @@ def _try_load_inter() -> None:
 # Initialised with best-guess platform scale; apply_dpi_scale() refines it.
 FONT: dict = {k: max(8, int(round(v * _DPI_SCALE))) for k, v in _FONT_BASE.items()}
 
+# Cross-platform monospace font family string — use in inline QSS stylesheets.
+# "Menlo" (macOS) → "Consolas" (Windows) → "Courier New" (fallback).
+MONO_FONT = "'Menlo','Consolas','Courier New',monospace"
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  Active palette

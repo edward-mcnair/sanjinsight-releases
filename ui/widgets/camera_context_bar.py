@@ -161,7 +161,7 @@ class CameraContextBar(QWidget):
         color  = PALETTE.get("warning", "#ffb300") if is_ir else PALETTE.get("accent", "#00d4aa")
         self._mode_lbl.setText(label)
         self._mode_lbl.setStyleSheet(
-            f"color:{color}; font-family:Menlo,monospace; "
+            f"color:{color}; font-family:'Menlo','Consolas','Courier New',monospace; "
             f"font-size:{FONT.get('caption', 8)}pt; font-weight:700; "
             f"letter-spacing:1px; background:transparent; padding:0 4px;")
 

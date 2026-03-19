@@ -106,7 +106,7 @@ class _MapPanel(QFrame):
 
         self._title_lbl = QLabel(self._title_str)
         self._title_lbl.setStyleSheet(
-            f"color:#ddd; font-size:{FONT['heading']}pt; font-weight:600; font-family:Menlo,monospace;")
+            f"color:#ddd; font-size:{FONT['heading']}pt; font-weight:600; font-family:'Menlo','Consolas','Courier New',monospace;")
         self._title_lbl.setAlignment(Qt.AlignCenter)
         lay.addWidget(self._title_lbl)
 
@@ -118,7 +118,7 @@ class _MapPanel(QFrame):
 
         self._range_lbl = QLabel("—")
         self._range_lbl.setAlignment(Qt.AlignCenter)
-        self._range_lbl.setStyleSheet(f"color:#888; font-size:{FONT['label']}pt; font-family:Menlo,monospace;")
+        self._range_lbl.setStyleSheet(f"color:#888; font-size:{FONT['label']}pt; font-family:'Menlo','Consolas','Courier New',monospace;")
         lay.addWidget(self._range_lbl)
 
     def set_data(self, arr: Optional[np.ndarray],
@@ -185,7 +185,7 @@ class _StatsTable(QTableWidget):
         self.setAlternatingRowColors(True)
         self.setStyleSheet(f"""
             QTableWidget {{ background:#141414; color:#ccc; font-size:{FONT['label']}pt;
-                           font-family:Menlo,monospace; gridline-color:#222; }}
+                           font-family:'Menlo','Consolas','Courier New',monospace; gridline-color:#222; }}
             QHeaderView::section {{ background:#1e1e1e; color:#aaa; font-size:{FONT['label']}pt;
                                    padding: 4px 16px 4px 8px; }}
             QTableWidget::item:alternate {{ background:#191919; }}

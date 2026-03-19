@@ -152,9 +152,14 @@ class AmcadBiltDriver(BiasDriver):
             raise RuntimeError(
                 f"Cannot connect to AMCAD pivserver64 at "
                 f"{self._host}:{self._port} — {exc}\n\n"
-                f"Ensure pivserver64.exe is running on the instrument PC.\n"
-                f"Launch it with:  pivserver64.exe -p {self._port}\n"
-                f"Then verify network connectivity:  ping {self._host}"
+                f"Check the following:\n"
+                f"  1. pivserver64.exe is running on the instrument PC:\n"
+                f"         pivserver64.exe -p {self._port}\n"
+                f"  2. Network connectivity:  ping {self._host}\n"
+                f"  3. Windows Firewall on the instrument PC allows inbound\n"
+                f"     connections on TCP port {self._port}.\n"
+                f"     (Control Panel → Windows Defender Firewall\n"
+                f"      → Advanced Settings → Inbound Rules → New Rule)"
             ) from exc
 
         try:

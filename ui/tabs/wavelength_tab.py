@@ -437,7 +437,7 @@ class WavelengthTab(QWidget):
         )
         self._nm_spin.setStyleSheet(err_qss)
         self._wl_readout.setStyleSheet(
-            f"font-family: Menlo, monospace; font-size: {FONT['readoutSm']}pt; "
+            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size: {FONT['readoutSm']}pt; "
             f"color: {danger};"
         )
 
@@ -487,7 +487,7 @@ class WavelengthTab(QWidget):
 
         # Wavelength readout label
         self._wl_readout.setStyleSheet(
-            f"font-family: Menlo, monospace; font-size: {F['readoutSm']}pt; "
+            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size: {F['readoutSm']}pt; "
             f"color: {accent};"
         )
 

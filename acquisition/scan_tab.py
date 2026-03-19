@@ -337,7 +337,7 @@ class ScanTab(QWidget):
         # ---- Tile size summary ----
         self._summary_lbl = QLabel("")
         self._summary_lbl.setStyleSheet(
-            f"font-family:Menlo,monospace; font-size:{FONT['label']}pt; color:#666;")
+            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['label']}pt; color:#666;")
         self._summary_lbl.setWordWrap(True)
         lay.addWidget(self._summary_lbl)
         self._update_summary()
@@ -372,7 +372,7 @@ class ScanTab(QWidget):
 
         self._tile_lbl = QLabel("Ready")
         self._tile_lbl.setStyleSheet(
-            f"font-family:Menlo,monospace; font-size:{FONT['heading']}pt; color:#555;")
+            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['heading']}pt; color:#555;")
         self._tile_lbl.setWordWrap(True)
 
         rl.addWidget(self._run_btn)
@@ -389,7 +389,7 @@ class ScanTab(QWidget):
         self._log.setFixedHeight(120)
         self._log.setStyleSheet(
             f"background:#111; color:#555; "
-            f"font-family:Menlo,monospace; font-size:{FONT['sublabel']}pt;")
+            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['sublabel']}pt;")
         ll.addWidget(self._log)
         lay.addWidget(log_box)
         lay.addStretch()
@@ -426,7 +426,7 @@ class ScanTab(QWidget):
             val = QLabel("—")
             val.setAlignment(Qt.AlignCenter)
             val.setStyleSheet(
-                scaled_qss("font-family:Menlo,monospace; font-size:15pt; color:#aaa;"))
+                scaled_qss("font-family:'Menlo','Consolas','Courier New',monospace; font-size:15pt; color:#aaa;"))
             v.addWidget(sub)
             v.addWidget(val)
             w2._val = val
@@ -549,7 +549,7 @@ class ScanTab(QWidget):
         color = ("#00d4aa" if prog.state == "complete" else
                  "#ff6666" if prog.state in ("error", "aborted") else "#ffaa44")
         self._stat_fields["state"]._val.setStyleSheet(
-            scaled_qss(f"font-family:Menlo,monospace; font-size:15pt; color:{color};"))
+            scaled_qss(f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:15pt; color:{color};"))
 
         self._log.append(
             f"<span style='color:#444'>"

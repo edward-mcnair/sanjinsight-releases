@@ -424,7 +424,7 @@ class BiasTab(QWidget):
         val.setAlignment(Qt.AlignCenter)
         color = PALETTE.get(pal_key, "#00d4aa")
         val.setStyleSheet(
-            f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:{color};")
+            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readout']}pt; color:{color};")
         v.addWidget(sub)
         v.addWidget(val)
         w._val     = val
@@ -437,7 +437,7 @@ class BiasTab(QWidget):
         for rw in (self._v_w, self._i_w, self._p_w, self._comp_w, self._state_w):
             color = PALETTE.get(rw._pal_key, "#00d4aa")
             rw._val.setStyleSheet(
-                f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:{color};")
+                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readout']}pt; color:{color};")
         # Unit / indicator labels
         dim  = PALETTE.get("textDim",  "#999999")
         acc  = PALETTE.get("accent",   "#00d4aa")
@@ -676,7 +676,7 @@ class BiasTab(QWidget):
         if status.error:
             self._state_w._val.setText("ERROR")
             self._state_w._val.setStyleSheet(
-                f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:{PALETTE['danger']};")
+                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readout']}pt; color:{PALETTE['danger']};")
             return
 
         self._v_w._val.setText(f"{status.actual_voltage:.4f} V")
@@ -690,11 +690,11 @@ class BiasTab(QWidget):
         if status.output_on:
             self._state_w._val.setText("ON ●")
             self._state_w._val.setStyleSheet(
-                f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:{PALETTE['success']};")
+                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readout']}pt; color:{PALETTE['success']};")
         else:
             self._state_w._val.setText("OFF ○")
             self._state_w._val.setStyleSheet(
-                f"font-family:Menlo,monospace; font-size:{FONT['readout']}pt; color:#444;")
+                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readout']}pt; color:#444;")
 
         # Gate-channel readout (AMCAD BILT only)
         if self._gate_row.isVisible() and hasattr(status, "gate_voltage"):

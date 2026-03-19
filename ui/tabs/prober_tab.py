@@ -388,7 +388,7 @@ class ProberTab(QWidget):
                   else PALETTE["textDim"])
         self._st_w._val.setText(status)
         self._st_w._val.setStyleSheet(
-            f"font-family:Menlo,monospace; font-size:{FONT['readoutSm']}pt; "
+            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readoutSm']}pt; "
             f"color:{color};")
 
     # ---------------------------------------------------------------- #
@@ -516,7 +516,7 @@ class ProberTab(QWidget):
         val = QLabel(initial)
         val.setAlignment(Qt.AlignCenter)
         val.setStyleSheet(
-            f"font-family:Menlo,monospace; font-size:{FONT['readoutSm']}pt; "
+            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readoutSm']}pt; "
             f"color:{color};")
 
         lay.addWidget(lbl)

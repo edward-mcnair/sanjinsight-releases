@@ -176,7 +176,7 @@ class AcquireTab(QWidget):
         self._notes_edit.setMaximumHeight(70)
         self._notes_edit.setStyleSheet(
             f"background:{PALETTE.get('bg','#242424')}; color:{PALETTE.get('text','#ebebeb')}; border:1px solid {PALETTE.get('border','#484848')}; "
-            f"font-size:{FONT['body']}pt; font-family:Menlo,monospace;")
+            f"font-size:{FONT['body']}pt; font-family:'Menlo','Consolas','Courier New',monospace;")
         nl.addWidget(self._notes_edit)
 
         # Quick-insert chips for common tags
@@ -226,7 +226,7 @@ class AcquireTab(QWidget):
         bot = QHBoxLayout()
         self._snr_lbl = QLabel("SNR  —")
         self._snr_lbl.setStyleSheet(
-            scaled_qss("font-family:Menlo,monospace; font-size:15pt; color:#555;"))
+            scaled_qss("font-family:'Menlo','Consolas','Courier New',monospace; font-size:15pt; color:#555;"))
         self._export_btn = QPushButton("Export")
         set_btn_icon(self._export_btn, "fa5s.file-export")
         self._export_btn.setToolTip("Export acquisition results to a folder")
@@ -251,7 +251,7 @@ class AcquireTab(QWidget):
         if hasattr(self, "_notes_edit"):
             self._notes_edit.setStyleSheet(
                 f"background:{bg}; color:{txt}; border:1px solid {bdr}; "
-                f"font-size:{FONT['body']}pt; font-family:Menlo,monospace;")
+                f"font-size:{FONT['body']}pt; font-family:'Menlo','Consolas','Courier New',monospace;")
         acc = P.get("accent",   "#00d4aa")
         su2 = P.get("surface2", "#3d3d3d")
         sur = P.get("surface",  "#2d2d2d")
