@@ -270,27 +270,6 @@ class BosonDriver(CameraDriver):
         else:
             self._y16_mode = True
 
-        # Verify the video device by reading a test frame and logging its
-        # resolution.  This catches the common macOS issue where system_profiler
-        # indices don't match OpenCV AVFoundation indices, so a webcam at index 1
-        # gets opened instead of the Boson's 320×256 (or 640×512) UVC stream.
-        ret, test_frame = cap.read()
-        if ret and test_frame is not None:
-            h, w = test_frame.shape[:2]
-            log.info("Boson: test frame from index %d: %dx%d dtype=%s",
-                     video_idx, w, h, test_frame.dtype)
-            # If the frame is much larger than the expected Boson resolution
-            # (e.g. 1280x720 from a webcam), try other indices to find the
-            # actual Boson UVC stream.
-            if w > self._W * 2 or h > self._H * 2:
-                log.warning(
-                    "Boson: frame %dx%d at index %d does not match expected "
-                    "%dx%d — probing other indices for the Boson UVC stream.",
-                    w, h, video_idx, self._W, self._H)
-                found = self._probe_video_indices(cap, video_idx)
-                if found is not None:
-                    cap, video_idx = found
-
         with self._cap_lock:
             self._cap = cap
         self._open = True
@@ -301,68 +280,54 @@ class BosonDriver(CameraDriver):
             video_idx, self._y16_mode,
         )
 
-    def _probe_video_indices(self, wrong_cap, wrong_idx):
-        """Try other OpenCV indices to find the actual Boson UVC stream.
-
-        Returns (cap, index) tuple on success, or None if no match found.
-        The wrong_cap is released if a better match is found.
-        """
-        import cv2
-        import sys as _sys
-        for idx in range(6):
-            if idx == wrong_idx:
-                continue
-            try:
-                if _sys.platform == "win32":
-                    probe = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
-                else:
-                    probe = cv2.VideoCapture(idx)
-                if not probe.isOpened():
-                    continue
-                ret, f = probe.read()
-                if not ret or f is None:
-                    probe.release()
-                    continue
-                h, w = f.shape[:2]
-                log.info("Boson: probe index %d → %dx%d", idx, w, h)
-                # Accept if resolution matches expected Boson output (±10%)
-                if (abs(w - self._W) <= self._W * 0.1 and
-                        abs(h - self._H) <= self._H * 0.1):
-                    log.info(
-                        "Boson: found matching %dx%d stream at index %d. "
-                        "Update 'Video Device Index' to %d in Device Manager.",
-                        w, h, idx, idx)
-                    # Apply Y16 / resolution settings to the new capture
-                    y16_fourcc = cv2.VideoWriter_fourcc(*"Y16 ")
-                    probe.set(cv2.CAP_PROP_FOURCC, y16_fourcc)
-                    probe.set(cv2.CAP_PROP_FRAME_WIDTH,  self._W)
-                    probe.set(cv2.CAP_PROP_FRAME_HEIGHT, self._H)
-                    probe.set(cv2.CAP_PROP_FPS,          self._fps)
-                    probe.set(cv2.CAP_PROP_CONVERT_RGB,  0)
-                    wrong_cap.release()
-                    return probe, idx
-                probe.release()
-            except Exception:
-                continue
-        log.warning(
-            "Boson: could not find a matching video stream at any index. "
-            "Using index %d despite resolution mismatch.", wrong_idx)
-        return None
-
     # ── Video device helpers ───────────────────────────────────────────────────
 
     def _auto_detect_video_index(self) -> int:
-        """
-        On macOS, use system_profiler to find the AVFoundation index of the
-        first FLIR camera (VID 09CB).  Falls back to the configured video_index
-        on failure or on other platforms.
+        """Find the correct OpenCV index for the Boson UVC stream.
 
-        This avoids the common mistake of index 0 being the built-in FaceTime
-        camera while the Boson is at index 1 or 2.
+        On macOS, system_profiler indices often don't match OpenCV's
+        AVFoundation indices.  This method probes camera indices by checking
+        the *native* resolution (before any cap.set() calls) to identify the
+        Boson — its 320×256 (Boson 320) or 640×512 (Boson 640) output is
+        unique and no webcam uses these resolutions.
+
+        Falls back to the configured video_index on other platforms or if
+        probing fails.
         """
         import sys as _sys
+        import cv2
+
         if _sys.platform != "darwin":
             return self._video_index
+
+        # Try configured index first, then scan 0–5.
+        candidates = [self._video_index] + [
+            i for i in range(6) if i != self._video_index
+        ]
+        for idx in candidates:
+            try:
+                cap = cv2.VideoCapture(idx)
+                if not cap.isOpened():
+                    continue
+                # Read native resolution (no cap.set yet — this is the
+                # camera's default output size).
+                native_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                native_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                cap.release()
+                log.debug("Boson auto-detect: index %d → native %dx%d",
+                          idx, native_w, native_h)
+                if native_w == self._W and native_h == self._H:
+                    if idx != self._video_index:
+                        log.info(
+                            "Boson: found %dx%d stream at OpenCV index %d "
+                            "(configured: %d). Update 'Video Device Index' in "
+                            "Device Manager to %d to skip this probe.",
+                            native_w, native_h, idx, self._video_index, idx)
+                    return idx
+            except Exception:
+                continue
+
+        # No native-resolution match — fall back to system_profiler hint.
         try:
             import subprocess, json
             r = subprocess.run(
@@ -374,13 +339,10 @@ class BosonDriver(CameraDriver):
                 name = cam.get("_name", "").lower()
                 uid  = cam.get("spcamera_unique-id", "").lower()
                 if "flir" in name or "09cb" in uid:
-                    if i != self._video_index:
-                        log.info(
-                            "Boson: auto-detected UVC at index %d ('%s'). "
-                            "Update 'Video Device Index' in Device Manager to %d "
-                            "to avoid this scan on every connect.",
-                            i, cam.get("_name", ""), i,
-                        )
+                    log.info(
+                        "Boson: no native-resolution match; using "
+                        "system_profiler hint → index %d ('%s')",
+                        i, cam.get("_name", ""))
                     return i
         except Exception as exc:
             log.debug("Boson: video index auto-detect failed: %s", exc)

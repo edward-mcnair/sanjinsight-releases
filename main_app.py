@@ -1027,6 +1027,8 @@ class MainWindow(QMainWindow):
 
     def _on_fpga(self, status):
         self._fpga_tab.update_status(status)
+        if app_state.fpga is None:
+            return
         ok  = status.error is None and status.running
         tip = ("FPGA: running" if ok else
                f"FPGA error: {status.error}" if status.error else "FPGA: stopped")
@@ -1034,6 +1036,8 @@ class MainWindow(QMainWindow):
 
     def _on_bias(self, status):
         self._bias_tab.update_status(status)
+        if app_state.bias is None:
+            return
         ok  = status.error is None and status.output_on
         tip = (f"Bias: {status.actual_voltage:.3f}V / {status.actual_current*1000:.2f}mA"
                if ok else
@@ -1042,6 +1046,10 @@ class MainWindow(QMainWindow):
 
     def _on_stage(self, status):
         self._stage_tab.update_status(status)
+        # Ignore stale status updates from simulated stage drivers that
+        # were queued before the demo-mode shutdown completed.
+        if app_state.stage is None:
+            return
         ok  = status.error is None
         pos = status.position
         tip = (f"Stage: {pos.x:.0f} / {pos.y:.0f} / {pos.z:.0f} μm" if ok
