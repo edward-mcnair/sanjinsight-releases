@@ -136,9 +136,10 @@ class ApplicationState:
         The hardware grab loop re-reads this every iteration, so switching
         active_camera_type automatically redirects frame acquisition.
         """
-        if self._ir_cam is not None:
-            return self._cam if self._active_camera_type == "tr" else self._ir_cam
-        return self._cam
+        with self._lock:
+            if self._ir_cam is not None:
+                return self._cam if self._active_camera_type == "tr" else self._ir_cam
+            return self._cam
 
     @cam.setter
     def cam(self, value):

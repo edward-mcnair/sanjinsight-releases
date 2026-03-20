@@ -233,7 +233,7 @@ class _ReadinessPanel(QGroupBox):
                 pass
             finally:
                 self._homing = False
-                self.refresh()
+                QTimer.singleShot(0, self.refresh)
 
         threading.Thread(target=_run, daemon=True).start()
 

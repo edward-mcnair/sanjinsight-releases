@@ -474,6 +474,10 @@ class DeviceManager:
     def _disconnect_worker(self, uid: str,
                            on_complete: Optional[Callable]):
         entry = self._entries[uid]
+        # Save the driver reference BEFORE disconnect clears it — needed
+        # by _eject_from_app to identify which app_state slot to clear
+        # (e.g. ir_cam vs cam for cameras).
+        driver_ref = entry.driver_obj
         try:
             if entry.driver_obj and hasattr(entry.driver_obj, "disconnect"):
                 entry.driver_obj.disconnect()
@@ -487,7 +491,7 @@ class DeviceManager:
                                     else DeviceState.ABSENT)
             self._log(f"Disconnected: {entry.display_name}")
             self._emit(uid, entry.state)
-            self._eject_from_app(uid)
+            self._eject_from_app(uid, driver_ref=driver_ref)
             if on_complete:
                 on_complete(True, "Disconnected")
 
@@ -712,16 +716,24 @@ class DeviceManager:
         except Exception:
             log.warning("[%s] _inject_into_app: unexpected error", uid, exc_info=True)
 
-    def _eject_from_app(self, uid: str):
-        """Clear the app_state reference when a device disconnects."""
+    def _eject_from_app(self, uid: str, driver_ref=None):
+        """Clear the app_state reference when a device disconnects.
+
+        ``driver_ref`` is the driver object saved **before** disconnect
+        cleared ``entry.driver_obj``.  Without it the identity check
+        (e.g. ``driver_ref is app_state.ir_cam``) would always fail and
+        IR cameras would never be properly ejected.
+        """
         try:
             from hardware.app_state import app_state
             desc  = self._entries[uid].descriptor
             dtype = desc.device_type
-            driver_obj = self._entries[uid].driver_obj
+            # Use the pre-disconnect reference if provided, otherwise
+            # fall back to the entry (may already be None).
+            driver_obj = driver_ref or self._entries[uid].driver_obj
             if dtype == DTYPE_CAMERA:
                 # Clear the correct slot — IR cameras go to ir_cam, TR to cam.
-                if driver_obj is app_state.ir_cam:
+                if driver_obj is not None and driver_obj is app_state.ir_cam:
                     app_state.ir_cam = None
                 else:
                     app_state.cam = None

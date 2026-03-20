@@ -187,9 +187,8 @@ class MeasurementReadoutStrip(QWidget):
         dt_sub_font.setBold(False)
 
         # Value text — monospace for stable column width as digits change.
-        val_font = QFont("Menlo")
-        val_font.setStyleHint(QFont.Monospace)
-        val_font.setPointSize(FONT["body"])
+        from ui.font_utils import mono_font
+        val_font = mono_font(FONT["body"])
 
         # ── Fill background ────────────────────────────────────────────────
         p.fillRect(0, 0, w, h, bg)

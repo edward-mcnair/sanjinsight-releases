@@ -1564,7 +1564,7 @@ class MainWindow(QMainWindow):
                 box.addButton("Close", QMessageBox.RejectRole)
                 box.exec_()
                 if box.clickedButton() is open_btn:
-                    self._on_device_manager()
+                    self._open_device_manager()
                 return
             self._scan_start_ts = time.time()
             try:
@@ -2456,7 +2456,7 @@ class MainWindow(QMainWindow):
             box.addButton("Close", QMessageBox.RejectRole)
             box.exec_()
             if box.clickedButton() is open_btn:
-                self._on_device_manager()
+                self._open_device_manager()
             return
 
         try:

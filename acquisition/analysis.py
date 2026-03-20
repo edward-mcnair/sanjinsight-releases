@@ -187,7 +187,12 @@ class ThermalAnalysisEngine:
         binary_mask = above.astype(bool)
 
         # ---- 3. Label ----
-        from scipy.ndimage import label as ndlabel
+        try:
+            from scipy.ndimage import label as ndlabel
+        except ImportError:
+            raise RuntimeError(
+                "scipy is required for hotspot analysis.\n"
+                "Install it with:  pip install scipy")
         labelled, n_found = ndlabel(binary_mask)
 
         # ---- 4 + 5. Filter + stats ----

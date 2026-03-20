@@ -14,6 +14,7 @@ log = logging.getLogger(__name__)
 from PyQt5.QtWidgets import QWidget, QLabel, QVBoxLayout
 from PyQt5.QtCore    import Qt
 from PyQt5.QtGui     import QImage, QPixmap
+import numpy as np
 
 from acquisition.processing import to_display
 from acquisition             import apply_colormap
@@ -48,6 +49,7 @@ class ImagePane(QWidget):
             disp = apply_colormap(disp, cmap)
         if disp.ndim == 2:
             h, w = disp.shape
+            disp = np.ascontiguousarray(disp)
             qi = QImage(disp.data, w, h, w, QImage.Format_Grayscale8)
         else:
             h, w = disp.shape[:2]
