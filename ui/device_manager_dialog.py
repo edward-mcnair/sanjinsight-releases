@@ -1975,6 +1975,8 @@ class DeviceManagerDialog(QDialog):
     hw_status_changed      = pyqtSignal(bool)
     demo_requested         = pyqtSignal()   # user chose "Run in Demo Mode" from the no-devices dialog
     setup_wizard_requested = pyqtSignal()   # user chose "Setup Wizard" from the no-devices dialog
+    _log_line              = pyqtSignal(str)  # internal: thread-safe log append
+    _status_changed        = pyqtSignal(str)  # internal: thread-safe uid refresh
 
     def __init__(self, device_manager: DeviceManager, parent=None,
                  demo_mode_getter=None):
@@ -2137,6 +2139,9 @@ class DeviceManagerDialog(QDialog):
         # Wire up manager callbacks
         device_manager.set_status_callback(self._on_status_change)
         device_manager.set_log_callback(self._on_log)
+        # Both signals use queued connections — safe to emit from background threads
+        self._log_line.connect(self._append_log)
+        self._status_changed.connect(self._refresh_uid)
 
         # Connect list → profile panel
         self._list_panel.device_selected.connect(
@@ -2205,7 +2210,9 @@ class DeviceManagerDialog(QDialog):
 
     def _on_status_change(self, uid: str,
                            state: DeviceState, msg: str):
-        QTimer.singleShot(0, lambda: self._refresh_uid(uid))
+        # Emit via queued signal so _refresh_uid always runs on the GUI thread,
+        # regardless of whether the status callback fires from a background thread.
+        self._status_changed.emit(uid)
 
     def _refresh_uid(self, uid: str):
         self._list_panel.refresh_row(uid)
@@ -2221,7 +2228,9 @@ class DeviceManagerDialog(QDialog):
             pass
 
     def _on_log(self, msg: str):
-        QTimer.singleShot(0, lambda: self._append_log(msg))
+        # Emit via queued signal so _append_log always runs on the GUI thread,
+        # regardless of whether _on_log is called from a background worker thread.
+        self._log_line.emit(msg)
 
     def _append_log(self, msg: str):
         self._log_edit.append(msg)

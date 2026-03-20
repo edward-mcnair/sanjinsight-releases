@@ -226,6 +226,43 @@ class HardwareService(QObject):
             if stage_cfg.get("enabled", False):
                 self._launch(self._run_stage, args=(stage_cfg,), name="hw.stage")
 
+    def start_idle(self) -> None:
+        """Restart just the camera grab loop without opening any driver from config.
+
+        Call this after shutdown() when the Device Manager will populate
+        app_state.cam / app_state.ir_cam directly via _inject_into_app.
+        The grab loop polls those slots and starts delivering camera_frame
+        signals as soon as a driver appears — no driver re-initialisation needed.
+        """
+        self._stop_event.clear()
+        self._cam_preview_free.set()   # reset back-pressure gate
+        self._launch(self._run_camera_idle, name="hw.camera_idle")
+
+    def _run_camera_idle(self):
+        """Grab loop for Device-Manager-injected cameras.
+
+        Unlike _run_camera(), this does NOT open or start a driver.  It
+        simply waits for app_state.cam to become non-None (set by
+        DeviceManager._inject_into_app) and then delivers frames exactly
+        as the normal grab loop does.
+        """
+        last_frame_t = time.monotonic()
+        while not self._stop_event.is_set():
+            cam = app_state.cam
+            if cam is None:
+                self._stop_event.wait(0.1)
+                continue
+            try:
+                frame = cam.grab(timeout_ms=500)
+                if frame:
+                    if self._cam_preview_free.is_set():
+                        self._cam_preview_free.clear()
+                        self.camera_frame.emit(frame)
+                    last_frame_t = time.monotonic()
+            except Exception as e:
+                log.debug("HardwareService idle camera grab: %s", e)
+                self._stop_event.wait(0.1)
+
     def start_demo(self) -> None:
         """
         Start all hardware using simulated drivers regardless of config.

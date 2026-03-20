@@ -374,6 +374,10 @@ class _SplitterTop(QWidget):
 # ------------------------------------------------------------------ #
 
 class MainWindow(QMainWindow):
+    # Emitted (from any thread) when a real device connects while in demo mode
+    # — the connected slot runs on the GUI thread to clean up the demo UI.
+    _demo_auto_exited = pyqtSignal()
+
     def __init__(self, auth=None, auth_session=None):
         super().__init__()
         self._auth         = auth
@@ -720,6 +724,13 @@ class MainWindow(QMainWindow):
         self._device_mgr_dlg.demo_requested.connect(self._activate_demo_mode)
         # Allow the Device Manager's "Setup Wizard" button to open the wizard.
         self._device_mgr_dlg.setup_wizard_requested.connect(self._open_hardware_setup)
+
+        # Wire Device Manager → hw_service so the main window hears about
+        # cameras / devices connected through the Device Manager dialog.
+        # This fires hw_service.device_connected which triggers _on_device_hotplug
+        # → camera selectors refresh, safe-mode re-evaluated, status header updated.
+        self._device_mgr.set_post_inject_callback(self._on_device_mgr_injected)
+        self._demo_auto_exited.connect(self._finish_auto_demo_exit)
 
         # Emergency stop — wire header button to hw_service
         self._header.connect_estop(
@@ -1249,6 +1260,73 @@ class MainWindow(QMainWindow):
                               scan_rdy.blocked_reason)
         except Exception:
             log.debug("_update_safe_mode failed", exc_info=True)
+
+    def _on_device_mgr_injected(self, uid: str, driver_obj) -> None:
+        """Called from DeviceManager after a successful driver injection.
+
+        Runs on the connect-worker thread — uses Qt signals for all GUI work.
+        Emits hw_service.device_connected so _on_device_hotplug fires on the
+        GUI thread, refreshing camera selectors, safe-mode state, and the
+        status header.
+
+        If the app is still in demo mode when a real device connects, this
+        automatically exits demo mode before activating the real driver.
+        """
+        try:
+            from hardware.device_registry import DTYPE_CAMERA, DTYPE_FPGA, DTYPE_BIAS
+            from hardware.app_state import app_state as _as
+            entry = self._device_mgr.get(uid)
+            if entry is None:
+                return
+            dtype = entry.descriptor.device_type
+
+            # Auto-exit demo mode when any real device connects via Device Manager.
+            if _as.demo_mode:
+                self._handle_real_device_in_demo(uid, driver_obj, dtype)
+                return
+
+            if dtype == DTYPE_CAMERA:
+                cam_type = getattr(
+                    getattr(driver_obj, "info", None), "camera_type", "tr"
+                ) or "tr"
+                key = "ir_camera" if str(cam_type).lower() == "ir" else "camera"
+            elif dtype == DTYPE_FPGA:
+                key = "fpga"
+            elif dtype == DTYPE_BIAS:
+                key = "bias"
+            else:
+                key = uid
+            hw_service.device_connected.emit(key, True)
+        except Exception:
+            log.debug("_on_device_mgr_injected failed for %s", uid, exc_info=True)
+
+    def _handle_real_device_in_demo(self, uid: str, driver_obj,
+                                     dtype) -> None:
+        """Schedule an auto-exit from demo mode when a real device connects.
+
+        Runs on the connect-worker thread.  The heavy shutdown/restart work is
+        deferred to _deactivate_demo_mode (called on the GUI thread) so that
+        the connect-worker thread is not blocked by hw_service.shutdown().
+
+        _inject_into_app has already set app_state.ir_cam = driver_obj and
+        set active_camera_type = "ir" (since the simulated TR camera is not
+        treated as a real TR camera), so live frames from the real device
+        are already visible — this signal just cleans up the demo UI.
+        """
+        log.info("Device Manager: real device connected while in demo mode — "
+                 "scheduling auto-exit of demo mode.")
+        self._demo_auto_exited.emit()
+
+    def _finish_auto_demo_exit(self) -> None:
+        """GUI-thread: called when a real device connects while in demo mode.
+
+        Delegates to _deactivate_demo_mode with auto_mode=True so that:
+        - The demo banner is hidden
+        - Simulated drivers are shut down (background thread)
+        - Any real drivers already injected are preserved
+        - Device Manager dialog is NOT re-opened (it's already showing)
+        """
+        self._deactivate_demo_mode(auto_mode=True)
 
     def _open_device_manager(self):
         self._device_mgr_dlg.show()
@@ -2181,13 +2259,20 @@ class MainWindow(QMainWindow):
         self._settings_tab.set_auth_session(None)
         log.info("Admin logged out")
 
-    def _deactivate_demo_mode(self):
-        """Exit demo mode and open the Device Manager to scan for real hardware.
+    def _deactivate_demo_mode(self, *, auto_mode: bool = False):
+        """Exit demo mode and (optionally) open the Device Manager.
 
-        Called when the user clicks the '✕ Exit' button in the demo banner.
-        Shuts down simulated drivers on a background thread, clears the demo
-        flag, hides the banner, then opens the Device Manager so the user can
-        scan for their instrument.
+        Called when the user clicks the '✕ Exit' button in the demo banner, or
+        automatically via _finish_auto_demo_exit when a real device connects
+        while demo mode is still active.
+
+        Shuts down simulated drivers on a background thread while preserving
+        any real drivers that were already injected via the Device Manager.
+
+        Args:
+            auto_mode: When True the Device Manager dialog is NOT shown after
+                       the switch (it's already open) and the status message
+                       reflects the automated exit.
         """
         import threading as _threading
         from hardware.app_state import app_state as _app_state
@@ -2197,16 +2282,57 @@ class MainWindow(QMainWindow):
         _app_state.demo_mode = False
         self._header.set_demo_mode(False)
         self._header.clear_devices()          # flush simulated device entries
-        self._status.showMessage(
-            f"SanjINSIGHT {version_string()}  —  exiting demo mode…", 4000)
-        signals.log_message.emit(
-            "Exiting demo mode — shutting down simulated drivers…")
+        if auto_mode:
+            self._status.showMessage(
+                "Real hardware connected — exited demo mode automatically.", 5000)
+        else:
+            self._status.showMessage(
+                f"SanjINSIGHT {version_string()}  —  exiting demo mode…", 4000)
+            signals.log_message.emit(
+                "Exiting demo mode — shutting down simulated drivers…")
 
         def _switch_to_real():
+            from hardware.app_state import app_state as _as
+            # Preserve any real (non-simulated) drivers already connected via
+            # Device Manager before shutdown clears app_state slots.
+            _real_ir  = None
+            _real_cam = None
+            try:
+                from hardware.cameras.simulated import SimulatedDriver
+                if _as.ir_cam is not None and not isinstance(_as.ir_cam, SimulatedDriver):
+                    _real_ir = _as.ir_cam
+                if _as.cam is not None and not isinstance(_as.cam, SimulatedDriver):
+                    _real_cam = _as.cam
+            except Exception:
+                pass
+
             hw_service.shutdown()          # stop simulated drivers
-            # Device Manager opened on GUI thread after shutdown completes
-            from PyQt5.QtCore import QTimer
-            QTimer.singleShot(0, self._device_mgr_dlg.show)
+
+            # Clear stale demo-camera references so app_state.cam returns None
+            # until a real driver is available.  Real drivers are restored below.
+            _as.cam    = None
+            _as.ir_cam = None
+            _as.active_camera_type = "tr"  # reset to default
+
+            # Restore real drivers saved above.
+            if _real_ir is not None:
+                _as.ir_cam = _real_ir
+                if _real_cam is None:
+                    _as.active_camera_type = "ir"
+            if _real_cam is not None:
+                _as.cam = _real_cam
+
+            hw_service.start_idle()        # restart grab loop with real camera
+
+            if _real_ir or _real_cam:
+                # Notify the main window so camera selectors and safe-mode
+                # are refreshed for the already-connected real hardware.
+                _key = "ir_camera" if _real_ir else "camera"
+                hw_service.device_connected.emit(_key, True)
+            elif not auto_mode:
+                # No real device yet → open Device Manager so user can scan.
+                from PyQt5.QtCore import QTimer
+                QTimer.singleShot(0, self._device_mgr_dlg.show)
 
         _threading.Thread(
             target=_switch_to_real, daemon=True, name="hw.exit_demo"

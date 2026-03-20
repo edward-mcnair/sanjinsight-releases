@@ -277,7 +277,7 @@ class BosonDriver(CameraDriver):
         log.info(
             "Boson opened: model=%s serial=%s video_index=%d y16=%s",
             self._info.model, self._info.serial or "unknown",
-            self._video_index, self._y16_mode,
+            video_idx, self._y16_mode,
         )
 
     # ── Video device helpers ───────────────────────────────────────────────────

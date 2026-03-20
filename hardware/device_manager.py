@@ -177,6 +177,11 @@ class DeviceManager:
         self._safe_mode:        bool = False
         self._safe_mode_reason: str  = ""
 
+        # Optional callback fired after every successful _inject_into_app.
+        # Used by main_app.py to emit hw_service.device_connected so the
+        # main window refreshes camera selectors / safe-mode status.
+        self._post_inject_cb: Optional[Callable[[str, object], None]] = None
+
         # Initialise an entry for every known device and restore any
         # connection parameters (port, baud, IP) saved in a previous session.
         for uid, desc in DEVICE_REGISTRY.items():
@@ -205,6 +210,17 @@ class DeviceManager:
     def set_log_callback(self, cb: Callable[[str], None]):
         """Called with human-readable log messages."""
         self._log_cb = cb
+
+    def set_post_inject_callback(self,
+                                  cb: Callable[[str, object], None]) -> None:
+        """Register a callback fired after every successful driver injection.
+
+        cb(uid: str, driver_obj) — called from the connect worker thread
+        immediately after _inject_into_app completes successfully.  Use this
+        to emit hw_service.device_connected so the main window refreshes its
+        camera selectors and safe-mode state without a circular import.
+        """
+        self._post_inject_cb = cb
 
     def _emit(self, uid: str, state: DeviceState, msg: str = ""):
         if self._status_cb:
@@ -397,6 +413,12 @@ class DeviceManager:
             self._log(f"✓  Connected: {desc.display_name}  ({entry.address})")
             self._emit(uid, DeviceState.CONNECTED)
             self._inject_into_app(uid, driver_obj)
+
+            if self._post_inject_cb:
+                try:
+                    self._post_inject_cb(uid, driver_obj)
+                except Exception:
+                    log.debug("[%s] post_inject_cb failed", uid, exc_info=True)
 
             if on_complete:
                 on_complete(True, "Connected")
@@ -614,7 +636,37 @@ class DeviceManager:
             }
 
             try:
-                if   dtype == DTYPE_CAMERA:  app_state.cam    = driver_obj
+                if dtype == DTYPE_CAMERA:
+                    # Route IR cameras (Boson etc.) to the ir_cam slot;
+                    # TR/visible cameras go to the primary cam slot.
+                    _cam_type = getattr(
+                        getattr(driver_obj, "info", None), "camera_type", "tr"
+                    ) or "tr"
+                    if str(_cam_type).lower() == "ir":
+                        app_state.ir_cam = driver_obj
+                        # Auto-select IR if there is no real TR camera.  A
+                        # simulated TR camera counts as "absent" here so that
+                        # the live grab loop immediately delivers IR frames
+                        # when the user connects a real IR camera while still
+                        # in demo mode (simulated TR camera still running).
+                        _tr = app_state.tr_cam
+                        _tr_is_real = False
+                        if _tr is not None:
+                            try:
+                                from hardware.cameras.simulated import SimulatedDriver
+                                _tr_is_real = not isinstance(_tr, SimulatedDriver)
+                            except Exception:
+                                _tr_is_real = True   # can't determine — assume real
+                        if not _tr_is_real:
+                            app_state.active_camera_type = "ir"
+                    else:
+                        app_state.cam = driver_obj
+                    # Start the frame-grab thread inside the driver.
+                    try:
+                        driver_obj.start()
+                    except Exception:
+                        log.debug("[%s] driver.start() failed or not needed",
+                                  uid, exc_info=True)
                 elif dtype == DTYPE_FPGA:    app_state.fpga   = driver_obj
                 elif dtype == DTYPE_STAGE:   app_state.stage  = driver_obj
                 elif dtype == DTYPE_PROBER:  app_state.prober = driver_obj

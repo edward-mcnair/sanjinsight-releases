@@ -147,6 +147,11 @@ class ApplicationState:
             self._cam = value
 
     @property
+    def tr_cam(self):
+        """Primary TR camera driver (None if no TR camera connected)."""
+        return self._cam
+
+    @property
     def ir_cam(self):
         """Secondary IR camera driver (None on non-hybrid systems)."""
         return self._ir_cam
