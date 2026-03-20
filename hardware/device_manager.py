@@ -308,7 +308,16 @@ class DeviceManager:
             # Guard: if the device was never auto-discovered and has no address
             # configured, give the user a clear action rather than a cryptic
             # driver error. Serial/USB/Ethernet devices all need an address.
-            needs_address = desc.connection_type in ("serial", "usb", "ethernet")
+            # Boson cameras support video-only mode with an empty serial_port —
+            # skip the address guard so the driver can open in that mode.
+            _boson_video_only = (
+                desc.uid in ("flir_boson_320", "flir_boson_640")
+                and not entry.address
+            )
+            needs_address = (
+                desc.connection_type in ("serial", "usb", "ethernet")
+                and not _boson_video_only
+            )
             if needs_address and not entry.address:
                 raise ValueError(
                     f"No port or address configured for {desc.display_name}.\n\n"

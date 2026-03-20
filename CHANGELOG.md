@@ -10,6 +10,35 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.4.1-beta.1] — 2026-03-19
+
+### Added
+
+- **FLIR Boson camera driver** (`hardware/cameras/boson_driver.py`) — `BosonDriver` class supporting the FLIR Boson 320 and Boson 640 uncooled microbolometer cameras. Uses a two-channel architecture: serial FSLP control via the bundled FLIR Boson 3.0 Python SDK (`hardware/cameras/boson/`) and UVC video capture via `cv2.VideoCapture` with Y16 FOURCC for 14-bit radiometric data. `send_ffc()` triggers a Flat Field Correction cycle via the SDK. Video-only mode is activated automatically when `serial_port` is blank — FFC and SDK commands are unavailable but frame capture works normally.
+- **Bundled FLIR Boson 3.0 Python SDK** (`hardware/cameras/boson/`) — pure-Python, no DLL required. Package structure: `ClientFiles_Python/` (FSLP client) + `CommunicationFiles/` (serial framing). No manual SDK download or install needed.
+- **New camera registry entries**: `flir_boson_320` (320×256, 14-bit, USB, IR), `flir_boson_640` (640×512, 14-bit, USB, IR), `basler_a2a1280_125um_swir` (1280×1024, USB3, TR/NIR), `allied_vision_goldeye_g032` (640×480, GigE, IR/SWIR), `photonfocus_mv4_d1280u` (1280×1024, GigE, TR).
+- **Camera ICD/IID files** bundled in `assets/camera_icd/` — NI IMAQdx camera interface descriptors for Basler a2A1280-125umSWIR, Allied Vision Goldeye G-032 Cool, and Photonfocus MV4-D1280U-H01-GT. Install by copying `.icd`/`.iid` files to the NI IMAQdx camera directory and restarting NI MAX.
+- **`DeviceEntry.video_index`** — new integer field (default 0) on `DeviceEntry` for selecting the UVC device index passed to `cv2.VideoCapture`. Persisted in device-params prefs so the setting survives restarts.
+- **Device Manager** — FLIR Boson camera entries now show **Serial Port** and **Video Device Index** fields in the Connection Parameters area.
+- **Windows spec** (`installer/sanjinsight.spec`) — Boson SDK hidden imports and data tree added so the bundled pure-Python SDK is included in the PyInstaller output.
+
+### Changed
+
+- **pypylon wheel is self-contained** — the pypylon wheel bundles the pylon runtime internally; no separate Basler SDK install is required. Updated all documentation references accordingly.
+
+### Fixed
+
+- **Invalid `__init__.py`** in `hardware/cameras/boson/` — file contained only a pass-through comment and prevented the package from being imported. Replaced with a proper empty `__init__.py`.
+- **`sys.path.append(None)`** — `BosonDriver.__init__` could append `None` to `sys.path` when `serial_port` was unset, polluting the path and causing unrelated import failures.
+- **Serial port leak** — `BosonDriver.close()` did not call `sdk_client.close()` when serial was open, leaving the port held after disconnect.
+- **Address guard blocking video-only mode** — `DeviceManager` address guard raised "No port or address configured" for Boson cameras registered with a blank `serial_port`. Guard now exempts Boson entries when `serial_port` is blank and `video_index` is set.
+- **`isOpen()` deprecated call** — replaced `serial.Serial.isOpen()` (deprecated since pyserial 3.0) with the `serial.Serial.is_open` property in `BosonDriver`.
+- **Missing `self` in `PortBase`** — `PortBase.__init__` in the Boson SDK `CommunicationFiles/` was missing `self` as the first parameter, causing `TypeError` on instantiation.
+- **`print()` calls in frozen bundle** — debug `print()` statements in the Boson SDK client files replaced with `logging.getLogger(__name__).debug()` to avoid console output in PyInstaller frozen builds.
+- **Y16 FOURCC validation** — `cv2.VideoCapture` silently accepted non-Y16 streams on some UVC devices, returning 8-bit frames that appeared valid but had incorrect radiometric scaling. `BosonDriver.open()` now validates the negotiated FOURCC and raises `RuntimeError` if Y16 is not obtained.
+
+---
+
 ## [1.4.0-beta.1] — 2026-03-19
 
 ### Added

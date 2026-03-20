@@ -39,8 +39,8 @@ The installer cannot bundle OS-level hardware drivers. Install these **before** 
 | **NI-RIO** | FPGA (NI 9637) | [ni.com → Drivers → NI-RIO](https://www.ni.com/en/support/downloads/drivers/download.ni-rio.html) |
 | **NI Vision Acquisition Software** | Camera (NI IMAQdx) | [ni.com → Drivers → NI-VAS](https://www.ni.com/en/support/downloads/drivers/download.ni-vision-acquisition-software.html) |
 | **NI-VISA** | Keithley bias source | [ni.com → Drivers → NI-VISA](https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html) |
-| **Basler Pylon 8 SDK** | Basler TR camera | [baslerweb.com/downloads](https://www.baslerweb.com/en-us/downloads/software/) |
-| **FLIR Spinnaker SDK** | Microsanj IR camera | [flir.com/spinnaker-sdk](https://www.flir.com/products/spinnaker-sdk/) — then `pip install spinnaker_python` (wheel ships inside the SDK package) |
+| **Basler camera** | Basler TR / SWIR camera | **No SDK install required** — pypylon bundles the pylon runtime. |
+| **FLIR Boson** | FLIR Boson 320 / 640 IR camera | **No SDK install required** — Boson SDK is bundled with the installer. Configure `serial_port` and `video_index` in Device Manager after install. |
 
 > **NI drivers:** NI-RIO and NI Vision Acquisition Software both require a restart after installation; NI-VISA does not. You can install all three NI packages first and then restart once — you do not need to restart between each NI install.
 
@@ -70,9 +70,9 @@ The AI Assistant requires a language model file (~2–5 GB). Go to **Settings �
 □ Install NI Vision Acquisition Software       ← do NOT restart yet
 □ Install NI-VISA                              ← no restart needed
 □ Restart PC once (satisfies NI-RIO + NI-VAS restart requirements)
-□ Install Basler Pylon 8 SDK         (Basler TR camera systems only)
-□ Install FLIR Spinnaker SDK +
-    pip install spinnaker_python      (Microsanj IR camera systems only)
+□ (Basler camera: no SDK needed — pypylon is self-contained)
+□ (FLIR Boson: no SDK needed — bundled with installer)
+□   → FLIR Boson: configure serial_port + video_index in Device Manager
 □ Copy FPGA bitfile → C:\Microsanj\firmware\ez500firmware.lvbitx
 □ Launch SanjINSIGHT → complete Admin Setup (first time only)
 □ Complete Hardware Setup Wizard
@@ -104,14 +104,14 @@ After admin setup, the **Hardware Setup Wizard** opens and walks you through con
 |---|---|
 | **1 — Welcome** | Wait a few seconds for the auto-scan to complete. A status message shows how many devices were found. |
 | **2 — TEC Controllers** | Confirm or select the COM port for each TEC (Meerstetter and/or ATEC). Use "simulated" if no TEC is connected. |
-| **3 — Camera** | Choose the driver: **pypylon** (Basler TR camera), **Microsanj IR Camera** (IR thermography camera), **ni_imaqdx** (NI camera), or **simulated**. If auto-scan found a camera, the serial number is pre-filled. |
+| **3 — Camera** | Choose the driver: **pypylon** (Basler TR/SWIR camera), **boson** (FLIR Boson 320/640), **Microsanj IR Camera** (IR camera via flirpy), **ni_imaqdx** (NI camera), or **simulated**. If auto-scan found a camera, the serial number is pre-filled. |
 | **4 — FPGA** | Choose **ni9637** and browse to the FPGA bitfile (`.lvbitx`). Enter the resource string (e.g. `RIO0`). Use **simulated** for software-only use. |
 | **5 — Bias Source** | Select the bias source type and connection port. Use **simulated** if no bias source is connected. |
 | **6 — Stage** | Select the motorised stage type and serial port. Use **simulated** if no stage is connected. |
 | **7 — AI Assistant** | Optionally start the AI model download. This can also be done later via Settings. |
 | **8 — Done** | Review your settings and click **Finish**. The configuration is saved to `config.yaml`. |
 
-> **Microsanj IR Camera:** If you select this driver and the Spinnaker SDK is not yet installed, an amber install notice appears with a direct download link. Install the SDK, then click **Test Camera** to verify.
+> **FLIR Boson:** If you select the `boson` driver, connect the Boson via USB before clicking **Test Camera**. Set `serial_port` and `video_index` in Device Manager after the wizard completes.
 
 > **Tip:** You can re-open this wizard at any time via **Help → Hardware Setup…** (Ctrl+Shift+H).
 
@@ -336,8 +336,9 @@ Operator Mode is a simplified interface for technicians who run repeatably again
 | Problem | Check |
 |---|---|
 | Connected Devices button shows red | Click the button to see which device is red. Open **Device Manager** (Ctrl+D) and click **Reconnect**. Verify driver and port in **Hardware Setup** (Ctrl+Shift+H). |
-| Basler TR camera not found | Ensure Basler Pylon 8 SDK is installed and the camera appears in the Pylon Viewer. |
-| Microsanj IR camera not found | Ensure the FLIR Spinnaker SDK is installed and run `pip install spinnaker_python`. Check USB connection. Run **Test Camera** in the Hardware Setup Wizard. |
+| Basler TR camera not found | Check USB 3.0 connection. No Basler SDK install is needed — pypylon is self-contained. Open Device Manager and click **Reconnect**. |
+| Microsanj IR camera not found | Check USB connection. `flirpy` is bundled — no SDK install needed. Run **Test Camera** in the Hardware Setup Wizard. |
+| FLIR Boson not found | Check USB connection. Verify `video_index` matches the Boson's UVC device (see Section 21.2 of the User Manual). On macOS, check **System Preferences → Security & Privacy → Camera** to confirm the application has camera access. If using SDK commands, verify `serial_port` is set to the correct CDC port. |
 | TEC not stabilising | Increase **Max settle time** in Calibration settings. Check physical TEC connections. |
 | FPGA not found | Confirm NI-RIO drivers are installed and the resource string matches NI MAX (e.g. `RIO0`). |
 | ΔT always shows "—" | Load and apply a calibration file: **Calibration → 📂 Load .cal → ✓ Apply**. |

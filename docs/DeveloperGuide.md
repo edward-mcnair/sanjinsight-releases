@@ -392,6 +392,7 @@ def preflight(cls) -> tuple[bool, list[str]]:
 | Driver | Hard failure trigger | Warning trigger |
 |---|---|---|
 | `PylonDriver` | `pypylon.pylon` not importable | — |
+| `BosonDriver` | — (SDK is bundled; always passes) | — |
 | `FlirDriver` | `flirpy` not importable | — |
 | `NiImaqdxDriver` | not Windows, or `niimaqdx.dll` not found | `ImaqdxAttr.exe` missing (exposure/gain unavailable) |
 | `DirectShowDriver` | not Windows, or `cv2` not importable | — |
@@ -434,7 +435,28 @@ class CameraDriver(ABC):
 - `timestamp: float` — `time.monotonic()` at capture
 - `index: int` — frame counter
 
-**Implementations**: `pypylon_driver.py` (Basler TR), `flir_driver.py` (Microsanj IR Camera via flirpy), `ni_imaqdx.py` (NI IMAQdx), `directshow.py` (OpenCV/DirectShow), `simulated.py`.
+**Implementations**: `pypylon_driver.py` (Basler TR), `boson_driver.py` (FLIR Boson 320/640 via bundled Boson SDK (serial FSLP) + OpenCV UVC), `flir_driver.py` (Microsanj IR Camera via flirpy), `ni_imaqdx.py` (NI IMAQdx), `directshow.py` (OpenCV/DirectShow), `simulated.py`.
+
+#### FLIR Boson Driver (`hardware/cameras/boson_driver.py`)
+
+The Boson driver uses a two-channel architecture:
+
+**Control channel** — `hardware/cameras/boson/` contains the FLIR Boson 3.0 Python SDK (pure-Python, no DLL). The package uses the FSLP serial protocol (`FSLP_PY_SERIAL` path). Structure:
+- `ClientFiles_Python/` — FSLP client; SDK entry point is `BosonAPI`
+- `CommunicationFiles/` — serial framing and packet layer
+
+The control channel is optional. When `serial_port` is blank, `BosonDriver` skips SDK initialisation and operates in video-only mode.
+
+**Video channel** — `cv2.VideoCapture(video_index)` with `cv2.VideoWriter_fourcc(*'Y16 ')` FOURCC to capture 14-bit radiometric data. `open()` validates that Y16 is actually negotiated and raises `RuntimeError` if a lower-bit-depth format is returned instead.
+
+**Key public API:**
+
+```python
+driver.send_ffc()          # triggers Flat Field Correction (SDK control channel only)
+driver.sdk_client          # property: BosonAPI instance, or None in video-only mode
+```
+
+**`BosonDriver.preflight()`** — always returns `(True, [])` since the SDK is bundled; no external install to check.
 
 #### TEC (`hardware/tec/base.py — TecDriver`)
 
@@ -592,9 +614,10 @@ The pre-flight step ensures optional SDK dependencies are checked and reported a
 | `rigol_dp832` | `visa` | `create_bias()` |
 | `amcad_bilt` | `amcad_bilt` | `create_bias()` |
 
-**Special cfg remapping** — two devices need non-standard config keys before reaching their factory:
+**Special cfg remapping** — devices that need non-standard config keys before reaching their factory:
 - **BNC 745**: `cfg["address"] = entry.address` (VISA resource string stored in `DeviceEntry.address`)
 - **AMCAD BILT**: `cfg["host"] = entry.ip_address`, `cfg["port"] = desc.tcp_port` (TCP port 5035 from `DeviceDescriptor.tcp_port`; distinct from serial COM port in `cfg["port"]`)
+- **FLIR Boson 320 / 640**: `cfg["serial_port"] = entry.address` (CDC serial port for FSLP control), `cfg["video_index"] = entry.video_index` (UVC device index). Width/height are injected from the registry (320×256 for `flir_boson_320`, 640×512 for `flir_boson_640`). `DeviceEntry.video_index` is a new `int` field (default `0`) persisted in device-params prefs.
 
 **UI driver wiring** — after every hotplug event `main_app._on_device_hotplug()` calls:
 ```python
@@ -1756,8 +1779,8 @@ requests>=2.31         HTTP (update checker, cloud AI)
 bcrypt>=4.0            Password hashing for user accounts (work factor 12)
 
 # Optional — hardware SDKs (Windows-only unless otherwise noted, not in PyPI)
-pypylon                Basler Pylon camera SDK Python wrapper (Basler TR camera)
-spinnaker_python       FLIR Spinnaker SDK Python wrapper (Microsanj IR camera; distributed with SDK installer)
+pypylon                Basler camera SDK — self-contained wheel (bundles pylon runtime; no OS SDK install needed)
+flirpy                 FLIR camera SDK Python wrapper — used by flir_driver.py (Microsanj IR Camera v1a); bundled in installer
 pyMeCom                Meerstetter TEC serial protocol
 nifpga                 NI-FPGA Python interface
 pyvisa                 NI-VISA / GPIB / SCPI instrument control

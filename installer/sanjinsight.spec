@@ -60,6 +60,25 @@ hidden_imports = [
     'hardware.cameras.pypylon_driver',
     'hardware.cameras.directshow',
     'hardware.cameras.simulated',
+    # ── FLIR Boson SDK (bundled Python SDK — all pure-Python) ────────
+    'hardware.cameras.boson_driver',
+    'hardware.cameras.boson',
+    'hardware.cameras.boson.ClientFiles_Python',
+    'hardware.cameras.boson.ClientFiles_Python.Client_API',
+    'hardware.cameras.boson.ClientFiles_Python.Client_Dispatcher',
+    'hardware.cameras.boson.ClientFiles_Python.Client_Packager',
+    'hardware.cameras.boson.ClientFiles_Python.EnumTypes',
+    'hardware.cameras.boson.ClientFiles_Python.ReturnCodes',
+    'hardware.cameras.boson.ClientFiles_Python.Serializer_BuiltIn',
+    'hardware.cameras.boson.ClientFiles_Python.Serializer_Struct',
+    'hardware.cameras.boson.CommunicationFiles',
+    'hardware.cameras.boson.CommunicationFiles.CommonFslp',
+    'hardware.cameras.boson.CommunicationFiles.PySerialFslp',
+    'hardware.cameras.boson.CommunicationFiles.PySerialPort',
+    'hardware.cameras.boson.CommunicationFiles.FslpBase',
+    'hardware.cameras.boson.CommunicationFiles.PortBase',
+    'hardware.cameras.boson.CommunicationFiles.CSerialFslp',
+    'hardware.cameras.boson.CommunicationFiles.CSerialPort',
     'hardware.tec.meerstetter',
     'hardware.tec.atec',
     'hardware.tec.simulated',
@@ -184,8 +203,9 @@ hidden_imports += _safe_collect('dcps')
 # thorlabs_apt_device — Thorlabs APT/Kinesis motorised stage controllers
 hidden_imports += _safe_collect('thorlabs_apt_device')
 
-# pypylon — Basler camera SDK Python bindings
-# SDK-dependent: also requires Basler pylon 8 installed at the OS level.
+# pypylon — Basler camera SDK Python bindings.
+# The pypylon wheel is self-contained: it bundles the pylon runtime internally.
+# No separate Basler Pylon SDK installation is required at the OS level.
 hidden_imports += _safe_collect('pypylon')
 
 # ── Data files (non-Python assets bundled alongside the exe) ─────────────────
@@ -203,6 +223,16 @@ datas = [
     # Without these the simulated camera falls back to the parametric IC model.
     (os.path.join(PROJECT_DIR, 'assets', 'demo_background.png'),       'assets'),
     (os.path.join(PROJECT_DIR, 'assets', 'demo_signal.png'),           'assets'),
+
+    # Camera ICD / IID files (NI IMAQdx camera configuration descriptors).
+    # Covers Basler a2A1280-125umSWIR, Allied Vision Goldeye G-032, Photonfocus MV4.
+    *( [(os.path.join(PROJECT_DIR, 'assets', 'camera_icd'),
+         'assets/camera_icd')]
+       if os.path.isdir(os.path.join(PROJECT_DIR, 'assets', 'camera_icd')) else [] ),
+
+    # FLIR Boson Python SDK source tree (pure-Python; also listed in hidden_imports).
+    (os.path.join(PROJECT_DIR, 'hardware', 'cameras', 'boson'),
+     os.path.join('hardware', 'cameras', 'boson')),
 
     # ── Documentation (read at module-import time by ai/prompt_templates.py) ─
     # ai/prompt_templates.py resolves: Path(__file__).parent.parent / "docs"

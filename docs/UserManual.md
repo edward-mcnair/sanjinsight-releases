@@ -169,8 +169,8 @@ The installer cannot bundle Windows kernel-level hardware drivers. Install these
 | **NI-RIO** | FPGA — NI 9637 | Yes | [ni.com → NI-RIO](https://www.ni.com/en/support/downloads/drivers/download.ni-rio.html) |
 | **NI Vision Acquisition Software** | Camera — NI IMAQdx | Yes | [ni.com → NI-VAS](https://www.ni.com/en/support/downloads/drivers/download.ni-vision-acquisition-software.html) |
 | **NI-VISA** | Bias source — Keithley (GPIB / USB / LAN) | No | [ni.com → NI-VISA](https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html) |
-| **Basler Pylon 8 SDK** | Basler TR camera | No | [baslerweb.com/downloads](https://www.baslerweb.com/en-us/downloads/software/) — includes the USB3 Vision driver and `pypylon` Python bindings |
-| **FLIR Spinnaker SDK** | Microsanj IR Camera | No | [flir.com/spinnaker-sdk](https://www.flir.com/products/spinnaker-sdk/) — after installing the SDK, also run `pip install spinnaker_python` (the wheel is included inside the Spinnaker package) |
+| **Basler camera** | Basler TR / SWIR camera | No | **No SDK required** — pypylon bundles the pylon runtime in its wheel. Install SanjINSIGHT and connect the camera. |
+| **FLIR Boson** | FLIR Boson 320 / 640 IR camera | No | **No SDK required** — the Boson 3.0 Python SDK is bundled in the installer. After install, configure `serial_port` and `video_index` in Device Manager. |
 
 After installing the NI drivers, open **NI MAX** (Measurement & Automation Explorer) and verify:
 - The camera appears under **Devices and Interfaces** with the correct name (e.g. `cam4`).
@@ -212,9 +212,9 @@ The AI Assistant requires a local language model file (~2–5 GB, downloaded onc
 □ Install NI Vision Acquisition Software       ← do NOT restart yet
 □ Install NI-VISA                              ← no restart needed
 □ Restart PC once (satisfies NI-RIO + NI-VAS restart requirements)
-□ Install Basler Pylon 8 SDK                   (Basler TR camera systems only)
-□ Install FLIR Spinnaker SDK +
-    pip install spinnaker_python               (Microsanj IR camera systems only)
+□ (Basler camera: no SDK install needed — pypylon is self-contained)
+□ (FLIR Boson: no SDK install needed — SDK is bundled)
+□   → After install: configure serial_port + video_index in Device Manager
 □ Confirm camera + FPGA visible in NI MAX
 □ Copy FPGA bitfile → C:\Microsanj\firmware\ez500firmware.lvbitx
 □ Launch SanjINSIGHT → complete Admin Setup    (first launch only)
@@ -271,7 +271,7 @@ Any user of any type can be granted **Administrator** privileges as an overlay. 
 
 ### 3.3 Page 1 — Welcome
 
-Displays a brief overview of the system and a **camera SDK prerequisites** notice. For Basler TR cameras, install the Basler Pylon 8 SDK before clicking Next. For the Microsanj IR Camera, install the FLIR Spinnaker SDK and run `pip install spinnaker_python` before clicking Next — an amber notice with a download link is shown if the SDK is not detected.
+Displays a brief overview of the system. No camera SDK installation is required before clicking Next — pypylon bundles the pylon runtime, and the FLIR Boson SDK is bundled in the installer.
 
 The scan status label updates as each hardware class is checked. Wait for "Scan complete — N devices found" before clicking **Next**, or click through immediately if you prefer to configure manually.
 
@@ -305,8 +305,9 @@ Two TEC controllers are supported independently.
 | Camera Serial # | Text field | Leave blank for first found camera |
 | NI Camera Name | Text field | NI IMAQdx only — e.g. `cam4` |
 
-> **pypylon** — Requires Basler Pylon 8 SDK. Supports the Basler acA1920-155um TR camera. If the SDK is not installed, an amber notice appears with a download link.
-> **Microsanj IR Camera** — Requires the FLIR Spinnaker SDK and `spinnaker_python` Python wheel (see Section 2.3, Step 2). If the SDK is not installed, an amber notice appears in the wizard with a direct download link. After installing, click **Test Camera** to verify the camera is detected.
+> **pypylon** — Self-contained; no separate Basler SDK install required. Supports all Basler USB3 Vision and GigE Vision cameras including the TR and SWIR models.
+> **boson** — FLIR Boson 320 / 640 IR camera. SDK is bundled in the installer. Set `serial_port` and `video_index` in Device Manager after connecting.
+> **Microsanj IR Camera** — Uses the `flir` driver via `flirpy` (bundled). No external SDK required.
 > **ni_imaqdx** — Requires NI Vision Acquisition Software. Camera name is shown in NI MAX.
 > **simulated** — Generates synthetic frames; no hardware needed.
 
@@ -1396,6 +1397,8 @@ The Device Manager shows the current connection state and driver details for eac
 
 **Disconnect** — Safely closes the driver connection.
 
+> **FLIR Boson cameras:** When a Boson 320 or Boson 640 entry is selected, the Connection Parameters area shows two additional fields: **Serial Port** (the CDC serial interface for SDK/FFC commands) and **Video Device Index** (the `cv2.VideoCapture` index for the UVC video device). Leave Serial Port blank to use video-only mode. Click **Run FFC** to trigger a Flat Field Correction cycle.
+
 > **Note:** Changes to driver type or port require re-running the Hardware Setup wizard (Ctrl+Shift+H) and restarting the application.
 
 ---
@@ -1711,20 +1714,101 @@ All supervisor override events are logged to the audit log (Section 21.7).
 
 | Model | Sensor | Connection | Driver | Required SDK |
 |---|---|---|---|---|
-| Basler acA1920-155um | 1920×1200, mono | USB 3.0 | `pypylon` | Basler Pylon SDK 8.x |
-| Basler acA640-750um | 640×480, mono | USB 3.0 | `pypylon` | Basler Pylon SDK 8.x |
-| Basler acA2040-90um | 2040×1088, mono | USB 3.0 | `pypylon` | Basler Pylon SDK 8.x |
-| Basler acA1300-200um | 1280×1024, mono | USB 3.0 | `pypylon` | Basler Pylon SDK 8.x |
-| Any Basler USB3 Vision | varies | USB 3.0 | `pypylon` | Basler Pylon SDK 8.x |
-| Any Basler GigE Vision | varies | Gigabit Ethernet | `pypylon` | Basler Pylon SDK 8.x |
+| Basler acA1920-155um | 1920×1200, mono | USB 3.0 | `pypylon` | None (self-contained wheel) |
+| Basler acA640-750um | 640×480, mono | USB 3.0 | `pypylon` | None (self-contained wheel) |
+| Basler acA2040-90um | 2040×1088, mono | USB 3.0 | `pypylon` | None (self-contained wheel) |
+| Basler acA1300-200um | 1280×1024, mono | USB 3.0 | `pypylon` | None (self-contained wheel) |
+| Any Basler USB3 Vision | varies | USB 3.0 | `pypylon` | None (self-contained wheel) |
+| Any Basler GigE Vision | varies | Gigabit Ethernet | `pypylon` | None (self-contained wheel) |
+| Basler a2A1280-125umSWIR | 1280×1024, SWIR mono | USB 3.0 | `pypylon` | None (self-contained wheel) |
+| Allied Vision Goldeye G-032 Cool | 636×508, SWIR/IR | GigE | `ni_imaqdx` | NI Vision Acquisition Software 2019+ (ICD bundled) |
+| Photonfocus MV4-D1280U-H01-GT | 1280×1024, mono | GigE | `ni_imaqdx` | NI Vision Acquisition Software 2019+ (ICD bundled) |
+| FLIR Boson 320 | 320×256, 14-bit IR | USB | `boson` | None (SDK bundled) |
+| FLIR Boson 640 | 640×512, 14-bit IR | USB | `boson` | None (SDK bundled) |
 | NI IMAQdx cameras | varies | USB / GigE / Camera Link | `ni_imaqdx` | NI Vision Acquisition Software 2019+ |
 | DirectShow-compatible | varies | USB | `directshow` | None (Windows API) |
 | Simulated | 512×512, synthetic | — | `simulated` | None |
 
-> **Pylon SDK download:** [baslerweb.com/downloads](https://www.baslerweb.com/en/downloads/software-downloads/)
+> **pypylon:** The pypylon wheel bundles the pylon runtime internally — no separate Basler SDK install is required.
 > **NI Vision Acquisition download:** [ni.com/downloads](https://www.ni.com/en/support/downloads/drivers/download.ni-vision-acquisition-software.html)
 
-### 21.2 TEC Controllers
+### 21.2 FLIR Boson Camera Setup
+
+The FLIR Boson 320 and Boson 640 are USB-connected uncooled IR microbolometer cameras. They enumerate as two separate USB interfaces: a serial CDC control port (for SDK/FFC commands) and a UVC video device (for frame capture).
+
+**Connection**
+
+Plug the Boson into a USB 2.0 or USB 3.0 port using the supplied cable. Both interfaces appear automatically — no additional driver install is needed on Windows 10/11 or macOS.
+
+**`serial_port` — serial control port**
+
+The `serial_port` key selects the CDC serial interface used for SDK commands (FFC, gain mode, telemetry, etc.).
+
+- **macOS:** Run `ls /dev/cu.usb*` in Terminal. The Boson CDC port typically appears as `/dev/cu.usbmodem*` or `/dev/cu.usbserial*`.
+- **Windows:** Open **Device Manager → Ports (COM & LPT)**. Look for "FLIR Boson" or "CDC Serial Device". Note the `COM` number (e.g. `COM5`).
+
+Set `serial_port` to this value in the Device Manager Connection Parameters or in `config.yaml`. If left blank, the driver operates in **video-only mode** — FFC and all SDK commands are unavailable, but frame capture works normally.
+
+**`video_index` — UVC device index**
+
+The `video_index` key is the integer index passed to `cv2.VideoCapture(index)` to select the Boson's UVC video device. The default is `0`. If multiple USB cameras are connected, enumerate them to find the correct index:
+
+```python
+import cv2
+for i in range(10):
+    cap = cv2.VideoCapture(i)
+    if cap.isOpened():
+        print(i, cap.get(cv2.CAP_PROP_FRAME_WIDTH), cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        cap.release()
+```
+
+Set `video_index` to the index that matches the Boson's resolution (320 or 640 pixels wide).
+
+**Video-only mode**
+
+Leave `serial_port` blank to use the Boson without SDK control. The driver captures Y16 radiometric frames normally. FFC and telemetry features are disabled; no error is shown during connection.
+
+**FFC (Flat Field Correction)**
+
+FFC corrects non-uniformity across the sensor and should be run before measurements, especially after the camera has warmed up or the scene temperature has changed significantly. Trigger FFC via:
+
+- **Device Manager** — select the Boson entry and click **Run FFC** in the action bar.
+- **SDK** — call `driver.send_ffc()` from the scripting console or Python API.
+
+**`config.yaml`**
+
+```yaml
+hardware:
+  camera:
+    driver: boson
+    serial_port: ""          # CDC serial port; blank = video-only mode
+    video_index: 0           # cv2.VideoCapture index for the UVC video device
+    width: 320               # 320 (Boson 320) or 640 (Boson 640)
+    height: 256              # 256 (Boson 320) or 512 (Boson 640)
+    camera_type: ir          # must be "ir" for Boson cameras
+```
+
+### 21.3 Camera ICD Files (NI IMAQdx)
+
+NI IMAQdx uses **camera interface descriptor** (`.icd`) and **instrument interface descriptor** (`.iid`) files to configure acquisition parameters for specific camera models. Without the correct ICD file, NI MAX may not recognise the camera or may not expose the full resolution and pixel format.
+
+**Bundled cameras**
+
+The following ICD/IID files are included in `assets/camera_icd/` in the SanjINSIGHT installation:
+
+| Camera | File(s) |
+|---|---|
+| Basler a2A1280-125umSWIR | `basler_a2a1280_125um_swir.icd` |
+| Allied Vision Goldeye G-032 Cool | `allied_vision_goldeye_g032.icd`, `allied_vision_goldeye_g032.iid` |
+| Photonfocus MV4-D1280U-H01-GT | `photonfocus_mv4_d1280u.icd` |
+
+**Windows installation**
+
+1. Locate the ICD directory — typically `C:\Program Files\National Instruments\Vision\ICD\` (exact path depends on NI Vision Acquisition Software version; check NI MAX → Tools → NI-IMAQdx → Camera Files).
+2. Copy the `.icd` and `.iid` files for your camera from `assets/camera_icd/` into that directory.
+3. Restart **NI MAX**. The camera should now appear with its full model name and correct resolution options under **Devices and Interfaces**.
+
+### 21.4 TEC Controllers
 
 | Model | Manufacturer | Connection | Driver | Baud | Required Package |
 |---|---|---|---|---|---|
@@ -1735,7 +1819,7 @@ All supervisor override events are logged to the audit log (Section 21.7).
 
 > The Meerstetter protocol requires the FTDI VCP driver for USB connections. Windows 11 usually installs this automatically. Manual download: [ftdichip.com/drivers/vcp-drivers](https://ftdichip.com/drivers/vcp-drivers/).
 
-### 21.3 FPGA / Signal Generation
+### 21.5 FPGA / Signal Generation
 
 | Model | Manufacturer | Connection | Driver | Required Software |
 |---|---|---|---|---|
@@ -1749,7 +1833,7 @@ All supervisor override events are logged to the audit log (Section 21.7).
 
 > **BNC 745:** Replaces the NI-9637 in PT-100B transient test setups. Communicates via PyVISA — install with `pip install pyvisa pyvisa-py`. For GPIB connections, NI-VISA and a NI-GPIB-USB-HS adapter are recommended. Configure the VISA resource string in Device Manager (e.g. `GPIB::12` or `USB0::0x0A33::0x0021::...`). Supports continuous lock-in mode and single-shot transient mode.
 
-### 21.4 Bias Sources
+### 21.6 Bias Sources
 
 #### AMCAD BILT Pulsed I-V System
 
@@ -1791,7 +1875,7 @@ The AMCAD BILT is a two-channel (Gate + Drain) pulsed voltage/current source for
 
 > **VISA GPIB connections** require either NI-VISA + NI-GPIB-USB-HS adapter, or Keysight IO Libraries Suite + Keysight GPIB adapter. USB and Ethernet VISA instruments work with `pyvisa-py` only (no NI-VISA required).
 
-### 21.5 Motorised Stages
+### 21.7 Motorised Stages
 
 #### Thorlabs (USB, via thorlabs-apt-device)
 
@@ -1821,13 +1905,13 @@ The AMCAD BILT is a two-channel (Gate + Drain) pulsed voltage/current source for
 |---|---|---|---|
 | Semi-automatic prober | MPI Corporation | RS-232 (115 200 baud) | `mpi_prober` |
 
-### 21.6 Objective Turret
+### 21.8 Objective Turret
 
 | Controller | Manufacturer | Connection | Driver | Baud |
 |---|---|---|---|---|
 | LINX (Arduino-based) | Olympus / custom | USB-CDC | `olympus_linx` | 115 200 |
 
-### 21.7 SDK and Driver Version Reference
+### 21.9 SDK and Driver Version Reference
 
 | Software | Minimum Version | Recommended | Notes |
 |---|---|---|---|
@@ -1835,8 +1919,8 @@ The AMCAD BILT is a two-channel (Gate + Drain) pulsed voltage/current source for
 | NI-RIO | 19.0 (2019) | Latest | Bitfile must match installed version |
 | NI Vision Acquisition Software | 2019 | Latest | Includes NI-IMAQdx |
 | NI-VISA | 19.0 | Latest | Required for GPIB instruments |
-| Basler Pylon SDK | 7.x | **8.x** | Pylon 8 recommended; pypylon 3.x ships with it |
-| FLIR Spinnaker SDK | 3.x | **Latest** | Required for the Microsanj IR Camera. Download from [flir.com/spinnaker-sdk](https://www.flir.com/products/spinnaker-sdk/). After installing, run `pip install spinnaker_python` (wheel is included inside the SDK package). |
+| Basler Pylon SDK | — | — | **Not required** — pypylon bundles the pylon runtime in its wheel. No OS-level Basler SDK install needed. |
+| FLIR Boson SDK | — | — | **Not required** — the Boson 3.0 Python SDK is bundled in the installer (`hardware/cameras/boson/`). No separate download needed. |
 | Thorlabs Kinesis | 1.14 | Latest | Required for Thorlabs USB stages |
 | FTDI VCP Driver | 2.12 | Latest | Auto-installed by Windows Update on most systems |
 | PyVISA | 1.13 | **Latest** | Required for BNC 745 (GPIB/USB/Serial). Install: `pip install pyvisa pyvisa-py` |
@@ -1852,9 +1936,16 @@ The AMCAD BILT is a two-channel (Gate + Drain) pulsed voltage/current source for
 hardware:
 
   camera:
-    driver: pypylon          # pypylon | ni_imaqdx | directshow | simulated
+    driver: pypylon          # pypylon | boson | ni_imaqdx | directshow | simulated
     serial: ""               # Basler serial number (blank = first found)
     camera_name: ""          # NI IMAQdx camera name (e.g. "cam4")
+
+    # boson driver keys (used when driver: boson)
+    serial_port: ""          # CDC serial port for SDK/FFC commands (blank = video-only mode)
+    video_index: 0           # cv2.VideoCapture index for UVC video device
+    width: 320               # 320 (Boson 320) or 640 (Boson 640)
+    height: 256              # 256 (Boson 320) or 512 (Boson 640)
+    camera_type: tr          # "tr" (thermoreflectance) or "ir" (infrared); set "ir" for Boson
 
   fpga:
     driver: ni9637           # ni9637 | simulated

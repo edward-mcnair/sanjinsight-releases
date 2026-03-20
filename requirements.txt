@@ -61,13 +61,16 @@ thorlabs-apt-device>=0.3.0    # Thorlabs APT/Kinesis stage controllers (USB)
 #
 # Rigol DP832 native LAN driver (no NI-VISA required):
 #   pip install git+https://github.com/tspspi/pydp832
+#
+# flirpy — used by flir_driver.py (Microsanj IR Camera v1a).
+#   Bundled in the installer; not needed for FLIR Boson (uses boson_driver.py with bundled SDK).
+#   pip install flirpy
 
 # ── Hardware drivers — require OS-level SDK (install SDK first, then pip) ──────
 # These Python packages only work once the vendor SDK is installed at the OS level.
 # They are bundled in the .exe only when present on the build machine.
 
-# Basler camera — pypylon wheel is self-contained on macOS/Windows (bundles
-# the pylon SDK internally).  No separate Basler SDK install required.
+# Basler camera SDK — self-contained wheel (bundles pylon runtime, no separate Basler SDK install needed)
 pypylon>=26.0.0               # Basler camera SDK (bundled in installer)
 #
 # NI FPGA — needs NI-RIO drivers:
