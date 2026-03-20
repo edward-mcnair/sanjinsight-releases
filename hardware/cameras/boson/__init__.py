@@ -1,18 +1,16 @@
-from .ClientFiles_Python import EnumTypes as EE
-from .ClientFiles_Python import Client_API as CamAPI
-from .ClientFiles_Python import Serializer_Struct as SS
-from .ClientFiles_Python.EnumTypes import *
-from .ClientFiles_Python.Serializer_Struct import *
-from .ClientFiles_Python import __dict__
-
-__all__ = ['CamAPI','EE','SS']
-
-for item in EE.__dict__.items():
-    if "FLR_" in item[0] and isinstance(item[1],type):
-        __all__.append(item[0])
-        __dict__[item[0]] = item[1]
-        
-for item in SS.__dict__.items():
-    if "FLR_" in item[0] and isinstance(item[1],type):
-        __all__.append(item[0])
-        __dict__[item[0]] = item[1]
+# hardware/cameras/boson/__init__.py
+#
+# FLIR Boson 3.0 Python SDK — embedded package.
+#
+# Source: FLIR SDK_USER_PERMISSIONS v3.0 (2021-02-03).
+# Embedded for self-contained distribution; no separate FLIR SDK install needed.
+#
+# SanjINSIGHT imports directly from the sub-packages:
+#   hardware.cameras.boson.ClientFiles_Python.Client_API   — pyClient
+#   hardware.cameras.boson.CommunicationFiles.CommonFslp   — CommonFslp
+#   hardware.cameras.boson.CommunicationFiles.PySerialFslp — PySerialFslp
+#
+# The original SDK __init__.py used `from .ClientFiles_Python import __dict__`
+# which is not valid Python and raised ImportError on all modern CPython versions.
+# That namespace-injection pattern is not needed for the SanjINSIGHT integration
+# and is intentionally omitted.

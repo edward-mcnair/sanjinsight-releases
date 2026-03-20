@@ -23,7 +23,7 @@ class PortBase():
     def setPortID(self, portID):
         self.portID = portID
 
-    def setPortBaudrate(baudrate):
+    def setPortBaudrate(self, baudrate):
         self.baudrate = baudrate
 
     def __enter__(self):

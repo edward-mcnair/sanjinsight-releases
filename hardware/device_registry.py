@@ -289,8 +289,8 @@ DEVICE_REGISTRY: dict[str, DeviceDescriptor] = {
         driver_version = "builtin",
         hot_loadable   = False,
         usb_vid        = 0x09CB,     # FLIR Boson USB VID
-        usb_pid        = None,       # PID varies by Boson revision
-        serial_patterns= ["Boson", "FLIR", "Microsanj IR"],
+        usb_pid        = 0x4007,     # Boson 320 PID (Microsanj v1a ships 320)
+        serial_patterns= ["Microsanj IR"],  # narrowed to avoid overlap with flir_boson_320
         description    = "FLIR Boson-based uncooled microbolometer thermal camera "
                          "mounted in a Microsanj nosepiece housing. "
                          "320×256 or 640×512, 16-bit radiometric, ~30 fps. "

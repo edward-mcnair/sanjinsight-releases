@@ -110,9 +110,11 @@ class DeviceEntry:
     driver_obj:     object          = None   # live driver instance
 
     # Connection params (may be overridden by user in settings)
-    baud_rate:  int   = 0
-    ip_address: str   = ""
-    timeout_s:  float = 2.0
+    baud_rate:   int   = 0
+    ip_address:  str   = ""
+    timeout_s:   float = 2.0
+    # Boson-specific: serial control port and UVC video device index
+    video_index: int   = 0
 
     @property
     def uid(self) -> str:
@@ -144,6 +146,7 @@ class DeviceEntry:
             "baud_rate":      self.baud_rate  or self.descriptor.default_baud,
             "ip_address":     self.ip_address or self.descriptor.default_ip,
             "timeout_s":      self.timeout_s,
+            "video_index":    self.video_index,
         }
 
 
@@ -181,10 +184,11 @@ class DeviceManager:
             try:
                 import config as _cfg
                 saved = _cfg.get_pref(f"device_params.{uid}", {})
-                if saved.get("address"):    entry.address    = saved["address"]
-                if saved.get("baud_rate"):  entry.baud_rate  = saved["baud_rate"]
-                if saved.get("ip_address"): entry.ip_address = saved["ip_address"]
-                if saved.get("timeout_s"):  entry.timeout_s  = saved["timeout_s"]
+                if saved.get("address"):     entry.address     = saved["address"]
+                if saved.get("baud_rate"):   entry.baud_rate   = saved["baud_rate"]
+                if saved.get("ip_address"):  entry.ip_address  = saved["ip_address"]
+                if saved.get("timeout_s"):   entry.timeout_s   = saved["timeout_s"]
+                if "video_index" in saved:   entry.video_index = saved["video_index"]
             except Exception:
                 pass   # config not yet initialised at import time — ignore
             self._entries[uid] = entry
@@ -461,6 +465,18 @@ class DeviceManager:
         # from _load_custom_driver.
         if dtype == DTYPE_CAMERA:
             from hardware.cameras import create_camera
+            # Boson: serial control port = entry.address (set in Device Manager),
+            # UVC video device index = entry.video_index.
+            # Width/height injected from registry so Boson 640 gets correct geometry.
+            if desc.uid in ("flir_boson_320", "flir_boson_640"):
+                cfg["serial_port"] = addr  # address field stores serial port path
+                cfg["video_index"] = entry.video_index
+                if desc.uid == "flir_boson_640":
+                    cfg.setdefault("width",  640)
+                    cfg.setdefault("height", 512)
+                else:
+                    cfg.setdefault("width",  320)
+                    cfg.setdefault("height", 256)
             return create_camera(cfg)
         elif dtype == DTYPE_TEC:
             from hardware.tec import create_tec

@@ -11,14 +11,15 @@ interfaces over a single USB connection:
 This driver:
   1. Opens the control channel with the bundled Boson Python SDK
      (hardware/cameras/boson/) using pure-Python serial (pyserial).
-     No native DLL is required — useDll=False selects the PySerial FSLP path.
+     No native DLL is required — FSLP_PY_SERIAL selects the PySerial path.
   2. Opens the video channel with cv2.VideoCapture.
   3. Maps the Boson's 14-bit radiometric output to a uint16 CameraFrame
      expected by the rest of SanjINSIGHT.
 
 Config keys (under hardware.camera):
     driver:        "boson"
-    serial_port:   "/dev/cu.usbmodemXXX"   # macOS  (or "COM3" on Windows)
+    serial_port:   "/dev/cu.usbmodemXXX"   # macOS (or "COM3" on Windows)
+                   Leave blank for video-only mode (no SDK control).
     video_index:   0                        # cv2.VideoCapture device index
     width:         320                      # 320 or 640
     height:        256                      # 256 or 512
@@ -41,8 +42,8 @@ log = logging.getLogger(__name__)
 
 # ── Boson sensor geometry ─────────────────────────────────────────────────────
 _BOSON_MODELS = {
-    (320, 256): "Boson 320",
-    (640, 512): "Boson 640",
+    (320, 256): "FLIR Boson 320",
+    (640, 512): "FLIR Boson 640",
 }
 
 # Default baud rate for the Boson UART control channel
@@ -55,8 +56,14 @@ class BosonDriver(CameraDriver):
 
     Control is exercised via the bundled FLIR Boson Python SDK over serial
     (pure-Python FSLP — no DLL required, works on macOS, Windows, Linux).
-    Video frames are captured via OpenCV's UVC backend, which is natively
-    available on all supported platforms.
+    Video frames are captured via OpenCV's UVC backend.
+
+    Thread safety
+    -------------
+    grab() must be safe to call from a background thread while close() may
+    be called from the GUI thread.  _cap_lock serialises VideoCapture access
+    only — the lock is NOT held during the blocking cap.read() call, so
+    close() is never blocked by an in-progress grab.
     """
 
     # ── Preflight ─────────────────────────────────────────────────────────────
@@ -78,8 +85,13 @@ class BosonDriver(CameraDriver):
                 "pyserial is not installed.\n"
                 "  Fix: pip install pyserial"
             )
+        # Use a relative-style import-by-path so the check works both in the
+        # source tree and inside a frozen PyInstaller bundle.
         try:
-            from hardware.cameras.boson.ClientFiles_Python.Client_API import pyClient  # noqa: F401
+            import importlib
+            importlib.import_module(
+                "hardware.cameras.boson.ClientFiles_Python.Client_API"
+            )
         except ImportError as exc:
             issues.append(
                 f"FLIR Boson SDK not found in the installation: {exc}\n"
@@ -91,17 +103,18 @@ class BosonDriver(CameraDriver):
 
     def __init__(self, cfg: dict):
         super().__init__(cfg)
-        self._serial_port  = cfg.get("serial_port", "")
-        self._baud         = int(cfg.get("baud", _DEFAULT_BAUD))
-        self._video_index  = int(cfg.get("video_index", 0))
-        self._W            = int(cfg.get("width",  320))
-        self._H            = int(cfg.get("height", 256))
-        self._fps          = float(cfg.get("fps",  60.0))
+        self._serial_port = cfg.get("serial_port", "")
+        self._baud        = int(cfg.get("baud", _DEFAULT_BAUD))
+        self._video_index = int(cfg.get("video_index", 0))
+        self._W           = int(cfg.get("width",  320))
+        self._H           = int(cfg.get("height", 256))
+        self._fps         = float(cfg.get("fps",  60.0))
 
-        self._client       = None   # pyClient (SDK control)
-        self._cap          = None   # cv2.VideoCapture (video)
-        self._lock         = threading.Lock()
-        self._frame_idx    = 0
+        self._client      = None   # pyClient (SDK control)
+        self._cap         = None   # cv2.VideoCapture (video)
+        self._cap_lock    = threading.Lock()   # guards _cap reference only
+        self._state_lock  = threading.Lock()   # guards _open flag
+        self._frame_idx   = 0                  # monotonic; only written in grab()
 
         self._info = CameraInfo(
             driver      = "boson",
@@ -115,115 +128,180 @@ class BosonDriver(CameraDriver):
         )
 
     def open(self) -> None:
-        if self._open:
-            return
+        with self._state_lock:
+            if self._open:
+                return
+            self._open_locked()
 
+    def _open_locked(self) -> None:
+        """Must be called with _state_lock held."""
         import cv2
 
-        # ── 1. Control channel ────────────────────────────────────────────────
+        fslp = None  # track separately so we can clean up on partial failure
+
+        # ── 1. Control channel (optional) ─────────────────────────────────────
         if self._serial_port:
             try:
-                from hardware.cameras.boson.ClientFiles_Python.Client_API import pyClient
                 from hardware.cameras.boson.CommunicationFiles.CommonFslp import (
                     CommonFslp, FSLP_TYPE_E,
                 )
+                from hardware.cameras.boson.ClientFiles_Python.Client_API import pyClient
+
                 fslp = CommonFslp.getFslp(
                     self._serial_port, self._baud,
                     FSLP_TYPE_E.FSLP_PY_SERIAL,
                 )
                 fslp.port.open()
                 self._client = pyClient(fslp=fslp, useDll=False, ex=False)
-                # Read serial number from camera
+
+                # Read serial number (FLR_RESULT enum comparison, not str())
+                from hardware.cameras.boson.ClientFiles_Python.ReturnCodes import FLR_RESULT
                 result, sn = self._client.systemGetCameraSerialNumber()
-                if str(result) == "FLR_RESULT.R_SUCCESS":
+                if result is FLR_RESULT.R_SUCCESS:
                     self._info.serial = str(sn)
                     log.info("Boson serial number: %s", self._info.serial)
+                else:
+                    log.warning("Boson: could not read serial number (%s)", result)
+
             except Exception as exc:
                 log.warning(
                     "Boson control channel failed on %s — "
-                    "video-only mode (no SDK commands): %s",
+                    "continuing in video-only mode (no SDK commands): %s",
                     self._serial_port, exc,
                 )
+                # Clean up serial port if it was opened before the failure
+                if fslp is not None:
+                    try:
+                        fslp.port.close()
+                    except Exception:
+                        pass
                 self._client = None
         else:
             log.info(
                 "Boson: no serial_port configured — video-only mode. "
-                "Set serial_port in config.yaml for full camera control."
+                "Set serial_port in config.yaml for full SDK control."
             )
 
         # ── 2. Video channel ──────────────────────────────────────────────────
         cap = cv2.VideoCapture(self._video_index)
         if not cap.isOpened():
-            if self._client:
-                self._client.Close()
-                self._client = None
-            raise RuntimeError(
-                f"FLIR Boson: could not open video device index {self._video_index}.\n"
-                "Check:\n"
-                "  1. Boson is connected via USB.\n"
-                "  2. video_index in config.yaml matches the Boson UVC device.\n"
-                "  3. On macOS, grant Camera access in System Preferences → Privacy."
-            )
-
-        # Configure video for raw 16-bit output (Y16 pixel format)
-        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"Y16 "))
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH,  self._W)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self._H)
-        cap.set(cv2.CAP_PROP_FPS, self._fps)
-        cap.set(cv2.CAP_PROP_CONVERT_RGB, 0)  # raw, no colour conversion
-
-        self._cap   = cap
-        self._open  = True
-        log.info(
-            "Boson opened: model=%s serial=%s video_index=%d",
-            self._info.model, self._info.serial or "unknown", self._video_index,
-        )
-
-    def start(self) -> None:
-        # VideoCapture begins delivering frames as soon as it's opened.
-        pass
-
-    def stop(self) -> None:
-        pass
-
-    def close(self) -> None:
-        with self._lock:
+            # Serial was opened successfully — close it before raising
             if self._client:
                 try:
                     self._client.Close()
                 except Exception:
                     pass
                 self._client = None
-            if self._cap:
-                self._cap.release()
-                self._cap = None
-        self._open = False
+            raise RuntimeError(
+                f"FLIR Boson: could not open video device index {self._video_index}.\n"
+                "Check:\n"
+                "  1. Boson is connected via USB.\n"
+                "  2. video_index in config.yaml matches the Boson UVC device\n"
+                "     (try incrementing from 0 if another camera is present).\n"
+                "  3. On macOS, grant Camera access: System Settings → Privacy → Camera."
+            )
+
+        # Request 16-bit greyscale (Y16) pixel format for radiometric data.
+        # cap.set() returns False silently on unsupported formats — we log a
+        # warning so the user knows the data may be 8-bit AGC output instead.
+        y16_fourcc = cv2.VideoWriter_fourcc(*"Y16 ")
+        cap.set(cv2.CAP_PROP_FOURCC, y16_fourcc)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH,  self._W)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self._H)
+        cap.set(cv2.CAP_PROP_FPS,          self._fps)
+        cap.set(cv2.CAP_PROP_CONVERT_RGB,  0)   # raw, no colour conversion
+
+        # Validate that Y16 was accepted
+        actual_fourcc = int(cap.get(cv2.CAP_PROP_FOURCC))
+        if actual_fourcc != y16_fourcc:
+            four = "".join(chr((actual_fourcc >> (8 * i)) & 0xFF) for i in range(4))
+            log.warning(
+                "Boson: Y16 pixel format not accepted by the UVC backend "
+                "(got FOURCC '%s'). Frames will be 8-bit AGC output scaled "
+                "to uint16. Radiometric accuracy is reduced.", four.strip()
+            )
+            self._y16_mode = False
+        else:
+            self._y16_mode = True
+
+        with self._cap_lock:
+            self._cap = cap
+        self._open = True
+
+        log.info(
+            "Boson opened: model=%s serial=%s video_index=%d y16=%s",
+            self._info.model, self._info.serial or "unknown",
+            self._video_index, self._y16_mode,
+        )
+
+    def start(self) -> None:
+        # VideoCapture begins delivering frames as soon as it is opened.
+        pass
+
+    def stop(self) -> None:
+        pass
+
+    def close(self) -> None:
+        # Swap out _cap reference under cap_lock so any in-progress grab()
+        # that already read _cap will finish naturally, while new grab() calls
+        # see None and return immediately.
+        with self._cap_lock:
+            cap = self._cap
+            self._cap = None
+
+        if cap is not None:
+            cap.release()
+
+        if self._client is not None:
+            try:
+                self._client.Close()
+            except Exception:
+                pass
+            self._client = None
+
+        with self._state_lock:
+            self._open = False
+
         log.info("Boson closed")
 
     # ── Acquisition ───────────────────────────────────────────────────────────
 
     def grab(self, timeout_ms: int = 2000) -> Optional[CameraFrame]:
         import cv2
-        deadline = time.monotonic() + timeout_ms / 1000.0
-        with self._lock:
-            if not self._cap or not self._cap.isOpened():
-                return None
-            while time.monotonic() < deadline:
-                ret, frame = self._cap.read()
-                if ret and frame is not None:
-                    break
-            else:
-                log.debug("Boson grab timeout (%d ms)", timeout_ms)
-                return None
 
-        # The Boson delivers 16-bit grayscale frames over UVC (Y16).
-        # If OpenCV decodes to uint8 (AGC output mode), scale up to uint16.
+        # Read _cap reference without holding the lock during the blocking call.
+        with self._cap_lock:
+            cap = self._cap
+        if cap is None:
+            return None
+
+        deadline = time.monotonic() + timeout_ms / 1000.0
+        frame = None
+        while time.monotonic() < deadline:
+            ret, f = cap.read()
+            if ret and f is not None:
+                frame = f
+                break
+
+        if frame is None:
+            log.debug("Boson grab timeout (%d ms)", timeout_ms)
+            return None
+
+        # Normalise to uint16.
+        # Y16 mode: OpenCV delivers single-channel uint16 — use directly.
+        # AGC/fallback: may be BGR uint8 or single-channel uint8 — scale up.
         if frame.ndim == 3:
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         if frame.dtype != np.uint16:
-            frame = frame.astype(np.uint16) * 256  # 8→16-bit, preserves ordering
+            if not getattr(self, '_y16_warned', False):
+                log.warning(
+                    "Boson: received uint8 frame — scaling ×256. "
+                    "Radiometric data unavailable (AGC output mode)."
+                )
+                self._y16_warned = True
+            frame = frame.astype(np.uint16) * 256
 
-        self._frame_idx += 1
+        self._frame_idx += 1   # only written here (single grab-thread pattern)
         return CameraFrame(
             data        = frame,
             frame_index = self._frame_idx,
@@ -235,10 +313,7 @@ class BosonDriver(CameraDriver):
     # ── Attribute control ─────────────────────────────────────────────────────
 
     def set_exposure(self, microseconds: float) -> None:
-        """
-        Boson manages integration time internally (auto-exposure microbolometer).
-        This is a no-op; the UI slider is intentionally not wired for Boson.
-        """
+        """Boson manages integration time internally — no-op."""
         pass
 
     def set_gain(self, db: float) -> None:
@@ -246,10 +321,10 @@ class BosonDriver(CameraDriver):
         pass
 
     def exposure_range(self) -> tuple:
-        return (0.0, 0.0)   # not applicable
+        return (0.0, 0.0)
 
     def gain_range(self) -> tuple:
-        return (0.0, 0.0)   # not applicable
+        return (0.0, 0.0)
 
     # ── SDK passthrough ───────────────────────────────────────────────────────
 
@@ -275,10 +350,11 @@ class BosonDriver(CameraDriver):
             log.warning("Boson: FFC requested but control channel is not open")
             return False
         try:
+            from hardware.cameras.boson.ClientFiles_Python.ReturnCodes import FLR_RESULT
             result = self._client.bosonRunFFC()
-            ok = str(result) == "FLR_RESULT.R_SUCCESS"
+            ok = (result is FLR_RESULT.R_SUCCESS)
             if ok:
-                log.info("Boson: FFC triggered")
+                log.info("Boson: FFC triggered successfully")
             else:
                 log.warning("Boson: FFC returned %s", result)
             return ok

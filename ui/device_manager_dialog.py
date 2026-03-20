@@ -1172,6 +1172,34 @@ class _DeviceProfilePanel(QWidget):
                 self._param_widgets["visa_address"] = visa_edit
                 r += 1
                 _conn_note = None
+            elif desc.uid in ("flir_boson_320", "flir_boson_640"):
+                # Boson: serial control port + UVC video device index
+                pg.addWidget(self._sublabel("Serial Port"), r, 0)
+                serial_edit = QLineEdit(entry.address or "")
+                serial_edit.setPlaceholderText(
+                    "/dev/cu.usbmodemXXXX  (macOS)  |  COM3  (Windows)")
+                serial_edit.setToolTip(
+                    "Serial port for Boson SDK control commands (FFC, settings).\n"
+                    "Leave blank for video-only mode.\n"
+                    "macOS: /dev/cu.usbmodem…   Windows: COM3, COM4…\n"
+                    "Run  python -m serial.tools.list_ports  to list available ports.")
+                pg.addWidget(serial_edit, r, 1)
+                self._param_widgets["boson_serial"] = serial_edit
+                r += 1
+
+                pg.addWidget(self._sublabel("Video Device Index"), r, 0)
+                from PyQt5.QtWidgets import QSpinBox
+                vid_spin = QSpinBox()
+                vid_spin.setRange(0, 15)
+                vid_spin.setValue(entry.video_index)
+                vid_spin.setToolTip(
+                    "OpenCV VideoCapture index for the Boson UVC video stream.\n"
+                    "0 = first camera.  Increment if another camera (e.g. built-in\n"
+                    "FaceTime) is present and takes index 0.")
+                pg.addWidget(vid_spin, r, 1)
+                self._param_widgets["boson_video_index"] = vid_spin
+                r += 1
+                _conn_note = None
             elif desc.device_type == DTYPE_FPGA:
                 _conn_note = ("Connects via NI-DAQmx — no COM port required.\n"
                               "Device name (e.g. Dev1) is assigned in NI MAX.")
@@ -1277,7 +1305,9 @@ class _DeviceProfilePanel(QWidget):
         if "baud"         in pw: entry.baud_rate  = int(pw["baud"].currentText())
         if "ip"           in pw: entry.ip_address = pw["ip"].text().strip()
         if "timeout"      in pw: entry.timeout_s  = pw["timeout"].value()
-        if "visa_address" in pw: entry.address    = pw["visa_address"].text().strip()
+        if "visa_address"      in pw: entry.address      = pw["visa_address"].text().strip()
+        if "boson_serial"      in pw: entry.address      = pw["boson_serial"].text().strip()
+        if "boson_video_index" in pw: entry.video_index  = pw["boson_video_index"].value()
 
         # Persist connection parameters to user preferences so they survive
         # dialog close / app restart.
@@ -1285,10 +1315,11 @@ class _DeviceProfilePanel(QWidget):
             import config as _cfg
             pref_key = f"device_params.{entry.uid}"
             _pref_dict = {
-                "address":    entry.address,
-                "baud_rate":  entry.baud_rate,
-                "ip_address": entry.ip_address,
-                "timeout_s":  entry.timeout_s,
+                "address":     entry.address,
+                "baud_rate":   entry.baud_rate,
+                "ip_address":  entry.ip_address,
+                "timeout_s":   entry.timeout_s,
+                "video_index": entry.video_index,
             }
             # Camera type — also write to hardware.camera.camera_type so the
             # camera_registry and hardware_service pick it up on next start.
