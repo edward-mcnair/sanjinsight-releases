@@ -1,0 +1,12 @@
+[NIIMAQ_HEADER]
+Type = 3
+Version = 2
+
+[CAMERA_INTERFACE_DATA]
+SerialNumber = 0000000F31F43098
+BusType = 69707634
+InterfaceName = "cam3"
+Vendor = "Allied Vision"
+Model = "Goldeye G-032 Cool (4068520)"
+CameraFile = "Allied Vision Goldeye G-032 Cool (4068520) (#0000000F31F42E7C).icd"
+AttributeURL = ""

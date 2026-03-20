@@ -1,0 +1,12 @@
+[NIIMAQ_HEADER]
+Type = 3
+Version = 2
+
+[CAMERA_INTERFACE_DATA]
+SerialNumber = 000070F8E7B01098
+BusType = 69707634
+InterfaceName = "DUV"
+Vendor = "Photonfocus AG"
+Model = "MV4-D1280U-H01-GT"
+CameraFile = "Photonfocus AG MV4-D1280U-H01-GT (#000070F8E7B01098).icd"
+AttributeURL = ""

@@ -31,6 +31,7 @@ _DRIVERS = {
     "directshow":  ("hardware.cameras.directshow",       "DirectShowDriver"),
     "simulated":   ("hardware.cameras.simulated",        "SimulatedDriver"),
     "flir":        ("hardware.cameras.flir_driver",      "FlirDriver"),
+    "boson":       ("hardware.cameras.boson_driver",     "BosonDriver"),
 }
 
 # Drivers that only work on Windows
@@ -102,6 +103,12 @@ _INSTALL_HINTS: dict[str, str] = {
         "Also install the FLIR Spinnaker SDK (cross-platform):\n"
         "  https://www.flir.com/products/spinnaker-sdk/\n"
         "The spinnaker_python wheel is distributed alongside the SDK installer."
+    ),
+    "boson": (
+        "The FLIR Boson SDK is bundled with SanjINSIGHT — no extra install needed.\n"
+        "Ensure pyserial and opencv-python are installed:\n"
+        "  pip install pyserial opencv-python\n"
+        "Connect the Boson via USB and set serial_port + video_index in config.yaml."
     ),
 }
 

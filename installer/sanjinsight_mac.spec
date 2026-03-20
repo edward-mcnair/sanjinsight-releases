@@ -11,7 +11,19 @@ import importlib.util
 import os
 import sys
 
-from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
+from PyInstaller.utils.hooks import (
+    collect_data_files, collect_dynamic_libs, collect_submodules,
+)
+
+# ── pypylon — collect entire package: Python modules + bundled pylon.framework ─
+# The pypylon wheel is self-contained: it ships pylon.framework inside the
+# site-packages/pypylon/ directory (~30 MB), so no separate Basler SDK install
+# is needed.  We collect each piece explicitly to keep datas/binaries/imports
+# typed correctly regardless of PyInstaller version.
+_pypylon_modules = collect_submodules('pypylon')          # list[str] — module names
+_pypylon_datas   = collect_data_files('pypylon',
+                       include_py_files=False)            # list[tuple] — (src, dest)
+_pypylon_bins    = collect_dynamic_libs('pypylon')        # list[tuple] — (src, dest)
 
 # SPECPATH is the absolute path of the installer/ directory.
 # Inserting the project root lets us import version.py below.
@@ -79,6 +91,36 @@ hidden_imports = [
     'h5py.utils',
     'h5py._proxy',
 
+    # ── pypylon (Basler camera SDK — self-contained wheel) ────────────
+    # collect_submodules discovers the full module tree; explicit entries
+    # below are a safety net in case the camera driver imports them lazily.
+    'pypylon',
+    'pypylon.pylon',
+    'pypylon.genicam',
+    *_pypylon_modules,
+
+    # ── FLIR Boson SDK (bundled Python SDK) ──────────────────────────
+    # All modules are pure-Python and shipped in hardware/cameras/boson/.
+    # Listed explicitly because the factory loads them via importlib.
+    'hardware.cameras.boson_driver',
+    'hardware.cameras.boson',
+    'hardware.cameras.boson.ClientFiles_Python',
+    'hardware.cameras.boson.ClientFiles_Python.Client_API',
+    'hardware.cameras.boson.ClientFiles_Python.Client_Dispatcher',
+    'hardware.cameras.boson.ClientFiles_Python.Client_Packager',
+    'hardware.cameras.boson.ClientFiles_Python.EnumTypes',
+    'hardware.cameras.boson.ClientFiles_Python.ReturnCodes',
+    'hardware.cameras.boson.ClientFiles_Python.Serializer_BuiltIn',
+    'hardware.cameras.boson.ClientFiles_Python.Serializer_Struct',
+    'hardware.cameras.boson.CommunicationFiles',
+    'hardware.cameras.boson.CommunicationFiles.CommonFslp',
+    'hardware.cameras.boson.CommunicationFiles.PySerialFslp',
+    'hardware.cameras.boson.CommunicationFiles.PySerialPort',
+    'hardware.cameras.boson.CommunicationFiles.FslpBase',
+    'hardware.cameras.boson.CommunicationFiles.PortBase',
+    'hardware.cameras.boson.CommunicationFiles.CSerialFslp',
+    'hardware.cameras.boson.CommunicationFiles.CSerialPort',
+
     # ── pyqtgraph (real-time charts) ─────────────────────────────────
     # ui/charts.py imports via try/except so PyInstaller static analysis
     # misses it; list every subpackage used at runtime.
@@ -119,6 +161,19 @@ datas = [
     (os.path.join(_root, 'assets', 'demo_background.png'),      'assets'),
     (os.path.join(_root, 'assets', 'demo_signal.png'),          'assets'),
 
+    # Camera ICD / IID files (NI IMAQdx camera configuration descriptors).
+    # Used by hardware/cameras/ni_imaqdx.py on Windows.  Bundled on macOS too
+    # so a single installer covers all platforms.
+    *( [(os.path.join(_root, 'assets', 'camera_icd'), 'assets/camera_icd')]
+       if os.path.isdir(os.path.join(_root, 'assets', 'camera_icd')) else [] ),
+
+    # FLIR Boson Python SDK — pure-Python source files shipped in the package.
+    # PyInstaller imports the .py modules automatically via hiddenimports above,
+    # but the SDK's __init__.py reads sibling paths at runtime so we also need
+    # the source tree available as data.
+    (os.path.join(_root, 'hardware', 'cameras', 'boson'),
+     os.path.join('hardware', 'cameras', 'boson')),
+
     # Documentation (read by ai/prompt_templates.py at runtime)
     *( [(os.path.join(_root, 'docs', 'QuickstartGuide.md'), 'docs'),
         (os.path.join(_root, 'docs', 'UserManual.md'),      'docs')]
@@ -139,6 +194,7 @@ datas = [
     *collect_data_files('PyQt5', include_py_files=False),
     *collect_data_files('h5py'),
     *collect_data_files('pyqtgraph'),   # colormap CSVs, Qt platform plugins
+    *_pypylon_datas,                   # pypylon .py helpers + pylon.framework data
 
     # llama_cpp data files (skipped gracefully if not installed)
     *( collect_data_files('llama_cpp')
@@ -150,6 +206,8 @@ a = Analysis(
     [os.path.join(_root, 'main_app.py')],
     pathex=[_root],
     binaries=[
+        # pypylon: pylon.framework dylibs bundled inside the wheel
+        *_pypylon_bins,
         # llama_cpp native dylib (skipped if not installed)
         *( collect_dynamic_libs('llama_cpp')
            if importlib.util.find_spec('llama_cpp') else [] ),

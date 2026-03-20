@@ -1,0 +1,12 @@
+[NIIMAQ_HEADER]
+Type = 3
+Version = 2
+
+[CAMERA_INTERFACE_DATA]
+SerialNumber = 0000267601CA9A1F
+BusType = 55534233
+InterfaceName = "cam10"
+Vendor = "Basler"
+Model = "a2A1280-125umSWIR"
+CameraFile = "Basler a2A1280-125umSWIR (#0000267601CA9A1F).icd"
+AttributeURL = ""

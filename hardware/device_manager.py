@@ -521,6 +521,8 @@ class DeviceManager:
             "rigol_dp832":              "visa",
             "amcad_bilt":               "amcad_bilt",
             "bnc_745":                  "bnc745",
+            "flir_boson_320":           "boson",
+            "flir_boson_640":           "boson",
         }
         return KEY_MAP.get(desc.uid, desc.uid)
 

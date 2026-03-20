@@ -1,0 +1,12 @@
+[NIIMAQ_HEADER]
+Type = 3
+Version = 2
+
+[CAMERA_INTERFACE_DATA]
+SerialNumber = 000026760177F4D1
+BusType = 55534233
+InterfaceName = "cam9"
+Vendor = "Basler"
+Model = "acA1920-155um"
+CameraFile = "Basler acA1920-155um (#000026760177F4D1).icd"
+AttributeURL = ""

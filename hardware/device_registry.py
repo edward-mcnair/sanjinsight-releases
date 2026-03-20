@@ -168,6 +168,116 @@ DEVICE_REGISTRY: dict[str, DeviceDescriptor] = {
                          "Requires GigE Vision compliant network interface.",
     ),
 
+    # ── FLIR Boson (direct — bundled Boson SDK) ──────────────────────────────
+
+    "flir_boson_320": DeviceDescriptor(
+        uid            = "flir_boson_320",
+        display_name   = "FLIR Boson 320",
+        manufacturer   = "FLIR Systems",
+        device_type    = DTYPE_CAMERA,
+        connection_type= CONN_USB,
+        camera_type    = "ir",
+        driver_module  = "hardware.cameras.boson_driver",
+        driver_version = "builtin",
+        hot_loadable   = True,
+        usb_vid        = 0x09CB,    # FLIR Boson USB VID
+        usb_pid        = 0x4007,    # Boson 320 PID
+        serial_patterns= ["Boson", "FLIR Boson", "09CB:4007"],
+        description    = "FLIR Boson 320×256 uncooled LWIR microbolometer. "
+                         "Controlled via bundled FLIR Python SDK over serial (FSLP), "
+                         "video via UVC (USB Video Class). 14-bit radiometric output.",
+        datasheet_url  = "https://www.flir.com/products/boson/",
+        notes          = "Set serial_port (e.g. /dev/cu.usbmodemXXX on macOS, "
+                         "COM3 on Windows) and video_index in config.yaml. "
+                         "Driver: boson",
+    ),
+
+    "flir_boson_640": DeviceDescriptor(
+        uid            = "flir_boson_640",
+        display_name   = "FLIR Boson 640",
+        manufacturer   = "FLIR Systems",
+        device_type    = DTYPE_CAMERA,
+        connection_type= CONN_USB,
+        camera_type    = "ir",
+        driver_module  = "hardware.cameras.boson_driver",
+        driver_version = "builtin",
+        hot_loadable   = True,
+        usb_vid        = 0x09CB,
+        usb_pid        = 0x4009,    # Boson 640 PID
+        serial_patterns= ["Boson 640", "FLIR Boson 640", "09CB:4009"],
+        description    = "FLIR Boson 640×512 uncooled LWIR microbolometer. "
+                         "Higher resolution variant of the Boson 320. "
+                         "14-bit radiometric output at up to 60 fps.",
+        datasheet_url  = "https://www.flir.com/products/boson/",
+        notes          = "Set serial_port and video_index in config.yaml. "
+                         "Driver: boson",
+    ),
+
+    # ── Basler SWIR (ICD-registered, NI IMAQdx / pypylon) ────────────────────
+
+    "basler_a2a1280_125um_swir": DeviceDescriptor(
+        uid            = "basler_a2a1280_125um_swir",
+        display_name   = "Basler a2A1280-125umSWIR",
+        manufacturer   = "Basler AG",
+        device_type    = DTYPE_CAMERA,
+        connection_type= CONN_USB,
+        camera_type    = "tr",
+        driver_module  = "hardware.cameras.pypylon_driver",
+        driver_version = "builtin",
+        hot_loadable   = False,
+        usb_vid        = 0x2676,
+        usb_pid        = 0xBA02,
+        serial_patterns= ["Basler", "a2A1280", "0000267601CA9A1F"],
+        description    = "Basler a2A1280-125umSWIR USB3 Vision short-wave infrared "
+                         "camera, 1280×1024 @ 125 fps. "
+                         "ICD file: assets/camera_icd/Basler a2A1280-125umSWIR.icd.",
+        datasheet_url  = "https://www.baslerweb.com/",
+    ),
+
+    # ── Allied Vision Goldeye (ICD-registered, NI IMAQdx) ────────────────────
+
+    "allied_vision_goldeye_g032": DeviceDescriptor(
+        uid            = "allied_vision_goldeye_g032",
+        display_name   = "Allied Vision Goldeye G-032 Cool",
+        manufacturer   = "Allied Vision Technologies",
+        device_type    = DTYPE_CAMERA,
+        connection_type= CONN_ETHERNET,
+        camera_type    = "ir",
+        driver_module  = "hardware.cameras.ni_imaqdx",
+        driver_version = "builtin",
+        hot_loadable   = False,
+        tcp_port       = 3956,      # GigE Vision control port
+        tcp_banner     = "Allied Vision",
+        serial_patterns= ["Allied Vision", "Goldeye", "0000000F31F4"],
+        description    = "Allied Vision Goldeye G-032 Cool InGaAs SWIR camera. "
+                         "GigE Vision, 636×508, cooled InGaAs sensor. "
+                         "ICD file: assets/camera_icd/Allied Vision Goldeye.icd.",
+        datasheet_url  = "https://www.alliedvision.com/en/products/cameras/detail/Goldeye/G-032.html",
+        notes          = "NI IMAQdx required (Windows). interface_name: cam3 or DUV.",
+    ),
+
+    # ── Photonfocus MV4 (ICD-registered, NI IMAQdx) ──────────────────────────
+
+    "photonfocus_mv4_d1280u": DeviceDescriptor(
+        uid            = "photonfocus_mv4_d1280u",
+        display_name   = "Photonfocus MV4-D1280U-H01-GT",
+        manufacturer   = "Photonfocus AG",
+        device_type    = DTYPE_CAMERA,
+        connection_type= CONN_ETHERNET,
+        camera_type    = "tr",
+        driver_module  = "hardware.cameras.ni_imaqdx",
+        driver_version = "builtin",
+        hot_loadable   = False,
+        tcp_port       = 3956,      # GigE Vision
+        tcp_banner     = "Photonfocus",
+        serial_patterns= ["Photonfocus", "MV4", "000070F8E7B0"],
+        description    = "Photonfocus MV4-D1280U-H01-GT GigE Vision camera. "
+                         "1280×1024, high-dynamic-range CMOS. "
+                         "ICD file: assets/camera_icd/Photonfocus MV4-D1280U.icd.",
+        datasheet_url  = "https://www.photonfocus.com/",
+        notes          = "NI IMAQdx required (Windows). interface_name: DUV.",
+    ),
+
     "microsanj_ir_camera_v1a": DeviceDescriptor(
         uid            = "microsanj_ir_camera_v1a",
         display_name   = "Microsanj Infrared Camera v1a",

@@ -66,9 +66,9 @@ thorlabs-apt-device>=0.3.0    # Thorlabs APT/Kinesis stage controllers (USB)
 # These Python packages only work once the vendor SDK is installed at the OS level.
 # They are bundled in the .exe only when present on the build machine.
 
-# Basler camera — needs pylon 8 SDK (installs USB3 Vision filter driver):
-#   https://www.baslerweb.com/en-us/downloads/software-downloads/
-#   pip install pypylon
+# Basler camera — pypylon wheel is self-contained on macOS/Windows (bundles
+# the pylon SDK internally).  No separate Basler SDK install required.
+pypylon>=26.0.0               # Basler camera SDK (bundled in installer)
 #
 # NI FPGA — needs NI-RIO drivers:
 #   https://www.ni.com/en/support/downloads/drivers/download.ni-rio.html
