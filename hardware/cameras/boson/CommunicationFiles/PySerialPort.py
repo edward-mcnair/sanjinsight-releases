@@ -35,7 +35,7 @@ class PySerialPort(PortBase):
         self.port.parity   = 'N'
         self.port.stopbits = 1
         self.port.bytesize = 8
-        self.port.timeout  = 10
+        self.port.timeout  = 2   # 2 s per read; fast failure if camera not responding
         self.port.open()
         if self.port.is_open:
             log.debug("Boson SDK: serial port %s open", self.portID)

@@ -560,6 +560,8 @@ class _DeviceListPanel(QWidget):
 # ------------------------------------------------------------------ #
 
 class _DeviceProfilePanel(QWidget):
+    open_log_requested = pyqtSignal()   # emitted when a connect starts
+
     def __init__(self, device_manager: DeviceManager):
         super().__init__()
         self._mgr    = device_manager
@@ -1538,6 +1540,10 @@ class _DeviceProfilePanel(QWidget):
             self._conn_btn.setEnabled(False)
             self._conn_btn.setText("Connecting…")
 
+        # Ask the parent dialog to open the log panel so the user can see
+        # "Connecting…" messages and any timeout/error output immediately.
+        self.open_log_requested.emit()
+
         def _done(ok, msg):
             QTimer.singleShot(0, lambda: self.show_device(uid))
 
@@ -2136,6 +2142,9 @@ class DeviceManagerDialog(QDialog):
         self._list_panel.device_selected.connect(
             self._profile_panel.show_device)
 
+        # Auto-open the log panel whenever a connection attempt starts
+        self._profile_panel.open_log_requested.connect(self._open_log_panel)
+
         # Propagate scan-done + per-device state changes to hw_status_changed
         self._list_panel.scan_completed.connect(self._emit_hw_status)
 
@@ -2222,6 +2231,12 @@ class DeviceManagerDialog(QDialog):
     # ---------------------------------------------------------------- #
     #  Log panel toggle                                                 #
     # ---------------------------------------------------------------- #
+
+    def _open_log_panel(self):
+        """Ensure the log panel is visible (called when a connect attempt starts)."""
+        if not self._log_btn.isChecked():
+            self._log_btn.setChecked(True)
+            self._toggle_log(True)
 
     def _toggle_log(self, checked: bool):
         self._log_widget.setVisible(checked)

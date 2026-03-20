@@ -32,6 +32,15 @@ import os     as _os_boot
 import time   as _time_boot
 import traceback as _tb_boot
 
+# On macOS, OpenCV's AVFoundation backend tries to request Camera permission
+# from whichever thread calls cv2.VideoCapture() — but macOS only allows the
+# authorization dialog on the main thread.  Setting this env var tells OpenCV
+# to skip the in-process auth request and just fail fast if permission has not
+# already been granted via System Settings → Privacy & Security → Camera.
+# The user grants permission once; after that VideoCapture opens normally.
+if _sys_boot.platform == "darwin":
+    _os_boot.environ.setdefault("OPENCV_AVFOUNDATION_SKIP_AUTH", "1")
+
 _BOOT_LOG_DIR  = _os_boot.path.join(_os_boot.path.expanduser("~"), ".microsanj", "logs")
 _BOOT_CRASH    = _os_boot.path.join(_BOOT_LOG_DIR, "startup_crash.txt")
 
@@ -2187,6 +2196,7 @@ class MainWindow(QMainWindow):
 
         _app_state.demo_mode = False
         self._header.set_demo_mode(False)
+        self._header.clear_devices()          # flush simulated device entries
         self._status.showMessage(
             f"SanjINSIGHT {version_string()}  —  exiting demo mode…", 4000)
         signals.log_message.emit(

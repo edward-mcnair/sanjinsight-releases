@@ -379,6 +379,13 @@ class ConnectedDevicesButton(QWidget):
         if self._popup and self._popup.isVisible():
             self._popup.update_devices(self._devices)
 
+    def clear_devices(self) -> None:
+        """Remove all device entries (e.g. when exiting demo mode)."""
+        self._devices.clear()
+        self._refresh()
+        if self._popup and self._popup.isVisible():
+            self._popup.update_devices(self._devices)
+
     def set_active_device(self, key: str) -> None:
         """Mark *key* as the active camera; clear the flag on all other camera keys."""
         changed = False
@@ -1237,6 +1244,10 @@ class StatusHeader(QWidget):
     def set_active_device(self, key: str) -> None:
         """Mark *key* as the active camera in the dropdown (shows 'Active' pill)."""
         self._devices_btn.set_active_device(key)
+
+    def clear_devices(self) -> None:
+        """Clear all device entries from the dropdown (e.g. when exiting demo mode)."""
+        self._devices_btn.clear_devices()
 
     def set_hw_btn_status(self, connected: bool):
         """Legacy API — overall status is now derived from individual device states."""

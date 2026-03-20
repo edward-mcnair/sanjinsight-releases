@@ -345,18 +345,38 @@ class DeviceManager:
                         log.warning("[%s] pre-flight warning: %s", uid, issue)
 
             # Enforce a hard timeout on connect() so the UI is never frozen.
+            # NOTE: do NOT use `with ThreadPoolExecutor` here — the context
+            # manager calls shutdown(wait=True) on exit, which blocks until the
+            # driver thread returns even after a TimeoutError.  For drivers like
+            # Boson whose cv2.VideoCapture() can hang for minutes (wrong index,
+            # macOS camera permission pending), that deadlocks _connect_worker.
+            # We use shutdown(wait=False) so the stuck thread is abandoned and
+            # _connect_worker can report failure immediately.
+            addr_str = entry.address or "(video-only)"
+            self._log(f"Connecting {desc.display_name} on {addr_str} …")
             log.info("[%s] Connecting %s on %s …",
-                     uid, desc.display_name, entry.address or "?")
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                future = pool.submit(driver_obj.connect)
-                try:
-                    future.result(timeout=_CONNECT_TIMEOUT_S)
-                except concurrent.futures.TimeoutError:
-                    raise TimeoutError(
-                        f"Connect timed out after {_CONNECT_TIMEOUT_S:.0f}s. "
-                        f"Check that the device is powered and not held by "
-                        f"another process (terminal, firmware updater, etc.)."
-                    )
+                     uid, desc.display_name, addr_str)
+            import sys as _sys
+            pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+            future = pool.submit(driver_obj.connect)
+            try:
+                future.result(timeout=_CONNECT_TIMEOUT_S)
+                pool.shutdown(wait=False)
+            except concurrent.futures.TimeoutError:
+                pool.shutdown(wait=False)   # abandon stuck driver thread
+                _macos_hint = (
+                    "\n\nOn macOS, also check:\n"
+                    "  • System Settings → Privacy & Security → Camera\n"
+                    "    → enable SanjINSIGHT (or Terminal if running from source).\n"
+                    "  • For the FLIR Boson, confirm the Video Device Index in\n"
+                    "    Device Manager matches the UVC camera (try 0, 1, 2…)."
+                ) if _sys.platform == "darwin" else ""
+                raise TimeoutError(
+                    f"Connect timed out after {_CONNECT_TIMEOUT_S:.0f}s. "
+                    f"Check that the device is powered and not held by "
+                    f"another process (terminal, firmware updater, etc.)."
+                    + _macos_hint
+                )
 
             log.info("[%s] Connected in %.2fs", uid, time.time() - t0)
 

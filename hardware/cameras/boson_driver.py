@@ -170,10 +170,10 @@ class BosonDriver(CameraDriver):
                 fslp.port.open()
                 self._client = pyClient(fslp=fslp, useDll=False, ex=False)
 
-                # Read serial number (FLR_RESULT enum comparison, not str())
+                # Read serial number via bosonGetCameraSN() (uint32)
                 from hardware.cameras.boson.ClientFiles_Python.ReturnCodes import FLR_RESULT
-                result, sn = self._client.systemGetCameraSerialNumber()
-                if result is FLR_RESULT.R_SUCCESS:
+                result, sn = self._client.bosonGetCameraSN()
+                if result is FLR_RESULT.R_SUCCESS and sn is not None:
                     self._info.serial = str(sn)
                     log.info("Boson serial number: %s", self._info.serial)
                 else:
@@ -205,10 +205,11 @@ class BosonDriver(CameraDriver):
         # DirectShow (CAP_DSHOW) handles these sizes correctly and is the
         # recommended backend for UVC thermal cameras on Windows.
         import sys as _sys
+        video_idx = self._auto_detect_video_index()
         if _sys.platform == "win32":
-            cap = cv2.VideoCapture(self._video_index, cv2.CAP_DSHOW)
+            cap = cv2.VideoCapture(video_idx, cv2.CAP_DSHOW)
         else:
-            cap = cv2.VideoCapture(self._video_index)
+            cap = cv2.VideoCapture(video_idx)
 
         if not cap.isOpened():
             # Serial was opened successfully — close it before raising
@@ -218,21 +219,28 @@ class BosonDriver(CameraDriver):
                 except Exception:
                     pass
                 self._client = None
-            win_hint = (
-                "\n  3. On Windows, try setting 'video_index' to the correct "
-                "DirectShow device index.\n"
-                "     Run: python -c \"import cv2; [print(i, cv2.VideoCapture(i, "
-                "cv2.CAP_DSHOW).isOpened()) for i in range(5)]\""
-            ) if _sys.platform == "win32" else (
-                "\n  3. On macOS, grant Camera access: System Settings → Privacy → Camera."
-            )
+            cam_list = self._enumerate_video_devices()
+            cam_list_str = ("\n  Available video devices:\n" + cam_list) if cam_list else ""
+            if _sys.platform == "win32":
+                hint = (
+                    "\n  3. Set 'Video Device Index' in Device Manager to the correct"
+                    " DirectShow index.\n"
+                    "     Run: python -c \"import cv2; [print(i, cv2.VideoCapture(i,"
+                    " cv2.CAP_DSHOW).isOpened()) for i in range(5)]\""
+                )
+            else:
+                hint = (
+                    "\n  3. Grant Camera access to Terminal (or SanjINSIGHT):\n"
+                    "     System Settings → Privacy & Security → Camera → enable it,\n"
+                    "     then quit and restart the app."
+                    "\n  4. Set the correct 'Video Device Index' in Device Manager."
+                )
             raise RuntimeError(
-                f"FLIR Boson: could not open video device index {self._video_index}.\n"
+                f"FLIR Boson: could not open video device index {video_idx}.\n"
                 "Check:\n"
-                "  1. Boson is connected via USB.\n"
-                "  2. video_index in config.yaml matches the Boson UVC device\n"
-                "     (try incrementing from 0 if another camera is present)."
-                + win_hint
+                "  1. Boson is physically connected via USB (run Scan to refresh).\n"
+                "  2. No other app (QuickTime, Photo Booth) is using the camera."
+                + hint + cam_list_str
             )
 
         # Request 16-bit greyscale (Y16) pixel format for radiometric data.
@@ -245,14 +253,18 @@ class BosonDriver(CameraDriver):
         cap.set(cv2.CAP_PROP_FPS,          self._fps)
         cap.set(cv2.CAP_PROP_CONVERT_RGB,  0)   # raw, no colour conversion
 
-        # Validate that Y16 was accepted
+        # Validate that Y16 was accepted.
+        # macOS AVFoundation does not expose Y16 over UVC — 8-bit AGC fallback
+        # is expected and normal on macOS; log at INFO rather than WARNING there.
         actual_fourcc = int(cap.get(cv2.CAP_PROP_FOURCC))
         if actual_fourcc != y16_fourcc:
             four = "".join(chr((actual_fourcc >> (8 * i)) & 0xFF) for i in range(4))
-            log.warning(
-                "Boson: Y16 pixel format not accepted by the UVC backend "
-                "(got FOURCC '%s'). Frames will be 8-bit AGC output scaled "
-                "to uint16. Radiometric accuracy is reduced.", four.strip()
+            _y16_log = log.info if _sys.platform == "darwin" else log.warning
+            _y16_log(
+                "Boson: Y16 pixel format not available on this platform "
+                "(got FOURCC '%s'). Running in 8-bit AGC mode — frames scaled "
+                "to uint16. Radiometric accuracy is reduced on macOS; "
+                "full 14-bit output is available on Windows.", four.strip()
             )
             self._y16_mode = False
         else:
@@ -267,6 +279,72 @@ class BosonDriver(CameraDriver):
             self._info.model, self._info.serial or "unknown",
             self._video_index, self._y16_mode,
         )
+
+    # ── Video device helpers ───────────────────────────────────────────────────
+
+    def _auto_detect_video_index(self) -> int:
+        """
+        On macOS, use system_profiler to find the AVFoundation index of the
+        first FLIR camera (VID 09CB).  Falls back to the configured video_index
+        on failure or on other platforms.
+
+        This avoids the common mistake of index 0 being the built-in FaceTime
+        camera while the Boson is at index 1 or 2.
+        """
+        import sys as _sys
+        if _sys.platform != "darwin":
+            return self._video_index
+        try:
+            import subprocess, json
+            r = subprocess.run(
+                ["system_profiler", "SPCameraDataType", "-json"],
+                capture_output=True, text=True, timeout=5,
+            )
+            cameras = json.loads(r.stdout).get("SPCameraDataType", [])
+            for i, cam in enumerate(cameras):
+                name = cam.get("_name", "").lower()
+                uid  = cam.get("spcamera_unique-id", "").lower()
+                if "flir" in name or "09cb" in uid:
+                    if i != self._video_index:
+                        log.info(
+                            "Boson: auto-detected UVC at index %d ('%s'). "
+                            "Update 'Video Device Index' in Device Manager to %d "
+                            "to avoid this scan on every connect.",
+                            i, cam.get("_name", ""), i,
+                        )
+                    return i
+        except Exception as exc:
+            log.debug("Boson: video index auto-detect failed: %s", exc)
+        return self._video_index
+
+    def _enumerate_video_devices(self) -> str:
+        """Return a human-readable list of available video devices (best-effort)."""
+        import sys as _sys
+        try:
+            if _sys.platform == "darwin":
+                import subprocess, json
+                r = subprocess.run(
+                    ["system_profiler", "SPCameraDataType", "-json"],
+                    capture_output=True, text=True, timeout=5,
+                )
+                cameras = json.loads(r.stdout).get("SPCameraDataType", [])
+                return "\n".join(
+                    f"    [{i}] {c.get('_name', 'Unknown')}"
+                    for i, c in enumerate(cameras)
+                )
+            elif _sys.platform == "win32":
+                # Quick DirectShow probe — only test indices that open instantly
+                import cv2
+                lines = []
+                for i in range(6):
+                    cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
+                    if cap.isOpened():
+                        lines.append(f"    [{i}] (device found)")
+                        cap.release()
+                return "\n".join(lines)
+        except Exception as exc:
+            log.debug("Boson: enumerate_video_devices failed: %s", exc)
+        return ""
 
     def start(self) -> None:
         # VideoCapture begins delivering frames as soon as it is opened.

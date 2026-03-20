@@ -612,7 +612,7 @@ class SidebarNav(QWidget):
     def select_by_label(self, label: str):
         """Navigate to the sidebar item whose label matches (case-insensitive)."""
         for item in self._sidebar._items:
-            if item.label.lower() == label.lower():
+            if item._item.label.lower() == label.lower():
                 self.navigate_to(item.panel)
                 return
 
