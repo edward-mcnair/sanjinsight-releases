@@ -72,6 +72,16 @@ class FpgaDriver(ABC):
     def close(self) -> None:
         """Stop and close FPGA session."""
 
+    # Aliases so DeviceManager._connect_worker() can call connect()/disconnect()
+    # uniformly across all driver types (cameras, TECs, stages, FPGAs, bias).
+    def connect(self) -> None:
+        """Alias for open() — used by DeviceManager."""
+        self.open()
+
+    def disconnect(self) -> None:
+        """Alias for close() — used by DeviceManager."""
+        self.close()
+
     # ---------------------------------------------------------------- #
     #  Control                                                          #
     # ---------------------------------------------------------------- #

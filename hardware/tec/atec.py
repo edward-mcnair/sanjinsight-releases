@@ -49,6 +49,7 @@ class AtecDriver(TecDriver):
         self._serial_lock = threading.Lock()
 
     def connect(self) -> None:
+        connected_ok = False
         try:
             self._port_lock.acquire()
             self._serial = serial.Serial(
@@ -61,19 +62,18 @@ class AtecDriver(TecDriver):
                 **exclusive_serial_kwargs(),
             )
             self._connected = True
+            connected_ok = True
             log.info("ATEC-302 connected on %s", self._port)
         except ImportError:
-            self._port_lock.release()
             raise RuntimeError(
                 "pyserial not installed. Run: pip install pyserial")
         except serial.SerialException as e:
-            self._port_lock.release()
             raise RuntimeError(
                 f"ATEC-302 connect failed on {self._port}: {e}\n"
                 f"Check port name and cable connection.")
-        except Exception:
-            self._port_lock.release()
-            raise
+        finally:
+            if not connected_ok:
+                self._port_lock.release()
 
     def disconnect(self) -> None:
         if self._serial and self._serial.is_open:

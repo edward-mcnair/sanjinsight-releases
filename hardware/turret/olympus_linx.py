@@ -106,6 +106,7 @@ class OlympusLinxTurret(ObjectiveTurretDriver):
         except ImportError:
             raise RuntimeError(
                 "pyserial not installed.  Run: pip install pyserial")
+        connected_ok = False
         try:
             self._port_lock.acquire()
             self._ser = serial.Serial(
@@ -114,6 +115,7 @@ class OlympusLinxTurret(ObjectiveTurretDriver):
                 write_timeout=self._timeout)
             time.sleep(0.2)   # Arduino resets on serial connect
             self._connected = True
+            connected_ok = True
             log.info("Olympus turret (LINX) connected on %s", self._port)
 
             # Query number of slots and initial position
@@ -130,9 +132,11 @@ class OlympusLinxTurret(ObjectiveTurretDriver):
                 self._cur_pos = 0
 
         except Exception as e:
-            self._port_lock.release()
             raise RuntimeError(
                 f"Olympus turret connect failed on {self._port}: {e}")
+        finally:
+            if not connected_ok:
+                self._port_lock.release()
 
     def disconnect(self) -> None:
         if self._ser:

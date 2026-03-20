@@ -80,6 +80,16 @@ class KeithleyDriver(BiasDriver):
             self._connected = True
 
         except Exception as e:
+            # Clean up partially-opened VISA resources on failure.
+            try:
+                if self._inst is not None:
+                    self._inst.close()
+                    self._inst = None
+                if self._rm is not None:
+                    self._rm.close()
+                    self._rm = None
+            except Exception:
+                pass
             raise RuntimeError(
                 f"Keithley connect failed at {self._address}: {e}\n"
                 f"Check VISA address in NI MAX or Keithley software.")

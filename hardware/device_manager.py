@@ -719,7 +719,12 @@ class DeviceManager:
             desc  = self._entries[uid].descriptor
             dtype = desc.device_type
             driver_obj = self._entries[uid].driver_obj
-            if   dtype == DTYPE_CAMERA:  app_state.cam    = None
+            if dtype == DTYPE_CAMERA:
+                # Clear the correct slot — IR cameras go to ir_cam, TR to cam.
+                if driver_obj is app_state.ir_cam:
+                    app_state.ir_cam = None
+                else:
+                    app_state.cam = None
             elif dtype == DTYPE_FPGA:    app_state.fpga   = None
             elif dtype == DTYPE_STAGE:   app_state.stage  = None
             elif dtype == DTYPE_PROBER:  app_state.prober = None
