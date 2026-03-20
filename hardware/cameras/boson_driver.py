@@ -270,6 +270,27 @@ class BosonDriver(CameraDriver):
         else:
             self._y16_mode = True
 
+        # Verify the video device by reading a test frame and logging its
+        # resolution.  This catches the common macOS issue where system_profiler
+        # indices don't match OpenCV AVFoundation indices, so a webcam at index 1
+        # gets opened instead of the Boson's 320×256 (or 640×512) UVC stream.
+        ret, test_frame = cap.read()
+        if ret and test_frame is not None:
+            h, w = test_frame.shape[:2]
+            log.info("Boson: test frame from index %d: %dx%d dtype=%s",
+                     video_idx, w, h, test_frame.dtype)
+            # If the frame is much larger than the expected Boson resolution
+            # (e.g. 1280x720 from a webcam), try other indices to find the
+            # actual Boson UVC stream.
+            if w > self._W * 2 or h > self._H * 2:
+                log.warning(
+                    "Boson: frame %dx%d at index %d does not match expected "
+                    "%dx%d — probing other indices for the Boson UVC stream.",
+                    w, h, video_idx, self._W, self._H)
+                found = self._probe_video_indices(cap, video_idx)
+                if found is not None:
+                    cap, video_idx = found
+
         with self._cap_lock:
             self._cap = cap
         self._open = True
@@ -279,6 +300,54 @@ class BosonDriver(CameraDriver):
             self._info.model, self._info.serial or "unknown",
             video_idx, self._y16_mode,
         )
+
+    def _probe_video_indices(self, wrong_cap, wrong_idx):
+        """Try other OpenCV indices to find the actual Boson UVC stream.
+
+        Returns (cap, index) tuple on success, or None if no match found.
+        The wrong_cap is released if a better match is found.
+        """
+        import cv2
+        import sys as _sys
+        for idx in range(6):
+            if idx == wrong_idx:
+                continue
+            try:
+                if _sys.platform == "win32":
+                    probe = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
+                else:
+                    probe = cv2.VideoCapture(idx)
+                if not probe.isOpened():
+                    continue
+                ret, f = probe.read()
+                if not ret or f is None:
+                    probe.release()
+                    continue
+                h, w = f.shape[:2]
+                log.info("Boson: probe index %d → %dx%d", idx, w, h)
+                # Accept if resolution matches expected Boson output (±10%)
+                if (abs(w - self._W) <= self._W * 0.1 and
+                        abs(h - self._H) <= self._H * 0.1):
+                    log.info(
+                        "Boson: found matching %dx%d stream at index %d. "
+                        "Update 'Video Device Index' to %d in Device Manager.",
+                        w, h, idx, idx)
+                    # Apply Y16 / resolution settings to the new capture
+                    y16_fourcc = cv2.VideoWriter_fourcc(*"Y16 ")
+                    probe.set(cv2.CAP_PROP_FOURCC, y16_fourcc)
+                    probe.set(cv2.CAP_PROP_FRAME_WIDTH,  self._W)
+                    probe.set(cv2.CAP_PROP_FRAME_HEIGHT, self._H)
+                    probe.set(cv2.CAP_PROP_FPS,          self._fps)
+                    probe.set(cv2.CAP_PROP_CONVERT_RGB,  0)
+                    wrong_cap.release()
+                    return probe, idx
+                probe.release()
+            except Exception:
+                continue
+        log.warning(
+            "Boson: could not find a matching video stream at any index. "
+            "Using index %d despite resolution mismatch.", wrong_idx)
+        return None
 
     # ── Video device helpers ───────────────────────────────────────────────────
 
