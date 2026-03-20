@@ -254,8 +254,7 @@ class CalibrationQualityChart(QWidget):
                     pen=pg.mkPen(color=warning, width=1, style=Qt.DashLine),
                     label="0.80 threshold",
                     labelOpts={"color": warning,
-                               "position": 0.9,
-                               "font": QFont("Menlo", FONT.get("caption", 9))})
+                               "position": 0.9})
                 self._r2_plot.addItem(line)
 
                 _add_text(self._r2_plot,
@@ -421,8 +420,7 @@ class AnalysisHistogramChart(QWidget):
             pos=threshold, angle=90,
             pen=pg.mkPen(color=warning, width=2),
             label=f"threshold {threshold:.1f} °C",
-            labelOpts={"color": warning, "position": 0.85,
-                       "font": QFont("Menlo", FONT.get("caption", 9))})
+            labelOpts={"color": warning, "position": 0.85})
         self._plot.addItem(tl)
 
         # Summary annotation

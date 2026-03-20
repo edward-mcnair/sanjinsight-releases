@@ -2316,10 +2316,11 @@ class MainWindow(QMainWindow):
 
             hw_service.shutdown()          # stop simulated drivers
 
-            # Clear stale demo-camera references so app_state.cam returns None
-            # until a real driver is available.  Real drivers are restored below.
+            # Clear stale demo-camera references and the old demo pipeline
+            # so acquisition uses the real camera, not the simulated one.
             _as.cam    = None
             _as.ir_cam = None
+            _as.pipeline = None
             _as.active_camera_type = "tr"  # reset to default
 
             # Restore real drivers saved above.
@@ -2329,6 +2330,24 @@ class MainWindow(QMainWindow):
                     _as.active_camera_type = "ir"
             if _real_cam is not None:
                 _as.cam = _real_cam
+
+            # Create a new acquisition pipeline for the real camera so
+            # COLD/HOT capture uses the actual device, not the stale
+            # demo pipeline.
+            _active = _real_cam or _real_ir
+            if _active is not None:
+                try:
+                    pipeline = AcquisitionPipeline(
+                        _active,
+                        fpga=_as.fpga,
+                        bias=_as.bias)
+                    pipeline.on_progress = lambda p: hw_service.acq_progress.emit(p)
+                    pipeline.on_complete = lambda r: hw_service.acq_complete.emit(r)
+                    pipeline.on_error    = lambda e: hw_service.error.emit(e)
+                    _as.pipeline = pipeline
+                except Exception:
+                    log.debug("Failed to create pipeline for real camera",
+                              exc_info=True)
 
             hw_service.start_idle()        # restart grab loop with real camera
 
