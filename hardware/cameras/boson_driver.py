@@ -70,21 +70,37 @@ class BosonDriver(CameraDriver):
 
     @classmethod
     def preflight(cls) -> tuple:
+        import sys as _sys
+        _frozen = getattr(_sys, 'frozen', False)
+
         issues = []
         try:
             import cv2  # noqa: F401
         except ImportError:
-            issues.append(
-                "opencv-python is not installed.\n"
-                "  Fix: pip install opencv-python"
-            )
+            if _frozen:
+                issues.append(
+                    "opencv-python (cv2) could not be loaded from the application bundle.\n"
+                    "  This is an internal packaging error.\n"
+                    "  Fix: reinstall SanjINSIGHT from the latest installer."
+                )
+            else:
+                issues.append(
+                    "opencv-python is not installed.\n"
+                    "  Fix: pip install opencv-python"
+                )
         try:
             import serial  # noqa: F401
         except ImportError:
-            issues.append(
-                "pyserial is not installed.\n"
-                "  Fix: pip install pyserial"
-            )
+            if _frozen:
+                issues.append(
+                    "pyserial could not be loaded from the application bundle.\n"
+                    "  Fix: reinstall SanjINSIGHT from the latest installer."
+                )
+            else:
+                issues.append(
+                    "pyserial is not installed.\n"
+                    "  Fix: pip install pyserial"
+                )
         # Use a relative-style import-by-path so the check works both in the
         # source tree and inside a frozen PyInstaller bundle.
         try:
