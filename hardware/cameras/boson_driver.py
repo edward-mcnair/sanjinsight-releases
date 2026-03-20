@@ -183,7 +183,17 @@ class BosonDriver(CameraDriver):
             )
 
         # ── 2. Video channel ──────────────────────────────────────────────────
-        cap = cv2.VideoCapture(self._video_index)
+        # On Windows, cv2.VideoCapture() defaults to the MSMF (Media Foundation)
+        # backend, which rejects non-standard resolutions like the Boson's native
+        # 320×256 and 640×512 sizes — resulting in failure to open or black frames.
+        # DirectShow (CAP_DSHOW) handles these sizes correctly and is the
+        # recommended backend for UVC thermal cameras on Windows.
+        import sys as _sys
+        if _sys.platform == "win32":
+            cap = cv2.VideoCapture(self._video_index, cv2.CAP_DSHOW)
+        else:
+            cap = cv2.VideoCapture(self._video_index)
+
         if not cap.isOpened():
             # Serial was opened successfully — close it before raising
             if self._client:
@@ -192,13 +202,21 @@ class BosonDriver(CameraDriver):
                 except Exception:
                     pass
                 self._client = None
+            win_hint = (
+                "\n  3. On Windows, try setting 'video_index' to the correct "
+                "DirectShow device index.\n"
+                "     Run: python -c \"import cv2; [print(i, cv2.VideoCapture(i, "
+                "cv2.CAP_DSHOW).isOpened()) for i in range(5)]\""
+            ) if _sys.platform == "win32" else (
+                "\n  3. On macOS, grant Camera access: System Settings → Privacy → Camera."
+            )
             raise RuntimeError(
                 f"FLIR Boson: could not open video device index {self._video_index}.\n"
                 "Check:\n"
                 "  1. Boson is connected via USB.\n"
                 "  2. video_index in config.yaml matches the Boson UVC device\n"
-                "     (try incrementing from 0 if another camera is present).\n"
-                "  3. On macOS, grant Camera access: System Settings → Privacy → Camera."
+                "     (try incrementing from 0 if another camera is present)."
+                + win_hint
             )
 
         # Request 16-bit greyscale (Y16) pixel format for radiometric data.

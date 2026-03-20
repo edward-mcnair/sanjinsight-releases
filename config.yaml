@@ -56,7 +56,7 @@ hardware:
   # name alone — set it here and in Device Manager so the UI shows the
   # correct modality label and scan options.
   #   tr  — thermoreflectance camera (Basler, NI IMAQdx, DirectShow, …)
-  #   ir  — infrared / uncooled bolometer camera (FLIR Spinnaker, …)
+  #   ir  — infrared / uncooled bolometer camera (FLIR Boson, FLIR-based OEM camera)
 
   camera:
     enabled: true
@@ -67,6 +67,11 @@ hardware:
     #              The name displayed there (e.g. "cam0", "cam4") goes here.
     #              Names are assigned by enumeration order and can change if
     #              cameras are reconnected — verify after any USB change.
+    #              Typical names by camera model:
+    #                Basler acA1920-155um        → "cam4" (or "cam0" if only camera)
+    #                Basler a2A1280-125umSWIR    → "cam0" (check NI MAX after connect)
+    #                Allied Vision Goldeye G-032 → "cam3" or the name shown in NI MAX
+    #                Photonfocus MV4-D1280U      → varies; check NI MAX after connect
     camera_name: "cam4"
     width: 1920
     height: 1200
