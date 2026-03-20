@@ -822,6 +822,7 @@ class MainWindow(QMainWindow):
         ]
 
     def _connect_signals(self):
+        self._last_ir_frame = None      # most recent frame for emissivity capture
         signals.new_live_frame.connect(self._on_frame)
         signals.tec_status.connect(self._on_tec)
         signals.fpga_status.connect(self._on_fpga)
@@ -992,6 +993,7 @@ class MainWindow(QMainWindow):
         # we process this one.  This keeps Qt's event queue bounded to ≤1
         # pending frame regardless of camera fps or VM event-loop latency.
         hw_service.ack_camera_frame()
+        self._last_ir_frame = frame     # keep latest for emissivity capture
         self._camera_tab.update_frame(frame)
         self._acquire_tab.update_live(frame)
         self._roi_tab.update_frame(frame.data)
@@ -1007,6 +1009,20 @@ class MainWindow(QMainWindow):
             f"Camera: {cam.info.model if cam else ''}  |  "
             f"Frame {frame.frame_index}  |  "
             f"Exp {frame.exposure_us:.0f}μs")
+
+    def _read_ir_camera_temp(self) -> float:
+        """Return the mean pixel value of the latest IR frame (°C-equivalent).
+
+        Used by the emissivity tab's "Capture from camera" button.
+        On macOS the Boson runs in 8-bit AGC mode (uint8 scaled to uint16),
+        so the value is an uncalibrated mean — the user enters the true
+        blackbody temperature manually.
+        """
+        f = self._last_ir_frame
+        if f is None or f.data is None:
+            raise RuntimeError("No IR frame available — is the camera running?")
+        import numpy as np
+        return float(np.mean(f.data))
 
     def _on_tec(self, index, status):
         self._temp_tab.update_tec(index, status)
@@ -1214,6 +1230,16 @@ class MainWindow(QMainWindow):
         # finishes initialising on its background thread.
         if "camera" in key:
             self._refresh_all_camera_selectors()
+
+        # Wire the emissivity tab's "Capture from camera" button to the
+        # live IR camera when an IR camera connects (or disconnect it).
+        if "ir" in key or "camera" in key:
+            ir = app_state.ir_cam if ok else None
+            if ir is not None:
+                self._emissivity_tab.set_camera_temp_source(
+                    self._read_ir_camera_temp)
+            else:
+                self._emissivity_tab.set_camera_temp_source(None)
 
         # Reveal driver-specific UI panels for BNC 745 / AMCAD BILT
         if "fpga" in key:
@@ -3069,6 +3095,11 @@ if __name__ == "__main__":
         window.setWindowIcon(_app_icon)   # title-bar / taskbar icon
 
     # ── Demo mode: activate immediately, skip the startup dialog ──────
+    # If a device was previously connected, try to auto-connect it after
+    # demo mode starts — the _handle_real_device_in_demo path will
+    # automatically exit demo mode once the connection succeeds.
+    _remembered_uid = config.get_pref("hw.last_connected_device", None)
+
     if _FORCE_DEMO:
         app_state.demo_mode = True
         window._header.set_demo_mode(True)
@@ -3076,6 +3107,29 @@ if __name__ == "__main__":
             f"SanjINSIGHT {version_string()}  \u2014  DEMO MODE  (simulated hardware)", 0)
         signals.log_message.emit("Running in demo mode \u2014 all hardware is simulated")
         hw_service.start_demo()
+
+        # Auto-connect the last-used device in the background.
+        if _remembered_uid is not None:
+            def _auto_reconnect():
+                import time as _t
+                _t.sleep(1.5)   # let demo mode finish initialising
+                dm = window._device_mgr
+                entry = dm.get(_remembered_uid)
+                if entry is None:
+                    log.info("Auto-reconnect: device %s not in registry", _remembered_uid)
+                    return
+                if entry.address:
+                    log.info("Auto-reconnect: attempting %s on %s …",
+                             entry.descriptor.display_name, entry.address)
+                    dm.connect(_remembered_uid)
+                else:
+                    log.info("Auto-reconnect: no saved address for %s — skipping",
+                             _remembered_uid)
+
+            threading.Thread(
+                target=_auto_reconnect, daemon=True,
+                name="hw.auto_reconnect"
+            ).start()
 
     # ── Normal startup: Device Manager as the startup gate ───────────
     else:

@@ -414,6 +414,13 @@ class DeviceManager:
             self._emit(uid, DeviceState.CONNECTED)
             self._inject_into_app(uid, driver_obj)
 
+            # Remember this device so the app can auto-connect on next launch.
+            try:
+                import config as _cfg
+                _cfg.set_pref("hw.last_connected_device", uid)
+            except Exception:
+                pass
+
             if self._post_inject_cb:
                 try:
                     self._post_inject_cb(uid, driver_obj)
