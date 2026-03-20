@@ -17,7 +17,10 @@ Layout (QSplitter Horizontal)
 
 from __future__ import annotations
 
+import logging
 import threading
+
+log = logging.getLogger(__name__)
 
 import numpy as np
 from PyQt5.QtWidgets import (
@@ -217,7 +220,7 @@ class _ReadinessPanel(QGroupBox):
                     self._cam_row.set_action_tooltip("Autofocus requires a Z stage")
 
         except Exception:
-            pass
+            log.debug("Readiness panel refresh failed", exc_info=True)
 
     def _do_home(self) -> None:
         self._homing = True

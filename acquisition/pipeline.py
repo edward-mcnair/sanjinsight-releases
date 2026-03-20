@@ -252,7 +252,7 @@ class AcquisitionPipeline:
             try:
                 self.on_progress(p)
             except Exception:
-                pass
+                log.debug("Progress callback failed", exc_info=True)
 
     def _run(self, n_frames: int, inter_phase_delay: float):
         self._state  = AcqState.CAPTURING

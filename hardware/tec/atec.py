@@ -6,7 +6,7 @@ Driver for ATEC-302 TEC controller via Modbus-style serial communication.
 Requires: pip install pyserial
 
 Config keys (under hardware.tec_atec):
-    port:     "COM4"
+    port:     ""        Serial port (Windows: COMx, macOS: /dev/cu.usbmodemXXX)
     baudrate: 9600
     address:  1
     timeout:  1.0
@@ -37,7 +37,7 @@ class AtecDriver(TecDriver):
 
     def __init__(self, cfg: dict):
         super().__init__(cfg)
-        self._port     = cfg.get("port",     "COM4")
+        self._port     = cfg.get("port",     "")
         self._baudrate = cfg.get("baudrate", 9600)
         self._address  = cfg.get("address",  1)
         self._timeout  = cfg.get("timeout",  1.0)
@@ -49,6 +49,11 @@ class AtecDriver(TecDriver):
         self._serial_lock = threading.Lock()
 
     def connect(self) -> None:
+        if not self._port:
+            raise RuntimeError(
+                "No serial port configured for ATEC-302 TEC.\n\n"
+                "Set the port in Device Manager (e.g. COM4 on Windows, "
+                "/dev/cu.usbmodemXXX on macOS).")
         connected_ok = False
         try:
             self._port_lock.acquire()

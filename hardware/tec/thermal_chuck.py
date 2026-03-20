@@ -105,7 +105,7 @@ class ThermalChuckDriver(TecDriver):
 
     def __init__(self, cfg: dict):
         super().__init__(cfg)
-        self._port    = cfg.get("port",     "COM5")
+        self._port    = cfg.get("port",     "")
         self._baud    = int(cfg.get("baud",  9600))
         self._timeout = float(cfg.get("timeout", 5.0))
 
@@ -137,6 +137,11 @@ class ThermalChuckDriver(TecDriver):
     # ---------------------------------------------------------------- #
 
     def connect(self) -> None:
+        if not self._port:
+            raise RuntimeError(
+                "No serial port configured for thermal chuck.\n\n"
+                "Set the port in Device Manager (e.g. COM5 on Windows, "
+                "/dev/cu.usbmodemXXX on macOS).")
         try:
             import serial
         except ImportError:

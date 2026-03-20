@@ -6,7 +6,7 @@ Driver for Meerstetter TEC-1089 controller via pyMeCom library.
 Requires: pip install pyMeCom
 
 Config keys (under hardware.tec_meerstetter):
-    port:     "COM3"    Serial port (Windows: COMx, Mac/Linux: /dev/ttyUSBx)
+    port:     ""        Serial port (Windows: COMx, macOS: /dev/cu.usbmodemXXX)
     address:  2         Device address set on the unit
     timeout:  1.0
 """
@@ -46,7 +46,7 @@ class MeerstetterDriver(TecDriver):
 
     def __init__(self, cfg: dict):
         super().__init__(cfg)
-        self._port    = cfg.get("port",    "COM3")
+        self._port    = cfg.get("port",    "")
         self._address = cfg.get("address", 2)
         self._timeout = cfg.get("timeout", 10.0)
 
@@ -69,6 +69,11 @@ class MeerstetterDriver(TecDriver):
     def connect(self) -> None:
         # Acquire port lock first; release it on any failure (try/finally ensures
         # the lock is released even on BaseException such as KeyboardInterrupt — L-5 fix).
+        if not self._port:
+            raise RuntimeError(
+                "No serial port configured for Meerstetter TEC.\n\n"
+                "Set the port in Device Manager (e.g. COM3 on Windows, "
+                "/dev/cu.usbmodemXXX on macOS).")
         self._port_lock.acquire()
         _connected_ok = False
         try:

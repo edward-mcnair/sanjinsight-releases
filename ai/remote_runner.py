@@ -389,28 +389,32 @@ class RemoteRunner(QObject):
 
         status, resp_obj = self._post_anthropic("/v1/messages", payload, stream=True)
         if status != 200:
+            self._close_stream(resp_obj)
             raise RuntimeError(f"Anthropic API HTTP {status}")
 
         full_text: list[str] = []
-        for line in resp_obj:
-            if self._cancel_event.is_set():
-                log.debug("RemoteRunner: Anthropic stream cancelled")
-                break
-            line = line.decode("utf-8", errors="replace").rstrip()
-            if not line.startswith("data: "):
-                continue
-            data = line[6:]
-            if data == "[DONE]":
-                break
-            try:
-                obj = json.loads(data)
-            except json.JSONDecodeError:
-                continue
-            if obj.get("type") == "content_block_delta":
-                token = obj.get("delta", {}).get("text", "")
-                if token:
-                    full_text.append(token)
-                    self.token_ready.emit(token)
+        try:
+            for line in resp_obj:
+                if self._cancel_event.is_set():
+                    log.debug("RemoteRunner: Anthropic stream cancelled")
+                    break
+                line = line.decode("utf-8", errors="replace").rstrip()
+                if not line.startswith("data: "):
+                    continue
+                data = line[6:]
+                if data == "[DONE]":
+                    break
+                try:
+                    obj = json.loads(data)
+                except json.JSONDecodeError:
+                    continue
+                if obj.get("type") == "content_block_delta":
+                    token = obj.get("delta", {}).get("text", "")
+                    if token:
+                        full_text.append(token)
+                        self.token_ready.emit(token)
+        finally:
+            self._close_stream(resp_obj)
         return "".join(full_text)
 
     # ── OpenAI streaming ─────────────────────────────────────────────────
@@ -427,29 +431,33 @@ class RemoteRunner(QObject):
         status, resp_obj = self._post_openai(
             "/v1/chat/completions", payload, stream=True)
         if status != 200:
+            self._close_stream(resp_obj)
             raise RuntimeError(f"OpenAI API HTTP {status}")
 
         full_text: list[str] = []
-        for line in resp_obj:
-            if self._cancel_event.is_set():
-                log.debug("RemoteRunner: OpenAI stream cancelled")
-                break
-            line = line.decode("utf-8", errors="replace").rstrip()
-            if not line.startswith("data: "):
-                continue
-            data = line[6:].strip()
-            if data == "[DONE]":
-                break
-            try:
-                obj = json.loads(data)
-            except json.JSONDecodeError:
-                continue
-            token = (obj.get("choices", [{}])[0]
-                        .get("delta", {})
-                        .get("content", ""))
-            if token:
-                full_text.append(token)
-                self.token_ready.emit(token)
+        try:
+            for line in resp_obj:
+                if self._cancel_event.is_set():
+                    log.debug("RemoteRunner: OpenAI stream cancelled")
+                    break
+                line = line.decode("utf-8", errors="replace").rstrip()
+                if not line.startswith("data: "):
+                    continue
+                data = line[6:].strip()
+                if data == "[DONE]":
+                    break
+                try:
+                    obj = json.loads(data)
+                except json.JSONDecodeError:
+                    continue
+                token = (obj.get("choices", [{}])[0]
+                            .get("delta", {})
+                            .get("content", ""))
+                if token:
+                    full_text.append(token)
+                    self.token_ready.emit(token)
+        finally:
+            self._close_stream(resp_obj)
         return "".join(full_text)
 
     # ── Ollama streaming (OpenAI-compatible, plain HTTP, localhost) ───────
@@ -482,30 +490,44 @@ class RemoteRunner(QObject):
                 f"Cannot reach Ollama at localhost:{_OLLAMA_PORT}: {exc}") from exc
 
         if resp.status != 200:
+            conn.close()
             raise RuntimeError(f"Ollama HTTP {resp.status}")
 
         full_text: list[str] = []
-        for line in resp:
-            if self._cancel_event.is_set():
-                log.debug("RemoteRunner: Ollama stream cancelled")
-                break
-            line = line.decode("utf-8", errors="replace").rstrip()
-            if not line.startswith("data: "):
-                continue
-            data = line[6:].strip()
-            if data == "[DONE]":
-                break
-            try:
-                obj = json.loads(data)
-            except json.JSONDecodeError:
-                continue
-            token = (obj.get("choices", [{}])[0]
-                        .get("delta", {})
-                        .get("content", ""))
-            if token:
-                full_text.append(token)
-                self.token_ready.emit(token)
+        try:
+            for line in resp:
+                if self._cancel_event.is_set():
+                    log.debug("RemoteRunner: Ollama stream cancelled")
+                    break
+                line = line.decode("utf-8", errors="replace").rstrip()
+                if not line.startswith("data: "):
+                    continue
+                data = line[6:].strip()
+                if data == "[DONE]":
+                    break
+                try:
+                    obj = json.loads(data)
+                except json.JSONDecodeError:
+                    continue
+                token = (obj.get("choices", [{}])[0]
+                            .get("delta", {})
+                            .get("content", ""))
+                if token:
+                    full_text.append(token)
+                    self.token_ready.emit(token)
+        finally:
+            conn.close()
         return "".join(full_text)
+
+    @staticmethod
+    def _close_stream(resp_obj) -> None:
+        """Close the HTTP connection attached to a streaming response."""
+        try:
+            conn = getattr(resp_obj, "_conn_ref", None)
+            if conn is not None:
+                conn.close()
+        except Exception:
+            pass
 
     # ── HTTP helpers ─────────────────────────────────────────────────────
 
@@ -521,7 +543,8 @@ class RemoteRunner(QObject):
         conn.request("POST", path, body=body, headers=headers)
         resp = conn.getresponse()
         if stream:
-            return resp.status, resp   # caller iterates response lines
+            resp._conn_ref = conn  # attach so caller can close via _close_stream
+            return resp.status, resp
         data = resp.read()
         conn.close()
         return resp.status, data
@@ -537,6 +560,7 @@ class RemoteRunner(QObject):
         conn.request("POST", path, body=body, headers=headers)
         resp = conn.getresponse()
         if stream:
+            resp._conn_ref = conn
             return resp.status, resp
         data = resp.read()
         conn.close()

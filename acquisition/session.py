@@ -275,7 +275,7 @@ class Session:
             thumb = cv2.resize(np.stack([r, g, b], axis=-1), (160, 120))
             cv2.imwrite(os.path.join(folder, "thumbnail.png"), thumb)
         except Exception:
-            pass
+            log.debug("Thumbnail save failed for %s", folder, exc_info=True)
 
     @staticmethod
     def load(folder: str) -> "Session":

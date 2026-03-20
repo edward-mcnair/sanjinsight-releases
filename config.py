@@ -78,8 +78,8 @@ _DEFAULT_CONFIG: dict = {
         "imaging_system":  "hybrid",
         "camera":          {"driver": "simulated"},
         "fpga":            {"driver": "simulated"},
-        "tec_meerstetter": {"driver": "simulated", "port": "COM3"},
-        "tec_atec":        {"driver": "simulated", "port": "COM4"},
+        "tec_meerstetter": {"driver": "simulated", "port": ""},
+        "tec_atec":        {"driver": "simulated", "port": ""},
         "stage":           {"driver": "simulated"},
         "bias":            {"driver": "simulated"},
         # Poll intervals — increase these on slow USB/VM setups (e.g. Parallels)

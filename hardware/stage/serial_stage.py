@@ -34,7 +34,7 @@ class SerialStageDriver(StageDriver):
 
     def __init__(self, cfg: dict):
         super().__init__(cfg)
-        self._port    = cfg.get("port",    "COM5")
+        self._port    = cfg.get("port",    "")
         self._baud    = cfg.get("baudrate", 9600)
         self._dialect = cfg.get("dialect", "prior").lower()
         self._timeout = cfg.get("timeout", 1.0)
@@ -43,6 +43,11 @@ class SerialStageDriver(StageDriver):
         self._port_lock = PortLock(self._port)
 
     def connect(self) -> None:
+        if not self._port:
+            raise RuntimeError(
+                "No serial port configured for stage.\n\n"
+                "Set the port in Device Manager (e.g. COM5 on Windows, "
+                "/dev/cu.usbmodemXXX on macOS).")
         try:
             self._port_lock.acquire()
             self._serial = serial.Serial(

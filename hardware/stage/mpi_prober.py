@@ -87,7 +87,7 @@ class MpiProberDriver(StageDriver):
 
     def __init__(self, cfg: dict):
         super().__init__(cfg)
-        self._port       = cfg.get("port",       "COM6")
+        self._port       = cfg.get("port",       "")
         self._baud       = int(cfg.get("baud",   115200))
         self._timeout    = float(cfg.get("timeout", 5.0))
         self._settle_ms  = float(cfg.get("settle_ms", 200))
@@ -126,6 +126,11 @@ class MpiProberDriver(StageDriver):
     # ---------------------------------------------------------------- #
 
     def connect(self) -> None:
+        if not self._port:
+            raise RuntimeError(
+                "No serial port configured for MPI prober.\n\n"
+                "Set the port in Device Manager (e.g. COM6 on Windows, "
+                "/dev/cu.usbmodemXXX on macOS).")
         try:
             import serial
         except ImportError:
