@@ -490,10 +490,8 @@ class MainWindow(QMainWindow):
         self._bias_tab     = BiasTab(hw_service=hw_service)
         self._stage_tab    = StageTab(hw_service=hw_service)
 
-        # Stage / Prober / Temperature "Open Device Manager" — standalone
+        # Stage "Open Device Manager" — standalone, wire here
         self._stage_tab.open_device_manager.connect(self._open_device_manager)
-        self._prober_tab.open_device_manager.connect(self._open_device_manager)
-        self._temp_tab.open_device_manager.connect(self._open_device_manager)
 
         self._roi_tab      = RoiTab()
         self._af_tab       = AutofocusTab()
@@ -546,6 +544,8 @@ class MainWindow(QMainWindow):
         self._movie_tab    = MovieTab()                          # ← burst capture
         self._transient_tab = TransientTab()                    # ← time-resolved
         self._prober_tab   = ProberTab()                        # ← probe chuck
+        self._prober_tab.open_device_manager.connect(self._open_device_manager)
+        self._temp_tab.open_device_manager.connect(self._open_device_manager)
         self._wavelength_tab   = WavelengthTab()               # ← monochromator control
         self._emissivity_tab   = EmissivityCalTab()             # ← IR emissivity cal
         self._timing_tab       = TimingDiagramTab()             # ← timing waveform viewer
