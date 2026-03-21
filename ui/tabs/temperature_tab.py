@@ -24,13 +24,14 @@ log = logging.getLogger(__name__)
 
 from PyQt5.QtWidgets import (
     QWidget, QLabel, QPushButton, QDoubleSpinBox, QVBoxLayout,
-    QHBoxLayout, QGroupBox, QFrame)
-from PyQt5.QtCore    import Qt, QTimer
+    QHBoxLayout, QGroupBox, QFrame, QStackedWidget)
+from PyQt5.QtCore    import Qt, QTimer, pyqtSignal
 
 from hardware.app_state    import app_state
 from ui.widgets.temp_plot  import TempPlot
 from ui.widgets.collapsible_panel import CollapsiblePanel
 from ui.theme import FONT, PALETTE, scaled_qss
+from ui.icons import make_icon_label, IC
 
 # Approximate TEC temperature ramp rate (°C per minute).
 # Used for the stabilization time estimate shown in the UI.
@@ -42,6 +43,9 @@ _CHUCK_STAB_DURATION_S   = 5.0   # seconds within band
 
 
 class TemperatureTab(QWidget):
+
+    open_device_manager = pyqtSignal()
+
     def __init__(self, n_tecs: int, hw_service=None, has_chuck: bool = False):
         super().__init__()
         self._hw        = hw_service
@@ -50,7 +54,21 @@ class TemperatureTab(QWidget):
         # Chuck stability tracking (software-side, no HW flag from chuck driver)
         self._chuck_in_band_since: float | None = None
 
-        root = QVBoxLayout(self)
+        # Outer layout holds the stacked widget
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        self._stack = QStackedWidget()
+        outer.addWidget(self._stack)
+
+        # Page 0: not-connected empty state
+        self._stack.addWidget(self._build_empty_state(
+            "Temperature Controller", "TEC",
+            "Connect a TEC controller in Device Manager to enable "
+            "temperature control and monitoring."))
+
+        # Page 1: full controls
+        controls = QWidget()
+        root = QVBoxLayout(controls)
         root.setContentsMargins(10, 10, 10, 10)
         root.setSpacing(10)
 
@@ -68,6 +86,54 @@ class TemperatureTab(QWidget):
         self._chuck_box.setVisible(True)   # always render; update_chuck hides content if N/A
 
         root.addStretch()
+        self._stack.addWidget(controls)
+        self._stack.setCurrentIndex(0)  # empty state until device connects
+
+    def _build_empty_state(self, title: str, device: str, tip: str) -> QWidget:
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.setAlignment(Qt.AlignCenter)
+        lay.setSpacing(16)
+
+        icon_lbl = make_icon_label(IC.LINK_OFF, color="#555555", size=64)
+        icon_lbl.setAlignment(Qt.AlignCenter)
+
+        title_lbl = QLabel(f"{title} Not Connected")
+        title_lbl.setAlignment(Qt.AlignCenter)
+        title_lbl.setStyleSheet(
+            f"font-size: {FONT['readoutSm']}pt; font-weight: bold; color: #888;")
+
+        tip_lbl = QLabel(tip)
+        tip_lbl.setAlignment(Qt.AlignCenter)
+        tip_lbl.setWordWrap(True)
+        tip_lbl.setStyleSheet(f"font-size: {FONT['label']}pt; color: #555;")
+        tip_lbl.setMaximumWidth(400)
+
+        btn = QPushButton("Open Device Manager")
+        btn.setFixedWidth(200)
+        btn.setFixedHeight(36)
+        btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {PALETTE.get('surface','#2d2d2d')}; color: #00d4aa;
+                border: 1px solid #00d4aa66; border-radius: 5px;
+                font-size: {FONT['label']}pt; font-weight: 600;
+            }}
+            QPushButton:hover {{ background: {PALETTE.get('surface2','#3d3d3d')}; }}
+        """)
+        btn.clicked.connect(self.open_device_manager)
+
+        lay.addStretch()
+        lay.addWidget(icon_lbl)
+        lay.addWidget(title_lbl)
+        lay.addWidget(tip_lbl)
+        lay.addSpacing(8)
+        lay.addWidget(btn, 0, Qt.AlignCenter)
+        lay.addStretch()
+        return w
+
+    def set_hardware_available(self, available: bool) -> None:
+        """Switch between empty state (page 0) and full controls (page 1)."""
+        self._stack.setCurrentIndex(1 if available else 0)
 
     def _build_tec(self, title, tec_index):
         box = QGroupBox(title)

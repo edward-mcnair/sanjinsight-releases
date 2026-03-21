@@ -490,8 +490,10 @@ class MainWindow(QMainWindow):
         self._bias_tab     = BiasTab(hw_service=hw_service)
         self._stage_tab    = StageTab(hw_service=hw_service)
 
-        # Stage "Open Device Manager" — standalone, wire here
+        # Stage / Prober / Temperature "Open Device Manager" — standalone
         self._stage_tab.open_device_manager.connect(self._open_device_manager)
+        self._prober_tab.open_device_manager.connect(self._open_device_manager)
+        self._temp_tab.open_device_manager.connect(self._open_device_manager)
 
         self._roi_tab      = RoiTab()
         self._af_tab       = AutofocusTab()
@@ -1217,6 +1219,9 @@ class MainWindow(QMainWindow):
         Refreshes hardware-readiness labels in the acquisition tabs that
         display a static HW status panel (populated at showEvent but not
         otherwise updated while the tab is already visible).
+
+        Also toggles Tier-1 tab empty-state placeholders so controls are
+        hidden when the owning device is absent (unless demo mode is active).
         """
         try:
             self._movie_tab._refresh_hw()
@@ -1230,6 +1235,16 @@ class MainWindow(QMainWindow):
         # finishes initialising on its background thread.
         if "camera" in key:
             self._refresh_all_camera_selectors()
+            # Refresh AutoScan TR/IR section visibility
+            try:
+                self._autoscan_tab.refresh_active_camera()
+            except Exception:
+                log.debug("AutoScan camera refresh failed", exc_info=True)
+            # Refresh Capture tab for TR/IR mode
+            try:
+                self._acquire_tab.refresh_camera_mode()
+            except Exception:
+                log.debug("AcquireTab camera refresh failed", exc_info=True)
 
         # Wire the emissivity tab's "Capture from camera" button to the
         # live IR camera when an IR camera connects (or disconnect it).
@@ -1247,6 +1262,11 @@ class MainWindow(QMainWindow):
         elif "bias" in key:
             self._bias_tab.set_bias_driver(app_state.bias if ok else None)
 
+        # Toggle Tier-1 tab empty-state placeholders.
+        # In demo mode all tabs stay fully visible.
+        if not app_state.demo_mode:
+            self._refresh_tab_availability(key, ok)
+
         # Re-evaluate required-device readiness after every hotplug event
         self._update_safe_mode()
 
@@ -1261,6 +1281,40 @@ class MainWindow(QMainWindow):
             else:
                 self._toasts.show_warning(f"{label} disconnected",
                                           auto_dismiss_ms=0)
+
+    def _refresh_tab_availability(self, key: str = "", ok: bool = True):
+        """Toggle Tier-1 tab empty-state placeholders based on device presence.
+
+        Called from _on_device_hotplug and during startup.  If *key* is empty
+        every tab is re-evaluated; otherwise only the tab matching *key*.
+        """
+        _map = {
+            "stage":     (self._stage_tab,   lambda: app_state.stage is not None),
+            "prober":    (self._prober_tab,  lambda: app_state.prober is not None),
+            "camera":    (self._camera_tab,  lambda: app_state.cam is not None),
+            "ir_camera": (self._camera_tab,  lambda: app_state.cam is not None),
+            "fpga":      (self._fpga_tab,    lambda: app_state.fpga is not None),
+            "bias":      (self._bias_tab,    lambda: app_state.bias is not None),
+            "tec":       (self._temp_tab,    lambda: len(app_state.tecs) > 0),
+        }
+        if key:
+            # Refresh only the matching tab(s)
+            for k, (tab, test) in _map.items():
+                if k in key:
+                    if hasattr(tab, 'set_hardware_available'):
+                        tab.set_hardware_available(test())
+        else:
+            # Full refresh (startup)
+            for tab, test in _map.values():
+                if hasattr(tab, 'set_hardware_available'):
+                    tab.set_hardware_available(test())
+
+    def _show_all_tabs(self) -> None:
+        """Show full controls on every Tier-1 tab (for demo mode)."""
+        for tab in (self._stage_tab, self._prober_tab, self._camera_tab,
+                    self._fpga_tab, self._bias_tab, self._temp_tab):
+            if hasattr(tab, 'set_hardware_available'):
+                tab.set_hardware_available(True)
 
     def _update_safe_mode(self) -> None:
         """
@@ -2227,6 +2281,8 @@ class MainWindow(QMainWindow):
         _app_state.demo_mode = True
         _app_state.tecs      = []
         self._header.set_demo_mode(True)
+        # Ensure all Tier-1 tabs show full controls in demo mode
+        self._show_all_tabs()
         self._status.showMessage(
             f"SanjINSIGHT {version_string()}  \u2014  DEMO MODE  "
             f"(simulated hardware)", 0)
@@ -3107,6 +3163,7 @@ if __name__ == "__main__":
             f"SanjINSIGHT {version_string()}  \u2014  DEMO MODE  (simulated hardware)", 0)
         signals.log_message.emit("Running in demo mode \u2014 all hardware is simulated")
         hw_service.start_demo()
+        window._show_all_tabs()  # demo mode: all tabs show full controls
 
         # Auto-connect the last-used device in the background.
         if _remembered_uid is not None:

@@ -25,15 +25,15 @@ log = logging.getLogger(__name__)
 from PyQt5.QtWidgets import (
     QWidget, QLabel, QPushButton, QDoubleSpinBox, QSpinBox,
     QVBoxLayout, QHBoxLayout, QGridLayout, QGroupBox,
-    QProgressBar, QSizePolicy, QMessageBox)
-from PyQt5.QtCore import Qt, QTimer, QRect, QPoint
+    QProgressBar, QSizePolicy, QMessageBox, QStackedWidget)
+from PyQt5.QtCore import Qt, QTimer, QRect, QPoint, pyqtSignal
 from PyQt5.QtGui  import (QPainter, QColor, QPen, QFont,
                            QBrush, QFontMetrics)
 
 from hardware.app_state import app_state
 from ui.theme      import FONT, PALETTE
 from ui.font_utils import mono_font
-from ui.icons import set_btn_icon
+from ui.icons import set_btn_icon, make_icon_label, IC
 
 
 # ------------------------------------------------------------------ #
@@ -172,11 +172,27 @@ class ProberTab(QWidget):
     A QTimer polls position every second to keep readouts current.
     """
 
+    open_device_manager = pyqtSignal()
+
     def __init__(self):
         super().__init__()
         self._prober = None   # refreshed on each timer tick / showEvent
 
-        root = QVBoxLayout(self)
+        # Outer layout holds the stacked widget
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        self._stack = QStackedWidget()
+        outer.addWidget(self._stack)
+
+        # Page 0: not-connected empty state
+        self._stack.addWidget(self._build_empty_state(
+            "Probe Station", "Prober",
+            "Connect a probe station in Device Manager to enable "
+            "wafer navigation and die stepping."))
+
+        # Page 1: full controls
+        controls = QWidget()
+        root = QVBoxLayout(controls)
         root.setContentsMargins(10, 10, 10, 10)
         root.setSpacing(10)
 
@@ -328,6 +344,9 @@ class ProberTab(QWidget):
         self._poll_timer.setInterval(1000)   # 1 Hz position refresh
         self._poll_timer.timeout.connect(self._refresh_position)
 
+        self._stack.addWidget(controls)
+        self._stack.setCurrentIndex(0)  # empty state until device connects
+
     # ---------------------------------------------------------------- #
     #  Visibility / refresh                                            #
     # ---------------------------------------------------------------- #
@@ -340,6 +359,52 @@ class ProberTab(QWidget):
     def hideEvent(self, e):
         self._poll_timer.stop()
         super().hideEvent(e)
+
+    def _build_empty_state(self, title: str, device: str, tip: str) -> QWidget:
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.setAlignment(Qt.AlignCenter)
+        lay.setSpacing(16)
+
+        icon_lbl = make_icon_label(IC.LINK_OFF, color="#555555", size=64)
+        icon_lbl.setAlignment(Qt.AlignCenter)
+
+        title_lbl = QLabel(f"{title} Not Connected")
+        title_lbl.setAlignment(Qt.AlignCenter)
+        title_lbl.setStyleSheet(
+            f"font-size: {FONT['readoutSm']}pt; font-weight: bold; color: #888;")
+
+        tip_lbl = QLabel(tip)
+        tip_lbl.setAlignment(Qt.AlignCenter)
+        tip_lbl.setWordWrap(True)
+        tip_lbl.setStyleSheet(f"font-size: {FONT['label']}pt; color: #555;")
+        tip_lbl.setMaximumWidth(400)
+
+        btn = QPushButton("Open Device Manager")
+        btn.setFixedWidth(200)
+        btn.setFixedHeight(36)
+        btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {PALETTE.get('surface','#2d2d2d')}; color: #00d4aa;
+                border: 1px solid #00d4aa66; border-radius: 5px;
+                font-size: {FONT['label']}pt; font-weight: 600;
+            }}
+            QPushButton:hover {{ background: {PALETTE.get('surface2','#3d3d3d')}; }}
+        """)
+        btn.clicked.connect(self.open_device_manager)
+
+        lay.addStretch()
+        lay.addWidget(icon_lbl)
+        lay.addWidget(title_lbl)
+        lay.addWidget(tip_lbl)
+        lay.addSpacing(8)
+        lay.addWidget(btn, 0, Qt.AlignCenter)
+        lay.addStretch()
+        return w
+
+    def set_hardware_available(self, available: bool) -> None:
+        """Switch between empty state (page 0) and full controls (page 1)."""
+        self._stack.setCurrentIndex(1 if available else 0)
 
     def _refresh_all(self):
         """Reload prober reference and update all UI elements."""

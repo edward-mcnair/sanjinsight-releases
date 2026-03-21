@@ -67,7 +67,8 @@ class AcquireTab(QWidget):
         self._frames.setMinimumWidth(110)
         cl.addWidget(self._frames, 0, 1)
 
-        cl.addWidget(self._sub("Phase delay (s)"), 1, 0)
+        self._delay_label = self._sub("Phase delay (s)")
+        cl.addWidget(self._delay_label, 1, 0)
         self._delay = QDoubleSpinBox()
         self._delay.setRange(0, 60)
         self._delay.setValue(0)
@@ -453,3 +454,31 @@ class AcquireTab(QWidget):
     def set_n_frames(self, n: int):
         """Update the frame count spinbox (called when a profile is applied)."""
         self._frames.setValue(int(n))
+
+    def refresh_camera_mode(self) -> None:
+        """Adapt UI controls for IR vs TR camera mode.
+
+        IR cameras capture thermal frames directly — no cold/hot phase
+        separation or stimulus is needed.  TR cameras use the full
+        cold → stimulus → hot → ΔR/R pipeline.
+        """
+        is_ir = getattr(app_state, "active_camera_type", "tr") == "ir"
+        # Phase buttons (TR only)
+        self._cold_btn.setVisible(not is_ir)
+        self._hot_btn.setVisible(not is_ir)
+        # Phase delay (TR only — IR has no stimulus switching)
+        self._delay.setVisible(not is_ir)
+        self._delay_label.setVisible(not is_ir)
+        # Update RUN button label
+        if is_ir:
+            self._run_btn.setText("CAPTURE")
+            self._run_btn.setToolTip(
+                "Capture thermal frames from the IR camera.\n\n"
+                "Keyboard shortcut: Ctrl+R")
+        else:
+            self._run_btn.setText("RUN SEQUENCE")
+            self._run_btn.setToolTip(
+                "Run the full cold → hot acquisition sequence automatically.\n"
+                "Captures cold baseline, applies stimulus, captures hot frames, "
+                "then computes ΔR/R and ΔT.\n\n"
+                "Keyboard shortcut: Ctrl+R")

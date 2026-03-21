@@ -45,7 +45,7 @@ class StageTab(QWidget):
         root.setContentsMargins(10, 10, 10, 10)
         root.setSpacing(10)
         self._stack.addWidget(controls)
-        self._stack.setCurrentIndex(1)  # show controls by default
+        self._stack.setCurrentIndex(0)  # empty state until device connects
 
         # Position readouts
         pos_box = QGroupBox("Current Position")
