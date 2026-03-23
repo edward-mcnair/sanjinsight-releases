@@ -1028,6 +1028,11 @@ class MainWindow(QMainWindow):
 
     def _on_tec(self, index, status):
         self._temp_tab.update_tec(index, status)
+        # Ignore stale status updates from simulated TEC drivers that
+        # were queued before demo-mode shutdown completed.
+        tec_list = getattr(app_state, 'tecs', None) or []
+        if index >= len(tec_list) or tec_list[index] is None:
+            return
         key = f"tec{index}"
         ok  = status.error is None
         tip = (f"TEC {index+1}: {status.actual_temp:.1f}°C → {status.target_temp:.1f}°C"
@@ -1442,6 +1447,11 @@ class MainWindow(QMainWindow):
         if cam is not None:
             self._header.set_connected("tr_camera", True,
                                        f"TR Camera: {getattr(cam, 'info', None) and cam.info.model or 'connected'}")
+        # Clear any stale TEC/stage/FPGA metrics that snuck in after reset().
+        self._metrics.reset()
+        # Reset tab empty-state placeholders now that demo devices are gone.
+        # Tabs for unconnected hardware revert to their empty state.
+        self._refresh_tab_availability()
 
     def _open_device_manager(self):
         self._device_mgr_dlg.show()
@@ -2402,9 +2412,10 @@ class MainWindow(QMainWindow):
         self._metrics.reset()                 # clear stale TEC/stage/FPGA metrics
 
         # Stale TEC/FPGA status signals may already be queued in the Qt event
-        # loop from demo polling threads.  Schedule a second clear after a
-        # short delay to catch any that re-add stale demo devices.
+        # loop from demo polling threads.  Schedule clears after short delays
+        # to catch any that re-add stale demo devices (TEC poll = 0.5s).
         QTimer.singleShot(500, self._purge_stale_demo_devices)
+        QTimer.singleShot(1500, self._purge_stale_demo_devices)
 
         if auto_mode:
             self._status.showMessage(
@@ -2425,8 +2436,11 @@ class MainWindow(QMainWindow):
                 from hardware.cameras.simulated import SimulatedDriver
                 if _as.ir_cam is not None and not isinstance(_as.ir_cam, SimulatedDriver):
                     _real_ir = _as.ir_cam
-                if _as.cam is not None and not isinstance(_as.cam, SimulatedDriver):
-                    _real_cam = _as.cam
+                # Use tr_cam (raw _cam slot) — not the .cam property which
+                # returns ir_cam when active_camera_type=="ir", causing the
+                # same driver to appear in both slots.
+                if _as.tr_cam is not None and not isinstance(_as.tr_cam, SimulatedDriver):
+                    _real_cam = _as.tr_cam
             except Exception:
                 pass
 

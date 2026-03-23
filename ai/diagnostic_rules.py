@@ -117,7 +117,7 @@ def rule_tec_stable(snap: dict) -> list[RuleResult]:
     # from stale simulated-driver data after demo mode exit).
     try:
         from hardware.app_state import app_state as _as
-        if not _as.demo_mode and not getattr(_as, 'tec', None):
+        if not _as.demo_mode and not getattr(_as, 'tecs', None):
             return []
     except Exception:
         pass
