@@ -414,9 +414,17 @@ class DeviceManager:
             self._emit(uid, DeviceState.CONNECTED)
             self._inject_into_app(uid, driver_obj)
 
-            # Remember this device so the app can auto-connect on next launch.
+            # Remember all connected devices so the app can auto-connect on
+            # next launch.  Maintains a list of UIDs (order = connect order).
             try:
                 import config as _cfg
+                saved = _cfg.get_pref("hw.last_connected_devices", [])
+                if not isinstance(saved, list):
+                    saved = [saved] if saved else []
+                if uid not in saved:
+                    saved.append(uid)
+                _cfg.set_pref("hw.last_connected_devices", saved)
+                # Keep legacy key for backward compat with older installs
                 _cfg.set_pref("hw.last_connected_device", uid)
             except Exception:
                 pass
@@ -492,6 +500,15 @@ class DeviceManager:
             self._log(f"Disconnected: {entry.display_name}")
             self._emit(uid, entry.state)
             self._eject_from_app(uid, driver_ref=driver_ref)
+            # Remove from saved auto-reconnect list
+            try:
+                import config as _cfg
+                saved = _cfg.get_pref("hw.last_connected_devices", [])
+                if isinstance(saved, list) and uid in saved:
+                    saved.remove(uid)
+                    _cfg.set_pref("hw.last_connected_devices", saved)
+            except Exception:
+                pass
             if on_complete:
                 on_complete(True, "Disconnected")
 

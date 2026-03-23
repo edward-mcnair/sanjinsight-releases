@@ -3199,10 +3199,15 @@ if __name__ == "__main__":
         window.setWindowIcon(_app_icon)   # title-bar / taskbar icon
 
     # ── Demo mode: activate immediately, skip the startup dialog ──────
-    # If a device was previously connected, try to auto-connect it after
+    # If devices were previously connected, try to auto-connect them after
     # demo mode starts — the _handle_real_device_in_demo path will
-    # automatically exit demo mode once the connection succeeds.
-    _remembered_uid = config.get_pref("hw.last_connected_device", None)
+    # automatically exit demo mode once the first connection succeeds.
+    _remembered_uids = config.get_pref("hw.last_connected_devices", [])
+    # Backward compat: migrate single-device key to list
+    if not _remembered_uids:
+        _single = config.get_pref("hw.last_connected_device", None)
+        if _single:
+            _remembered_uids = [_single]
 
     if _FORCE_DEMO:
         app_state.demo_mode = True
@@ -3213,23 +3218,27 @@ if __name__ == "__main__":
         hw_service.start_demo()
         window._show_all_tabs()  # demo mode: all tabs show full controls
 
-        # Auto-connect the last-used device in the background.
-        if _remembered_uid is not None:
+        # Auto-connect all previously-used devices in the background.
+        if _remembered_uids:
             def _auto_reconnect():
                 import time as _t
                 _t.sleep(1.5)   # let demo mode finish initialising
                 dm = window._device_mgr
-                entry = dm.get(_remembered_uid)
-                if entry is None:
-                    log.info("Auto-reconnect: device %s not in registry", _remembered_uid)
-                    return
-                if entry.address:
-                    log.info("Auto-reconnect: attempting %s on %s …",
-                             entry.descriptor.display_name, entry.address)
-                    dm.connect(_remembered_uid)
-                else:
-                    log.info("Auto-reconnect: no saved address for %s — skipping",
-                             _remembered_uid)
+                for uid in _remembered_uids:
+                    entry = dm.get(uid)
+                    if entry is None:
+                        log.info("Auto-reconnect: device %s not in registry", uid)
+                        continue
+                    if entry.address:
+                        log.info("Auto-reconnect: attempting %s on %s …",
+                                 entry.descriptor.display_name, entry.address)
+                        dm.connect(uid)
+                        # Small delay between connections to let each device
+                        # initialise before the next one starts.
+                        _t.sleep(1.0)
+                    else:
+                        log.info("Auto-reconnect: no saved address for %s — skipping",
+                                 uid)
 
             threading.Thread(
                 target=_auto_reconnect, daemon=True,
