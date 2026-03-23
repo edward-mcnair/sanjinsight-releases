@@ -193,27 +193,27 @@ def get_cameras() -> List[CameraEntry]:
                 and entry.driver_model):
             entry.label = entry.driver_model
 
-    # ── Demo-mode supplement: add running cameras not covered by config ──
-    # In demo mode both a TR and IR camera are always started, but the
-    # config may only list one (or none).  Add entries for any camera type
-    # that is running but not already represented.
-    if getattr(app_state, "demo_mode", False):
-        seen_types = {e.camera_type for e in entries}
-        for drv, cam_type in ((tr_drv, "tr"), (ir_drv, "ir")):
-            if drv is None or cam_type in seen_types:
-                continue
-            model = ""
-            try:
-                model = drv.info.model or ""
-            except Exception:
-                pass
-            entries.append(CameraEntry(
-                config_key=cam_type,
-                label=model or f"{cam_type.upper()} Camera",
-                camera_type=cam_type,
-                is_connected=True,
-                driver_model=model,
-            ))
+    # ── Supplement: add running cameras not covered by config ────────────
+    # Cameras connected via Device Manager may not have a config entry.
+    # In demo mode both TR and IR cameras are always started.  In either
+    # case, add an entry for any camera type that is running but not
+    # already represented so the CameraContextBar and selectors see it.
+    seen_types = {e.camera_type for e in entries}
+    for drv, cam_type in ((tr_drv, "tr"), (ir_drv, "ir")):
+        if drv is None or cam_type in seen_types:
+            continue
+        model = ""
+        try:
+            model = drv.info.model or ""
+        except Exception:
+            pass
+        entries.append(CameraEntry(
+            config_key=cam_type,
+            label=model or f"{cam_type.upper()} Camera",
+            camera_type=cam_type,
+            is_connected=True,
+            driver_model=model,
+        ))
 
     return entries
 
