@@ -2399,6 +2399,7 @@ class MainWindow(QMainWindow):
         _app_state.demo_mode = False
         self._header.set_demo_mode(False)
         self._header.clear_devices()          # flush simulated device entries
+        self._metrics.reset()                 # clear stale TEC/stage/FPGA metrics
 
         # Stale TEC/FPGA status signals may already be queued in the Qt event
         # loop from demo polling threads.  Schedule a second clear after a

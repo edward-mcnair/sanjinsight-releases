@@ -92,6 +92,14 @@ def rule_stage_homed(snap: dict) -> Optional[RuleResult]:
     stage = snap.get("stage", {})
     if not stage:
         return None
+    # Skip rule when no real stage is connected (avoids false warnings
+    # from stale simulated-driver data after demo mode exit).
+    try:
+        from hardware.app_state import app_state as _as
+        if not _as.demo_mode and _as.stage is None:
+            return None
+    except Exception:
+        pass
     homed = stage.get("homed", False)
     return RuleResult(
         rule_id      = "R3_stage_homed",
@@ -105,6 +113,14 @@ def rule_stage_homed(snap: dict) -> Optional[RuleResult]:
 
 def rule_tec_stable(snap: dict) -> list[RuleResult]:
     """R4 — each enabled TEC should be within setpoint tolerance."""
+    # Skip rule when no real TECs are connected (avoids false warnings
+    # from stale simulated-driver data after demo mode exit).
+    try:
+        from hardware.app_state import app_state as _as
+        if not _as.demo_mode and not getattr(_as, 'tec', None):
+            return []
+    except Exception:
+        pass
     results: list[RuleResult] = []
     for tec in snap.get("tec", []):
         if tec.get("error") or not tec.get("enabled"):

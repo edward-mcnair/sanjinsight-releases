@@ -311,6 +311,22 @@ class MetricsService(QObject):
         """Return the latest metrics snapshot without emitting a signal."""
         return self._build_snapshot()
 
+    def reset(self) -> None:
+        """Clear all accumulated state.
+
+        Called when exiting demo mode so stale simulated-device metrics
+        (TEC stability, stage homed, FPGA running) don't produce false
+        warnings in the readiness banner.
+        """
+        self._tec_state.clear()
+        self._fpga_metrics.clear()
+        self._stage_metrics.clear()
+        self._active_issues.clear()
+        self._issue_messages.clear()
+        self._cam_metrics.clear()
+        self._prev_frame = None
+        self._cam_connected = False
+
     # ================================================================ #
     #  Internal helpers                                                 #
     # ================================================================ #
