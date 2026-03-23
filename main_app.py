@@ -1183,12 +1183,20 @@ class MainWindow(QMainWindow):
         Called when the user picks a camera from the global CameraContextBar.
 
         The bar has already updated app_state.active_camera_type; we just
-        need to sync the header active-device indicator and the per-tab
-        selectors (including AutoScan's modality-specific layout).
+        need to sync the header active-device indicator, per-tab selectors
+        (including AutoScan's modality-specific layout), and restart the
+        Live feed if it's running so it picks up the new camera.
         """
         key = "tr_camera" if cam_type == "tr" else "ir_camera"
         self._header.set_active_device(key)
         self._refresh_all_camera_selectors()
+
+        # Restart Live feed so it picks up the new camera immediately
+        try:
+            self._live_tab.restart_if_running()
+        except Exception:
+            log.debug("Live tab restart failed on camera switch", exc_info=True)
+
         log.info("Global camera bar: active camera → %s", cam_type)
 
     def _refresh_all_camera_selectors(self) -> None:
@@ -1415,6 +1423,25 @@ class MainWindow(QMainWindow):
         - Device Manager dialog is NOT re-opened (it's already showing)
         """
         self._deactivate_demo_mode(auto_mode=True)
+
+    def _purge_stale_demo_devices(self) -> None:
+        """Delayed cleanup: clear stale demo device entries from the header.
+
+        Called 500ms after demo exit to catch any TEC/FPGA status signals
+        that were already queued in the Qt event loop before shutdown.
+        Re-adds only genuinely connected real devices.
+        """
+        if app_state.demo_mode:
+            return  # re-entered demo mode — don't interfere
+        self._header.clear_devices()
+        # Re-add only real connected devices
+        if app_state.ir_cam is not None:
+            self._header.set_connected("ir_camera", True,
+                                       f"IR Camera: {getattr(app_state.ir_cam, 'info', None) and app_state.ir_cam.info.model or 'connected'}")
+        cam = getattr(app_state, '_cam', None)
+        if cam is not None:
+            self._header.set_connected("tr_camera", True,
+                                       f"TR Camera: {getattr(cam, 'info', None) and cam.info.model or 'connected'}")
 
     def _open_device_manager(self):
         self._device_mgr_dlg.show()
@@ -2372,6 +2399,12 @@ class MainWindow(QMainWindow):
         _app_state.demo_mode = False
         self._header.set_demo_mode(False)
         self._header.clear_devices()          # flush simulated device entries
+
+        # Stale TEC/FPGA status signals may already be queued in the Qt event
+        # loop from demo polling threads.  Schedule a second clear after a
+        # short delay to catch any that re-add stale demo devices.
+        QTimer.singleShot(500, self._purge_stale_demo_devices)
+
         if auto_mode:
             self._status.showMessage(
                 "Real hardware connected — exited demo mode automatically.", 5000)

@@ -984,6 +984,17 @@ class LiveTab(QWidget):
         self._last_stats_ts  = 0.0
         self._badges_active  = False
 
+    def restart_if_running(self):
+        """Re-start the live processor if currently running.
+
+        Called by MainWindow when the user switches cameras via the
+        CameraContextBar so the Live feed picks up the new camera without
+        the user having to manually Stop → Start.
+        """
+        if self._proc is not None:
+            self._stop()
+            self._start()
+
     def _toggle_freeze(self):
         self._frozen = not self._frozen
         self._canvas.freeze(self._frozen)
