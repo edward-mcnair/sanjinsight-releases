@@ -3623,12 +3623,15 @@ if __name__ == "__main__":
 
         # Auto-reconnect all previously-used Device Manager devices on Windows.
         # Runs after hw_service.start() has had time to finish opening devices
-        # from hardware config — we skip any that are already CONNECTED so we
+        # from hardware config — we skip any that are already connected so we
         # don't race on the same USB/serial resource.
         if _remembered_uids:
             def _auto_reconnect_normal():
                 import time as _t
                 from hardware.device_manager import DeviceState
+                from hardware.device_registry import (
+                    CONN_CAMERA, DTYPE_CAMERA, DTYPE_FPGA,
+                    DTYPE_STAGE, DTYPE_TEC, DTYPE_BIAS)
                 _t.sleep(5.0)   # let hw_service.start() finish camera init
                 dm = window._device_mgr
                 for uid in _remembered_uids:
@@ -3636,14 +3639,34 @@ if __name__ == "__main__":
                     if entry is None:
                         log.info("Auto-reconnect: device %s not in registry", uid)
                         continue
-                    # Skip if already connected (e.g. hw_service.start() opened
-                    # the camera from config, or it was connected by the startup
-                    # Device Manager dialog).
+                    # Skip if Device Manager already has it connected.
                     if entry.state == DeviceState.CONNECTED:
                         log.info("Auto-reconnect: %s already connected — skipping",
                                  entry.descriptor.display_name)
                         continue
-                    from hardware.device_registry import CONN_CAMERA
+                    # Skip if hw_service.start() already opened this device type
+                    # directly (it doesn't go through Device Manager, so
+                    # entry.state is still ABSENT even though the hardware is open).
+                    dtype = entry.descriptor.device_type
+                    _already_open = False
+                    if dtype == DTYPE_CAMERA:
+                        # Check if a real camera is already running in the slot
+                        if app_state.cam is not None or app_state.ir_cam is not None:
+                            _already_open = True
+                    elif dtype == DTYPE_FPGA and app_state.fpga is not None:
+                        _already_open = True
+                    elif dtype == DTYPE_STAGE and app_state.stage is not None:
+                        _already_open = True
+                    elif dtype == DTYPE_TEC and len(app_state.tecs) > 0:
+                        _already_open = True
+                    elif dtype == DTYPE_BIAS and app_state.bias is not None:
+                        _already_open = True
+                    if _already_open:
+                        log.info("Auto-reconnect: %s — device type already "
+                                 "open in app_state, skipping",
+                                 entry.descriptor.display_name)
+                        continue
+
                     _conn = entry.descriptor.connection_type
                     if entry.address or _conn == CONN_CAMERA:
                         log.info("Auto-reconnect: attempting %s on %s …",

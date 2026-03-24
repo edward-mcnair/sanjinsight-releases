@@ -211,6 +211,21 @@ class BosonDriver(CameraDriver):
         else:
             cap = cv2.VideoCapture(video_idx)
 
+        # Sanity-check: verify the opened device has the expected Boson
+        # resolution.  This prevents the driver from silently grabbing a
+        # laptop webcam when auto-detect falls back to the default index.
+        if cap.isOpened():
+            _actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            _actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            if (_actual_w, _actual_h) not in _BOSON_MODELS and \
+               (_actual_w != self._W or _actual_h != self._H):
+                log.warning(
+                    "Boson: video index %d reports %dx%d — not a Boson "
+                    "resolution (%dx%d). Rejecting to avoid using webcam.",
+                    video_idx, _actual_w, _actual_h, self._W, self._H)
+                cap.release()
+                cap = cv2.VideoCapture(-1)  # force isOpened() == False
+
         if not cap.isOpened():
             # Serial was opened successfully — close it before raising
             if self._client:
@@ -285,28 +300,29 @@ class BosonDriver(CameraDriver):
     def _auto_detect_video_index(self) -> int:
         """Find the correct OpenCV index for the Boson UVC stream.
 
-        On macOS, system_profiler indices often don't match OpenCV's
-        AVFoundation indices.  This method probes camera indices by checking
-        the *native* resolution (before any cap.set() calls) to identify the
-        Boson — its 320×256 (Boson 320) or 640×512 (Boson 640) output is
-        unique and no webcam uses these resolutions.
+        Probes camera indices by checking the *native* resolution (before any
+        cap.set() calls) to identify the Boson — its 320×256 (Boson 320) or
+        640×512 (Boson 640) output is unique and no laptop webcam uses these
+        resolutions.
 
-        Falls back to the configured video_index on other platforms or if
-        probing fails.
+        On Windows uses DirectShow backend for probing (MSMF can misreport
+        resolution for thermal cameras).  On macOS uses AVFoundation.
+
+        Falls back to a platform-specific hint (system_profiler on macOS,
+        WMI on Windows) if resolution probing fails, then to the configured
+        video_index as a last resort.
         """
         import sys as _sys
         import cv2
-
-        if _sys.platform != "darwin":
-            return self._video_index
 
         # Try configured index first, then scan 0–5.
         candidates = [self._video_index] + [
             i for i in range(6) if i != self._video_index
         ]
+        _backend = cv2.CAP_DSHOW if _sys.platform == "win32" else 0
         for idx in candidates:
             try:
-                cap = cv2.VideoCapture(idx)
+                cap = cv2.VideoCapture(idx, _backend) if _backend else cv2.VideoCapture(idx)
                 if not cap.isOpened():
                     continue
                 # Read native resolution (no cap.set yet — this is the
@@ -327,25 +343,54 @@ class BosonDriver(CameraDriver):
             except Exception:
                 continue
 
-        # No native-resolution match — fall back to system_profiler hint.
-        try:
-            import subprocess, json
-            r = subprocess.run(
-                ["system_profiler", "SPCameraDataType", "-json"],
-                capture_output=True, text=True, timeout=5,
-            )
-            cameras = json.loads(r.stdout).get("SPCameraDataType", [])
-            for i, cam in enumerate(cameras):
-                name = cam.get("_name", "").lower()
-                uid  = cam.get("spcamera_unique-id", "").lower()
-                if "flir" in name or "09cb" in uid:
-                    log.info(
-                        "Boson: no native-resolution match; using "
-                        "system_profiler hint → index %d ('%s')",
-                        i, cam.get("_name", ""))
-                    return i
-        except Exception as exc:
-            log.debug("Boson: video index auto-detect failed: %s", exc)
+        # No native-resolution match — try platform-specific device name hint.
+        if _sys.platform == "darwin":
+            try:
+                import subprocess, json
+                r = subprocess.run(
+                    ["system_profiler", "SPCameraDataType", "-json"],
+                    capture_output=True, text=True, timeout=5,
+                )
+                cameras = json.loads(r.stdout).get("SPCameraDataType", [])
+                for i, cam in enumerate(cameras):
+                    name = cam.get("_name", "").lower()
+                    uid  = cam.get("spcamera_unique-id", "").lower()
+                    if "flir" in name or "09cb" in uid:
+                        log.info(
+                            "Boson: no native-resolution match; using "
+                            "system_profiler hint → index %d ('%s')",
+                            i, cam.get("_name", ""))
+                        return i
+            except Exception as exc:
+                log.debug("Boson: macOS video index auto-detect failed: %s", exc)
+        elif _sys.platform == "win32":
+            # Use WMI/PowerShell to find which DirectShow index is the Boson.
+            # Check both "Camera" and "Image" PnP classes — the Boson UVC
+            # device may enumerate under either depending on the driver.
+            try:
+                import subprocess
+                r = subprocess.run(
+                    ["powershell", "-Command",
+                     "Get-PnpDevice -Class Camera,Image -Status OK | "
+                     "Select-Object -ExpandProperty FriendlyName"],
+                    capture_output=True, text=True, timeout=5,
+                    creationflags=0x08000000,  # CREATE_NO_WINDOW
+                )
+                names = [n.strip() for n in r.stdout.strip().splitlines() if n.strip()]
+                for i, name in enumerate(names):
+                    if "flir" in name.lower() or "boson" in name.lower():
+                        log.info(
+                            "Boson: no native-resolution match; using "
+                            "PnP device hint → index %d ('%s')", i, name)
+                        return i
+            except Exception as exc:
+                log.debug("Boson: Windows video index auto-detect failed: %s", exc)
+
+        log.warning(
+            "Boson: auto-detect could not find %dx%d stream in indices 0–5. "
+            "Falling back to configured video_index=%d. If the live feed shows "
+            "the laptop webcam, update 'Video Device Index' in Device Manager.",
+            self._W, self._H, self._video_index)
         return self._video_index
 
     def _enumerate_video_devices(self) -> str:
