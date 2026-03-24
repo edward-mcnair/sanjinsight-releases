@@ -21,10 +21,10 @@ Versioning scheme: Semantic Versioning  MAJOR.MINOR.PATCH[-PRERELEASE]
 """
 
 # ── Version number ────────────────────────────────────────────────────────────
-__version__    = "1.4.1-beta.1"
-PRERELEASE     = "beta.1"           # empty string "" for GA releases
+__version__    = "1.4.1-beta.2"
+PRERELEASE     = "beta.2"           # empty string "" for GA releases
 VERSION_TUPLE  = (1, 4, 1)          # numeric-only, for < / > comparisons
-BUILD_DATE     = "2026-03-19"       # set by CI/CD on release; update manually otherwise
+BUILD_DATE     = "2026-03-24"       # set by CI/CD on release; update manually otherwise
 
 # ── Application identity ──────────────────────────────────────────────────────
 APP_NAME       = "SanjINSIGHT"
