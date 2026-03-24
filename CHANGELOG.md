@@ -10,6 +10,28 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.4.1-beta.2] — 2026-03-24
+
+### Added
+
+- **FTDI VCP driver bundled in installer** — the FTDI CDM (Combined Driver Model) driver is now automatically downloaded and included in the Windows installer. It installs silently during setup if not already present, so the Meerstetter TEC-1089 and LDD-1121 appear as COM ports immediately after installation.
+- **pyMeCom auto-installed in local builds** — `build_installer.bat` now installs pyMeCom (and pydp832) from GitHub before running PyInstaller, matching the CI workflow behavior.
+- **`find_all_by_usb()` in device registry** — returns all registry entries matching a given VID:PID, fixing FTDI VID:PID sharing between Meerstetter TEC, ATEC, and LDD devices.
+
+### Fixed
+
+- **Camera "exclusively opened" race condition** — `hw_service.start()` and Device Manager auto-reconnect were both trying to open the same USB camera. Added `skip_cameras=True` parameter so only one code path owns camera connections.
+- **Boson "could not open video device" on Windows** — auto-detect used `cap.get()` which returns stale values on Windows DirectShow until a frame is read. Replaced with frame-verify pass. Also fixed PnP enumeration order being incorrectly used as DirectShow index.
+- **Camera selection not persisting across tabs** — three separate force-resets were overriding the user's IR/TR choice: (1) `_inject_into_app` force-switching to TR on TR connect, (2) `_switch_to_real` always defaulting to TR, (3) `AcquireTab` missing `showEvent`. All three fixed; saved preference now restored on tab switch and camera reconnect.
+- **Undefined `dtype` in `_connect_worker`** — `dtype` was referenced for camera timeout check but never assigned in that scope.
+- **TEC-1089 port conflict** — scanner deduplication used address-only keys, dropping the second device on the same COM port. Changed to `(address, uid)` composite key.
+- **pyMeCom wrong GitHub URL** — CI workflow referenced `marcwimmer/pyMeCom` instead of the correct `meerstetter/pyMeCom`.
+- **pyMeCom not available on PyPI for Python 3.10** — reverted to optional dependency installed from GitHub in CI and build scripts.
+- **qtawesome missing from Windows installer** — added to hidden_imports and `collect_data_files()` in the Windows PyInstaller spec.
+- **Inno Setup compile errors** — CI-generated ISS script had invalid `[Run]` flags (`waitprogress`, `skipifdoesntexist`). Replaced with valid flags and moved file-existence checks into Pascal Script functions.
+
+---
+
 ## [1.4.1-beta.1] — 2026-03-19
 
 ### Added
