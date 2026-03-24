@@ -675,10 +675,10 @@ class _PageTEC(_PageBase):
             f"font-size:{FONT['caption']}pt; color:{PALETTE['textDim']};")
 
         try:
-            from mecom import MeComAPI
-            tec = MeComAPI(port)
+            from mecom import MeCom
+            tec = MeCom(serialport=port, metype='TEC')
             info = tec.identify()
-            tec.session.close()
+            tec.stop()
             self._meer_test_lbl.setText(
                 f"✓  Connected: {info}" if info else f"✓  TEC responded on {port}")
             self._meer_test_lbl.setStyleSheet(ok_ss)

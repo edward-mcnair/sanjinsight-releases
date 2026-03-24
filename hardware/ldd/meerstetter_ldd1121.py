@@ -82,8 +82,10 @@ class MeerstetterLdd1121(LddDriver):
     def connect(self) -> None:
         try:
             self._port_lock.acquire()
-            from mecom import MeComAPI
-            self._ldd = MeComAPI(self._port)
+            from mecom import MeCom
+            self._ldd = MeCom(serialport=self._port,
+                              timeout=self._timeout,
+                              metype='LDD')
             self._ldd.identify()
             self._connected = True
             log.info("Meerstetter LDD-1121 connected on %s (address %d)",
@@ -109,7 +111,7 @@ class MeerstetterLdd1121(LddDriver):
     def disconnect(self) -> None:
         if self._ldd:
             try:
-                self._ldd.session.close()
+                self._ldd.stop()
             except Exception:
                 pass
         self._connected = False
@@ -127,14 +129,14 @@ class MeerstetterLdd1121(LddDriver):
         with self._api_lock:
             self._ldd.set_parameter(
                 parameter_id=self._PID_OUTPUT_ENABLE, value=1,
-                address=self._address, instance=1)
+                address=self._address, parameter_instance=1)
 
     def disable(self) -> None:
         """De-activate LED output (Output Enable = 0)."""
         with self._api_lock:
             self._ldd.set_parameter(
                 parameter_id=self._PID_OUTPUT_ENABLE, value=0,
-                address=self._address, instance=1)
+                address=self._address, parameter_instance=1)
 
     def set_current(self, current_a: float) -> None:
         """
@@ -149,7 +151,7 @@ class MeerstetterLdd1121(LddDriver):
         with self._api_lock:
             self._ldd.set_parameter(
                 parameter_id=self._PID_TARGET_CURR, value=clamped,
-                address=self._address, instance=1)
+                address=self._address, parameter_instance=1)
 
     # ---------------------------------------------------------------- #
     #  Readback                                                         #
@@ -160,16 +162,16 @@ class MeerstetterLdd1121(LddDriver):
             with self._api_lock:
                 temp = self._ldd.get_parameter(
                     parameter_id=self._PID_OBJECT_TEMP,
-                    address=self._address, instance=1)
+                    address=self._address, parameter_instance=1)
                 current = self._ldd.get_parameter(
                     parameter_id=self._PID_ACT_CURRENT,
-                    address=self._address, instance=1)
+                    address=self._address, parameter_instance=1)
                 voltage = self._ldd.get_parameter(
                     parameter_id=self._PID_ACT_VOLTAGE,
-                    address=self._address, instance=1)
+                    address=self._address, parameter_instance=1)
                 enabled = bool(self._ldd.get_parameter(
                     parameter_id=self._PID_OUTPUT_ENABLE,
-                    address=self._address, instance=1))
+                    address=self._address, parameter_instance=1))
 
             return LddStatus(
                 actual_current_a = float(current),

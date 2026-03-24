@@ -61,7 +61,7 @@ class MeerstetterDriver(TecDriver):
         self._tec       = None
         self._target    = 25.0
         self._port_lock = PortLock(self._port)
-        # pyMeCom MeComAPI is not thread-safe; the poll thread and control
+        # pyMeCom MeCom is not thread-safe; the poll thread and control
         # threads (set_target, enable, disable) must not call it concurrently
         # or they will corrupt each other's serial frames and cause CRC errors.
         self._api_lock  = threading.Lock()
@@ -77,8 +77,10 @@ class MeerstetterDriver(TecDriver):
         self._port_lock.acquire()
         _connected_ok = False
         try:
-            from mecom import MeComAPI, MeComQuerySet, MeComQuery
-            self._tec = MeComAPI(self._port)
+            from mecom import MeCom
+            self._tec = MeCom(serialport=self._port,
+                              timeout=self._timeout,
+                              metype='TEC')
             self._tec.identify()
             self._connected = True
             _connected_ok = True
@@ -136,7 +138,7 @@ class MeerstetterDriver(TecDriver):
                         parameter_id=param_id,
                         value=value,
                         address=self._address,
-                        instance=1,
+                        parameter_instance=1,
                     )
                     log.debug("TEC-1089 param %d (%s) → %s", param_id, name, value)
                 except Exception as exc:
@@ -147,9 +149,9 @@ class MeerstetterDriver(TecDriver):
     def disconnect(self) -> None:
         if self._tec:
             try:
-                self._tec.session.close()
+                self._tec.stop()
             except Exception:
-                log.debug("MeerstetterDriver.disconnect: session.close() failed — "
+                log.debug("MeerstetterDriver.disconnect: stop() failed — "
                           "port will still be released", exc_info=True)
         self._connected = False
         self._port_lock.release()
@@ -161,7 +163,7 @@ class MeerstetterDriver(TecDriver):
             return
         with self._api_lock:
             self._tec.set_parameter(parameter_id=2010, value=1,
-                                    address=self._address, instance=1)
+                                    address=self._address, parameter_instance=1)
 
     def disable(self) -> None:
         if self._tec is None:
@@ -169,7 +171,7 @@ class MeerstetterDriver(TecDriver):
             return
         with self._api_lock:
             self._tec.set_parameter(parameter_id=2010, value=0,
-                                    address=self._address, instance=1)
+                                    address=self._address, parameter_instance=1)
 
     def set_target(self, temperature_c: float) -> None:
         self._target = temperature_c
@@ -179,29 +181,29 @@ class MeerstetterDriver(TecDriver):
         # Parameter 3000: Target Object Temperature
         with self._api_lock:
             self._tec.set_parameter(parameter_id=3000, value=temperature_c,
-                                    address=self._address, instance=1)
+                                    address=self._address, parameter_instance=1)
 
     def get_status(self) -> TecStatus:
         try:
             with self._api_lock:
                 # Parameter 1000: Object Temperature (°C)
                 actual = self._tec.get_parameter(
-                    parameter_id=1000, address=self._address, instance=1)
+                    parameter_id=1000, address=self._address, parameter_instance=1)
                 # Parameter 1001: Sink Temperature (°C)
                 sink = self._tec.get_parameter(
-                    parameter_id=1001, address=self._address, instance=1)
+                    parameter_id=1001, address=self._address, parameter_instance=1)
                 # Parameter 1020: Actual Output Current (A)
                 current = self._tec.get_parameter(
-                    parameter_id=1020, address=self._address, instance=1)
+                    parameter_id=1020, address=self._address, parameter_instance=1)
                 # Parameter 1021: Actual Output Voltage (V)
                 voltage = self._tec.get_parameter(
-                    parameter_id=1021, address=self._address, instance=1)
+                    parameter_id=1021, address=self._address, parameter_instance=1)
                 # Parameter 1200: Temperature Is Stable flag (0/1)
                 hw_stable = bool(self._tec.get_parameter(
-                    parameter_id=1200, address=self._address, instance=1))
+                    parameter_id=1200, address=self._address, parameter_instance=1))
                 # Parameter 2010: Output Enable status (0/1)
                 enabled = bool(self._tec.get_parameter(
-                    parameter_id=2010, address=self._address, instance=1))
+                    parameter_id=2010, address=self._address, parameter_instance=1))
 
             return TecStatus(
                 actual_temp    = float(actual),
