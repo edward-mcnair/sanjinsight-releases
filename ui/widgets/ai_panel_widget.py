@@ -188,20 +188,40 @@ class AIPanelWidget(QWidget):
         grade_row.addStretch()
         ev_lay.addLayout(grade_row)
 
-        # Up to 5 issue rows — clickable buttons that fire a targeted AI query
-        self._issue_rows: list[QPushButton] = []
+        # Up to 5 issue rows — each row has an issue label + optional fix button
+        self._issue_rows: list[QWidget] = []       # row container widgets
+        self._issue_btns: list[QPushButton] = []   # issue text buttons
+        self._fix_btns:   list[QPushButton] = []   # fix action buttons
         self._active_issues: list = []   # latest RuleResult objects, set by refresh_evidence
+        self._fix_callback = None        # set by MainWindow: fn(rule_id)
         for i in range(5):
+            row = QWidget()
+            row_lay = QHBoxLayout(row)
+            row_lay.setContentsMargins(0, 0, 0, 0)
+            row_lay.setSpacing(4)
+
             btn = QPushButton("")
             btn.setStyleSheet(
                 f"QPushButton {{ background:transparent; color:{_MUTED()}; "
                 f"border:none; text-align:left; padding:1px 4px; font-size:{FONT['caption']}pt; }}"
                 f"QPushButton:hover {{ background:{PALETTE.get('surface2','#3d3d3d')}; border-radius:3px; }}"
             )
-            btn.setVisible(False)
             btn.clicked.connect(lambda checked, idx=i: self._on_issue_clicked(idx))
-            ev_lay.addWidget(btn)
-            self._issue_rows.append(btn)
+            row_lay.addWidget(btn, 1)
+
+            fix_btn = QPushButton("")
+            fix_btn.setFixedHeight(20)
+            fix_btn.setMaximumWidth(80)
+            fix_btn.setCursor(Qt.PointingHandCursor)
+            fix_btn.setVisible(False)
+            fix_btn.clicked.connect(lambda checked, idx=i: self._on_fix_clicked(idx))
+            row_lay.addWidget(fix_btn)
+
+            row.setVisible(False)
+            ev_lay.addWidget(row)
+            self._issue_rows.append(row)
+            self._issue_btns.append(btn)
+            self._fix_btns.append(fix_btn)
 
         lay.addWidget(self._evidence_frame)
 
@@ -526,32 +546,56 @@ class AIPanelWidget(QWidget):
         active = fails + warns
         self._active_issues = active   # store for click handler
 
-        for i, btn in enumerate(self._issue_rows):
+        from ai.auto_fix import get_fix
+
+        for i, row in enumerate(self._issue_rows):
+            issue_btn = self._issue_btns[i]
+            fix_btn   = self._fix_btns[i]
             if i < min(len(active), 5):
                 # Last slot: overflow indicator (not clickable as an issue)
                 if i == 4 and len(active) > 5:
-                    btn.setText(f"  …and {len(active) - 4} more issues")
-                    btn.setStyleSheet(
+                    issue_btn.setText(f"  …and {len(active) - 4} more issues")
+                    issue_btn.setStyleSheet(
                         f"QPushButton {{ background:transparent; color:{_MUTED()}; "
                         f"border:none; text-align:left; padding:1px 4px; font-size:{FONT['caption']}pt; }}"
                     )
-                    btn.setToolTip("")
-                    btn.setCursor(Qt.ArrowCursor)
+                    issue_btn.setToolTip("")
+                    issue_btn.setCursor(Qt.ArrowCursor)
+                    fix_btn.setVisible(False)
                 else:
                     r = active[i]
                     icon = "⊗" if r.severity == "fail" else "⚠"
                     clr  = _RED if r.severity == "fail" else _AMBER
-                    btn.setText(f"{icon}  {r.display_name}  ·  {r.observed}")
-                    btn.setStyleSheet(
+                    issue_btn.setText(f"{icon}  {r.display_name}  ·  {r.observed}")
+                    issue_btn.setStyleSheet(
                         f"QPushButton {{ background:transparent; color:{clr}; "
                         f"border:none; text-align:left; padding:1px 4px; font-size:{FONT['caption']}pt; }}"
                         f"QPushButton:hover {{ background:{PALETTE.get('surface2','#3d3d3d')}; border-radius:3px; }}"
                     )
-                    btn.setToolTip(f"{r.hint}\n\nClick to ask AI for guidance.")
-                    btn.setCursor(Qt.PointingHandCursor)
-                btn.setVisible(True)
+                    issue_btn.setToolTip(f"{r.hint}\n\nClick to ask AI for guidance.")
+                    issue_btn.setCursor(Qt.PointingHandCursor)
+
+                    # Show fix button if a fix action is registered
+                    fix = get_fix(r.rule_id)
+                    if fix is not None:
+                        _auto_icon = "⚡" if fix.auto else "→"
+                        fix_btn.setText(f"{_auto_icon} {fix.label}")
+                        fix_btn.setToolTip(fix.description)
+                        _fix_bg = PALETTE.get("surface2", "#3d3d3d")
+                        _fix_acc = _GREEN if fix.auto else _MUTED()
+                        fix_btn.setStyleSheet(
+                            f"QPushButton {{ background:{_fix_bg}; color:{_fix_acc}; "
+                            f"border:1px solid {_fix_acc}40; border-radius:3px; "
+                            f"font-size:{FONT['caption']}pt; padding:1px 6px; }}"
+                            f"QPushButton:hover {{ background:{_fix_acc}30; }}"
+                        )
+                        fix_btn.setVisible(True)
+                    else:
+                        fix_btn.setVisible(False)
+                row.setVisible(True)
             else:
-                btn.setVisible(False)
+                row.setVisible(False)
+                fix_btn.setVisible(False)
 
     # ------------------------------------------------------------------ #
     #  Theme support                                                       #
@@ -633,6 +677,25 @@ class AIPanelWidget(QWidget):
     # ------------------------------------------------------------------ #
     #  Internal                                                            #
     # ------------------------------------------------------------------ #
+
+    def set_fix_callback(self, callback) -> None:
+        """Set the callback for fix button clicks: callback(rule_id: str)."""
+        self._fix_callback = callback
+
+    def _on_fix_clicked(self, idx: int) -> None:
+        """Run the fix action for the issue at position idx."""
+        if idx >= len(self._active_issues):
+            return
+        r = self._active_issues[idx]
+        from ai.auto_fix import get_fix, can_auto_fix
+        fix = get_fix(r.rule_id)
+        if fix is None:
+            return
+        if fix.auto and self._fix_callback:
+            self._fix_callback(r.rule_id)
+        elif fix.navigate_to and self._fix_callback:
+            # For manual fixes, the callback handles navigation
+            self._fix_callback(r.rule_id)
 
     def _on_issue_clicked(self, idx: int) -> None:
         """Send a targeted AI query about the issue at position idx."""

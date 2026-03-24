@@ -292,6 +292,396 @@ class _DevicesPopup(QWidget):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+#  _ProfilePopup   — floating dropdown for profile save/load
+# ──────────────────────────────────────────────────────────────────────────────
+
+class _ProfilePopup(QWidget):
+    """
+    Floating dropdown listing saved profiles with one-click load.
+    Footer actions: save current settings, manage profiles.
+    """
+
+    profile_selected = pyqtSignal(object)   # emits Recipe
+    save_requested   = pyqtSignal()
+    manage_requested = pyqtSignal()
+
+    def __init__(self):
+        super().__init__(None, Qt.Popup | Qt.FramelessWindowHint)
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        self.setFixedWidth(300)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        # ── Header ────────────────────────────────────────────────────
+        hdr = QWidget()
+        hdr_lay = QHBoxLayout(hdr)
+        hdr_lay.setContentsMargins(14, 10, 14, 10)
+        hdr_lay.setSpacing(7)
+        self._hdr_icon = QLabel("●")
+        self._hdr_text = QLabel("Profiles")
+        hdr_lay.addWidget(self._hdr_icon)
+        hdr_lay.addWidget(self._hdr_text)
+        hdr_lay.addStretch()
+        self._hdr = hdr
+        outer.addWidget(hdr)
+
+        # ── Separator 1 ──────────────────────────────────────────────
+        self._sep1 = QFrame()
+        self._sep1.setFrameShape(QFrame.HLine)
+        self._sep1.setFixedHeight(1)
+        outer.addWidget(self._sep1)
+
+        # ── Profile rows container ───────────────────────────────────
+        self._rows_w = QWidget()
+        self._rows_lay = QVBoxLayout(self._rows_w)
+        self._rows_lay.setContentsMargins(0, 4, 0, 4)
+        self._rows_lay.setSpacing(0)
+        outer.addWidget(self._rows_w)
+
+        # Empty state
+        self._empty_lbl = QLabel("No saved profiles")
+        self._empty_lbl.setContentsMargins(14, 10, 14, 10)
+        outer.addWidget(self._empty_lbl)
+
+        # ── Separator 2 ──────────────────────────────────────────────
+        self._sep2 = QFrame()
+        self._sep2.setFrameShape(QFrame.HLine)
+        self._sep2.setFixedHeight(1)
+        outer.addWidget(self._sep2)
+
+        # ── Save button ──────────────────────────────────────────────
+        self._save_btn = QPushButton("💾  Save current settings…")
+        self._save_btn.setCursor(Qt.PointingHandCursor)
+        self._save_btn.setFixedHeight(36)
+        self._save_btn.clicked.connect(self._on_save)
+        outer.addWidget(self._save_btn)
+
+        # ── Separator 3 ──────────────────────────────────────────────
+        self._sep3 = QFrame()
+        self._sep3.setFrameShape(QFrame.HLine)
+        self._sep3.setFixedHeight(1)
+        outer.addWidget(self._sep3)
+
+        # ── Manage link ──────────────────────────────────────────────
+        self._manage_btn = QPushButton("Manage profiles…")
+        self._manage_btn.setCursor(Qt.PointingHandCursor)
+        self._manage_btn.setFixedHeight(34)
+        self._manage_btn.clicked.connect(self._on_manage)
+        outer.addWidget(self._manage_btn)
+
+        self._recipes = []     # list of Recipe objects
+        self._active_label = ""
+        self._apply_styles()
+
+    def show_below(self, anchor: QWidget):
+        pos = anchor.mapToGlobal(anchor.rect().bottomLeft())
+        self.adjustSize()
+        self.move(pos.x(), pos.y())
+        self.show()
+        self.raise_()
+
+    def set_profiles(self, recipes: list, active_label: str = ""):
+        """Rebuild rows from a list of Recipe objects."""
+        self._recipes = recipes
+        self._active_label = active_label
+
+        # Clear old rows
+        for i in reversed(range(self._rows_lay.count())):
+            item = self._rows_lay.itemAt(i)
+            if item and item.widget():
+                item.widget().deleteLater()
+
+        for recipe in recipes:
+            row = self._make_row(recipe)
+            self._rows_lay.addWidget(row)
+
+        has = bool(recipes)
+        self._empty_lbl.setVisible(not has)
+        self._rows_w.setVisible(has)
+        self._apply_styles()
+        self.adjustSize()
+
+    def _make_row(self, recipe) -> QWidget:
+        is_active = recipe.label == self._active_label
+        row = QWidget()
+        row.setCursor(Qt.PointingHandCursor)
+        row.setFixedHeight(40)
+        row.setAttribute(Qt.WA_Hover)
+
+        lay = QHBoxLayout(row)
+        lay.setContentsMargins(14, 0, 14, 0)
+        lay.setSpacing(8)
+
+        name_lbl = QLabel(recipe.label)
+        name_lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
+        row._name_lbl = name_lbl
+
+        desc_lbl = QLabel(recipe.description[:40] if recipe.description else "")
+        desc_lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
+        row._desc_lbl = desc_lbl
+
+        lay.addWidget(name_lbl, 1)
+        lay.addWidget(desc_lbl)
+
+        if is_active:
+            pill = QLabel("Active")
+            pill.setObjectName("profile_active_pill")
+            pill.setAttribute(Qt.WA_TransparentForMouseEvents)
+            row._active_pill = pill
+            lay.addWidget(pill)
+        else:
+            row._active_pill = None
+
+        row.mousePressEvent = lambda e, r=recipe: (
+            self._on_select(r)
+        ) if e.button() == Qt.LeftButton else None
+
+        return row
+
+    def _on_select(self, recipe):
+        self.hide()
+        self.profile_selected.emit(recipe)
+
+    def _on_save(self):
+        self.hide()
+        self.save_requested.emit()
+
+    def _on_manage(self):
+        self.hide()
+        self.manage_requested.emit()
+
+    def _apply_styles(self):
+        P   = PALETTE
+        bg  = P.get("bg",           "#242424")
+        bg2 = P.get("surface",      "#2d2d2d")
+        bdr = P.get("border",       "#484848")
+        dim = P.get("textDim",      "#999999")
+        sub = P.get("textSub",      "#6a6a6a")
+        txt = P.get("text",         "#ebebeb")
+        acc = P.get("accent",       "#00d4aa")
+
+        self.setStyleSheet(
+            f"_ProfilePopup {{ background:{bg}; border:1px solid {bdr}; "
+            f"border-top:none; border-radius:0 0 8px 8px; }}")
+
+        self._hdr.setStyleSheet(f"background:{bg2}; border-radius:0;")
+        self._hdr_text.setStyleSheet(
+            f"font-size:{FONT['label']}pt; font-weight:700; "
+            f"color:{txt}; background:transparent;")
+        self._hdr_icon.setStyleSheet(
+            f"font-size:{FONT['label']}pt; color:{acc}; background:transparent;")
+
+        for sep in (self._sep1, self._sep2, self._sep3):
+            sep.setStyleSheet(f"background:{bdr}; border:none;")
+
+        self._empty_lbl.setStyleSheet(
+            f"font-size:{FONT['label']}pt; color:{sub}; background:{bg};")
+
+        for btn in (self._save_btn, self._manage_btn):
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: {bg};
+                    color: {acc};
+                    border: none;
+                    font-size: {FONT['label']}pt;
+                    font-weight: 600;
+                    text-align: left;
+                    padding-left: 14px;
+                }}
+                QPushButton:hover {{
+                    background: {bg2};
+                }}
+            """)
+
+        # Last button gets bottom radius
+        self._manage_btn.setStyleSheet(
+            self._manage_btn.styleSheet().replace(
+                "border: none;",
+                "border: none; border-radius: 0 0 7px 7px;"))
+
+        # Style profile rows
+        for i in range(self._rows_lay.count()):
+            item = self._rows_lay.itemAt(i)
+            if item and item.widget():
+                row = item.widget()
+                row.setStyleSheet(
+                    f"QWidget {{ background:{bg}; }}"
+                    f"QWidget:hover {{ background:{bg2}; }}")
+                if hasattr(row, "_name_lbl"):
+                    row._name_lbl.setStyleSheet(
+                        f"font-size:{FONT['label']}pt; font-weight:600; "
+                        f"color:{txt}; background:transparent;")
+                if hasattr(row, "_desc_lbl"):
+                    row._desc_lbl.setStyleSheet(
+                        f"font-size:{FONT['caption']}pt; color:{sub}; "
+                        f"background:transparent;")
+                if hasattr(row, "_active_pill") and row._active_pill:
+                    row._active_pill.setStyleSheet(
+                        f"color:{acc}; font-size:{FONT['caption']}pt; "
+                        f"font-weight:700; background:transparent;")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  ProfileButton — header button with profile name + dropdown
+# ──────────────────────────────────────────────────────────────────────────────
+
+class ProfileButton(QWidget):
+    """
+    Header widget: active profile indicator + '▾' dropdown arrow.
+    Click to open _ProfilePopup listing saved profiles with save/load.
+    """
+
+    profile_selected = pyqtSignal(object)   # emits Recipe
+    save_requested   = pyqtSignal()
+    manage_requested = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._popup: _ProfilePopup | None = None
+        self._open: bool = False
+        self._profile = None       # current MaterialProfile
+        self._recipes = []         # cached recipe list
+        self._active_recipe_label = ""
+        self._recipe_store = None  # set by caller
+
+        self.setAttribute(Qt.WA_Hover)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setFixedHeight(30)
+        self.setMaximumHeight(36)
+        self.setMinimumWidth(80)
+        self.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(10, 0, 10, 0)
+        lay.setSpacing(5)
+
+        self._dot_lbl  = QLabel("●")
+        self._name_lbl = QLabel("No profile")
+        self._arrow_lbl = QLabel("▾")
+
+        for lbl in (self._dot_lbl, self._name_lbl, self._arrow_lbl):
+            lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
+
+        lay.addWidget(self._dot_lbl)
+        lay.addWidget(self._name_lbl)
+        lay.addWidget(self._arrow_lbl)
+
+        self._apply_styles()
+
+    def set_recipe_store(self, store):
+        """Inject the RecipeStore so the popup can list saved profiles."""
+        self._recipe_store = store
+
+    def set_profile(self, profile):
+        """Update the displayed profile name and color."""
+        from profiles.profiles import CATEGORY_ACCENTS
+        self._profile = profile
+        if profile is None:
+            dim = PALETTE.get("textDim", "#999999")
+            sub = PALETTE.get("textSub", "#6a6a6a")
+            self._name_lbl.setText("No profile")
+            self._name_lbl.setStyleSheet(
+                f"font-size:{FONT['label']}pt; color:{dim}; "
+                f"letter-spacing:1px; background:transparent;")
+            self._dot_lbl.setStyleSheet(
+                f"color:{sub}; font-size:{FONT['label']}pt; background:transparent;")
+            self.setToolTip("")
+        else:
+            accent = CATEGORY_ACCENTS.get(profile.category, "#00d4aa")
+            name = profile.name if len(profile.name) <= 28 else profile.name[:26] + "…"
+            self._name_lbl.setText(name)
+            self._name_lbl.setStyleSheet(
+                f"font-size:{FONT['label']}pt; color:{accent}; "
+                f"letter-spacing:1px; background:transparent;")
+            self._dot_lbl.setStyleSheet(
+                f"color:{accent}; font-size:{FONT['label']}pt; background:transparent;")
+            self.setToolTip(
+                f"{profile.name}\n"
+                f"C_T = {profile.ct_value:.3e} K⁻¹\n"
+                f"{profile.category}  ·  {profile.wavelength_nm} nm")
+
+    def set_active_recipe(self, label: str):
+        """Track which recipe is currently active (shown as 'Active' pill)."""
+        self._active_recipe_label = label
+
+    # ── Popup ────────────────────────────────────────────────────────
+
+    def _ensure_popup(self) -> _ProfilePopup:
+        if self._popup is None:
+            self._popup = _ProfilePopup()
+            self._popup.profile_selected.connect(self.profile_selected)
+            self._popup.save_requested.connect(self.save_requested)
+            self._popup.manage_requested.connect(self.manage_requested)
+        return self._popup
+
+    def mousePressEvent(self, e):
+        if e.button() == Qt.LeftButton:
+            p = self._ensure_popup()
+            if p.isVisible():
+                p.hide()
+                self._set_open(False)
+            else:
+                # Refresh recipe list before showing
+                if self._recipe_store:
+                    try:
+                        self._recipes = self._recipe_store.list()
+                    except Exception:
+                        self._recipes = []
+                p.set_profiles(self._recipes, self._active_recipe_label)
+                p._apply_styles()
+                p.show_below(self)
+                self._set_open(True)
+                p.installEventFilter(self)
+        super().mousePressEvent(e)
+
+    def eventFilter(self, obj, event):
+        if obj is self._popup and event.type() == event.Hide:
+            self._set_open(False)
+        return False
+
+    def _set_open(self, open_: bool):
+        self._open = open_
+        self._apply_styles()
+
+    # ── Styling ──────────────────────────────────────────────────────
+
+    def _apply_styles(self):
+        P     = PALETTE
+        surf  = P.get("surface",      "#2d2d2d")
+        bdr   = P.get("border",       "#484848")
+        hover = P.get("surfaceHover", "#404040")
+        txt   = P.get("text",         "#ebebeb")
+
+        if self._open:
+            radius   = "5px 5px 0 0"
+            border_b = "none"
+        else:
+            radius   = "5px"
+            border_b = f"1px solid {bdr}"
+
+        self.setStyleSheet(f"""
+            ProfileButton {{
+                background: {surf};
+                border: 1px solid {bdr};
+                border-bottom: {border_b};
+                border-radius: {radius};
+            }}
+            ProfileButton:hover {{
+                background: {hover};
+            }}
+        """)
+        self._arrow_lbl.setStyleSheet(
+            f"font-size:{int(FONT['label'] * 2.4)}pt; color:{txt}; "
+            f"background:transparent; padding-bottom:6px;")
+
+        # Dot and name styles are set by set_profile(); only touch arrow here.
+        if self._popup:
+            self._popup._apply_styles()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 #  ConnectedDevicesButton
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -898,19 +1288,9 @@ class StatusHeader(QWidget):
 
         lay.addStretch()
 
-        # ── Active profile pill ───────────────────────────────────────
-        self._profile_pill = QWidget()
-        self._profile_pill.setMaximumHeight(36)
-        self._profile_pill.setMinimumWidth(60)
-        self._profile_pill.setObjectName("profilePill")
-        pp_lay = QHBoxLayout(self._profile_pill)
-        pp_lay.setContentsMargins(8, 0, 8, 0)
-        pp_lay.setSpacing(5)
-        self._profile_pill_icon = QLabel("●")
-        self._profile_name_lbl  = QLabel("No profile")
-        pp_lay.addWidget(self._profile_pill_icon)
-        pp_lay.addWidget(self._profile_name_lbl)
-        lay.addWidget(self._profile_pill)
+        # ── Active profile button (dropdown) ──────────────────────────
+        self._profile_btn = ProfileButton()
+        lay.addWidget(self._profile_btn)
 
         # ── Divider 2 ─────────────────────────────────────────────────
         self._div2 = QFrame()
@@ -1035,11 +1415,9 @@ class StatusHeader(QWidget):
         if hasattr(self, "_div3"):
             self._div3.setStyleSheet(f"color:{bdr};")
 
-        # Profile pill default state (overridden by set_profile when a profile is active)
-        self._profile_pill_icon.setStyleSheet(
-            f"color:{sub}; font-size:{FONT['label']}pt;")
-        self._profile_name_lbl.setStyleSheet(
-            f"font-size:{FONT['label']}pt; color:{dim}; letter-spacing:1px;")
+        # Profile button
+        self._profile_btn._apply_styles()
+        self._profile_btn.set_profile(self._profile_btn._profile)
 
         # Logo: show white svg in dark mode, black svg in light mode
         dark = active_theme() == "dark"
@@ -1177,28 +1555,7 @@ class StatusHeader(QWidget):
 
     def set_profile(self, profile):
         """Update the active profile indicator in the header."""
-        from profiles.profiles import CATEGORY_ACCENTS
-        if profile is None:
-            dim = PALETTE.get("textDim", "#999999")
-            sub = PALETTE.get("textSub", "#6a6a6a")
-            self._profile_name_lbl.setText("No profile")
-            self._profile_name_lbl.setStyleSheet(
-                f"font-size:{FONT['label']}pt; color:{dim}; letter-spacing:1px;")
-            self._profile_pill_icon.setStyleSheet(
-                f"color:{sub}; font-size:{FONT['label']}pt;")
-            self._profile_pill.setToolTip("")
-        else:
-            accent = CATEGORY_ACCENTS.get(profile.category, "#00d4aa")
-            name   = profile.name if len(profile.name) <= 28 else profile.name[:26] + "…"
-            self._profile_name_lbl.setText(name)
-            self._profile_name_lbl.setStyleSheet(
-                f"font-size:{FONT['label']}pt; color:{accent}; letter-spacing:1px;")
-            self._profile_pill_icon.setStyleSheet(
-                f"color:{accent}; font-size:{FONT['label']}pt;")
-            self._profile_pill.setToolTip(
-                f"{profile.name}\n"
-                f"C_T = {profile.ct_value:.3e} K⁻¹\n"
-                f"{profile.category}  ·  {profile.wavelength_nm} nm")
+        self._profile_btn.set_profile(profile)
 
     def set_demo_mode(self, active: bool):
         """Show or hide the DEMO MODE banner in the header."""
