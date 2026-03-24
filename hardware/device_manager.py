@@ -407,6 +407,7 @@ class DeviceManager:
             import sys as _sys
             # Cameras (especially FLIR Boson) need a longer timeout because
             # auto-detect probes multiple video device indices on Windows.
+            dtype = desc.device_type
             _timeout = (_CAMERA_CONNECT_TIMEOUT_S if dtype == DTYPE_CAMERA
                         else _CONNECT_TIMEOUT_S)
             pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
