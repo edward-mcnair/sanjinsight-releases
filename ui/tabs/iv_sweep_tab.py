@@ -201,7 +201,9 @@ class IVSweepTab(QWidget):
         lay.addWidget(self._save_chk)
 
         row = QHBoxLayout()
-        self._save_path_lbl = QLabel("Default: ~/microsanj_sweeps/")
+        self._save_path_lbl = QLabel(
+            f"Default: {os.path.join(os.path.expanduser('~'), 'microsanj_sweeps')}"
+        )
         self._save_path_lbl.setStyleSheet(
             f"font-size:{FONT['caption']}pt; color:{PALETTE.get('textDim','#8892aa')};")
         row.addWidget(self._save_path_lbl, 1)

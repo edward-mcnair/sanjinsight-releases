@@ -207,7 +207,7 @@ class PylonDriver(CameraDriver):
             if node is None:
                 return
             from pypylon import genicam
-            if hasattr(node, 'IsWritable') and node.IsWritable():
+            if genicam.IsWritable(node):
                 genicam.IFloat(node).SetValue(float(microseconds))
                 log.debug("ExposureTime = %.0f us", microseconds)
         except Exception as e:
@@ -220,7 +220,7 @@ class PylonDriver(CameraDriver):
             if node is None:
                 return
             from pypylon import genicam
-            if hasattr(node, 'IsWritable') and node.IsWritable():
+            if genicam.IsWritable(node):
                 genicam.IFloat(node).SetValue(float(db))
                 log.debug("Gain = %.1f dB", db)
         except Exception as e:

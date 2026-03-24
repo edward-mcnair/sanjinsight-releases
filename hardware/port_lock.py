@@ -196,9 +196,10 @@ class PortLock:
 # ---------------------------------------------------------------------------
 
 def _lockfile_path(port: str) -> str:
-    """Return a safe /tmp path for the lock file of *port*."""
+    """Return a safe temp-directory path for the lock file of *port*."""
+    import tempfile
     safe = port.replace("/", "_").replace("\\", "_").replace(":", "_")
-    return os.path.join("/tmp", f"sanjinsight_port{safe}.lock")
+    return os.path.join(tempfile.gettempdir(), f"sanjinsight_port{safe}.lock")
 
 
 def _read_pid(lock_path: str) -> str | None:
