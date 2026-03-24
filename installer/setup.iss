@@ -154,7 +154,7 @@ Filename: "{tmp}\vc_redist.x64.exe"; \
 Filename: "{tmp}\CDM_Setup.exe"; \
   Parameters: "/S"; \
   StatusMsg: "Installing FTDI USB-serial driver (required by Meerstetter TEC/LDD)…"; \
-  Flags: waituntilterminated runhidden skipifnotexists; \
+  Flags: waituntilterminated runhidden; \
   Check: NeedsFTDIDriver
 
 ; ── Step 3: Launch SanjINSIGHT (optional checkbox on Finish page) ────────────
@@ -187,8 +187,14 @@ end;
 }
 function NeedsFTDIDriver(): Boolean;
 begin
-  Result := not RegKeyExists(HKLM,
-    'SYSTEM\CurrentControlSet\Services\FTSER2K');
+  { Skip if FTDI driver is already installed }
+  if RegKeyExists(HKLM, 'SYSTEM\CurrentControlSet\Services\FTSER2K') then
+  begin
+    Result := False;
+    Exit;
+  end;
+  { Skip if CDM_Setup.exe was not bundled (skipifsourcedoesntexist in [Files]) }
+  Result := FileExists(ExpandConstant('{tmp}\CDM_Setup.exe'));
 end;
 
 { ── Hardware SDK prerequisite guidance ───────────────────────────────────────
