@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 
 from .device_registry import (
     DeviceDescriptor, DEVICE_REGISTRY,
-    find_by_usb, find_by_serial_pattern, find_by_ni_pattern,
+    find_by_usb, find_all_by_usb, find_by_serial_pattern, find_by_ni_pattern,
     CONN_SERIAL, CONN_USB, CONN_ETHERNET, CONN_PCIE, CONN_CAMERA,
     DTYPE_CAMERA, DTYPE_UNKNOWN)
 
@@ -114,23 +114,44 @@ class SerialScanner:
                     log.debug("SerialScanner: VID:PID parse failed for hwid=%r — "
                               "skipping VID/PID match", hwid, exc_info=True)
 
-            descriptor = None
+            # Build list of all matching descriptors for this port.
+            # A single VID:PID (e.g. FTDI 0403:6001) may be used by
+            # multiple device types (Meerstetter TEC, ATEC, LDD).
+            # Create a discovered-device entry for each match so the user
+            # can pick the correct one in Device Manager.
+            descriptors = []
             if vid and pid:
-                descriptor = find_by_usb(vid, pid)
-            if descriptor is None:
-                descriptor = find_by_serial_pattern(desc, hwid)
+                descriptors = find_all_by_usb(vid, pid)
+            if not descriptors:
+                pattern_match = find_by_serial_pattern(desc, hwid)
+                if pattern_match:
+                    descriptors = [pattern_match]
 
-            results.append(DiscoveredDevice(
-                connection_type = CONN_SERIAL,
-                address         = port.device,
-                description     = desc,
-                hwid            = hwid,
-                manufacturer    = getattr(port, "manufacturer", "") or "",
-                serial_number   = getattr(port, "serial_number", "") or "",
-                vid             = vid,
-                pid             = pid,
-                descriptor      = descriptor,
-            ))
+            if descriptors:
+                for d in descriptors:
+                    results.append(DiscoveredDevice(
+                        connection_type = CONN_SERIAL,
+                        address         = port.device,
+                        description     = desc,
+                        hwid            = hwid,
+                        manufacturer    = getattr(port, "manufacturer", "") or "",
+                        serial_number   = getattr(port, "serial_number", "") or "",
+                        vid             = vid,
+                        pid             = pid,
+                        descriptor      = d,
+                    ))
+            else:
+                results.append(DiscoveredDevice(
+                    connection_type = CONN_SERIAL,
+                    address         = port.device,
+                    description     = desc,
+                    hwid            = hwid,
+                    manufacturer    = getattr(port, "manufacturer", "") or "",
+                    serial_number   = getattr(port, "serial_number", "") or "",
+                    vid             = vid,
+                    pid             = pid,
+                    descriptor      = None,
+                ))
         return results, None
 
 
@@ -574,12 +595,21 @@ class DeviceScanner:
         for t in threads:
             t.join(timeout=8.0)
 
-        # Deduplicate by address
+        # Deduplicate by (address, descriptor uid).
+        # A single COM port may legitimately match multiple device types
+        # (e.g. FTDI VID:PID 0403:6001 is used by Meerstetter TEC, ATEC,
+        # and LDD).  Deduplicating by address alone drops all but the first
+        # match, hiding valid devices from the user.  Deduplicating by
+        # (address, uid) keeps one entry per device type per port.
+        # Unrecognised devices (descriptor=None) are still deduped by
+        # address alone to avoid noise.
         seen    = set()
         unique  = []
         for d in report.devices:
-            if d.address not in seen:
-                seen.add(d.address)
+            uid = d.descriptor.uid if d.descriptor else "__none__"
+            key = (d.address, uid)
+            if key not in seen:
+                seen.add(key)
                 unique.append(d)
         report.devices = unique
         report.timestamp = time.time()

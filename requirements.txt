@@ -53,11 +53,11 @@ dcps>=0.8.0                   # DC Power Supply helpers — Keithley 2400, Rigol
 thorlabs-apt-device>=0.3.0    # Thorlabs APT/Kinesis stage controllers (USB)
                               #   https://pypi.org/project/thorlabs-apt-device/
 
-# ── Hardware drivers NOT on PyPI — install manually from GitHub if needed ─────
-# These are optional: the app falls back to simulated/VISA mode without them.
+# ── Hardware drivers from GitHub (not on PyPI) ───────────────────────────────
+# These are installed from source via git+https URLs.  If git is not available
+# at install time, pip will skip them — the app falls back to simulated mode.
 #
-# Meerstetter MeCom protocol (TEC-1089, LDD-1121):
-#   pip install git+https://github.com/marcwimmer/pyMeCom
+pyMeCom @ git+https://github.com/marcwimmer/pyMeCom  # Meerstetter MeCom protocol (TEC-1089, LDD-1121)
 #
 # Rigol DP832 native LAN driver (no NI-VISA required):
 #   pip install git+https://github.com/tspspi/pydp832

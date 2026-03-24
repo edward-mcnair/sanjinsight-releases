@@ -701,6 +701,18 @@ def find_by_usb(vid: int, pid: int) -> Optional[DeviceDescriptor]:
     return None
 
 
+def find_all_by_usb(vid: int, pid: int) -> list:
+    """Return ALL device descriptors matching a VID:PID pair.
+
+    Common USB-serial chips (FTDI 0403:6001, Prolific 067B:2303) are
+    shared by multiple device types.  Returning all matches lets the
+    scanner create a discovered-device entry for each, so the user can
+    pick the correct one in Device Manager.
+    """
+    return [d for d in DEVICE_REGISTRY.values()
+            if d.usb_vid == vid and d.usb_pid == pid]
+
+
 def find_by_serial_pattern(description: str,
                             hwid: str = "") -> Optional[DeviceDescriptor]:
     text = (description + " " + hwid).lower()
