@@ -81,7 +81,7 @@ jobs:
       - name: Install optional GitHub-only hardware drivers
         shell: bash
         run: |
-          python -m pip install git+https://github.com/marcwimmer/pyMeCom \
+          python -m pip install git+https://github.com/meerstetter/pyMeCom \
             && echo "[OK] pyMeCom installed" \
             || echo "[SKIP] pyMeCom unavailable — TEC will use simulated mode in bundle"
           python -m pip install git+https://github.com/tspspi/pydp832 \
