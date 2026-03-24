@@ -154,7 +154,7 @@ Filename: "{tmp}\vc_redist.x64.exe"; \
 Filename: "{tmp}\CDM_Setup.exe"; \
   Parameters: "/S"; \
   StatusMsg: "Installing FTDI USB-serial driver (required by Meerstetter TEC/LDD)…"; \
-  Flags: waituntilterminated runhidden skipifdoesntexist; \
+  Flags: waituntilterminated runhidden skipifnotexists; \
   Check: NeedsFTDIDriver
 
 ; ── Step 3: Launch SanjINSIGHT (optional checkbox on Finish page) ────────────
