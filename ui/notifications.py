@@ -691,8 +691,15 @@ class ToastManager(QObject):
 
     # ── Internal ───────────────────────────────────────────────────────
 
-    def _show(self, title: str, message: str, level: str,
-              guidance: list[str] | None, auto_dismiss_ms: int):
+    def _show(self, title: str = "", message: str = "", level: str = "error",
+              guidance: list[str] | None = None, auto_dismiss_ms: int = 0):
+        # Deduplicate: if the same message is already showing, skip it.
+        # This prevents identical hardware errors from flooding the UI.
+        for existing in self._toasts:
+            if (getattr(existing, '_msg_key', None) ==
+                    f"{level}:{title}:{message}"):
+                return
+
         # Prune if we already have too many
         while len(self._toasts) >= self.MAX_TOASTS:
             oldest = self._toasts.pop(0)
@@ -707,9 +714,11 @@ class ToastManager(QObject):
             auto_dismiss_ms=auto_dismiss_ms,
             parent=self._window
         )
+        toast._msg_key = f"{level}:{title}:{message}"
         toast.dismissed.connect(self._on_dismissed)
         self._toasts.append(toast)
         toast.show()
+        toast.raise_()
         self._restack_toasts()
 
     def _on_dismissed(self, toast):
@@ -718,7 +727,12 @@ class ToastManager(QObject):
         self._restack_toasts()
 
     def _restack_toasts(self):
-        """Position all visible toasts stacked from bottom-right."""
+        """Position all visible toasts stacked from bottom-right.
+
+        Toasts are children of the main window, so we use window-local
+        coordinates (not mapToGlobal) to keep them anchored correctly
+        regardless of window position on screen.
+        """
         win_rect = self._window.rect()
         right  = win_rect.right()  - self.MARGIN
         bottom = win_rect.bottom() - self.MARGIN
@@ -730,8 +744,7 @@ class ToastManager(QObject):
             w = toast.width()
             x = right - w
             y = y - h
-            toast.move(self._window.mapToGlobal(QPoint(0, 0)) +
-                       QPoint(x, y))
+            toast.move(x, y)
             y -= self.SPACING
 
     def eventFilter(self, obj, event):

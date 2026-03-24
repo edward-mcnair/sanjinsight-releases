@@ -202,23 +202,35 @@ class PylonDriver(CameraDriver):
 
     def set_exposure(self, microseconds: float) -> None:
         self._cfg["exposure_us"] = microseconds
-        from pypylon import genicam
-        node = self._cam.GetNodeMap().GetNode("ExposureTime")
-        if node and node.IsWritable():
-            genicam.IFloat(node).SetValue(float(microseconds))
-            log.debug("ExposureTime = %.0f us", microseconds)
+        try:
+            node = self._cam.GetNodeMap().GetNode("ExposureTime")
+            if node is None:
+                return
+            from pypylon import genicam
+            if hasattr(node, 'IsWritable') and node.IsWritable():
+                genicam.IFloat(node).SetValue(float(microseconds))
+                log.debug("ExposureTime = %.0f us", microseconds)
+        except Exception as e:
+            log.debug("set_exposure failed: %s", e)
 
     def set_gain(self, db: float) -> None:
         self._cfg["gain"] = db
-        from pypylon import genicam
-        node = self._cam.GetNodeMap().GetNode("Gain")
-        if node and node.IsWritable():
-            genicam.IFloat(node).SetValue(float(db))
-            log.debug("Gain = %.1f dB", db)
+        try:
+            node = self._cam.GetNodeMap().GetNode("Gain")
+            if node is None:
+                return
+            from pypylon import genicam
+            if hasattr(node, 'IsWritable') and node.IsWritable():
+                genicam.IFloat(node).SetValue(float(db))
+                log.debug("Gain = %.1f dB", db)
+        except Exception as e:
+            log.debug("set_gain failed: %s", e)
 
     def exposure_range(self) -> tuple:
         try:
             node = self._cam.GetNodeMap().GetNode("ExposureTime")
+            if node is None:
+                return (50.0, 200_000.0)
             from pypylon import genicam
             n = genicam.IFloat(node)
             return (n.GetMin(), n.GetMax())
@@ -228,6 +240,8 @@ class PylonDriver(CameraDriver):
     def gain_range(self) -> tuple:
         try:
             node = self._cam.GetNodeMap().GetNode("Gain")
+            if node is None:
+                return (0.0, 24.0)
             from pypylon import genicam
             n = genicam.IFloat(node)
             return (n.GetMin(), n.GetMax())
