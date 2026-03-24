@@ -96,6 +96,35 @@ if not exist "%REDIST_EXE%" (
 )
 echo.
 
+:: ── Step 2b: Download FTDI CDM driver if not present ───────────────────────
+set FTDI_EXE=%REDIST_DIR%\CDM_Setup.exe
+
+if not exist "%FTDI_EXE%" (
+    echo [2b/4] Downloading FTDI CDM driver ^(USB-serial for Meerstetter TEC/LDD^)...
+    if not exist "%REDIST_DIR%" mkdir "%REDIST_DIR%"
+    :: FTDI CDM v2.12.36.4 WHQL Certified — unified VCP + D2XX driver.
+    :: FTDI permits redistribution of CDM drivers without prior authorization.
+    :: If this URL stops working, download manually from:
+    ::   https://ftdichip.com/drivers/vcp-drivers/
+    :: Save the setup .exe as: installer\redist\CDM_Setup.exe
+    powershell -NoProfile -Command ^
+      "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://ftdichip.com/wp-content/uploads/2024/11/CDM-v2.12.36.4-WHQL-Certified.exe' -OutFile '%FTDI_EXE%'" 2>&1
+    if errorlevel 1 (
+        echo.
+        echo WARNING: FTDI CDM download failed.
+        echo          The installer will still build, but without the FTDI driver.
+        echo          To bundle it, download manually from:
+        echo            https://ftdichip.com/drivers/vcp-drivers/
+        echo          Save the CDM setup .exe as: installer\redist\CDM_Setup.exe
+        echo.
+    ) else (
+        echo       Saved to: %FTDI_EXE%
+    )
+) else (
+    echo [2b/4] CDM_Setup.exe already present — skipping download.
+)
+echo.
+
 :: ── Step 3: Build the PyInstaller bundle ─────────────────────────────────────
 echo [3/4] Building application bundle...
 echo       (using: %PYTHON_EXE%)

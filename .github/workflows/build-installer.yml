@@ -103,6 +103,39 @@ jobs:
             && echo "[OK] flirpy installed — Microsanj IR (FLIR Boson) support bundled" \
             || echo "[SKIP] flirpy unavailable — Microsanj IR camera will not be bundled"
 
+      # ── 4d. Download redistributable driver installers ──────────────────
+      # These are bundled into the Inno Setup installer and run silently on
+      # the end-user machine if the corresponding driver is not detected.
+      - name: Download redistributable drivers
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path installer\redist | Out-Null
+
+          # ── VC++ 2015-2022 Redistributable (x64) ────────────────────────
+          $vcRedist = "installer\redist\vc_redist.x64.exe"
+          if (!(Test-Path $vcRedist)) {
+            Write-Host "Downloading VC++ 2022 Redistributable..."
+            Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" `
+              -OutFile $vcRedist
+            Write-Host "[OK] vc_redist.x64.exe downloaded"
+          }
+
+          # ── FTDI CDM driver (USB-serial for Meerstetter TEC/LDD) ────────
+          # FTDI permits redistribution of CDM drivers.
+          $ftdi = "installer\redist\CDM_Setup.exe"
+          if (!(Test-Path $ftdi)) {
+            Write-Host "Downloading FTDI CDM v2.12.36.4 driver..."
+            try {
+              [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+              Invoke-WebRequest -Uri "https://ftdichip.com/wp-content/uploads/2024/11/CDM-v2.12.36.4-WHQL-Certified.exe" `
+                -OutFile $ftdi
+              Write-Host "[OK] CDM_Setup.exe downloaded"
+            } catch {
+              Write-Host "[SKIP] FTDI CDM download failed — installer will ship without FTDI driver"
+              Write-Host "       Users can install it manually from https://ftdichip.com/drivers/vcp-drivers/"
+            }
+          }
+
       # ── 5. Read version from version.py ───────────────────────────────────
       - name: Read version
         id: version
@@ -355,6 +388,9 @@ jobs:
             'SolidCompression    =yes',
             'WizardStyle         =modern',
             'PrivilegesRequired  =admin',
+            'MinVersion          =10.0.17763',
+            'ArchitecturesAllowed=x64compatible',
+            'ArchitecturesInstallIn64BitMode=x64compatible',
             'UninstallDisplayIcon={app}\{#AppExeName}',
             'UninstallDisplayName={#AppName} {#AppVersion}',
             '',
@@ -366,16 +402,48 @@ jobs:
             '',
             '[Files]',
             'Source: "..\dist\SanjINSIGHT\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs',
+            '; VC++ 2015-2022 Redistributable',
+            'Source: "redist\vc_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall skipifsourcedoesntexist; Check: NeedsVCRedist',
+            '; FTDI CDM driver (USB-serial for Meerstetter TEC/LDD)',
+            'Source: "redist\CDM_Setup.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall skipifsourcedoesntexist; Check: NeedsFTDIDriver',
+            '',
+            '[Dirs]',
+            'Name: "{app}\logs"',
+            'Name: "{app}\profiles\user"',
             '',
             '[Icons]',
             'Name: "{group}\{#AppName}";           Filename: "{app}\{#AppExeName}"',
             'Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"',
             'Name: "{autodesktop}\{#AppName}";     Filename: "{app}\{#AppExeName}"; Tasks: desktopicon',
             '',
+            '[Registry]',
+            'Root: HKCU; Subkey: "Software\Microsanj\SanjINSIGHT"; ValueType: string; ValueName: "Version"; ValueData: "{#AppVersion}"; Flags: uninsdeletekey',
+            'Root: HKCU; Subkey: "Software\Microsanj\SanjINSIGHT"; ValueType: string; ValueName: "InstallPath"; ValueData: "{app}"',
+            '',
             '[Run]',
+            '; VC++ Runtime (silent)',
+            'Filename: "{tmp}\vc_redist.x64.exe"; Parameters: "/quiet /norestart"; StatusMsg: "Installing Visual C++ 2022 Runtime…"; Flags: waitprogress runhidden skipifdoesntexist; Check: NeedsVCRedist',
+            '; FTDI VCP driver (silent)',
+            'Filename: "{tmp}\CDM_Setup.exe"; Parameters: "/S"; StatusMsg: "Installing FTDI USB-serial driver (for Meerstetter TEC/LDD)…"; Flags: waituntilterminated runhidden skipifdoesntexist; Check: NeedsFTDIDriver',
+            '; Launch app',
             'Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent',
             '',
             '[Code]',
+            'function NeedsVCRedist(): Boolean;',
+            'var',
+            '  dwInstalled: Cardinal;',
+            'begin',
+            '  if RegQueryDWordValue(HKLM, ''SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64'', ''Installed'', dwInstalled) then',
+            '    Result := (dwInstalled <> 1)',
+            '  else',
+            '    Result := True;',
+            'end;',
+            '',
+            'function NeedsFTDIDriver(): Boolean;',
+            'begin',
+            '  Result := not RegKeyExists(HKLM, ''SYSTEM\CurrentControlSet\Services\FTSER2K'');',
+            'end;',
+            '',
             'procedure CurStepChanged(CurStep: TSetupStep);',
             'begin',
             '  if CurStep = ssInstall then begin',

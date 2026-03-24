@@ -38,6 +38,13 @@
 ; VC++ 2015-2022 runtime is not already installed.
 #define VCRedistSrc "redist\vc_redist.x64.exe"
 
+; ── FTDI VCP driver (USB-to-serial for Meerstetter TEC-1089/LDD-1121) ──────
+; Place CDM_Setup.exe in installer\redist\ before building.
+; build_installer.bat downloads it automatically from FTDI's CDM page.
+; The installer bundles it and runs it silently if FTDI VCP is not installed.
+; FTDI explicitly permits redistribution of CDM drivers.
+#define FTDISetupSrc "redist\CDM_Setup.exe"
+
 [Setup]
 ; {A1B2C3D4…} — unique GUID identifies this app for Windows Add/Remove Programs.
 ; Do NOT change this GUID — changing it breaks in-place upgrades.
@@ -105,6 +112,12 @@ Source: "..\dist\SanjINSIGHT\*"; DestDir: "{app}"; \
 Source: "{#VCRedistSrc}"; DestDir: "{tmp}"; \
   Flags: deleteafterinstall; Check: NeedsVCRedist
 
+; ── FTDI CDM driver (USB-to-serial for Meerstetter TEC / LDD) ───────────────
+; FTDI permits redistribution of the CDM (Combined Driver Model) package.
+; build_installer.bat downloads CDM_Setup.exe to installer\redist\ automatically.
+Source: "{#FTDISetupSrc}"; DestDir: "{tmp}"; \
+  Flags: deleteafterinstall skipifsourcedoesntexist; Check: NeedsFTDIDriver
+
 [Dirs]
 ; Ensure writable directories exist at install time so the app can write to them
 ; without requesting elevation at runtime.
@@ -135,7 +148,16 @@ Filename: "{tmp}\vc_redist.x64.exe"; \
   Flags: waitprogress runhidden; \
   Check: NeedsVCRedist
 
-; ── Step 2: Launch SanjINSIGHT (optional checkbox on Finish page) ────────────
+; ── Step 2: FTDI VCP driver (silent, runs before app launches) ──────────────
+; /S              — NSIS silent mode (no UI)
+; FTDI CDM setup is an NSIS-based installer that supports /S for silent install.
+Filename: "{tmp}\CDM_Setup.exe"; \
+  Parameters: "/S"; \
+  StatusMsg: "Installing FTDI USB-serial driver (required by Meerstetter TEC/LDD)…"; \
+  Flags: waituntilterminated runhidden skipifdoesntexist; \
+  Check: NeedsFTDIDriver
+
+; ── Step 3: Launch SanjINSIGHT (optional checkbox on Finish page) ────────────
 Filename: "{app}\{#AppExeName}"; \
   Description: "{cm:LaunchProgram,{#AppName}}"; \
   Flags: nowait postinstall skipifsilent
@@ -156,6 +178,17 @@ begin
     Result := (dwInstalled <> 1)
   else
     Result := True;  { Registry key absent → runtime not installed }
+end;
+
+{ ── FTDI VCP driver detection ──────────────────────────────────────────────
+  The FTDI VCP (Virtual COM Port) driver registers a kernel service named
+  FTSER2K.  If the service exists, the driver is already installed.
+  Returns True when the FTDI driver needs to be installed.
+}
+function NeedsFTDIDriver(): Boolean;
+begin
+  Result := not RegKeyExists(HKLM,
+    'SYSTEM\CurrentControlSet\Services\FTSER2K');
 end;
 
 { ── Hardware SDK prerequisite guidance ───────────────────────────────────────
