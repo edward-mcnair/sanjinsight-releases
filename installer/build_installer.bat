@@ -74,6 +74,22 @@ if errorlevel 1 (
 echo       Done.
 echo.
 
+:: ── Step 1b: Install optional GitHub-only drivers (not on PyPI) ──────────────
+:: These are hardware protocol libraries that must be installed from GitHub.
+:: Failures are non-fatal — the app falls back to simulated mode without them.
+echo [1b/4] Installing optional hardware drivers from GitHub...
+python -m pip install git+https://github.com/meerstetter/pyMeCom --quiet 2>nul && (
+    echo       [OK] pyMeCom installed ^(Meerstetter TEC-1089 / LDD-1121^)
+) || (
+    echo       [SKIP] pyMeCom unavailable — TEC will use simulated mode
+)
+python -m pip install git+https://github.com/tspspi/pydp832 --quiet 2>nul && (
+    echo       [OK] pydp832 installed ^(Rigol DP832 native LAN driver^)
+) || (
+    echo       [SKIP] pydp832 unavailable — Rigol DP832 will use VISA mode
+)
+echo.
+
 :: ── Step 2: Download VC++ Redistributable if not present ─────────────────────
 set REDIST_DIR=%SCRIPT_DIR%\redist
 set REDIST_EXE=%REDIST_DIR%\vc_redist.x64.exe
