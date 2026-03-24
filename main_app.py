@@ -1898,19 +1898,21 @@ class MainWindow(QMainWindow):
     # ── Update checker ─────────────────────────────────────────────
 
     def _start_update_checker(self):
-        """Start the background update check if enabled in preferences."""
+        """Start the background update check if enabled in preferences.
+
+        Runs in all modes (including demo) — the user should always know
+        when a newer version is available, regardless of hardware state.
+        """
         from updater import UpdateChecker, should_check_now, record_check_date
         import config as _cfg
-        from hardware.app_state import app_state
-        if app_state.demo_mode:
-            log.debug("Update check skipped — running in demo mode")
-            return
         if not should_check_now(_cfg):
             return
         record_check_date(_cfg)
+        include_pre = _cfg.get_pref("updates.include_prerelease", False)
         checker = UpdateChecker(
             on_update=self._on_update_available,
             on_error=lambda e: log.debug(f"Update check: {e}"),
+            include_prerelease=include_pre,
         )
         checker.check_async(delay_s=8)
 
@@ -1934,13 +1936,17 @@ class MainWindow(QMainWindow):
     def _on_manual_update_check(self):
         """Triggered by Settings tab "Check Now" or Help → Check for Updates."""
         from updater import UpdateChecker
+        import config as _cfg
         import threading
+
+        include_pre = _cfg.get_pref("updates.include_prerelease", False)
 
         def _check():
             checker = UpdateChecker(
                 on_update=self._on_update_available,
                 on_no_update=lambda: _post_result("✓ You are up to date", "#00d4aa"),
                 on_error=lambda e: _post_result(f"Could not check: {e}", "#ff4444"),
+                include_prerelease=include_pre,
             )
             checker.check_sync()
 

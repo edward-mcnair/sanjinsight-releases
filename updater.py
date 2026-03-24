@@ -41,8 +41,8 @@ from dataclasses import dataclass, field
 from typing import Optional, Callable
 
 from version import (
-    UPDATE_CHECK_URL, RELEASES_PAGE_URL,
-    is_newer, parse_version, __version__,
+    UPDATE_CHECK_URL, UPDATE_CHECK_ALL_URL, RELEASES_PAGE_URL,
+    is_newer, parse_version, __version__, PRERELEASE,
 )
 
 log = logging.getLogger(__name__)
@@ -77,10 +77,17 @@ class UpdateChecker:
         on_update:  Callable[[UpdateInfo], None],
         on_error:   Optional[Callable[[str], None]] = None,
         on_no_update: Optional[Callable[[], None]]  = None,
+        include_prerelease: bool = False,
     ):
         self._on_update    = on_update
         self._on_error     = on_error or (lambda msg: log.debug(f"Update check: {msg}"))
         self._on_no_update = on_no_update or (lambda: None)
+        # When True, checks ALL releases (including pre-releases).
+        # When False, uses /releases/latest which skips pre-releases.
+        # Users on a beta channel should always set this to True so they
+        # see newer betas.  If the current build is itself a pre-release
+        # we also force this on so the user isn't stuck on an old beta.
+        self._include_pre  = include_prerelease or bool(PRERELEASE)
 
     def check_async(self, delay_s: float = 0) -> None:
         """Fire-and-forget background check. Optional startup delay."""
@@ -105,14 +112,30 @@ class UpdateChecker:
 
     def _fetch(self) -> Optional[UpdateInfo]:
         try:
+            # Choose endpoint: /releases/latest (stable only) or
+            # /releases?per_page=5 (includes pre-releases).
+            url = UPDATE_CHECK_ALL_URL if self._include_pre else UPDATE_CHECK_URL
             req = urllib.request.Request(
-                UPDATE_CHECK_URL,
+                url,
                 headers={
                     "Accept":     "application/vnd.github+json",
                     "User-Agent": f"SanjINSIGHT/{__version__}",
                 })
             with urllib.request.urlopen(req, timeout=10) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
+                raw = json.loads(resp.read().decode("utf-8"))
+
+            # /releases returns a list; /releases/latest returns a single object.
+            # Normalise to a single release dict — pick the newest that is
+            # newer than the running version.
+            if isinstance(raw, list):
+                data = self._pick_best(raw)
+                if data is None:
+                    log.debug("Up to date — no newer release in list "
+                              f"(running {__version__})")
+                    self._on_no_update()
+                    return None
+            else:
+                data = raw
 
             remote_version = data.get("tag_name", "").lstrip("v")
             if not remote_version:
@@ -120,7 +143,8 @@ class UpdateChecker:
                 return None
 
             if not is_newer(remote_version):
-                log.debug(f"Up to date (running {__version__}, latest {remote_version})")
+                log.debug(f"Up to date (running {__version__}, "
+                          f"latest {remote_version})")
                 self._on_no_update()
                 return None
 
@@ -130,17 +154,20 @@ class UpdateChecker:
             for asset in assets:
                 name = asset.get("name", "")
                 if name.lower().endswith(".exe") and "setup" in name.lower():
-                    download_url = asset.get("browser_download_url", download_url)
+                    download_url = asset.get("browser_download_url",
+                                             download_url)
                     break
 
             info = UpdateInfo(
                 version       = remote_version,
-                release_notes = data.get("body", "_No release notes provided._"),
+                release_notes = data.get("body",
+                                         "_No release notes provided._"),
                 download_url  = download_url,
                 release_url   = data.get("html_url", RELEASES_PAGE_URL),
                 is_prerelease = data.get("prerelease", False),
             )
-            log.info(f"Update available: v{remote_version} (running v{__version__})")
+            log.info(f"Update available: v{remote_version} "
+                     f"(running v{__version__})")
             try:
                 self._on_update(info)
             except Exception as e:
@@ -153,6 +180,23 @@ class UpdateChecker:
             self._on_error(f"Malformed API response: {e}")
         except Exception as e:
             self._on_error(f"Unexpected error: {e}")
+        return None
+
+    def _pick_best(self, releases: list) -> Optional[dict]:
+        """From a list of GitHub releases, return the newest that is newer
+        than the running version, respecting the prerelease preference."""
+        for rel in releases:
+            if rel.get("draft", False):
+                continue
+            tag = rel.get("tag_name", "").lstrip("v")
+            if not tag:
+                continue
+            # If user opted out of pre-releases, skip them — unless the
+            # running build is itself a pre-release (always show upgrades).
+            if rel.get("prerelease", False) and not self._include_pre:
+                continue
+            if is_newer(tag):
+                return rel
         return None
 
 

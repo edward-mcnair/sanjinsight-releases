@@ -175,6 +175,13 @@ class _MenuItem(QWidget):
                          (_TEXT_NORM() if self._hover else _TEXT_DIM()))
 
         icon_name = self._item.icon
+        # Remap icons that don't exist in the installed qtawesome version
+        # (e.g. "water-opacity" renamed in newer MDI fonts).
+        try:
+            from ui.icons import _safe_icon
+            icon_name = _safe_icon(icon_name)
+        except Exception:
+            pass
         if _QTA_AVAILABLE and "." in icon_name:
             cache_key = (icon_name, icon_col.name())
             px = _pix_cache.get(cache_key)

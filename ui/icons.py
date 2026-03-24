@@ -245,6 +245,49 @@ _FA5_TO_MDI: dict[str, str] = {
 }
 
 
+# ── Icon validation ───────────────────────────────────────────────────────────
+# Some MDI icon names were renamed or removed between qtawesome releases.
+# Validate all IC.* names at first use and remap any that don't exist in
+# the installed qtawesome to a safe fallback.  This prevents crashes inside
+# Qt paint events where exceptions may propagate to the global handler.
+
+_VALIDATED = False
+_ICON_REMAP: dict[str, str] = {}   # bad_name → fallback_name
+
+def _validate_icons() -> None:
+    """One-time check: test every IC.* constant and build remap table."""
+    global _VALIDATED
+    if _VALIDATED:
+        return
+    _VALIDATED = True
+    try:
+        import qtawesome as qta
+    except ImportError:
+        return
+    _SAFE = "mdi.circle-medium"
+    for attr in dir(IC):
+        if attr.startswith("_"):
+            continue
+        name = getattr(IC, attr)
+        if not isinstance(name, str) or "." not in name:
+            continue
+        try:
+            qta.icon(name, color="#ffffff").pixmap(16, 16)
+        except Exception:
+            import logging as _log
+            _log.getLogger(__name__).warning(
+                "Icon %r not available in installed qtawesome — "
+                "remapping to fallback", name)
+            _ICON_REMAP[name] = _SAFE
+
+
+def _safe_icon(name: str) -> str:
+    """Return *name* if valid, or its fallback from the remap table."""
+    if not _VALIDATED:
+        _validate_icons()
+    return _ICON_REMAP.get(name, name)
+
+
 # ── Icon helpers ──────────────────────────────────────────────────────────────
 
 def make_icon(icon_name: str, color: str | None = None, size: int = 16):
@@ -262,6 +305,7 @@ def make_icon(icon_name: str, color: str | None = None, size: int = 16):
     Returns ``None`` if qtawesome is not installed.
     """
     icon_name = _FA5_TO_MDI.get(icon_name, icon_name)
+    icon_name = _safe_icon(icon_name)
     if color is None:
         try:
             from ui.theme import PALETTE
@@ -318,6 +362,7 @@ def set_btn_icon(
     size      : int    icon pixel size (default 16)
     """
     icon_name = _FA5_TO_MDI.get(icon_name, icon_name)
+    icon_name = _safe_icon(icon_name)
     if color is None:
         try:
             from ui.theme import PALETTE

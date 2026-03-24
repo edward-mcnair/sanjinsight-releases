@@ -42,6 +42,9 @@ SOURCE_REPO         = "edward-mcnair/sanjinsight"          # private — source 
 RELEASES_REPO       = "edward-mcnair/sanjinsight-releases" # public  — installers only
 GITHUB_REPO         = RELEASES_REPO                        # alias used by updater
 UPDATE_CHECK_URL    = f"https://api.github.com/repos/{RELEASES_REPO}/releases/latest"
+# /releases (list all) needed when include_prerelease is True, because
+# /releases/latest only returns the most recent non-prerelease release.
+UPDATE_CHECK_ALL_URL = f"https://api.github.com/repos/{RELEASES_REPO}/releases?per_page=5"
 RELEASES_PAGE_URL   = f"https://github.com/{RELEASES_REPO}/releases"
 DOCS_URL            = f"https://docs.microsanj.com/sanjinsight"
 SUPPORT_EMAIL       = "software-support@microsanj.com"
