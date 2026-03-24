@@ -33,6 +33,11 @@ log = logging.getLogger(__name__)
 # within this time it is treated as a timeout failure.
 _CONNECT_TIMEOUT_S: float = 12.0
 
+# Camera connect timeout is longer because the Boson auto-detect on Windows
+# probes multiple DirectShow indices, reads test frames, and may run
+# PowerShell PnP queries — easily exceeding 12 s on cold USB enumeration.
+_CAMERA_CONNECT_TIMEOUT_S: float = 30.0
+
 from .device_registry import (DeviceDescriptor, DEVICE_REGISTRY,
                                 DTYPE_CAMERA, DTYPE_TEC, DTYPE_FPGA,
                                 DTYPE_STAGE, DTYPE_PROBER, DTYPE_TURRET,
@@ -311,6 +316,14 @@ class DeviceManager:
                 entry.last_connected = time.time()
                 entry.error_msg      = ""
                 self._emit(uid, DeviceState.CONNECTED)
+                # Fire post_inject_cb so the main window updates
+                # header, camera bar, tab availability, etc.
+                if self._post_inject_cb:
+                    try:
+                        self._post_inject_cb(uid, entry.driver_obj)
+                    except Exception:
+                        log.debug("[%s] post_inject_cb (adopted) failed",
+                                  uid, exc_info=True)
                 if on_complete:
                     on_complete(True, "Already open (adopted from hw_service)")
                 return
@@ -392,10 +405,14 @@ class DeviceManager:
             log.info("[%s] Connecting %s on %s …",
                      uid, desc.display_name, addr_str)
             import sys as _sys
+            # Cameras (especially FLIR Boson) need a longer timeout because
+            # auto-detect probes multiple video device indices on Windows.
+            _timeout = (_CAMERA_CONNECT_TIMEOUT_S if dtype == DTYPE_CAMERA
+                        else _CONNECT_TIMEOUT_S)
             pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
             future = pool.submit(driver_obj.connect)
             try:
-                future.result(timeout=_CONNECT_TIMEOUT_S)
+                future.result(timeout=_timeout)
                 pool.shutdown(wait=False)
             except concurrent.futures.TimeoutError:
                 pool.shutdown(wait=False)   # abandon stuck driver thread
@@ -407,7 +424,7 @@ class DeviceManager:
                     "    Device Manager matches the UVC camera (try 0, 1, 2…)."
                 ) if _sys.platform == "darwin" else ""
                 raise TimeoutError(
-                    f"Connect timed out after {_CONNECT_TIMEOUT_S:.0f}s. "
+                    f"Connect timed out after {_timeout:.0f}s. "
                     f"Check that the device is powered and not held by "
                     f"another process (terminal, firmware updater, etc.)."
                     + _macos_hint
@@ -639,6 +656,11 @@ class DeviceManager:
         # from _load_custom_driver.
         if dtype == DTYPE_CAMERA:
             from hardware.cameras import create_camera
+            # Inject camera_type from the device registry so the driver's
+            # CameraInfo reports the correct modality (tr/ir).  Without
+            # this, all cameras default to "tr" in CameraInfo, and
+            # _inject_into_app routes them to the wrong app_state slot.
+            cfg["camera_type"] = getattr(desc, "camera_type", "tr")
             # Boson: serial control port = entry.address (set in Device Manager),
             # UVC video device index = entry.video_index.
             # Width/height injected from registry so Boson 640 gets correct geometry.
@@ -797,6 +819,15 @@ class DeviceManager:
                             app_state.active_camera_type = "ir"
                     else:
                         app_state.cam = driver_obj
+                        # If active_camera_type was auto-set to "ir"
+                        # because no real TR camera existed when the IR
+                        # camera connected first, switch back to "tr"
+                        # now that a real TR camera is available.
+                        if app_state.active_camera_type == "ir":
+                            app_state.active_camera_type = "tr"
+                            log.info("[%s] Real TR camera connected — "
+                                     "switching active_camera_type back "
+                                     "to 'tr'", uid)
                     # Start the frame-grab thread inside the driver.
                     try:
                         driver_obj.start()

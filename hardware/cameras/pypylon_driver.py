@@ -146,14 +146,15 @@ class PylonDriver(CameraDriver):
         nm = self._cam.GetNodeMap()
 
         self._info = CameraInfo(
-            driver    = "pypylon",
-            model     = self._cam.GetDeviceInfo().GetModelName(),
-            serial    = self._cam.GetDeviceInfo().GetSerialNumber(),
-            width     = self._cam.Width.GetValue(),
-            height    = self._cam.Height.GetValue(),
-            bit_depth = 12,
-            max_fps   = self._cam.ResultingFrameRate.GetValue()
-                        if hasattr(self._cam, 'ResultingFrameRate') else 0.0,
+            driver      = "pypylon",
+            model       = self._cam.GetDeviceInfo().GetModelName(),
+            serial      = self._cam.GetDeviceInfo().GetSerialNumber(),
+            width       = self._cam.Width.GetValue(),
+            height      = self._cam.Height.GetValue(),
+            bit_depth   = 12,
+            max_fps     = self._cam.ResultingFrameRate.GetValue()
+                          if hasattr(self._cam, 'ResultingFrameRate') else 0.0,
+            camera_type = self._cfg.get("camera_type", "tr"),
         )
         self._open = True
 
