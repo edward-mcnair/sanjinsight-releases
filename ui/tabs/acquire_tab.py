@@ -455,6 +455,10 @@ class AcquireTab(QWidget):
         """Update the frame count spinbox (called when a profile is applied)."""
         self._frames.setValue(int(n))
 
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.refresh_camera_mode()
+
     def refresh_camera_mode(self) -> None:
         """Adapt UI controls for IR vs TR camera mode.
 

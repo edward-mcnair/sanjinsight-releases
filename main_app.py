@@ -2731,8 +2731,12 @@ class MainWindow(QMainWindow):
                 log.debug("_switch_to_real: DM re-inject failed",
                           exc_info=True)
 
-            # Update active camera type based on what's actually available
-            if _real_cam is not None:
+            # Set active camera type based on what's available.
+            # Respect saved user preference when both cameras exist.
+            if _real_cam is not None and _real_ir is not None:
+                _saved = config.get_pref("autoscan.selected_camera_type", "tr")
+                _as.active_camera_type = _saved if _saved in ("tr", "ir") else "tr"
+            elif _real_cam is not None:
                 _as.active_camera_type = "tr"
             elif _real_ir is not None:
                 _as.active_camera_type = "ir"

@@ -803,11 +803,10 @@ class DeviceManager:
                     ) or "tr"
                     if str(_cam_type).lower() == "ir":
                         app_state.ir_cam = driver_obj
-                        # Auto-select IR if there is no real TR camera.  A
-                        # simulated TR camera counts as "absent" here so that
-                        # the live grab loop immediately delivers IR frames
-                        # when the user connects a real IR camera while still
-                        # in demo mode (simulated TR camera still running).
+                        # Auto-select IR ONLY if no real TR camera exists
+                        # and the user hasn't already made a deliberate
+                        # selection.  Check whether a real TR camera is
+                        # present — if so, leave the user's choice alone.
                         _tr = app_state.tr_cam
                         _tr_is_real = False
                         if _tr is not None:
@@ -820,15 +819,11 @@ class DeviceManager:
                             app_state.active_camera_type = "ir"
                     else:
                         app_state.cam = driver_obj
-                        # If active_camera_type was auto-set to "ir"
-                        # because no real TR camera existed when the IR
-                        # camera connected first, switch back to "tr"
-                        # now that a real TR camera is available.
-                        if app_state.active_camera_type == "ir":
-                            app_state.active_camera_type = "tr"
-                            log.info("[%s] Real TR camera connected — "
-                                     "switching active_camera_type back "
-                                     "to 'tr'", uid)
+                        # Only auto-switch to TR if there was NO real TR
+                        # camera before (i.e. this is the first TR camera
+                        # connecting).  If the user has deliberately selected
+                        # IR via the camera bar, respect that choice — don't
+                        # force-switch back to TR on every reconnect.
                     # Start the frame-grab thread inside the driver.
                     try:
                         driver_obj.start()
