@@ -145,7 +145,7 @@ Root: HKCU; Subkey: "Software\Microsanj\SanjINSIGHT"; \
 Filename: "{tmp}\vc_redist.x64.exe"; \
   Parameters: "/quiet /norestart"; \
   StatusMsg: "Installing Visual C++ 2022 Runtime (required by Qt5)…"; \
-  Flags: waitprogress runhidden; \
+  Flags: waituntilterminated runhidden; \
   Check: NeedsVCRedist
 
 ; ── Step 2: FTDI VCP driver (silent, runs before app launches) ──────────────
