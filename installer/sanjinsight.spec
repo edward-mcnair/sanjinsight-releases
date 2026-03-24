@@ -104,6 +104,12 @@ hidden_imports = [
     'PyQt5.QtPrintSupport',
     'PyQt5.sip',
 
+    # ── qtawesome (icon font — Material Design Icons) ──────────────
+    # Imported inside try/except in ui/icons.py and ui/sidebar_nav.py,
+    # so PyInstaller's static analysis misses it.  Without this, no
+    # icons render and the bundle is ~15 MB smaller than expected.
+    'qtawesome',
+
     # ── Scientific stack ─────────────────────────────────────────────
     'numpy',
     'numpy.core._multiarray_umath',
@@ -258,6 +264,10 @@ datas = [
 
     # PyQt5 platform plugins and translations
     *collect_data_files('PyQt5', include_py_files=False),
+
+    # qtawesome font files (.ttf) and charmap files (.json)
+    # Without these, icons silently fail and the bundle is ~15 MB smaller.
+    *collect_data_files('qtawesome'),
 
     # h5py data files
     *collect_data_files('h5py'),
