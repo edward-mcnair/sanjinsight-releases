@@ -3647,14 +3647,17 @@ if __name__ == "__main__":
                     # Skip if hw_service.start() already opened this device type
                     # directly (it doesn't go through Device Manager, so
                     # entry.state is still ABSENT even though the hardware is open).
+                    # For cameras, check the SPECIFIC slot (TR vs IR) so that
+                    # an already-open Basler (TR) doesn't block Boson (IR)
+                    # auto-reconnect, and vice versa.
                     dtype = entry.descriptor.device_type
                     _already_open = False
                     if dtype == DTYPE_CAMERA:
-                        # Check BOTH camera slots directly — app_state.cam
-                        # switches based on active_camera_type and can miss
-                        # the TR slot when the active type is 'ir'.
-                        if app_state.tr_cam is not None or app_state.ir_cam is not None:
-                            _already_open = True
+                        _is_ir = uid in ("flir_boson_320", "flir_boson_640")
+                        if _is_ir:
+                            _already_open = app_state.ir_cam is not None
+                        else:
+                            _already_open = app_state.tr_cam is not None
                     elif dtype == DTYPE_FPGA and app_state.fpga is not None:
                         _already_open = True
                     elif dtype == DTYPE_STAGE and app_state.stage is not None:

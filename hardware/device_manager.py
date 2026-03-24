@@ -296,6 +296,25 @@ class DeviceManager:
                 if on_complete:
                     on_complete(False, "Already connecting")
                 return
+
+            # Guard: if hw_service.start() already opened this specific
+            # device type from config (it bypasses Device Manager), detect
+            # that here and adopt the existing driver instead of trying to
+            # open the hardware a second time (which causes "exclusively
+            # opened" errors for cameras and similar conflicts for other
+            # device types).
+            _adopted = self._try_adopt_existing(entry)
+            if _adopted:
+                log.info("[%s] Adopted existing driver from hw_service — "
+                         "marking as CONNECTED", uid)
+                entry.state          = DeviceState.CONNECTED
+                entry.last_connected = time.time()
+                entry.error_msg      = ""
+                self._emit(uid, DeviceState.CONNECTED)
+                if on_complete:
+                    on_complete(True, "Already open (adopted from hw_service)")
+                return
+
             allowed = _VALID_TRANSITIONS.get(entry.state, set())
             if DeviceState.CONNECTING not in allowed:
                 msg = (f"Cannot connect from state {entry.state.name}. "
@@ -521,6 +540,71 @@ class DeviceManager:
                 pass
             if on_complete:
                 on_complete(True, "Disconnected")
+
+    # ---------------------------------------------------------------- #
+    #  Adopt existing driver from hw_service                            #
+    # ---------------------------------------------------------------- #
+
+    def _try_adopt_existing(self, entry: DeviceEntry) -> bool:
+        """Check if hw_service.start() already opened this device type.
+
+        hw_service.start() opens devices from config.yaml directly into
+        app_state WITHOUT going through Device Manager.  If the user then
+        clicks Connect (or auto-reconnect fires), we'd try to open the
+        same USB/serial resource a second time — causing "exclusively
+        opened" errors for cameras and similar conflicts elsewhere.
+
+        This method checks the SPECIFIC app_state slot for the entry's
+        device type.  For cameras it distinguishes TR vs IR so that
+        connecting a Boson (IR) is not blocked by an already-open Basler
+        (TR) and vice versa.
+
+        Returns True (and sets entry.driver_obj) if an existing driver
+        was adopted, False otherwise.
+        """
+        try:
+            from hardware.app_state import app_state
+            desc  = entry.descriptor
+            dtype = desc.device_type
+
+            if dtype == DTYPE_CAMERA:
+                # Determine whether this specific entry is IR or TR
+                _is_ir = desc.uid in ("flir_boson_320", "flir_boson_640")
+                if _is_ir:
+                    existing = app_state.ir_cam
+                else:
+                    existing = app_state.tr_cam
+                if existing is not None:
+                    # Verify it's a real driver, not a simulated one
+                    try:
+                        from hardware.cameras.simulated import SimulatedDriver
+                        if isinstance(existing, SimulatedDriver):
+                            return False   # demo driver — don't adopt
+                    except ImportError:
+                        pass
+                    entry.driver_obj = existing
+                    return True
+            elif dtype == DTYPE_FPGA:
+                if app_state.fpga is not None:
+                    entry.driver_obj = app_state.fpga
+                    return True
+            elif dtype == DTYPE_STAGE:
+                if app_state.stage is not None:
+                    entry.driver_obj = app_state.stage
+                    return True
+            elif dtype == DTYPE_TEC:
+                if len(app_state.tecs) > 0:
+                    # Can't definitively map which TEC — adopt first match
+                    entry.driver_obj = app_state.tecs[0]
+                    return True
+            elif dtype == DTYPE_BIAS:
+                if app_state.bias is not None:
+                    entry.driver_obj = app_state.bias
+                    return True
+        except Exception:
+            log.debug("_try_adopt_existing failed for %s", entry.uid,
+                      exc_info=True)
+        return False
 
     # ---------------------------------------------------------------- #
     #  Driver instantiation                                             #

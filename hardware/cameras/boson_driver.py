@@ -347,7 +347,8 @@ class BosonDriver(CameraDriver):
                 continue
 
         # Pass 2: set-and-verify — on Windows with DirectShow, the Boson
-        # may not report its native resolution until cap.set() is called.
+        # may not report its native resolution until cap.set() is called
+        # AND a frame is actually read (format negotiation is deferred).
         # A regular webcam will reject 320×256 and stay at 640×480.
         for idx in _set_verify_candidates:
             try:
@@ -356,18 +357,36 @@ class BosonDriver(CameraDriver):
                     continue
                 cap.set(cv2.CAP_PROP_FRAME_WIDTH,  self._W)
                 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self._H)
+
+                # Check cap.get() first (fast path)
                 actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
                 actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                cap.release()
-                log.debug("Boson auto-detect (set-verify): index %d → %dx%d "
-                          "after requesting %dx%d",
-                          idx, actual_w, actual_h, self._W, self._H)
                 if actual_w == self._W and actual_h == self._H:
+                    cap.release()
                     log.info(
                         "Boson: set-verify found %dx%d stream at OpenCV "
                         "index %d (native resolution probe missed it).",
                         actual_w, actual_h, idx)
                     return idx
+
+                # On Windows, cap.get() may return stale values until a
+                # frame is actually read.  Read one frame and check the
+                # real pixel dimensions — this is the definitive test.
+                ret, frame = cap.read()
+                cap.release()
+                if ret and frame is not None:
+                    fh, fw = frame.shape[:2]
+                    log.debug("Boson auto-detect (frame-verify): index %d "
+                              "→ actual frame %dx%d", idx, fw, fh)
+                    if fw == self._W and fh == self._H:
+                        log.info(
+                            "Boson: frame-verify found %dx%d stream at "
+                            "OpenCV index %d.", fw, fh, idx)
+                        return idx
+                else:
+                    log.debug("Boson auto-detect (set-verify): index %d "
+                              "→ cap.get says %dx%d, frame read failed",
+                              idx, actual_w, actual_h)
             except Exception:
                 continue
 
@@ -392,9 +411,13 @@ class BosonDriver(CameraDriver):
             except Exception as exc:
                 log.debug("Boson: macOS video index auto-detect failed: %s", exc)
         elif _sys.platform == "win32":
-            # Use WMI/PowerShell to find which DirectShow index is the Boson.
-            # Check both "Camera" and "Image" PnP classes — the Boson UVC
-            # device may enumerate under either depending on the driver.
+            # PnP can confirm a Boson is physically connected, but the PnP
+            # enumeration order does NOT correspond to DirectShow indices.
+            # Instead, count how many non-Boson cameras appear in PnP; the
+            # Boson's DirectShow index is typically the last video device.
+            # As a safe heuristic, if PnP confirms a Boson exists and we
+            # only found 2 video devices (0 and 1), the Boson is whichever
+            # one is NOT the built-in webcam (typically index 1).
             try:
                 import subprocess
                 r = subprocess.run(
@@ -405,12 +428,31 @@ class BosonDriver(CameraDriver):
                     creationflags=0x08000000,  # CREATE_NO_WINDOW
                 )
                 names = [n.strip() for n in r.stdout.strip().splitlines() if n.strip()]
-                for i, name in enumerate(names):
-                    if "flir" in name.lower() or "boson" in name.lower():
+                _boson_found = any(
+                    "flir" in n.lower() or "boson" in n.lower() for n in names
+                )
+                if _boson_found:
+                    # Count DirectShow devices that successfully opened
+                    _ds_indices = [
+                        i for i in range(6)
+                        if cv2.VideoCapture(i, cv2.CAP_DSHOW).isOpened()
+                    ]
+                    # The built-in webcam is almost always index 0;
+                    # external USB cameras (Boson) get the next index.
+                    # Pick the highest index that is NOT a known webcam.
+                    for idx in reversed(_ds_indices):
+                        if idx > 0:   # skip built-in webcam at 0
+                            log.info(
+                                "Boson: PnP confirms FLIR device present; "
+                                "using DirectShow index %d (highest "
+                                "non-webcam index)", idx)
+                            return idx
+                    # Only index 0 exists — Boson must be at 0
+                    if _ds_indices:
                         log.info(
-                            "Boson: no native-resolution match; using "
-                            "PnP device hint → index %d ('%s')", i, name)
-                        return i
+                            "Boson: PnP confirms FLIR device present; "
+                            "only index 0 available — using it")
+                        return _ds_indices[0]
             except Exception as exc:
                 log.debug("Boson: Windows video index auto-detect failed: %s", exc)
 
