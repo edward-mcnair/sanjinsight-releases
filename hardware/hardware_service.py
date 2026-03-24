@@ -180,28 +180,48 @@ class HardwareService(QObject):
     #  Public API                                                       #
     # ================================================================ #
 
-    def start(self) -> None:
+    def start(self, skip_cameras: bool = False) -> None:
         """
         Start all hardware drivers and poll threads based on current config.
         Call once after the Qt application and MainWindow are created.
         Non-blocking — all connect/open calls happen on background threads.
+
+        Parameters
+        ----------
+        skip_cameras : bool
+            When True, skip camera init from config.yaml and start only
+            the idle grab loop.  Use this when Device Manager auto-reconnect
+            will handle camera connections — prevents both paths from trying
+            to open the same USB camera simultaneously ("exclusively opened"
+            errors on Windows).  Non-camera devices (TEC, FPGA, bias, stage)
+            are still started from config as usual.
         """
         self._stop_event.clear()
         hw = config_module.get("hardware")
 
         # Camera (also creates the AcquisitionPipeline)
-        # Support new multi-camera list format: hardware.cameras
-        _cameras_list = hw.get("cameras") if hw else None
-        if _cameras_list and isinstance(_cameras_list, list):
-            for _i, _cam_cfg in enumerate(_cameras_list):
-                if not isinstance(_cam_cfg, dict):
-                    continue
-                _cam_type = str(_cam_cfg.get("camera_type", "tr")).lower()
-                _name = f"hw.camera_{_cam_type}"
-                self._launch(self._run_camera, args=(_cam_cfg,), name=_name)
+        if skip_cameras:
+            # Device Manager will inject camera drivers into app_state via
+            # _inject_into_app.  Start only the idle grab loop which polls
+            # app_state.cam and begins delivering frames as soon as a driver
+            # appears — no double-open race.
+            log.info("HardwareService: skip_cameras=True — starting idle "
+                     "grab loop (Device Manager will handle camera connections)")
+            self._cam_preview_free.set()
+            self._launch(self._run_camera_idle, name="hw.camera_idle")
         else:
-            # Legacy single-camera format
-            self._launch(self._run_camera, name="hw.camera")
+            # Support new multi-camera list format: hardware.cameras
+            _cameras_list = hw.get("cameras") if hw else None
+            if _cameras_list and isinstance(_cameras_list, list):
+                for _i, _cam_cfg in enumerate(_cameras_list):
+                    if not isinstance(_cam_cfg, dict):
+                        continue
+                    _cam_type = str(_cam_cfg.get("camera_type", "tr")).lower()
+                    _name = f"hw.camera_{_cam_type}"
+                    self._launch(self._run_camera, args=(_cam_cfg,), name=_name)
+            else:
+                # Legacy single-camera format
+                self._launch(self._run_camera, name="hw.camera")
 
         # TEC controllers
         for key in ["tec_meerstetter", "tec_atec"]:

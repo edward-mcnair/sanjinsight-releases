@@ -3609,7 +3609,18 @@ if __name__ == "__main__":
 
         # Start hardware after the Qt event loop begins (see COM STA
         # message-pump explanation in the QTimer.singleShot comment above).
-        QTimer.singleShot(0, hw_service.start)
+        # When auto-reconnect will handle cameras, skip camera init in
+        # hw_service.start() to prevent both paths from opening the same
+        # USB camera (causes "exclusively opened" errors on Windows).
+        _has_remembered_cameras = any(
+            (window._device_mgr.get(u) and
+             window._device_mgr.get(u).descriptor.device_type == "camera")
+            for u in _remembered_uids
+        ) if _remembered_uids else False
+        if _has_remembered_cameras:
+            QTimer.singleShot(0, lambda: hw_service.start(skip_cameras=True))
+        else:
+            QTimer.singleShot(0, hw_service.start)
 
         # Show Device Manager modally so the user sees scan results before
         # the main interface is accessible.  Modality is removed once the
@@ -3630,10 +3641,12 @@ if __name__ == "__main__":
             dm.finished.connect(lambda _: dm.setWindowModality(Qt.NonModal))
         QTimer.singleShot(0, _show_startup_dm)
 
-        # Auto-reconnect all previously-used Device Manager devices on Windows.
-        # Runs after hw_service.start() has had time to finish opening devices
-        # from hardware config — we skip any that are already connected so we
-        # don't race on the same USB/serial resource.
+        # Auto-reconnect all previously-used Device Manager devices.
+        # Camera init is skipped in hw_service.start() when remembered
+        # camera UIDs exist (skip_cameras=True), so Device Manager is the
+        # sole owner of camera connections — no double-open race.
+        # Non-camera devices may still be opened by hw_service.start()
+        # from config, so we check app_state for those.
         if _remembered_uids:
             def _auto_reconnect_normal():
                 import time as _t
@@ -3641,7 +3654,11 @@ if __name__ == "__main__":
                 from hardware.device_registry import (
                     CONN_CAMERA, DTYPE_CAMERA, DTYPE_FPGA,
                     DTYPE_STAGE, DTYPE_TEC, DTYPE_BIAS)
-                _t.sleep(5.0)   # let hw_service.start() finish camera init
+                # Brief pause to let Qt event loop start and hw_service
+                # threads to begin.  Cameras are handled exclusively by
+                # Device Manager (no race), so this only needs to be long
+                # enough for non-camera hw_service init.
+                _t.sleep(2.0)
                 dm = window._device_mgr
                 for uid in _remembered_uids:
                     entry = dm.get(uid)
@@ -3653,21 +3670,11 @@ if __name__ == "__main__":
                         log.info("Auto-reconnect: %s already connected — skipping",
                                  entry.descriptor.display_name)
                         continue
-                    # Skip if hw_service.start() already opened this device type
-                    # directly (it doesn't go through Device Manager, so
-                    # entry.state is still ABSENT even though the hardware is open).
-                    # For cameras, check the SPECIFIC slot (TR vs IR) so that
-                    # an already-open Basler (TR) doesn't block Boson (IR)
-                    # auto-reconnect, and vice versa.
+                    # For non-camera devices, check if hw_service.start()
+                    # already opened this device type from config.
                     dtype = entry.descriptor.device_type
                     _already_open = False
-                    if dtype == DTYPE_CAMERA:
-                        _is_ir = getattr(entry.descriptor, "camera_type", "tr") == "ir"
-                        if _is_ir:
-                            _already_open = app_state.ir_cam is not None
-                        else:
-                            _already_open = app_state.tr_cam is not None
-                    elif dtype == DTYPE_FPGA and app_state.fpga is not None:
+                    if dtype == DTYPE_FPGA and app_state.fpga is not None:
                         _already_open = True
                     elif dtype == DTYPE_STAGE and app_state.stage is not None:
                         _already_open = True

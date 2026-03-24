@@ -483,14 +483,16 @@ class BosonDriver(CameraDriver):
                     for i, c in enumerate(cameras)
                 )
             elif _sys.platform == "win32":
-                # Quick DirectShow probe — only test indices that open instantly
+                # Quick DirectShow probe — release every handle immediately
+                # to avoid holding exclusive access that blocks subsequent opens.
                 import cv2
                 lines = []
                 for i in range(6):
                     cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
-                    if cap.isOpened():
+                    opened = cap.isOpened()
+                    cap.release()   # always release, even if not opened
+                    if opened:
                         lines.append(f"    [{i}] (device found)")
-                        cap.release()
                 return "\n".join(lines)
         except Exception as exc:
             log.debug("Boson: enumerate_video_devices failed: %s", exc)
