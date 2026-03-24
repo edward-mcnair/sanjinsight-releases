@@ -408,8 +408,8 @@ class ApplicationState:
             }
 
     def is_hardware_ready(self) -> bool:
-        """True if at minimum a camera is connected."""
-        return self._cam is not None
+        """True if at minimum a camera (TR or IR) is connected."""
+        return self._cam is not None or self._ir_cam is not None
 
 
 # ── Module-level singleton ───────────────────────────────────────────

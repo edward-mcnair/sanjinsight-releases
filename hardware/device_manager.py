@@ -569,7 +569,8 @@ class DeviceManager:
 
             if dtype == DTYPE_CAMERA:
                 # Determine whether this specific entry is IR or TR
-                _is_ir = desc.uid in ("flir_boson_320", "flir_boson_640")
+                # using the registry's camera_type field (not hardcoded UIDs)
+                _is_ir = getattr(desc, "camera_type", "tr") == "ir"
                 if _is_ir:
                     existing = app_state.ir_cam
                 else:
@@ -689,29 +690,42 @@ class DeviceManager:
     def _driver_key(self, desc: DeviceDescriptor) -> str:
         """Map descriptor uid to the short driver key used by factories."""
         KEY_MAP = {
+            # Cameras
             "basler_aca1920_155um":     "pypylon",
+            "basler_aca2040_90umnir":   "pypylon",
             "basler_aca640_750um":      "pypylon",
             "basler_gigE_generic":      "pypylon",
+            "basler_a2a1280_125um_swir":"pypylon",
+            "allied_vision_goldeye_g032": "ni_imaqdx",
+            "photonfocus_mv4_d1280u":   "ni_imaqdx",
+            "microsanj_ir_camera_v1a":  "flir",
+            "flir_boson_320":           "boson",
+            "flir_boson_640":           "boson",
+            # TECs / thermal chucks
             "meerstetter_tec_1089":     "meerstetter",
             "meerstetter_tec_1123":     "meerstetter",
             "atec_302":                 "atec",
             "temptronic_ats_series":    "thermal_chuck",
             "cascade_thermal_chuck":    "thermal_chuck",
             "wentworth_thermal_chuck":  "thermal_chuck",
+            # FPGA / timing
             "ni_9637":                  "ni9637",
             "ni_usb_6001":              "ni9637",
+            "bnc_745":                  "bnc745",
+            # Stages / prober
             "thorlabs_bsc203":          "thorlabs",
             "thorlabs_mpc320":          "thorlabs",
             "prior_proscan":            "prior",
             "mpi_prober_generic":       "mpi_prober",
+            # Turret
             "olympus_ix_turret":        "olympus_linx",
+            # Bias sources
             "keithley_2400":            "keithley",
             "keithley_2450":            "keithley",
             "rigol_dp832":              "visa",
             "amcad_bilt":               "amcad_bilt",
-            "bnc_745":                  "bnc745",
-            "flir_boson_320":           "boson",
-            "flir_boson_640":           "boson",
+            # Laser diode driver
+            "meerstetter_ldd1121":      "meerstetter_ldd1121",
         }
         return KEY_MAP.get(desc.uid, desc.uid)
 

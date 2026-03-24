@@ -432,11 +432,15 @@ class BosonDriver(CameraDriver):
                     "flir" in n.lower() or "boson" in n.lower() for n in names
                 )
                 if _boson_found:
-                    # Count DirectShow devices that successfully opened
-                    _ds_indices = [
-                        i for i in range(6)
-                        if cv2.VideoCapture(i, cv2.CAP_DSHOW).isOpened()
-                    ]
+                    # Count DirectShow devices that successfully opened.
+                    # Must release each probe immediately to avoid holding
+                    # exclusive DirectShow handles that block the real open.
+                    _ds_indices = []
+                    for _pi in range(6):
+                        _probe = cv2.VideoCapture(_pi, cv2.CAP_DSHOW)
+                        if _probe.isOpened():
+                            _ds_indices.append(_pi)
+                        _probe.release()
                     # The built-in webcam is almost always index 0;
                     # external USB cameras (Boson) get the next index.
                     # Pick the highest index that is NOT a known webcam.

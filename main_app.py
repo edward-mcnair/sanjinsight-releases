@@ -1223,6 +1223,10 @@ class MainWindow(QMainWindow):
             self._cal_tab.refresh_camera_mode()
         except Exception:
             log.debug("CalibrationTab camera refresh failed", exc_info=True)
+        try:
+            self._acquire_tab.refresh_camera_mode()
+        except Exception:
+            log.debug("AcquireTab camera refresh failed", exc_info=True)
 
         log.info("Global camera bar: active camera → %s", cam_type)
 
@@ -1432,7 +1436,12 @@ class MainWindow(QMainWindow):
                 cam_type = getattr(
                     getattr(driver_obj, "info", None), "camera_type", "tr"
                 ) or "tr"
-                key = "ir_camera" if str(cam_type).lower() == "ir" else "camera"
+                if str(cam_type).lower() == "ir":
+                    key = "ir_camera"
+                else:
+                    # Use "tr_camera" on hybrid systems so the header shows
+                    # both TR and IR dots (consistent with _on_device_hotplug).
+                    key = "tr_camera" if app_state.ir_cam is not None else "camera"
             elif dtype == DTYPE_FPGA:
                 key = "fpga"
             elif dtype == DTYPE_BIAS:
@@ -3653,7 +3662,7 @@ if __name__ == "__main__":
                     dtype = entry.descriptor.device_type
                     _already_open = False
                     if dtype == DTYPE_CAMERA:
-                        _is_ir = uid in ("flir_boson_320", "flir_boson_640")
+                        _is_ir = getattr(entry.descriptor, "camera_type", "tr") == "ir"
                         if _is_ir:
                             _already_open = app_state.ir_cam is not None
                         else:
