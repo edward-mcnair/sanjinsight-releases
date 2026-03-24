@@ -3516,12 +3516,17 @@ if __name__ == "__main__":
         if _remembered_uids:
             def _auto_reconnect():
                 import time as _t
+                from hardware.device_manager import DeviceState
                 _t.sleep(1.5)   # let demo mode finish initialising
                 dm = window._device_mgr
                 for uid in _remembered_uids:
                     entry = dm.get(uid)
                     if entry is None:
                         log.info("Auto-reconnect: device %s not in registry", uid)
+                        continue
+                    if entry.state == DeviceState.CONNECTED:
+                        log.info("Auto-reconnect: %s already connected — skipping",
+                                 entry.descriptor.display_name)
                         continue
                     # Camera-type devices (Basler pypylon) connect via SDK
                     # enumeration and don't require a serial address.
@@ -3600,17 +3605,26 @@ if __name__ == "__main__":
         QTimer.singleShot(0, _show_startup_dm)
 
         # Auto-reconnect all previously-used Device Manager devices on Windows.
-        # Runs after a short delay so hw_service.start() has time to initialise
-        # serial ports and NI VISA before we try to open devices.
+        # Runs after hw_service.start() has had time to finish opening devices
+        # from hardware config — we skip any that are already CONNECTED so we
+        # don't race on the same USB/serial resource.
         if _remembered_uids:
             def _auto_reconnect_normal():
                 import time as _t
-                _t.sleep(3.0)   # let hw_service.start() finish init
+                from hardware.device_manager import DeviceState
+                _t.sleep(5.0)   # let hw_service.start() finish camera init
                 dm = window._device_mgr
                 for uid in _remembered_uids:
                     entry = dm.get(uid)
                     if entry is None:
                         log.info("Auto-reconnect: device %s not in registry", uid)
+                        continue
+                    # Skip if already connected (e.g. hw_service.start() opened
+                    # the camera from config, or it was connected by the startup
+                    # Device Manager dialog).
+                    if entry.state == DeviceState.CONNECTED:
+                        log.info("Auto-reconnect: %s already connected — skipping",
+                                 entry.descriptor.display_name)
                         continue
                     from hardware.device_registry import CONN_CAMERA
                     _conn = entry.descriptor.connection_type

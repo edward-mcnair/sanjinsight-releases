@@ -123,7 +123,7 @@ class IC:
     # Hardware connection
     CONNECT       = "mdi.power-plug-outline"
     # Wavelength / spectroscopy
-    WAVELENGTH    = "mdi.water-opacity"
+    WAVELENGTH    = "mdi.waves"
     MONOCHROMATOR = "mdi.ray-vertex"
     SPECTRUM      = "mdi.chart-bell-curve-cumulative"
     # Emissivity / IR calibration

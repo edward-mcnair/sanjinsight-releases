@@ -179,9 +179,20 @@ class _MenuItem(QWidget):
             cache_key = (icon_name, icon_col.name())
             px = _pix_cache.get(cache_key)
             if px is None:
-                px = qta.icon(icon_name, color=icon_col.name()).pixmap(18, 18)
-                _pix_cache[cache_key] = px
-            p.drawPixmap(x + 1, (h - 18) // 2, px)
+                try:
+                    px = qta.icon(icon_name, color=icon_col.name()).pixmap(18, 18)
+                except Exception:
+                    # Icon name not available in this qtawesome version —
+                    # fall back to a safe generic icon.
+                    try:
+                        px = qta.icon("mdi.circle-medium",
+                                      color=icon_col.name()).pixmap(18, 18)
+                    except Exception:
+                        px = None
+                if px is not None:
+                    _pix_cache[cache_key] = px
+            if px is not None:
+                p.drawPixmap(x + 1, (h - 18) // 2, px)
         else:
             p.setFont(_sans_font(_FONT["label"]))
             p.setPen(icon_col)
