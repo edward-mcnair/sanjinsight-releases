@@ -1218,6 +1218,12 @@ class MainWindow(QMainWindow):
         except Exception:
             log.debug("Live tab restart failed on camera switch", exc_info=True)
 
+        # Update mode-dependent UI in other tabs
+        try:
+            self._cal_tab.refresh_camera_mode()
+        except Exception:
+            log.debug("CalibrationTab camera refresh failed", exc_info=True)
+
         log.info("Global camera bar: active camera → %s", cam_type)
 
     def _refresh_all_camera_selectors(self) -> None:
@@ -1289,6 +1295,11 @@ class MainWindow(QMainWindow):
                 self._acquire_tab.refresh_camera_mode()
             except Exception:
                 log.debug("AcquireTab camera refresh failed", exc_info=True)
+            # Refresh Calibration tab TR/IR preset visibility
+            try:
+                self._cal_tab.refresh_camera_mode()
+            except Exception:
+                log.debug("CalibrationTab camera refresh failed", exc_info=True)
 
         # Wire the emissivity tab's "Capture from camera" button to the
         # live IR camera when an IR camera connects (or disconnect it).

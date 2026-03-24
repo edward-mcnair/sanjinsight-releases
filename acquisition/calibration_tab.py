@@ -231,19 +231,27 @@ class CalibrationTab(QWidget):
         pre_row1.addStretch()
         sl.addLayout(pre_row1)
 
-        # Preset buttons — row 2: manual standard presets from user manual
+        # Preset buttons — row 2: camera-mode standard presets
+        # When only one camera type is active, the matching button is
+        # relabelled "Standard" and the other is hidden so the user
+        # doesn't need to think about TR vs IR.
         pre_row2 = QHBoxLayout()
-        for label, temps, tip in [
-            ("TR Std", CAL_TR_TEMPS_C,
-             "TR Standard: 6-pt sweep 20–120 °C (~12 min)"),
-            ("IR Std",  CAL_IR_TEMPS_C,
-             "IR Standard: 7-pt sweep 85–115 °C for IR camera calibration"),
-        ]:
-            b = QPushButton(label)
-            b.setFixedHeight(26)
-            b.setToolTip(tip)
-            b.clicked.connect(lambda _, t=temps: self._set_preset(t))
-            pre_row2.addWidget(b)
+        self._btn_tr_std = QPushButton("TR Std")
+        self._btn_tr_std.setFixedHeight(26)
+        self._btn_tr_std.setToolTip(
+            "TR Standard: 6-pt sweep 20–120 °C (~12 min)")
+        self._btn_tr_std.clicked.connect(
+            lambda: self._set_preset(CAL_TR_TEMPS_C))
+        pre_row2.addWidget(self._btn_tr_std)
+
+        self._btn_ir_std = QPushButton("IR Std")
+        self._btn_ir_std.setFixedHeight(26)
+        self._btn_ir_std.setToolTip(
+            "IR Standard: 7-pt sweep 85–115 °C for IR camera calibration")
+        self._btn_ir_std.clicked.connect(
+            lambda: self._set_preset(CAL_IR_TEMPS_C))
+        pre_row2.addWidget(self._btn_ir_std)
+
         pre_row2.addStretch()
         sl.addLayout(pre_row2)
 
@@ -508,6 +516,43 @@ class CalibrationTab(QWidget):
             self._apply_btn.setEnabled(True)
         else:
             self._stats["state"]._val.setText("FAILED")
+
+    # ---------------------------------------------------------------- #
+    #  Camera-mode adaptation                                          #
+    # ---------------------------------------------------------------- #
+
+    def refresh_camera_mode(self) -> None:
+        """Show/hide TR/IR preset buttons based on active camera type.
+
+        When only one camera modality is active the matching button is
+        relabelled "Standard" (no TR/IR prefix) and the other is hidden,
+        so the user isn't asked to choose something already determined by
+        the connected camera.  When both cameras are connected the
+        original labels are shown.
+        """
+        from hardware.app_state import app_state
+        has_tr = app_state.tr_cam is not None
+        has_ir = app_state.ir_cam is not None
+        active = app_state.active_camera_type   # "tr" or "ir"
+
+        if has_tr and has_ir:
+            # Hybrid system — show both with full labels
+            self._btn_tr_std.setText("TR Std")
+            self._btn_ir_std.setText("IR Std")
+            self._btn_tr_std.setVisible(True)
+            self._btn_ir_std.setVisible(True)
+        elif active == "ir" or (has_ir and not has_tr):
+            self._btn_ir_std.setText("Standard")
+            self._btn_ir_std.setVisible(True)
+            self._btn_tr_std.setVisible(False)
+        else:
+            self._btn_tr_std.setText("Standard")
+            self._btn_tr_std.setVisible(True)
+            self._btn_ir_std.setVisible(False)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.refresh_camera_mode()
 
     # ---------------------------------------------------------------- #
     #  Temperature sequence helpers                                    #
