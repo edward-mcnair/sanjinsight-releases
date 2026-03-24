@@ -3650,8 +3650,10 @@ if __name__ == "__main__":
                     dtype = entry.descriptor.device_type
                     _already_open = False
                     if dtype == DTYPE_CAMERA:
-                        # Check if a real camera is already running in the slot
-                        if app_state.cam is not None or app_state.ir_cam is not None:
+                        # Check BOTH camera slots directly — app_state.cam
+                        # switches based on active_camera_type and can miss
+                        # the TR slot when the active type is 'ir'.
+                        if app_state.tr_cam is not None or app_state.ir_cam is not None:
                             _already_open = True
                     elif dtype == DTYPE_FPGA and app_state.fpga is not None:
                         _already_open = True

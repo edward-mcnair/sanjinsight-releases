@@ -320,6 +320,7 @@ class BosonDriver(CameraDriver):
             i for i in range(6) if i != self._video_index
         ]
         _backend = cv2.CAP_DSHOW if _sys.platform == "win32" else 0
+        _set_verify_candidates = []   # indices to retry with set-and-verify
         for idx in candidates:
             try:
                 cap = cv2.VideoCapture(idx, _backend) if _backend else cv2.VideoCapture(idx)
@@ -339,6 +340,33 @@ class BosonDriver(CameraDriver):
                             "(configured: %d). Update 'Video Device Index' in "
                             "Device Manager to %d to skip this probe.",
                             native_w, native_h, idx, self._video_index, idx)
+                    return idx
+                # Remember this index for the set-and-verify pass
+                _set_verify_candidates.append(idx)
+            except Exception:
+                continue
+
+        # Pass 2: set-and-verify — on Windows with DirectShow, the Boson
+        # may not report its native resolution until cap.set() is called.
+        # A regular webcam will reject 320×256 and stay at 640×480.
+        for idx in _set_verify_candidates:
+            try:
+                cap = cv2.VideoCapture(idx, _backend) if _backend else cv2.VideoCapture(idx)
+                if not cap.isOpened():
+                    continue
+                cap.set(cv2.CAP_PROP_FRAME_WIDTH,  self._W)
+                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self._H)
+                actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                cap.release()
+                log.debug("Boson auto-detect (set-verify): index %d → %dx%d "
+                          "after requesting %dx%d",
+                          idx, actual_w, actual_h, self._W, self._H)
+                if actual_w == self._W and actual_h == self._H:
+                    log.info(
+                        "Boson: set-verify found %dx%d stream at OpenCV "
+                        "index %d (native resolution probe missed it).",
+                        actual_w, actual_h, idx)
                     return idx
             except Exception:
                 continue
