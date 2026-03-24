@@ -586,6 +586,14 @@ class MainWindow(QMainWindow):
         # Wire recipe RUN signal → apply recipe to hardware
         self._recipe_tab.recipe_run.connect(self._apply_recipe)
 
+        # Wire header Profile button → save / load / manage
+        from acquisition.recipe_tab import RecipeStore
+        self._recipe_store = RecipeStore()
+        self._header._profile_btn.set_recipe_store(self._recipe_store)
+        self._header._profile_btn.save_requested.connect(self._save_profile_dialog)
+        self._header._profile_btn.profile_selected.connect(self._load_profile)
+        self._header._profile_btn.manage_requested.connect(self._navigate_to_profiles)
+
         # Wire Settings tab → theme toggle (Auto / Dark / Light)
         self._settings_tab.theme_changed.connect(self.apply_theme)
 
@@ -882,6 +890,9 @@ class MainWindow(QMainWindow):
         self._ai_panel.support_requested.connect(self._open_support_dialog)
         self._ai_service.history_exported.connect(self._on_history_exported)
 
+        # Auto-fix: wire the AI panel's fix button callback
+        self._ai_panel.set_fix_callback(self._on_autofix_requested)
+
         # Settings tab → AI service (enable / disable)
         self._settings_tab.ai_enable_requested.connect(self._on_ai_enable)
         self._settings_tab.ai_disable_requested.connect(
@@ -1027,12 +1038,13 @@ class MainWindow(QMainWindow):
         return float(np.mean(f.data))
 
     def _on_tec(self, index, status):
-        self._temp_tab.update_tec(index, status)
         # Ignore stale status updates from simulated TEC drivers that
         # were queued before demo-mode shutdown completed.
-        tec_list = getattr(app_state, 'tecs', None) or []
-        if index >= len(tec_list) or tec_list[index] is None:
-            return
+        if not app_state.demo_mode:
+            tec_list = getattr(app_state, 'tecs', None) or []
+            if index >= len(tec_list) or tec_list[index] is None:
+                return
+        self._temp_tab.update_tec(index, status)
         key = f"tec{index}"
         ok  = status.error is None
         tip = (f"TEC {index+1}: {status.actual_temp:.1f}°C → {status.target_temp:.1f}°C"
@@ -1049,6 +1061,8 @@ class MainWindow(QMainWindow):
                 self._dt_sparkline.setVisible(True)
 
     def _on_fpga(self, status):
+        if app_state.fpga is None and not app_state.demo_mode:
+            return
         self._fpga_tab.update_status(status)
         if app_state.fpga is None:
             return
@@ -1058,6 +1072,8 @@ class MainWindow(QMainWindow):
         self._header.set_connected("fpga", ok, tip)
 
     def _on_bias(self, status):
+        if app_state.bias is None and not app_state.demo_mode:
+            return
         self._bias_tab.update_status(status)
         if app_state.bias is None:
             return
@@ -1068,11 +1084,11 @@ class MainWindow(QMainWindow):
         self._header.set_connected("bias", ok, tip)
 
     def _on_stage(self, status):
-        self._stage_tab.update_status(status)
         # Ignore stale status updates from simulated stage drivers that
         # were queued before the demo-mode shutdown completed.
-        if app_state.stage is None:
+        if app_state.stage is None and not app_state.demo_mode:
             return
+        self._stage_tab.update_status(status)
         ok  = status.error is None
         pos = status.position
         tip = (f"Stage: {pos.x:.0f} / {pos.y:.0f} / {pos.z:.0f} μm" if ok
@@ -1247,6 +1263,21 @@ class MainWindow(QMainWindow):
         # + per-tab combos) so the IR entry appears as soon as the IR driver
         # finishes initialising on its background thread.
         if "camera" in key:
+            # Set header entry for this camera so Connected Devices count is correct.
+            # Live-frame handler only sets the *active* camera; this ensures
+            # both TR and IR cameras appear when connected.
+            if ok:
+                if "ir" in key:
+                    ir = app_state.ir_cam
+                    model = getattr(getattr(ir, 'info', None), 'model', '') if ir else ''
+                    self._header.set_connected("ir_camera", True,
+                                               f"IR Camera: {model or 'connected'}")
+                else:
+                    tr = app_state.tr_cam
+                    model = getattr(getattr(tr, 'info', None), 'model', '') if tr else ''
+                    cam_key = "tr_camera" if app_state.ir_cam is not None else "camera"
+                    self._header.set_connected(cam_key, True,
+                                               f"TR Camera: {model or 'connected'}")
             self._refresh_all_camera_selectors()
             # Refresh AutoScan TR/IR section visibility
             try:
@@ -1439,14 +1470,19 @@ class MainWindow(QMainWindow):
         if app_state.demo_mode:
             return  # re-entered demo mode — don't interfere
         self._header.clear_devices()
-        # Re-add only real connected devices
-        if app_state.ir_cam is not None:
-            self._header.set_connected("ir_camera", True,
-                                       f"IR Camera: {getattr(app_state.ir_cam, 'info', None) and app_state.ir_cam.info.model or 'connected'}")
-        cam = getattr(app_state, '_cam', None)
-        if cam is not None:
-            self._header.set_connected("tr_camera", True,
-                                       f"TR Camera: {getattr(cam, 'info', None) and cam.info.model or 'connected'}")
+        # Re-add only genuinely connected real devices (cameras)
+        ir = app_state.ir_cam
+        tr = app_state.tr_cam
+        if ir is not None:
+            model = getattr(getattr(ir, 'info', None), 'model', '') or 'connected'
+            self._header.set_connected("ir_camera", True, f"IR Camera: {model}")
+        if tr is not None:
+            model = getattr(getattr(tr, 'info', None), 'model', '') or 'connected'
+            cam_key = "tr_camera" if ir is not None else "camera"
+            self._header.set_connected(cam_key, True, f"TR Camera: {model}")
+        # Re-add real peripheral devices (stage, FPGA, bias, TEC are
+        # only re-added when their status handler fires next — clearing
+        # stale entries here is sufficient).
         # Clear any stale TEC/stage/FPGA metrics that snuck in after reset().
         self._metrics.reset()
         # Reset tab empty-state placeholders now that demo devices are gone.
@@ -1482,6 +1518,24 @@ class MainWindow(QMainWindow):
         act_quit.setShortcut(QKeySequence.Quit)          # Cmd+Q / Ctrl+Q
         act_quit.setMenuRole(QAction.QuitRole)           # macOS: move to app menu
         act_quit.triggered.connect(self.close)
+
+        # ── Profile menu ─────────────────────────────────────────
+        profile_menu = mb.addMenu("Profile")
+
+        act_save_profile = profile_menu.addAction("Save Current Settings…")
+        act_save_profile.setShortcut(QKeySequence("Ctrl+S"))
+        act_save_profile.setToolTip("Snapshot all current hardware settings as a named profile")
+        act_save_profile.triggered.connect(self._save_profile_dialog)
+
+        act_open_profile = profile_menu.addAction("Open Profile…")
+        act_open_profile.setShortcut(QKeySequence("Ctrl+O"))
+        act_open_profile.setToolTip("Load a previously saved profile")
+        act_open_profile.triggered.connect(self._open_profile_dialog)
+
+        profile_menu.addSeparator()
+
+        act_manage_profiles = profile_menu.addAction("Manage Profiles…")
+        act_manage_profiles.triggered.connect(self._navigate_to_profiles)
 
         # ── Acquisition menu ─────────────────────────────────────
         acq_menu = mb.addMenu("Acquisition")
@@ -1956,6 +2010,140 @@ class MainWindow(QMainWindow):
             )
         except Exception as e:
             log.warning("Recipe: could not auto-start acquisition: %s", e)
+
+    # ── Profile save / load ────────────────────────────────────────────
+
+    def _navigate_to_profiles(self):
+        """Navigate to the Library tab and switch to the Scan Profiles sub-tab."""
+        self._nav.navigate_to(self._library_tab)
+        self._library_tab._tabs.setCurrentIndex(1)  # Scan Profiles
+
+    def _save_profile_dialog(self):
+        """Show a dialog to name and save the current settings as a profile."""
+        from PyQt5.QtWidgets import QInputDialog
+        from acquisition.recipe_tab import Recipe
+
+        label, ok = QInputDialog.getText(
+            self, "Save Profile",
+            "Profile name:",
+            text=f"Profile {time.strftime('%Y-%m-%d %H:%M')}")
+        if not ok or not label.strip():
+            return
+
+        label = label.strip()
+        recipe = Recipe.from_current_state(app_state, label=label)
+
+        # Also capture TEC and bias state
+        if app_state.tecs:
+            try:
+                tec = app_state.tecs[0]
+                st = tec.get_status()
+                recipe.tec.enabled = True
+                recipe.tec.setpoint_c = st.target_temp
+            except Exception:
+                pass
+        if app_state.bias is not None:
+            try:
+                st = app_state.bias.get_status()
+                recipe.bias.enabled = True
+                recipe.bias.voltage_v = st.actual_voltage
+                recipe.bias.current_a = st.actual_current
+            except Exception:
+                pass
+
+        # Capture FPGA settings
+        if app_state.fpga is not None:
+            try:
+                st = app_state.fpga.get_status()
+                recipe.acquisition.modality = getattr(
+                    app_state, "active_modality", "thermoreflectance")
+            except Exception:
+                pass
+
+        self._recipe_store.save(recipe)
+        self._header._profile_btn.set_active_recipe(label)
+        self._toasts.show_success(f"Profile saved: {label}", auto_dismiss_ms=3000)
+        log.info("Profile saved: %s", label)
+
+    def _open_profile_dialog(self):
+        """Show a dialog listing saved profiles for the user to open."""
+        from PyQt5.QtWidgets import QInputDialog
+
+        recipes = self._recipe_store.list()
+        if not recipes:
+            self._toasts.show_warning("No saved profiles found.", auto_dismiss_ms=3000)
+            return
+
+        labels = [r.label for r in recipes]
+        chosen, ok = QInputDialog.getItem(
+            self, "Open Profile", "Select a profile:", labels, 0, False)
+        if not ok:
+            return
+
+        recipe = self._recipe_store.load(chosen)
+        if recipe:
+            self._load_profile(recipe)
+
+    def _load_profile(self, recipe):
+        """Apply a saved profile (recipe) to the current hardware state.
+
+        Unlike _apply_recipe, this does NOT start an acquisition — it only
+        configures the hardware parameters so the user can review before running.
+        """
+        from acquisition.recipe_tab import Recipe
+        log.info("Loading profile: %s", recipe.label)
+
+        # Camera
+        try:
+            hw_service.cam_set_exposure(recipe.camera.exposure_us)
+            hw_service.cam_set_gain(recipe.camera.gain_db)
+            self._camera_tab.set_exposure(recipe.camera.exposure_us)
+            self._camera_tab.set_gain(recipe.camera.gain_db)
+        except Exception as e:
+            log.debug("Profile load — camera: %s", e)
+
+        # Modality
+        app_state.active_modality = recipe.acquisition.modality
+
+        # Material profile
+        if recipe.profile_name:
+            try:
+                _find = getattr(self._profile_mgr, 'find_by_name',
+                                self._profile_mgr.find)
+                profile = _find(recipe.profile_name)
+                if profile:
+                    self._on_profile_applied(profile)
+            except Exception as e:
+                log.debug("Profile load — material profile: %s", e)
+
+        # TEC
+        if recipe.tec.enabled:
+            for idx in range(len(app_state.tecs)):
+                try:
+                    hw_service.tec_set_target(idx, recipe.tec.setpoint_c)
+                except Exception:
+                    pass
+
+        # Analysis
+        try:
+            from acquisition.analysis import AnalysisConfig
+            cfg = AnalysisConfig(
+                threshold_k        = recipe.analysis.threshold_k,
+                fail_hotspot_count = recipe.analysis.fail_hotspot_count,
+                fail_peak_k        = recipe.analysis.fail_peak_k,
+                fail_area_fraction = recipe.analysis.fail_area_fraction,
+                warn_hotspot_count = recipe.analysis.warn_hotspot_count,
+                warn_peak_k        = recipe.analysis.warn_peak_k,
+                warn_area_fraction = recipe.analysis.warn_area_fraction,
+            )
+            self._analysis_tab.set_config(cfg)
+        except Exception as e:
+            log.debug("Profile load — analysis: %s", e)
+
+        # Track active recipe in header button
+        self._header._profile_btn.set_active_recipe(recipe.label)
+        self._toasts.show_success(
+            f"Profile loaded: {recipe.label}", auto_dismiss_ms=3000)
 
     def _on_autoscan_scan_requested(self, cfg: dict) -> None:
         """Route an AutoScan scan/preview config to the appropriate engine."""
@@ -2434,6 +2622,8 @@ class MainWindow(QMainWindow):
             _real_cam = None
             try:
                 from hardware.cameras.simulated import SimulatedDriver
+                from hardware.device_registry import (DTYPE_CAMERA, DTYPE_FPGA,
+                                                      DTYPE_STAGE, DTYPE_BIAS)
                 if _as.ir_cam is not None and not isinstance(_as.ir_cam, SimulatedDriver):
                     _real_ir = _as.ir_cam
                 # Use tr_cam (raw _cam slot) — not the .cam property which
@@ -2446,12 +2636,19 @@ class MainWindow(QMainWindow):
 
             hw_service.shutdown()          # stop simulated drivers
 
-            # Clear stale demo-camera references and the old demo pipeline
-            # so acquisition uses the real camera, not the simulated one.
+            # Clear ALL stale demo device references.  shutdown() closes
+            # drivers but does NOT null out app_state slots — the closed
+            # simulated objects linger, making guards like
+            # "app_state.stage is None" ineffective.
             _as.cam    = None
             _as.ir_cam = None
             _as.pipeline = None
             _as.active_camera_type = "tr"  # reset to default
+            _as.stage  = None
+            _as.fpga   = None
+            _as.bias   = None
+            _as.prober = None
+            _as.tecs = []  # clear simulated TECs
 
             # Restore real drivers saved above.
             if _real_ir is not None:
@@ -2460,6 +2657,59 @@ class MainWindow(QMainWindow):
                     _as.active_camera_type = "ir"
             if _real_cam is not None:
                 _as.cam = _real_cam
+
+            # Re-inject any devices that connected via auto-reconnect
+            # while hw_service.shutdown() was running.  The shutdown may
+            # have closed them and the slot-clear above wiped them from
+            # app_state, so we need to re-instantiate from the Device
+            # Manager's still-CONNECTED entries.
+            try:
+                from hardware.device_manager import DeviceState
+                for uid, entry in self._device_mgr._entries.items():
+                    if entry.state != DeviceState.CONNECTED:
+                        continue
+                    if entry.driver_obj is None:
+                        continue
+                    drv = entry.driver_obj
+                    dtype = entry.descriptor.device_type
+                    if dtype == DTYPE_CAMERA:
+                        ct = getattr(getattr(drv, 'info', None),
+                                     'camera_type', 'tr') or 'tr'
+                        if str(ct).lower() == 'ir':
+                            if _as.ir_cam is None or isinstance(
+                                    _as.ir_cam, SimulatedDriver):
+                                # Re-open if shutdown closed it
+                                if not getattr(drv, '_open', True):
+                                    try: drv.open(); drv.start()
+                                    except Exception: continue
+                                _as.ir_cam = drv
+                                _real_ir = drv
+                        else:
+                            if _as.tr_cam is None or isinstance(
+                                    _as.tr_cam, SimulatedDriver):
+                                if not getattr(drv, '_open', True):
+                                    try: drv.open(); drv.start()
+                                    except Exception: continue
+                                _as.cam = drv
+                                _real_cam = drv
+                    elif dtype == DTYPE_FPGA and _as.fpga is None:
+                        _as.fpga = drv
+                    elif dtype == DTYPE_STAGE and _as.stage is None:
+                        _as.stage = drv
+                    elif dtype == DTYPE_BIAS and _as.bias is None:
+                        _as.bias = drv
+                log.info("_switch_to_real: re-injected DM-connected devices "
+                         "(ir=%s, tr=%s)", _real_ir is not None,
+                         _real_cam is not None)
+            except Exception:
+                log.debug("_switch_to_real: DM re-inject failed",
+                          exc_info=True)
+
+            # Update active camera type based on what's actually available
+            if _real_cam is not None:
+                _as.active_camera_type = "tr"
+            elif _real_ir is not None:
+                _as.active_camera_type = "ir"
 
             # Create a new acquisition pipeline for the real camera so
             # COLD/HOT capture uses the actual device, not the stale
@@ -2481,15 +2731,23 @@ class MainWindow(QMainWindow):
 
             hw_service.start_idle()        # restart grab loop with real camera
 
-            if _real_ir or _real_cam:
-                # Notify the main window so camera selectors and safe-mode
-                # are refreshed for the already-connected real hardware.
-                _key = "ir_camera" if _real_ir else "camera"
-                hw_service.device_connected.emit(_key, True)
-            elif not auto_mode:
+            # Notify the main window so camera selectors, header, and
+            # tab availability are refreshed for the real hardware state.
+            if _real_ir:
+                hw_service.device_connected.emit("ir_camera", True)
+            if _real_cam:
+                hw_service.device_connected.emit("camera", True)
+            if not (_real_ir or _real_cam) and not auto_mode:
                 # No real device yet → open Device Manager so user can scan.
                 from PyQt5.QtCore import QTimer
                 QTimer.singleShot(0, self._device_mgr_dlg.show)
+
+            # Schedule a final full refresh after shutdown has cleared all
+            # simulated device references.  This catches any tab/header state
+            # that the timed purges at 500/1500ms missed because shutdown
+            # was still in progress when they ran.
+            from PyQt5.QtCore import QTimer
+            QTimer.singleShot(0, self._purge_stale_demo_devices)
 
         _threading.Thread(
             target=_switch_to_real, daemon=True, name="hw.exit_demo"
@@ -2507,6 +2765,37 @@ class MainWindow(QMainWindow):
         if warns >= 3:  return "C"
         if warns >= 1:  return "B"
         return "A"
+
+    def _on_autofix_requested(self, rule_id: str) -> None:
+        """Handle a fix button click from the AI panel evidence section."""
+        from ai.auto_fix import get_fix, can_auto_fix, apply_fix
+
+        fix = get_fix(rule_id)
+        if fix is None:
+            return
+
+        if fix.auto:
+            # Run the automatic fix
+            self._toasts.show_info(
+                f"Fixing: {fix.description}…", auto_dismiss_ms=2000)
+
+            def _on_complete(success, msg):
+                # Called from background thread — use QTimer to get to GUI thread
+                from PyQt5.QtCore import QTimer
+                if success:
+                    QTimer.singleShot(0, lambda: self._toasts.show_success(
+                        f"Fixed: {msg}", auto_dismiss_ms=3000))
+                else:
+                    QTimer.singleShot(0, lambda: self._toasts.show_warning(
+                        f"Fix failed: {msg}", auto_dismiss_ms=5000))
+
+            apply_fix(rule_id, hw_service, app_state, on_complete=_on_complete)
+        elif fix.navigate_to:
+            # Manual fix — navigate to the relevant panel
+            if fix.navigate_to == "Device Manager":
+                self._open_device_manager()
+            else:
+                self._nav.select_by_label(fix.navigate_to)
 
     def _refresh_evidence_panel(self) -> None:
         """Push latest diagnostic results to the AI panel evidence section."""
@@ -2724,6 +3013,11 @@ class MainWindow(QMainWindow):
     def _on_startup_done(self):
         """Mark the startup window as complete; enable hotplug toasts."""
         self._startup_done = True
+        # Ensure tab empty-state placeholders reflect actual hardware.
+        # In demo mode all tabs are already shown; in normal mode this
+        # hides controls for unconnected devices (stage, TEC, etc.).
+        if not app_state.demo_mode:
+            self._refresh_tab_availability()
 
     def _restore_layout(self):
         """Restore persisted window geometry and tab splitter sizes."""
@@ -3229,9 +3523,14 @@ if __name__ == "__main__":
                     if entry is None:
                         log.info("Auto-reconnect: device %s not in registry", uid)
                         continue
-                    if entry.address:
+                    # Camera-type devices (Basler pypylon) connect via SDK
+                    # enumeration and don't require a serial address.
+                    from hardware.device_registry import CONN_CAMERA
+                    _conn = entry.descriptor.connection_type
+                    if entry.address or _conn == CONN_CAMERA:
                         log.info("Auto-reconnect: attempting %s on %s …",
-                                 entry.descriptor.display_name, entry.address)
+                                 entry.descriptor.display_name,
+                                 entry.address or f"({_conn} enumeration)")
                         dm.connect(uid)
                         # Small delay between connections to let each device
                         # initialise before the next one starts.
@@ -3299,6 +3598,36 @@ if __name__ == "__main__":
             dm.show()
             dm.finished.connect(lambda _: dm.setWindowModality(Qt.NonModal))
         QTimer.singleShot(0, _show_startup_dm)
+
+        # Auto-reconnect all previously-used Device Manager devices on Windows.
+        # Runs after a short delay so hw_service.start() has time to initialise
+        # serial ports and NI VISA before we try to open devices.
+        if _remembered_uids:
+            def _auto_reconnect_normal():
+                import time as _t
+                _t.sleep(3.0)   # let hw_service.start() finish init
+                dm = window._device_mgr
+                for uid in _remembered_uids:
+                    entry = dm.get(uid)
+                    if entry is None:
+                        log.info("Auto-reconnect: device %s not in registry", uid)
+                        continue
+                    from hardware.device_registry import CONN_CAMERA
+                    _conn = entry.descriptor.connection_type
+                    if entry.address or _conn == CONN_CAMERA:
+                        log.info("Auto-reconnect: attempting %s on %s …",
+                                 entry.descriptor.display_name,
+                                 entry.address or f"({_conn} enumeration)")
+                        dm.connect(uid)
+                        _t.sleep(1.0)
+                    else:
+                        log.info("Auto-reconnect: no saved address for %s — skipping",
+                                 uid)
+
+            threading.Thread(
+                target=_auto_reconnect_normal, daemon=True,
+                name="hw.auto_reconnect"
+            ).start()
 
     # Scan existing sessions on startup
     try:

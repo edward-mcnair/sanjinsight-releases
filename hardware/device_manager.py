@@ -426,6 +426,16 @@ class DeviceManager:
                 _cfg.set_pref("hw.last_connected_devices", saved)
                 # Keep legacy key for backward compat with older installs
                 _cfg.set_pref("hw.last_connected_device", uid)
+                # Persist connection parameters (address, baud, video_index,
+                # etc.) so the device can be auto-reconnected with the same
+                # settings on next launch.
+                _cfg.set_pref(f"device_params.{uid}", {
+                    "address":     entry.address,
+                    "baud_rate":   entry.baud_rate,
+                    "ip_address":  entry.ip_address,
+                    "timeout_s":   entry.timeout_s,
+                    "video_index": entry.video_index,
+                })
             except Exception:
                 pass
 
