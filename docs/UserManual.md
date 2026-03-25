@@ -1,7 +1,7 @@
 # SanjINSIGHT User Manual
 
-**Microsanj SanjINSIGHT v1.4.0-beta.1**
-**Document revision: 2026-03-19**
+**Microsanj SanjINSIGHT v1.4.1-beta.2**
+**Document revision: 2026-03-25**
 
 ---
 
@@ -176,7 +176,7 @@ After installing the NI drivers, open **NI MAX** (Measurement & Automation Explo
 - The camera appears under **Devices and Interfaces** with the correct name (e.g. `cam4`).
 - The FPGA chassis appears under **Remote Systems** with its resource string (e.g. `rio://169.254.x.x/RIO0`).
 
-> **USB-to-serial adapters** (Meerstetter TEC, ATEC, stage, turret): Windows 11 typically installs FTDI and Prolific chip drivers automatically via Windows Update. If a COM port does not appear in Device Manager after plugging in the cable, install the FTDI VCP driver manually from [ftdichip.com/drivers/vcp-drivers](https://ftdichip.com/drivers/vcp-drivers/).
+> **USB-to-serial adapters** (Meerstetter TEC, LDD, ATEC, stage, turret): The FTDI VCP driver is bundled with the SanjINSIGHT installer and installs silently during setup. The TEC-1089, LDD-1121, and other FTDI-based devices should appear as COM ports in Windows Device Manager immediately after installation. If a COM port still does not appear, download the latest FTDI VCP driver from [ftdichip.com/drivers/vcp-drivers](https://ftdichip.com/drivers/vcp-drivers/).
 
 #### Step 3 — Copy the FPGA bitfile
 
@@ -1817,7 +1817,7 @@ The following ICD/IID files are included in `assets/camera_icd/` in the SanjINSI
 | ATEC-302 | ATEC | RS-232 | `atec` | 9 600 | `pyserial` |
 | Simulated | — | — | `simulated` | — | None |
 
-> The Meerstetter protocol requires the FTDI VCP driver for USB connections. Windows 11 usually installs this automatically. Manual download: [ftdichip.com/drivers/vcp-drivers](https://ftdichip.com/drivers/vcp-drivers/).
+> The Meerstetter protocol requires the FTDI VCP driver for USB connections. This driver is bundled with the SanjINSIGHT installer and installs silently during setup. If COM ports do not appear, download manually from [ftdichip.com/drivers/vcp-drivers](https://ftdichip.com/drivers/vcp-drivers/).
 
 ### 21.5 FPGA / Signal Generation
 
@@ -1922,7 +1922,7 @@ The AMCAD BILT is a two-channel (Gate + Drain) pulsed voltage/current source for
 | Basler Pylon SDK | — | — | **Not required** — pypylon bundles the pylon runtime in its wheel. No OS-level Basler SDK install needed. |
 | FLIR Boson SDK | — | — | **Not required** — the Boson 3.0 Python SDK is bundled in the installer (`hardware/cameras/boson/`). No separate download needed. |
 | Thorlabs Kinesis | 1.14 | Latest | Required for Thorlabs USB stages |
-| FTDI VCP Driver | 2.12 | Latest | Auto-installed by Windows Update on most systems |
+| FTDI VCP Driver | 2.12 | Latest | Bundled with the SanjINSIGHT installer; installs silently during setup |
 | PyVISA | 1.13 | **Latest** | Required for BNC 745 (GPIB/USB/Serial). Install: `pip install pyvisa pyvisa-py` |
 | AMCAD PIV software | 2019+ | Latest | Includes `pivserver64.exe` required for AMCAD BILT |
 
@@ -2051,6 +2051,8 @@ logging:
 - Loosen **Stable tolerance** (e.g. 0.5 °C if the TEC is noisy).
 - Check physical connections: TEC power leads, thermistor wiring.
 - Verify the COM port is not in use by another application.
+- The TEC-1089 requires external DC power (12–36 V) to respond to serial commands. USB only powers the FTDI serial chip — the TEC processor does not boot without DC input.
+- The FTDI VCP driver is bundled with the SanjINSIGHT installer (v1.4.1-beta.2+). If the TEC does not appear as a COM port, reinstall SanjINSIGHT or download the FTDI driver from [ftdichip.com](https://ftdichip.com/drivers/vcp-drivers/).
 
 ### FPGA not found / bitfile error
 

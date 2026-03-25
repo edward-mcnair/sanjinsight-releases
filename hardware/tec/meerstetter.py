@@ -83,10 +83,15 @@ class MeerstetterDriver(TecDriver):
             self._tec = MeCom(serialport=self._port,
                               timeout=self._timeout,
                               metype='TEC')
-            # Try configured address first, then broadcast (0) as fallback.
-            # Some firmware versions don't respond to broadcast.
+            # Try configured address first, then common defaults, then
+            # broadcast (0) as a last resort.  Factory default for the
+            # TEC-1089 is address 2; for LDD-1121 it is address 1.
             _identified = False
-            for _try_addr in (self._address, 0):
+            _addrs = [self._address]
+            for _a in (2, 1, 0):
+                if _a not in _addrs:
+                    _addrs.append(_a)
+            for _try_addr in _addrs:
                 try:
                     dev_addr = self._tec.identify(address=_try_addr)
                     log.info("Meerstetter TEC-1089 identified at MeCom "
@@ -100,7 +105,7 @@ class MeerstetterDriver(TecDriver):
             if not _identified:
                 raise RuntimeError(
                     f"TEC did not respond to identify on {self._port} "
-                    f"(tried address {self._address} and broadcast 0)")
+                    f"(tried addresses {_addrs})")
             self._connected = True
             _connected_ok = True
         except ImportError:

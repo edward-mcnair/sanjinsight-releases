@@ -47,7 +47,7 @@ sanjinsight/
 ├── README_INSTALL.md        # Windows installation guide for end users
 │
 ├── hardware/                # Device drivers (camera, TEC, FPGA, bias, stage)
-│   ├── cameras/             # Basler, NI IMAQdx, DirectShow, simulated
+│   ├── cameras/             # Basler, NI IMAQdx, FLIR Boson, DirectShow, simulated
 │   ├── tec/                 # Meerstetter TEC-1089, ATEC-302, simulated
 │   ├── fpga/                # NI 9637 via nifpga, simulated
 │   ├── bias/                # Keithley, VISA-generic, simulated
@@ -84,19 +84,17 @@ pytest tests/
 
 ## Releasing a new version
 
-1. Update `version.py` — change `__version__` and `BUILD_DATE`
+1. Update `version.py` — change `__version__`, `PRERELEASE`, `VERSION_TUPLE`, and `BUILD_DATE`
 2. Add a release entry to `CHANGELOG.md`
 3. Commit and tag:
    ```bash
-   git add -A
-   git commit -m "Release v1.0.1"
-   git tag -a v1.0.1 -m "Release v1.0.1"
-   git push origin main --tags
+   git add version.py CHANGELOG.md
+   git commit -m "Bump version to v1.4.1-beta.2"
+   git tag -a v1.4.1-beta.2 -m "SanjINSIGHT v1.4.1-beta.2"
+   git push origin main v1.4.1-beta.2
    ```
-4. On GitHub: **Releases → Draft a new release → Choose tag v1.0.1**
-5. Paste the CHANGELOG section as release notes
-6. Attach the Windows installer `.exe` as a release asset
-7. Publish — the in-app update checker will notify users automatically
+4. CI builds the installer automatically and creates a GitHub Release with the `.exe` attached
+5. The in-app update checker notifies users on next startup
 
 ---
 

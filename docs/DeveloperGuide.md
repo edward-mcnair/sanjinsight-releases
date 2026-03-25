@@ -1,8 +1,8 @@
 # SanjINSIGHT — Developer Guide
 
-**Version**: 1.4.0-beta.1
+**Version**: 1.4.1-beta.2
 **Platform**: Windows 10/11 (64-bit); macOS/Linux supported for development
-**Stack**: Python 3.11 · PyQt5 · NumPy · PyInstaller · Inno Setup
+**Stack**: Python 3.10 · PyQt5 · NumPy · PyInstaller · Inno Setup
 **Repository**: Private source (`edward-mcnair/sanjinsight`) · Public releases (`edward-mcnair/sanjinsight-releases`)
 
 ---
@@ -81,7 +81,7 @@ sanjinsight/
 │   ├── driver_store.py        ← Driver instance cache
 │   ├── hardware_preset_manager.py ← Named hardware config profiles
 │   │
-│   ├── cameras/               ← CameraDriver implementations (pypylon, ni_imaqdx, flir_driver, simulated)
+│   ├── cameras/               ← CameraDriver implementations (pypylon, ni_imaqdx, boson_driver, flir_driver, directshow, simulated)
 │   ├── tec/                   ← TecDriver implementations
 │   ├── fpga/                  ← FpgaDriver implementations
 │   ├── bias/                  ← BiasDriver implementations
@@ -384,7 +384,7 @@ def preflight(cls) -> tuple[bool, list[str]]:
 `DeviceManager._connect_worker()` calls `preflight()` immediately after driver instantiation, before calling `connect()` or `open()`. Hard failures (`ok=False`) are surfaced as a formatted bullet list in the Device Manager error dialog. Non-blocking issues (`ok=True` with a non-empty list) are logged at `WARNING` level.
 
 **Why `preflight()` exists:**
-- Optional hardware SDKs (pypylon, nifpga, pyMeCom, …) cannot be bundled into the installer for every target system. Rather than a bare `ImportError` traceback, the user sees "pypylon not found — try reinstalling SanjINSIGHT" with a direct action.
+- Optional hardware SDKs (pypylon, nifpga, …) cannot always be bundled into the installer for every target system. Rather than a bare `ImportError` traceback, the user sees "pypylon not found — try reinstalling SanjINSIGHT" with a direct action. Note: pyMeCom is now bundled in the installer (installed from GitHub in the CI pipeline).
 - All imports of optional packages are deferred to `open()` / `connect()` or to `preflight()` itself — never at module level — so the driver module can be safely imported even when its SDK is absent.
 
 **Pre-flight coverage by driver:**
@@ -575,6 +575,8 @@ Runs five sub-scanners in parallel threads on startup:
 | `NetworkScanner` | Subnet TCP probe for GigE/SCPI instruments (opt-in, off by default) |
 
 Returns a `ScanReport` containing `List[DiscoveredDevice]`, each with a device key, display name, connection string, and whether it matched a known registry entry.
+
+**Deduplication** uses `(address, uid)` composite keys — not address alone. This is required because multiple devices can share the same USB VID:PID (e.g. Meerstetter TEC-1089, ATEC, and LDD-1121 all use FTDI VID `0403` PID `6001`). The registry function `find_all_by_usb(vid, pid)` returns all matching entries for a given VID:PID pair.
 
 ### 4.5 DeviceManager (`hardware/device_manager.py`)
 
@@ -1464,18 +1466,20 @@ main_app.MainWindow.__init__()
 ### 17.1 GitHub Actions (`.github/workflows/build-installer.yml`)
 
 **Triggers:**
-- `git push origin v1.4.0-beta.1` — builds + creates GitHub Release on `sanjinsight-releases`
+- `git push origin v1.4.1-beta.2` — builds + creates GitHub Release on `sanjinsight`
 - Manual **Run workflow** in Actions UI — builds only (artifact available for 1 day)
 
 **Steps:**
 1. Checkout on `windows-latest` runner
-2. Python 3.11 + pip dependencies
-3. Convert `assets/microsanj-logo.svg` → `installer/assets/sanjinsight.ico`
-4. Generate `installer/version_info.txt` (Windows VERSIONINFO)
-5. **PyInstaller** → `dist/SanjINSIGHT/` (self-contained bundle)
-6. **Inno Setup** → `installer_output/SanjINSIGHT-Setup-X.Y.Z.exe`
-7. Extract release notes from `CHANGELOG.md`
-8. **Create GitHub Release** on `edward-mcnair/sanjinsight-releases` with `.exe` attached
+2. Python 3.10 + pip dependencies (3.10 required for FLIR PySpin wheel compatibility)
+3. Install optional GitHub-only drivers (pyMeCom, pydp832) — failures are non-fatal
+4. Download redistributable drivers (VC++ Redist, FTDI CDM) to `installer/redist/`
+5. Convert `assets/microsanj-logo.svg` → `installer/assets/sanjinsight.ico`
+6. Generate `installer/version_info.txt` (Windows VERSIONINFO)
+7. **PyInstaller** → `dist/SanjINSIGHT/` (self-contained bundle)
+8. **Inno Setup** → `installer_output/SanjINSIGHT-Setup-X.Y.Z.exe` (bundles VC++ Redist + FTDI CDM driver)
+9. Extract release notes from `CHANGELOG.md`
+10. **Create GitHub Release** on `edward-mcnair/sanjinsight` with `.exe` attached
 
 ### 17.2 Release Procedure
 
@@ -1502,8 +1506,25 @@ git push origin v1.4.0-beta.2
 
 ### 17.3 Local Windows Build (manual)
 
+Use `build_installer.bat` which handles all steps automatically:
+
+```bash
+cd installer
+build_installer.bat 1.4.1
+```
+
+The script:
+1. Verifies the Python interpreter
+2. Installs dependencies from `requirements.txt`
+3. Installs optional GitHub-only drivers (pyMeCom, pydp832)
+4. Downloads VC++ Redistributable and FTDI CDM driver to `redist/`
+5. Runs PyInstaller with the spec file
+6. Runs Inno Setup to produce the final installer
+
+For manual builds without the batch script:
 ```bash
 pip install pyinstaller pillow cairosvg
+pip install git+https://github.com/meerstetter/pyMeCom
 pyinstaller installer/sanjinsight.spec --noconfirm --clean
 python installer/gen_version_info.py
 # Then open Inno Setup and compile installer/setup.iss
@@ -1781,7 +1802,7 @@ bcrypt>=4.0            Password hashing for user accounts (work factor 12)
 # Optional — hardware SDKs (Windows-only unless otherwise noted, not in PyPI)
 pypylon                Basler camera SDK — self-contained wheel (bundles pylon runtime; no OS SDK install needed)
 flirpy                 FLIR camera SDK Python wrapper — used by flir_driver.py (Microsanj IR Camera v1a); bundled in installer
-pyMeCom                Meerstetter TEC serial protocol
+pyMeCom                Meerstetter TEC serial protocol (installed from GitHub: meerstetter/pyMeCom)
 nifpga                 NI-FPGA Python interface
 pyvisa                 NI-VISA / GPIB / SCPI instrument control
 thorlabs_apt_device    Thorlabs APT/Kinesis stage control
@@ -1795,5 +1816,5 @@ pytest>=7.4            Test runner
 
 ---
 
-*This document was last updated for SanjINSIGHT v1.4.0-beta.1 (2026-03-19).
+*This document was last updated for SanjINSIGHT v1.4.1-beta.2 (2026-03-25).
 Update it whenever significant architectural changes are made.*

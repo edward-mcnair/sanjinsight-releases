@@ -1,6 +1,6 @@
 # SanjINSIGHT — Installation Guide (Windows)
 
-**Version:** 1.0.0
+**Version:** 1.4.1-beta.2
 **Applies to:** Windows 10 / Windows 11 (64-bit)
 **Support:** software-support@microsanj.com
 
@@ -53,7 +53,7 @@ Double-click `SanjINSIGHT-Setup-{version}.exe` and follow the prompts (administr
 
 ### 2 — Install NI hardware drivers
 
-These are Windows kernel-level drivers that cannot be embedded in the application installer. Install them **before** launching SanjINSIGHT:
+Most drivers are bundled with the SanjINSIGHT installer (including the FTDI VCP driver for USB-serial devices and camera SDKs). The only drivers that must be installed separately are National Instruments (NI) kernel-level drivers. Install these **before** launching SanjINSIGHT:
 
 | Driver | Required for | Download |
 |---|---|---|
@@ -61,9 +61,9 @@ These are Windows kernel-level drivers that cannot be embedded in the applicatio
 | **NI Vision Acquisition Software** | Camera — NI IMAQdx | [ni.com → NI-VAS](https://www.ni.com/en/support/downloads/drivers/download.ni-vision-acquisition-software.html) |
 | **NI-VISA** | Bias source — Keithley via GPIB | [ni.com → NI-VISA](https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html) |
 
-Each installer requires a restart. After all three are installed, open **NI MAX** (Measurement & Automation Explorer) and confirm that your camera and FPGA chassis appear under **Devices and Interfaces** / **Remote Systems**.
+NI-RIO and NI Vision Acquisition Software both require a restart; NI-VISA does not. You can install all three and then restart once. After all three are installed, open **NI MAX** (Measurement & Automation Explorer) and confirm that your camera and FPGA chassis appear under **Devices and Interfaces** / **Remote Systems**.
 
-> **USB-to-serial adapters** (Meerstetter TEC, ATEC, stage, turret): Windows 11 usually detects FTDI and Prolific adapters automatically. If a COM port does not appear in Device Manager after plugging in the cable, download and install the FTDI VCP driver from [ftdichip.com/drivers/vcp-drivers](https://ftdichip.com/drivers/vcp-drivers/).
+> **USB-to-serial adapters** (Meerstetter TEC, LDD, ATEC, stage, turret): The FTDI VCP driver is bundled with the SanjINSIGHT installer and installs silently during setup. USB-serial devices should appear as COM ports in Windows Device Manager immediately after installation. If a COM port still does not appear, download the latest FTDI VCP driver from [ftdichip.com/drivers/vcp-drivers](https://ftdichip.com/drivers/vcp-drivers/).
 
 ### 3 — Copy the FPGA bitfile
 
@@ -86,10 +86,11 @@ The AI Assistant requires a local language model (~2–5 GB). Go to **Settings �
 ### Quick checklist
 
 ```
-□ Run SanjINSIGHT-Setup.exe
-□ Install NI-RIO + restart
-□ Install NI Vision Acquisition Software + restart
-□ Install NI-VISA
+□ Run SanjINSIGHT-Setup.exe (FTDI driver installs automatically)
+□ Install NI-RIO                               ← do NOT restart yet
+□ Install NI Vision Acquisition Software       ← do NOT restart yet
+□ Install NI-VISA                              ← no restart needed
+□ Restart PC once (satisfies NI-RIO + NI-VAS restart requirements)
 □ Copy FPGA bitfile → C:\Microsanj\firmware\ez500firmware.lvbitx
 □ Open NI MAX — confirm camera and FPGA appear
 □ Launch SanjINSIGHT → complete Hardware Setup Wizard
@@ -144,10 +145,10 @@ This installs the GUI framework, NumPy, OpenCV, matplotlib, HDF5, and YAML suppo
 3. Open **NI MAX** and verify the camera appears under **Devices and Interfaces**.
 4. Note the camera name (e.g. `cam4`) — you will need it in the setup wizard.
 
-> **Alternative camera driver (Basler pypylon):**  
+> **Basler pypylon camera driver:**
 > If your site uses the Basler pypylon driver instead of NI IMAQdx:
-> 1. Download and install the **Basler Pylon SDK** from [baslerweb.com](https://www.baslerweb.com/en/downloads/software-downloads/).
-> 2. Run: `pip install pypylon`
+> Run: `pip install pypylon`
+> No separate Basler SDK install is needed — pypylon bundles the pylon runtime in its wheel.
 
 ---
 
@@ -159,7 +160,7 @@ Install only the packages for hardware you have:
 |---|---|
 | NI FPGA (NI 9637) | `pip install nifpga` |
 | Basler camera (pypylon) | `pip install pypylon` |
-| Meerstetter TEC-1089 | `pip install pyMeCom` |
+| Meerstetter TEC-1089 | `pip install git+https://github.com/meerstetter/pyMeCom` |
 | Keithley bias source | `pip install pyvisa pyvisa-py` |
 
 ---

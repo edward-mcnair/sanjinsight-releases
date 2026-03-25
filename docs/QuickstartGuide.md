@@ -1,6 +1,6 @@
 # SanjINSIGHT — Quick Start Guide
 
-**Microsanj SanjINSIGHT v1.4.0-beta.1**
+**Microsanj SanjINSIGHT v1.4.1-beta.2**
 *Get from first launch to your first thermoreflectance measurement in minutes.*
 
 ---
@@ -32,21 +32,20 @@ The installer bundles everything SanjINSIGHT needs to run — Python, all Python
 
 ### Step 2 — Install camera and hardware drivers
 
-The installer cannot bundle OS-level hardware drivers. Install these **before** launching SanjINSIGHT for the first time:
+Most drivers are bundled with the installer. The only drivers that must be installed separately are National Instruments (NI) kernel-level drivers. Install these **before** launching SanjINSIGHT for the first time:
 
 | Driver | Required for | Where to get it |
 |---|---|---|
 | **NI-RIO** | FPGA (NI 9637) | [ni.com → Drivers → NI-RIO](https://www.ni.com/en/support/downloads/drivers/download.ni-rio.html) |
 | **NI Vision Acquisition Software** | Camera (NI IMAQdx) | [ni.com → Drivers → NI-VAS](https://www.ni.com/en/support/downloads/drivers/download.ni-vision-acquisition-software.html) |
 | **NI-VISA** | Keithley bias source | [ni.com → Drivers → NI-VISA](https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html) |
-| **Basler camera** | Basler TR / SWIR camera | **No SDK install required** — pypylon bundles the pylon runtime. |
-| **FLIR Boson** | FLIR Boson 320 / 640 IR camera | **No SDK install required** — Boson SDK is bundled with the installer. Configure `serial_port` and `video_index` in Device Manager after install. |
+| **Basler camera** | Basler TR / SWIR camera | **No install required** — pypylon bundles the pylon runtime. |
+| **FLIR Boson** | FLIR Boson 320 / 640 IR camera | **No install required** — Boson SDK is bundled with the installer. Configure `serial_port` and `video_index` in Device Manager after install. |
+| **FTDI VCP** | USB-serial devices (Meerstetter TEC, LDD, stage) | **No install required** — the FTDI CDM driver is bundled with the installer and installs silently during setup. |
 
 > **NI drivers:** NI-RIO and NI Vision Acquisition Software both require a restart after installation; NI-VISA does not. You can install all three NI packages first and then restart once — you do not need to restart between each NI install.
 
-> **Camera SDKs** do not require a restart. Install both if you have both cameras. If you only have one camera type, install only the relevant SDK.
-
-> **USB-to-serial adapters (TEC, stage, turret):** Windows 11 usually installs FTDI and Prolific drivers automatically. If a COM port does not appear in Device Manager after plugging in the cable, download the driver manually from [ftdichip.com](https://ftdichip.com/drivers/vcp-drivers/).
+> **Camera and serial drivers** are bundled with the SanjINSIGHT installer — no separate download or installation is needed.
 
 ### Step 3 — Copy the FPGA bitfile
 
@@ -66,13 +65,14 @@ The AI Assistant requires a language model file (~2–5 GB). Go to **Settings �
 
 ```
 □ Run SanjINSIGHT-Setup.exe
+□   (FTDI driver installs automatically — no action needed)
+□   (Basler camera: no SDK needed — pypylon is self-contained)
+□   (FLIR Boson: no SDK needed — bundled with installer)
 □ Install NI-RIO                               ← do NOT restart yet
 □ Install NI Vision Acquisition Software       ← do NOT restart yet
 □ Install NI-VISA                              ← no restart needed
 □ Restart PC once (satisfies NI-RIO + NI-VAS restart requirements)
-□ (Basler camera: no SDK needed — pypylon is self-contained)
-□ (FLIR Boson: no SDK needed — bundled with installer)
-□   → FLIR Boson: configure serial_port + video_index in Device Manager
+□ FLIR Boson: configure serial_port + video_index in Device Manager
 □ Copy FPGA bitfile → C:\Microsanj\firmware\ez500firmware.lvbitx
 □ Launch SanjINSIGHT → complete Admin Setup (first time only)
 □ Complete Hardware Setup Wizard
@@ -340,6 +340,7 @@ Operator Mode is a simplified interface for technicians who run repeatably again
 | Microsanj IR camera not found | Check USB connection. `flirpy` is bundled — no SDK install needed. Run **Test Camera** in the Hardware Setup Wizard. |
 | FLIR Boson not found | Check USB connection. Verify `video_index` matches the Boson's UVC device (see Section 21.2 of the User Manual). On macOS, check **System Preferences → Security & Privacy → Camera** to confirm the application has camera access. If using SDK commands, verify `serial_port` is set to the correct CDC port. |
 | TEC not stabilising | Increase **Max settle time** in Calibration settings. Check physical TEC connections. |
+| TEC not found / connection timeout | The TEC-1089 must be powered on (12–36 VDC) — USB only powers the serial chip, not the TEC controller. Verify the COM port in Windows Device Manager matches what SanjINSIGHT expects. The FTDI driver is installed automatically by the SanjINSIGHT installer. |
 | FPGA not found | Confirm NI-RIO drivers are installed and the resource string matches NI MAX (e.g. `RIO0`). |
 | ΔT always shows "—" | Load and apply a calibration file: **Calibration → 📂 Load .cal → ✓ Apply**. |
 | Stage shows "NOT HOMED" | Open the **Stage** panel (Hardware group) and click **⌂ Home All** to set the reference position. |
