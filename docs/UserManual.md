@@ -694,6 +694,22 @@ When issues are shown, each one has a **Fix it →** button that navigates direc
 
 Press **Esc** or click **■ Abort** to cancel a running acquisition.
 
+#### Pre-Capture Validation *(v1.5.0)*
+
+Before each acquisition begins, a preflight validation dialog runs five automated checks:
+
+| Check | Ideal range | Fail condition | What it detects |
+|---|---|---|---|
+| **Exposure quality** | Mean intensity 30–80 % of dynamic range | Mean < 15 % or peak > 90 % | Under/overexposure |
+| **Frame stability** | Coefficient of variation (CV) low | CV > 0.02 | Vibration, flicker, or drift |
+| **Focus quality** | Laplacian variance high | Variance < 40 | Out-of-focus image |
+| **Hardware readiness** | All devices connected | Any device disconnected or faulted | Missing hardware |
+| **TEC stability** | Temperature settled | TEC not at setpoint | Thermal drift |
+
+If all checks pass, acquisition proceeds automatically. If any check fails, a dismissable dialog lists the issues. You can fix them and re-check, or dismiss the dialog to proceed anyway.
+
+Disable preflight checks in **Settings → Pre-Capture Validation** (config key: `acquisition.preflight_enabled`, default: on).
+
 ### 8.5 Result Display
 
 | Tab | Content |
@@ -782,7 +798,7 @@ After all tiles complete: final stitching pass, enable export buttons.
 | **📄 PDF Report** | `.pdf` | Multi-page PDF: maps, statistics, scan metadata |
 | **◈ Save as Profile** | (profile store) | Save the ΔR/R map as a material profile for future reference |
 
-> **Example CSV:** See `docs/samples/example_test.csv` for a sample export with columns `x_um, y_um, delta_t_c, delta_r_over_r, verdict, hotspot_count, peak_k, scan_duration_s`. Use this as a template for automated post-processing workflows.
+> **Example CSV:** See `docs/samples/example_test.csv` for a 20-row sample export with columns `x_um, y_um, delta_t_c, delta_r_over_r, verdict, hotspot_count, peak_k, scan_duration_s`. Use this as a template for automated post-processing workflows or data import validation.
 
 ---
 
@@ -1010,6 +1026,16 @@ The histogram makes it easy to see whether hotspot pixels represent a narrow spi
 
 Below the histogram, a table lists each detected hotspot region with its peak ΔT, area (pixels), and centroid coordinates (x, y). Click any row to highlight the corresponding region on the map.
 
+### 12.7 RGB Analysis *(v1.5.0)*
+
+When the source acquisition was captured with a color (RGB) camera, the analysis engine operates on 3-channel data:
+
+- **Per-channel ΔR/R:** The signal map is computed as (H, W, 3) with independent ΔR/R values for each color channel (red, green, blue).
+- **Luminance reduction:** For threshold-based hotspot detection and morphological operations, the engine reduces the 3-channel map to a single luminance channel using Rec. 709 weights (0.2126 R + 0.7152 G + 0.0722 B). This ensures consistent pass/fail verdicts regardless of color content.
+- **Per-channel statistics:** The `rgb_analysis` module provides per-channel min, max, mean, and standard deviation. These are available in the Stats tab when viewing an RGB acquisition result.
+
+Monochrome acquisitions are unaffected — the analysis engine detects the channel count automatically.
+
 ---
 
 ## 13. Sessions Panel
@@ -1083,6 +1109,14 @@ The **Camera** sidebar entry opens a panel with three sub-tabs: **Camera**, **RO
 **ROI sub-tab** — Defines a region of interest (rectangle, in pixels) that restricts the active sensor area. Reducing the ROI increases frame rate and reduces data volume per acquisition.
 
 **Autofocus sub-tab** — Drives the Z-axis stage to find the sharpest focus position. Select the focus metric (variance, Laplacian, or gradient) and click **Run Autofocus** to execute a Z-sweep.
+
+#### Camera Sub-Tab Quick-Action Buttons *(v1.5.0)*
+
+| Button | Visibility | Description |
+|---|---|---|
+| **Optimize Throughput** | All TR cameras (hidden for IR) | Runs the FPS Optimizer: (1) maximizes LED duty cycle, (2) sets camera to maximum frame rate, (3) binary-searches exposure to achieve 70 % of dynamic range. The result is the highest achievable frame rate at a usable exposure level. |
+| **Run FFC** | Cameras that support flat-field correction (Boson, FLIR IR) | Triggers a flat-field correction cycle on the sensor. Run before calibration or whenever the ambient temperature changes significantly. Hidden when the camera does not support FFC. |
+| **Autofocus** | When a motorized stage is connected | Runs autofocus using the last-used settings (metric and range). Executes in a background thread. Disabled when no stage is connected. |
 
 ### 12.2 Stimulus Panel
 
@@ -1349,20 +1383,22 @@ When you save a session, a folder is created under `~\.microsanj_sessions\` cont
 ```
 20260302_143022_device_A/
   session.json      — Human-readable metadata (exposure, gain, TEC temp, etc.)
-  cold_avg.npy      — Averaged cold frames (float32)
-  hot_avg.npy       — Averaged hot frames (float32)
-  delta_r_over_r.npy — ΔR/R signal map (float32)
-  difference.npy    — Raw (hot − cold) difference (float32)
+  cold_avg.npy      — Averaged cold frames (float64)
+  hot_avg.npy       — Averaged hot frames (float64)
+  delta_r_over_r.npy — ΔR/R signal map (float64)
+  difference.npy    — Raw (hot − cold) difference (float64)
   thumbnail.png     — Small PNG preview
 ```
+
+> **Float64 averaging (v1.5.0):** Pipeline averaging and all NPY files now use float64 precision (previously float32). HDF5 exports also store float64. TIFF exports remain float32 for file-size compatibility with ImageJ/FIJI.
 
 ### 16.2 Export Formats
 
 | Format | Extension | Description | Compatible with |
 |---|---|---|---|
-| **HDF5** | `.h5` | All arrays and metadata in a single hierarchical file | Python (h5py), MATLAB, HDFView |
-| **NumPy** | `.npy` / `.npz` | Native NumPy format | Python (numpy.load) |
-| **TIFF** | `.tiff` | 32-bit floating-point, ImageJ/FIJI compatible | ImageJ, FIJI, Olympus, any TIFF reader |
+| **HDF5** | `.h5` | All arrays and metadata in a single hierarchical file (float64) | Python (h5py), MATLAB, HDFView |
+| **NumPy** | `.npy` / `.npz` | Native NumPy format (float64) | Python (numpy.load) |
+| **TIFF** | `.tiff` | 32-bit floating-point, ImageJ/FIJI compatible (float32 for file size) | ImageJ, FIJI, Olympus, any TIFF reader |
 | **CSV** | `.csv` | Tab-separated X (µm), Y (µm), ΔT (°C) | Excel, MATLAB, any spreadsheet |
 | **MATLAB** | `.mat` | MATLAB binary format | MATLAB R2006b+ |
 | **PNG** | `.png` | 8-bit colormapped raster image | Any image viewer |
@@ -1432,6 +1468,18 @@ Open with **Help → Settings** or **Ctrl+,**. The Settings panel is organised i
 ### 18.4 Users *(admin-only)*
 
 Embeds the full user management table. See Section 21.4 for details.
+
+### 18.4a Pre-Capture Validation *(v1.5.0)*
+
+| Setting | Description |
+|---|---|
+| **Enable preflight checks** | Checkbox. When enabled, automated validation runs before each acquisition. When disabled, acquisitions start immediately without checks. Config key: `acquisition.preflight_enabled` (default: on). |
+
+### 18.4b Autofocus *(v1.5.0)*
+
+| Setting | Description |
+|---|---|
+| **Auto-focus before each capture** | Checkbox. When enabled and a motorized stage is connected, autofocus runs automatically before every acquisition. Disabled by default. Requires a connected Z-axis stage. |
 
 ### 18.5 Updates
 
@@ -1720,8 +1768,8 @@ All supervisor override events are logged to the audit log (Section 21.7).
 | Basler acA640-750um | 640×480, mono | USB 3.0 | `pypylon` | None (self-contained wheel) |
 | Basler acA2040-90um | 2040×1088, mono | USB 3.0 | `pypylon` | None (self-contained wheel) |
 | Basler acA1300-200um | 1280×1024, mono | USB 3.0 | `pypylon` | None (self-contained wheel) |
-| Any Basler USB3 Vision | varies | USB 3.0 | `pypylon` | None (self-contained wheel) |
-| Any Basler GigE Vision | varies | Gigabit Ethernet | `pypylon` | None (self-contained wheel) |
+| Any Basler USB3 Vision (mono or color) | varies | USB 3.0 | `pypylon` | None (self-contained wheel) |
+| Any Basler GigE Vision (mono or color) | varies | Gigabit Ethernet | `pypylon` | None (self-contained wheel) |
 | Basler a2A1280-125umSWIR | 1280×1024, SWIR mono | USB 3.0 | `pypylon` | None (self-contained wheel) |
 | Allied Vision Goldeye G-032 Cool | 636×508, SWIR/IR | GigE | `ni_imaqdx` | NI Vision Acquisition Software 2019+ (ICD bundled) |
 | Photonfocus MV4-D1280U-H01-GT | 1280×1024, mono | GigE | `ni_imaqdx` | NI Vision Acquisition Software 2019+ (ICD bundled) |
@@ -1729,10 +1777,27 @@ All supervisor override events are logged to the audit log (Section 21.7).
 | FLIR Boson 640 | 640×512, 14-bit IR | USB | `boson` | None (SDK bundled) |
 | NI IMAQdx cameras | varies | USB / GigE / Camera Link | `ni_imaqdx` | NI Vision Acquisition Software 2019+ |
 | DirectShow-compatible | varies | USB | `directshow` | None (Windows API) |
-| Simulated | 512×512, synthetic | — | `simulated` | None |
+| Simulated | 512×512, synthetic (mono or color) | — | `simulated` | None |
 
 > **pypylon:** The pypylon wheel bundles the pylon runtime internally — no separate Basler SDK install is required.
 > **NI Vision Acquisition download:** [ni.com/downloads](https://www.ni.com/en/support/downloads/drivers/download.ni-vision-acquisition-software.html)
+
+#### RGB Color Camera Support *(v1.5.0)*
+
+SanjINSIGHT supports RGB color cameras alongside traditional monochrome sensors. Enable color mode by setting `color_mode: true` in the camera section of `config.yaml`.
+
+**Driver-specific behavior:**
+
+| Driver | Color behavior |
+|---|---|
+| `pypylon` | Bayer demosaic is performed automatically by the pylon SDK for color Basler sensors. Frames arrive as (H, W, 3) RGB. |
+| `directshow` | The driver converts BGR to RGB when `color_mode: true`. |
+| `simulated` | Generates synthetic 3-channel RGB frames when `color_mode: true`. |
+| `boson` / FLIR IR | Always monochrome. The `color_mode` setting is ignored. |
+
+**Frame format:** `CameraFrame.data` is `(H, W)` for mono or `(H, W, 3)` for RGB. The `CameraFrame.channels` field reports 1 (mono) or 3 (RGB). `CameraInfo.pixel_format` is one of `"mono"`, `"bayer_rggb"`, `"rgb"`, or `"bgr"`.
+
+> **Note:** Thermal (IR) cameras — Boson 320, Boson 640, and other microbolometers — are always monochrome regardless of `color_mode`. The setting applies only to visible-light cameras.
 
 ### 21.2 FLIR Boson Camera Setup
 
@@ -2152,16 +2217,20 @@ Starting from v1.2.8, SanjINSIGHT validates all required software dependencies b
 
 | Field | Type | Description |
 |---|---|---|
-| `cold_avg` | float32 ndarray | Averaged cold-phase frame |
-| `hot_avg` | float32 ndarray | Averaged hot-phase frame |
-| `delta_r_over_r` | float32 ndarray | ΔR/R = (hot − cold) / cold |
+| `cold_avg` | float64 ndarray (H×W or H×W×3) | Averaged cold-phase frame |
+| `hot_avg` | float64 ndarray (H×W or H×W×3) | Averaged hot-phase frame |
+| `delta_r_over_r` | float64 ndarray (H×W or H×W×3) | ΔR/R = (hot − cold) / cold |
+| `difference` | float64 ndarray | Hot − cold difference image |
 | `snr_db` | float | Estimated SNR in dB |
 | `exposure_us` | float | Exposure time (µs) |
 | `gain_db` | float | Camera gain (dB) |
 | `n_frames` | int | Total frames averaged |
 | `duration_s` | float | Acquisition wall time (s) |
 | `timestamp` | float | Unix timestamp |
-| `valid` | bool | True if acquisition succeeded |
+| `dark_pixel_count` | int | Pixels masked as dark/noise |
+| `dark_pixel_fraction` | float | Fraction of dark pixels (0.0–1.0) |
+
+> **v1.5.0 change:** All averaged arrays are now float64 (previously float32). The H×W×3 shape applies when the source camera is RGB.
 
 **ScanResult**
 

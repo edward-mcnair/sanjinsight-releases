@@ -16,6 +16,19 @@ The application checks for updates automatically on startup and displays a notif
 
 ---
 
+## What's New in v1.5.0
+
+- **Multi-channel (RGB) color camera support** — pypylon auto-detects and demosaics Bayer sensors; DirectShow cameras support `color_mode: true`
+- **Pre-capture validation system** — checks exposure quality, frame stability, focus, and hardware readiness before each acquisition (enabled by default)
+- **FPS throughput optimizer** — one-click auto-tuning of LED power, FPS, and exposure via the Camera panel
+- **FFC button for thermal cameras** — triggers flat-field correction directly from the Camera panel toolbar
+- **Float64 pipeline averaging** — all averaged data uses float64 precision; HDF5 exports preserve full accuracy
+- **RGB thermoreflectance per-channel analysis** — per-channel ΔR/R computation for color sensors
+- **Autofocus convenience features** — quick-action Autofocus button on the Camera panel; optional auto-focus before each capture in Settings
+- **Pipeline processing hooks** — extensible hook points in the acquisition pipeline for custom pre/post-processing
+
+---
+
 ## For developers — Getting started
 
 ### Prerequisites

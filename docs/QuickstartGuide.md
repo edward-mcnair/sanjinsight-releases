@@ -104,7 +104,7 @@ After admin setup, the **Hardware Setup Wizard** opens and walks you through con
 |---|---|
 | **1 — Welcome** | Wait a few seconds for the auto-scan to complete. A status message shows how many devices were found. |
 | **2 — TEC Controllers** | Confirm or select the COM port for each TEC (Meerstetter and/or ATEC). Use "simulated" if no TEC is connected. |
-| **3 — Camera** | Choose the driver: **pypylon** (Basler TR/SWIR camera), **boson** (FLIR Boson 320/640), **Microsanj IR Camera** (IR camera via flirpy), **ni_imaqdx** (NI camera), or **simulated**. If auto-scan found a camera, the serial number is pre-filled. |
+| **3 — Camera** | Choose the driver: **pypylon** (Basler TR/SWIR camera), **boson** (FLIR Boson 320/640), **Microsanj IR Camera** (IR camera via flirpy), **ni_imaqdx** (NI camera), or **simulated**. If auto-scan found a camera, the serial number is pre-filled. **Color (RGB) cameras** are now supported — pypylon automatically detects Bayer sensors and demosaics them. For DirectShow cameras, set `color_mode: true` in config. Thermal cameras (Boson, FLIR) are always mono. |
 | **4 — FPGA** | Choose **ni9637** and browse to the FPGA bitfile (`.lvbitx`). Enter the resource string (e.g. `RIO0`). Use **simulated** for software-only use. |
 | **5 — Bias Source** | Select the bias source type and connection port. Use **simulated** if no bias source is connected. |
 | **6 — Stage** | Select the motorised stage type and serial port. Use **simulated** if no stage is connected. |
@@ -143,6 +143,12 @@ After admin setup, the **Hardware Setup Wizard** opens and walks you through con
 | **ACQUIRE** | AutoScan★, Live★, Capture★ (Single / Grid sub-tabs), Transient (Time-Resolved / Burst sub-tabs) |
 | **ANALYZE** | Calibration, Analysis★, Sessions, Compare, 3D Surface |
 | **Hardware** *(collapsible ▸)* | Camera (Camera / ROI / Autofocus sub-tabs), Stimulus (Modulation / Bias Source sub-tabs), Temperature, Stage, Prober |
+
+The **Camera** panel toolbar includes three quick-action buttons:
+
+- **Autofocus** — runs autofocus using the last-used settings (requires a motorised stage).
+- **Optimize Throughput** — automatically tunes LED power, FPS, and exposure for best throughput.
+- **Run FFC** — triggers flat-field correction. This button is only visible for thermal cameras (Boson, FLIR).
 | **LIBRARY** | Profiles (Material Profiles / Scan Profiles sub-tabs) |
 | **Settings** | |
 
@@ -185,8 +191,12 @@ AutoScan is the guided, single-screen workflow for new users and routine measure
 1. Open **Capture** from the sidebar (or press **Ctrl+1**) and select the **Single** sub-tab.
 2. Check the **readiness banner** at the top. A green "● READY TO ACQUIRE" means all checks pass. If it shows amber "NOT READY — N issues", click any **Fix it →** link to jump to the relevant panel.
 3. Set **Exposure**, **Gain**, and **Frames/half** in the left panel.
-4. Click **▶ Run Sequence** (or **Ctrl+R**). The pipeline captures cold and hot frames, computes ΔR/R, and displays the result.
+4. Click **▶ Run Sequence** (or **Ctrl+R**). If **pre-capture validation** is enabled (the default), SanjINSIGHT checks exposure quality, frame stability, focus, and hardware readiness before acquiring. Any issues are shown in a dialog — you can fix them or click **Proceed Anyway** to continue. The pipeline then captures cold and hot frames, computes ΔR/R, and displays the result.
 5. Click **💾 Save Session** to save to HDF5, or **🖼 Save Image** to export a PNG.
+
+> **Settings → Acquisition** has two related checkboxes:
+> - **Run pre-capture validation checks** (default: on) — controls the pre-capture validation described above.
+> - **Auto-focus before each capture** (default: off) — automatically runs autofocus before every acquisition. Requires a motorised stage.
 
 ### D — Grid Scan (large-area map)
 
@@ -283,11 +293,13 @@ Operator Mode is a simplified interface for technicians who run repeatably again
 
 | Button | Output | Use for |
 |---|---|---|
-| 💾 Save Session | `.h5` (HDF5) | Full dataset + metadata in one file |
+| 💾 Save Session | `.h5` (HDF5) | Full dataset + metadata in one file (float64 precision) |
 | 🖼 Save Image | `.png` | Quick visual record |
 | 📄 PDF Report | `.pdf` | Formal report with stats and maps |
 | 💾 Save Map | `.npy` | NumPy array for Python post-processing |
 | 💾 Save .cal | `.npz` | Calibration file (C_T map + R² map) |
+
+> **Float64 precision:** Averaged data throughout the pipeline now uses float64 precision. HDF5 exports store the full float64 values, preserving maximum accuracy for post-processing.
 
 > **Example CSV:** An example test output CSV is included at `docs/samples/example_test.csv`. It contains 20 representative thermoreflectance measurements with spatial coordinates, ΔT, ΔR/R, verdict, hotspot count, and scan timing — useful as a template for post-processing scripts or for understanding the export format.
 

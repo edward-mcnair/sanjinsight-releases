@@ -101,7 +101,11 @@ sanjinsight/
 │   ├── recipe_presets.py      ← Pre-built measurement recipes
 │   ├── autosave.py            ← Checkpoint saving
 │   ├── schema_migrations.py   ← Session metadata version migrations
-│   └── movie_pipeline.py      ← Burst-mode high-speed capture
+│   ├── movie_pipeline.py      ← Burst-mode high-speed capture
+│   ├── fps_optimizer.py       ← Auto-optimize acquisition throughput (LED → FPS → exposure)
+│   ├── image_metrics.py       ← Shared stateless image-quality metrics (focus, intensity, stability)
+│   ├── preflight.py           ← Pre-capture validation system (PreflightValidator, PreflightCheck, PreflightResult)
+│   └── rgb_analysis.py        ← Per-channel RGB thermoreflectance analysis utilities
 │
 ├── ui/                        ← Qt5 UI components
 │   ├── charts.py              ← PyQtGraph chart widgets (calibration, analysis, transient, sessions)
@@ -124,6 +128,7 @@ sanjinsight/
 │   ├── tabs/                  ← Merged tabs (capture, transient_capture, camera_control, stimulus, library)
 │   ├── dialogs/               ← Specialized dialogs (support bundle, etc.)
 │   └── widgets/               ← Reusable widgets (image pane, temp plot, status header …)
+│       └── preflight_dialog.py ← Pre-capture validation dialog (modal, traffic-light results)
 │
 ├── ai/                        ← AI assistant
 │   ├── ai_service.py          ← Multi-backend AI service (local + cloud)
@@ -177,7 +182,9 @@ sanjinsight/
 │   ├── QuickstartGuide.md
 │   ├── UserManual.md
 │   ├── LicenseKeySystem.md
-│   └── DeveloperGuide.md      ← This file
+│   ├── DeveloperGuide.md      ← This file
+│   └── samples/
+│       └── example_test.csv   ← Example thermoreflectance test data (20 rows, 8 columns)
 │
 ├── installer/                 ← Windows packaging
 │   ├── sanjinsight.spec       ← PyInstaller spec
@@ -405,10 +412,47 @@ class CameraDriver(ABC):
     def bit_depth(self) -> int: ...    # 8, 10, 12, or 16
 ```
 
-`CameraFrame` contains:
-- `data: np.ndarray` — uint16, shape `(H, W)`
-- `timestamp: float` — `time.monotonic()` at capture
-- `index: int` — frame counter
+`CameraFrame` fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `data` | `np.ndarray` | Shape `(H, W)` for mono or `(H, W, 3)` for RGB |
+| `frame_index` | `int` | Frame counter |
+| `exposure_us` | `float` | Exposure time at capture |
+| `gain_db` | `float` | Gain at capture |
+| `timestamp` | `float` | `time.time()` at grab |
+| `channels` | `int` | `1` = mono, `3` = RGB |
+| `bit_depth` | `int` | Native sensor bit depth (e.g. 12, 14, 16) |
+
+`CameraInfo` fields:
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `driver` | `str` | `""` | Driver module name |
+| `model` | `str` | `""` | Camera model string |
+| `serial` | `str` | `""` | Serial number |
+| `width` | `int` | `0` | Sensor width (px) |
+| `height` | `int` | `0` | Sensor height (px) |
+| `bit_depth` | `int` | `12` | Native sensor bit depth |
+| `max_fps` | `float` | `0.0` | Maximum frame rate |
+| `camera_type` | `str` | `"tr"` | `"tr"` (thermoreflectance) or `"ir"` (infrared) |
+| `pixel_format` | `str` | `"mono"` | `"mono"`, `"bayer_rggb"`, `"rgb"`, or `"bgr"` |
+
+**Flat-Field Correction (FFC):**
+
+IR cameras (e.g. Boson) support FFC — a shutter-based non-uniformity correction. The base class provides two optional methods:
+
+```python
+def supports_ffc(self) -> bool:
+    """Return True if this camera supports Flat-Field Correction."""
+    return False
+
+def do_ffc(self) -> bool:
+    """Trigger a Flat-Field Correction. Returns True on success."""
+    return False
+```
+
+Drivers that support FFC override both methods. `BosonDriver.do_ffc()` sends the FFC command via the FSLP serial SDK.
 
 **Implementations**: `pypylon_driver.py` (Basler TR), `boson_driver.py` (FLIR Boson 320/640 via bundled Boson SDK (serial FSLP) + OpenCV UVC), `flir_driver.py` (Microsanj IR Camera via flirpy), `ni_imaqdx.py` (NI IMAQdx), `directshow.py` (OpenCV/DirectShow), `simulated.py`.
 
@@ -654,18 +698,21 @@ result = pipeline.run(n_frames=100)
 ```python
 @dataclass
 class AcquisitionResult:
-    cold_avg: np.ndarray           # float64, shape (H, W)
-    hot_avg: np.ndarray            # float64, shape (H, W)
-    delta_r_over_r: np.ndarray     # float32, shape (H, W); NaN where dark
-    difference: np.ndarray         # float32, shape (H, W); hot − cold
+    cold_avg: np.ndarray           # float64, shape (H, W) or (H, W, 3) for RGB
+    hot_avg: np.ndarray            # float64, shape (H, W) or (H, W, 3) for RGB
+    delta_r_over_r: np.ndarray     # float64, shape (H, W) or (H, W, 3); NaN where dark
+    difference: np.ndarray         # float64, shape (H, W) or (H, W, 3); hot − cold
 
     n_frames: int
+    cold_captured: int
+    hot_captured: int
+    dark_pixel_count: int          # number of pixels masked as dark/noise
+    dark_pixel_fraction: float     # fraction of NaN pixels in result (0.0–1.0)
     exposure_us: float
     gain_db: float
     timestamp: float               # time.time()
     duration_s: float
     snr_db: float                  # computed from ΔR/R excluding NaN pixels
-    dark_pixel_fraction: float     # fraction of NaN pixels in result
     notes: str
 ```
 
@@ -715,6 +762,74 @@ For row in range(n_rows):
 ```
 
 Output: a stitched ΔR/R image of size `(n_rows × H, n_cols × W)`.
+
+### 5.6 Pipeline Processing Hooks
+
+The pipeline exposes two hook lists for extensibility without subclassing:
+
+- **`pre_capture_hooks`** (`List[Callable[[], None]]`) — Run before each capture phase (cold and hot). Use cases include triggering external instruments, logging, or inserting settling delays.
+- **`post_average_hooks`** (`List[Callable[[ndarray], ndarray]]`) — Transform the averaged frame after each phase completes. Each hook receives the float64 averaged array and must return a float64 array of the same shape.
+
+Hooks are invoked in list order. A failing hook is logged at WARNING level but does not abort the acquisition.
+
+```python
+pipeline.pre_capture_hooks.append(lambda: fpga.arm_trigger())
+pipeline.post_average_hooks.append(my_shading_correction)
+```
+
+### 5.7 Float64 Averaging
+
+All pipeline averaging now uses **float64** (was float32 in earlier versions). Each frame is cast to `float64` before accumulation, and the averaged result remains float64 throughout the ΔR/R computation. This provides >15 significant digits of precision, eliminating rounding artefacts that were visible in low-signal (ΔR/R < 10⁻⁴) measurements when using float32.
+
+### 5.8 Multi-Channel ΔR/R (RGB Cameras)
+
+When cold and hot averages are `(H, W, 3)` (i.e. from a color camera), the pipeline handles them natively:
+
+1. **Dark-pixel mask** — computed on the luminance channel (`cold.mean(axis=2)`) to produce a single 2D boolean mask.
+2. **Mask broadcast** — the 2D mask is expanded to `(H, W, 1)` via `np.newaxis` and broadcast across all three channels for safe division and NaN insertion.
+3. **ΔR/R result** — shape `(H, W, 3)`, where each channel contains an independent thermoreflectance signal at that wavelength.
+
+Downstream code can use `rgb_analysis.split_channels()` to separate R/G/B maps, or `rgb_analysis.to_luminance()` to reduce to a single-channel Rec. 709 weighted map.
+
+### 5.9 Pre-Capture Validation (`acquisition/preflight.py`)
+
+`PreflightValidator` runs five read-only checks immediately before acquisition starts. It never modifies hardware state. Total runtime target: < 1.5 seconds.
+
+**Checks performed:**
+
+| Rule ID | Check | Pass | Warn | Fail |
+|---|---|---|---|---|
+| `PF_CAMERA` | Camera connected | Connected | — | Not connected |
+| `PF_FPGA` | FPGA / stimulus connected | — | Not connected | — |
+| `PF_STAGE` | Stage connected (scan only) | — | — | Not connected |
+| `PF_EXPOSURE` | Exposure quality | Mean 30–80% DR | Outside ideal range | Mean < 15% or peak > 90% |
+| `PF_STABILITY` | Frame-to-frame CV | CV < 0.005 | CV 0.005–0.02 | CV > 0.02 |
+| `PF_FOCUS` | Laplacian variance | Score > 100 | Score 40–100 | Score < 40 |
+| `PF_TEC_*` | TEC channel stability | Stable | Not at setpoint | — |
+
+**Usage:**
+
+```python
+from acquisition.preflight import PreflightValidator
+validator = PreflightValidator(app_state, metrics_snapshot=latest_metrics)
+result = validator.run(operation="acquire")  # "acquire" | "scan" | "transient" | "movie"
+if not result.passed:
+    # show PreflightDialog, let user override or cancel
+```
+
+When all checks pass, acquisition starts immediately (no dialog). When any check is warn or fail, `PreflightDialog` (`ui/widgets/preflight_dialog.py`) displays a modal traffic-light summary. The user can proceed despite warnings or even failures.
+
+`PreflightResult.to_dict()` is stored in the session metadata (`SessionMeta.preflight`) for post-hoc traceability.
+
+### 5.10 Export Formats (`acquisition/export.py`)
+
+| Format | Precision | Multi-channel handling | Notes |
+|---|---|---|---|
+| HDF5 | float64 (native) | Full `(H,W,3)` arrays preserved | Stored under `/arrays/*` |
+| TIFF | float32 | Full `(H,W,3)` with `axes="YXC"` metadata; mono uses `axes="YX"` | float32 for file-size compatibility |
+| CSV | text | Reduced to Rec. 709 luminance (`0.2126·R + 0.7152·G + 0.0722·B`) | Inherently 2D |
+| NumPy (`.npy`) | float64 (native) | Full array preserved | Direct `np.save` |
+| MATLAB (`.mat`) | float64 | Full array preserved | Via `scipy.io.savemat` |
 
 ---
 
@@ -1122,6 +1237,25 @@ session.unload()                 # Frees memory
 ### 12.4 Schema Migrations (`acquisition/schema_migrations.py`)
 
 When a new field is added to `SessionMeta`, a migration function bumps `schema_version` and fills in the default value for old sessions. Migrations run automatically on `Session.load()`.
+
+**Current schema version: 3** (`CURRENT_SCHEMA = 3`).
+
+| Migration | Fields Added | Defaults |
+|---|---|---|
+| v0 → v1 | `schema_version` | `1` |
+| v1 → v2 | `camera_id`, `notes_log` | `""`, `[]` |
+| v2 → v3 | `frame_channels`, `frame_bit_depth`, `pixel_format`, `preflight` | `1`, `16`, `"mono"`, `None` |
+
+**v3 fields detail:**
+
+| Field | Type | Description |
+|---|---|---|
+| `frame_channels` | `int` | `1` (mono) or `3` (RGB) — matches `CameraFrame.channels` |
+| `frame_bit_depth` | `int` | Native sensor bit depth (12, 14, or 16). Defaults to `16` for migrated sessions (conservative upper bound since the original depth cannot be inferred). |
+| `pixel_format` | `str` | `"mono"`, `"bayer_rggb"`, or `"rgb"` — matches `CameraInfo.pixel_format` |
+| `preflight` | `Optional[dict]` | `PreflightResult.to_dict()` snapshot captured before acquisition, or `None` if preflight was not run. Contains the full list of checks, pass/warn/fail status, and timing. |
+
+When loading a session written by a *newer* version of the software (schema > CURRENT_SCHEMA), unknown fields are silently ignored and a warning is logged.
 
 ---
 
