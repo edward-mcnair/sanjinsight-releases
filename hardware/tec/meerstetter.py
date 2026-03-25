@@ -48,7 +48,7 @@ class MeerstetterDriver(TecDriver):
         super().__init__(cfg)
         self._port    = cfg.get("port",    "")
         self._address = cfg.get("address", 2)
-        self._timeout = cfg.get("timeout", 10.0)
+        self._timeout = cfg.get("timeout", 2)
 
         # PID and current parameters — read from config with production defaults
         self._pid_kp             = float(cfg.get("pid_kp",              35.0))
@@ -97,9 +97,20 @@ class MeerstetterDriver(TecDriver):
                 "After installing, restart the application."
             )
         except Exception as e:
+            err = str(e)
+            hints = []
+            if "timeout" in err.lower():
+                hints.append(
+                    "The TEC did not respond — check that:\n"
+                    "  • The correct COM port is selected in Device Manager\n"
+                    "  • The TEC-1089 is powered on\n"
+                    "  • The FTDI USB-serial driver is installed "
+                    "(Device Manager → Ports should show the TEC)\n"
+                    "  • No other software has the port open")
             raise RuntimeError(
                 f"Meerstetter connect failed on {self._port}: {e}\n"
-                f"Check port name and that nothing else is using it.")
+                + ("\n".join(hints) if hints else
+                   "Check port name and that nothing else is using it."))
         finally:
             # Release on any exception path; keep held on success (released by disconnect())
             if not _connected_ok:
