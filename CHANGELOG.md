@@ -10,6 +10,51 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.5.0-beta.1] — 2026-03-25
+
+### Added
+
+- **Multi-channel (RGB) camera support** — Color cameras now flow (H,W,3) data through the entire pipeline: capture, averaging, ΔR/R computation, display, analysis, and export. Supported drivers: pypylon (Bayer demosaic), DirectShow, and simulated camera. Thermal IR cameras (Boson, FLIR) remain mono.
+- **`CameraFrame` generalized** — New `channels` (1=mono, 3=RGB) and `bit_depth` fields on CameraFrame; `pixel_format` field on CameraInfo. All drivers now report explicit channel/bit-depth metadata.
+- **Float64 pipeline averaging** — All pipeline averaging upgraded from float32 to float64 for >15 significant digits of precision when averaging many frames.
+- **Pipeline processing hooks** — `pre_capture_hooks` and `post_average_hooks` on `AcquisitionPipeline` enable extensibility without modifying `_run()`.
+- **Session schema v3** — Adds `frame_channels`, `frame_bit_depth`, `pixel_format`, and `preflight` fields. Automatic cumulative migration from v1/v2.
+- **FFC (Flat-Field Correction) UI button** — Visible on Camera tab when camera supports FFC (Boson, FLIR). Wires to existing `send_ffc()` / `do_ffc()` driver methods.
+- **FPS Optimizer** (`acquisition/fps_optimizer.py`) — Three-step auto-optimization: maximize LED duty cycle, maximize frame rate, binary-search exposure for 70% of dynamic range.
+- **RGB thermoreflectance analysis** (`acquisition/rgb_analysis.py`) — Per-channel split, Rec. 709 luminance, per-channel statistics, and per-channel analysis engine dispatch.
+- **Pre-capture validation system** — Read-only preflight checks (exposure quality, frame stability, focus, hardware readiness, TEC stability) run before each acquisition. Dismissable dialog with traffic-light results. Toggle in Settings.
+- **Shared image metrics** (`acquisition/image_metrics.py`) — `compute_focus()`, `compute_intensity_stats()`, `compute_frame_stability()` used by both MetricsService and PreflightValidator.
+- **Autofocus quick-button** on Camera tab — Runs AF with last-used settings from a background thread. Disabled when no stage connected.
+- **"Optimize Throughput" button** on Camera tab — Runs FPS optimizer in background thread.
+- **"Auto-focus before each capture" checkbox** in Settings.
+- **Autofocus settings persistence** — Last-used AF config saved to preferences.
+- **Example test CSV** (`docs/samples/example_test.csv`) — 20 rows of representative thermoreflectance data with PASS/WARN/FAIL examples.
+
+### Fixed
+
+- **Thread safety: `_on_quick_af()` UI updates** — Moved `setEnabled`/`setText` calls from worker thread to main thread via `QTimer.singleShot(0, ...)`.
+- **UI blocking: `_on_optimize()`** — Moved FPS optimizer execution to a background thread.
+- **Stale closure: AF pre-capture hook** — Hook now resolves `app_state.cam`/`app_state.stage` at execution time, not closure creation time.
+- **Missing CameraFrame fields** — Boson driver now sets `channels=1, bit_depth=14`; FLIR driver sets `channels=1, bit_depth=16`.
+- **FPS optimizer streaming assumption** — Now detects if camera isn't streaming, starts it, and cleans up afterward.
+- **`to_display()` luminance calculation** — Signed mode now uses Rec. 709 weights instead of `mean(axis=2)`.
+- **Simulated camera `set_resolution()`/`set_fps()`** — Now preserve `camera_type` and `pixel_format` when rebuilding CameraInfo.
+- **8-bit to 12-bit scaling** — pypylon and DirectShow RGB conversion changed from `<< 4` (0-4080) to `* 4095 // 255` (correct 0-4095).
+- **Drift correction with RGB frames** — `estimate_shift()` now receives luminance; `apply_shift()` builds correct shift tuple for 3D arrays.
+- **Transient pipeline multi-channel** — Accumulator shape matches frame dimensionality; dark-mask computed on luminance and broadcast correctly.
+- **Movie pipeline multi-channel** — Same drift correction and dark-mask fixes as transient pipeline.
+- **Export float64 preservation** — `_collect_data()` no longer casts to float32; HDF5 stores native float64; TIFF keeps float32 for file size.
+- **Export multi-channel** — TIFF axes metadata set to "YXC" for 3-channel; CSV reduces to luminance for 2D output.
+- **Analysis multi-channel** — `ThermalAnalysisEngine.run()` and overlay renderer reduce RGB input to luminance for threshold/morphology.
+- **Session difference precision** — `session_manager.py` comparison now returns float64 instead of float32.
+
+### Changed
+
+- **MetricsService focus computation** — Delegates to shared `acquisition.image_metrics.compute_focus()`.
+- **Schema migration v2→v3 docstring** — Clarifies why `frame_bit_depth=16` is the correct conservative default for legacy sessions.
+
+---
+
 ## [1.4.1-beta.2] — 2026-03-24
 
 ### Added

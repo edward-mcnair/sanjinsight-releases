@@ -1,6 +1,6 @@
 # SanjINSIGHT — Installation Guide (Windows)
 
-**Version:** 1.4.1-beta.2
+**Version:** 1.5.0-beta.1
 **Applies to:** Windows 10 / Windows 11 (64-bit)
 **Support:** software-support@microsanj.com
 

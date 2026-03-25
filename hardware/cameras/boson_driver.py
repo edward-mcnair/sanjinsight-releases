@@ -572,6 +572,8 @@ class BosonDriver(CameraDriver):
             exposure_us = 0.0,   # Boson auto-exposes internally
             gain_db     = 0.0,
             timestamp   = time.time(),
+            channels    = 1,
+            bit_depth   = 14,
         )
 
     # ── Attribute control ─────────────────────────────────────────────────────
@@ -604,6 +606,13 @@ class BosonDriver(CameraDriver):
                 result, temp = client.bosonGetCameraStatus()
         """
         return self._client
+
+    def supports_ffc(self) -> bool:
+        return True
+
+    def do_ffc(self) -> bool:
+        """Trigger a Flat Field Correction via the CameraDriver interface."""
+        return self.send_ffc()
 
     def send_ffc(self) -> bool:
         """

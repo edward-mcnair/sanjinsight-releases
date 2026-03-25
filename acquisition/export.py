@@ -258,16 +258,18 @@ class SessionExporter:
             s = self._session
             m = s.meta if hasattr(s, "meta") else None
 
-            # Arrays (load lazily — session only reads from disk on access)
+            # Arrays (load lazily — session only reads from disk on access).
+            # Preserve native dtype (float64 from pipeline averaging);
+            # individual exporters cast to their target dtype.
             for name in ["cold_avg", "hot_avg", "delta_r_over_r", "difference"]:
                 arr = getattr(s, name, None)
                 if arr is not None:
-                    arrays[name] = arr.astype(np.float32)
+                    arrays[name] = arr
 
             # Optional ΔT (computed from calibration, may not be persisted)
             dt = getattr(s, "delta_t", None)
             if dt is not None:
-                arrays["delta_t"] = dt.astype(np.float32)
+                arrays["delta_t"] = dt
 
             # Metadata
             if m is not None:
@@ -313,8 +315,10 @@ class SessionExporter:
             data = arr.astype(np.uint16 if dtype == "uint16" else np.float32)
 
             if use_tifffile:
+                # Axes: "YXC" for multi-channel (H,W,3), "YX" for mono
+                axes = "YXC" if data.ndim == 3 else "YX"
                 metadata = {
-                    "axes": "YX",
+                    "axes": axes,
                     "array":   key,
                     "unit":    "°C" if key == "delta_t" else ("counts" if "avg" in key else ""),
                     **{str(k): str(v) for k, v in meta.items()
@@ -350,12 +354,15 @@ class SessionExporter:
         Write all arrays and all metadata into a single .h5 file.
 
         Structure:
-            /arrays/cold_avg             float32 dataset
-            /arrays/hot_avg              float32 dataset
-            /arrays/delta_r_over_r       float32 dataset
-            /arrays/difference           float32 dataset
-            /arrays/delta_t              float32 dataset (if available)
+            /arrays/cold_avg             float64 dataset
+            /arrays/hot_avg              float64 dataset
+            /arrays/delta_r_over_r       float64 dataset
+            /arrays/difference           float64 dataset
+            /arrays/delta_t              float64 dataset (if available)
             /meta/*                      scalar datasets from SessionMeta
+
+        Arrays are stored at their native precision (float64 from pipeline
+        averaging) so no information is lost in the archival format.
         """
         try:
             import h5py
@@ -415,6 +422,12 @@ class SessionExporter:
         if data is None:
             raise ValueError(
                 "No ΔT or ΔR/R array available for CSV export.")
+
+        # CSV is inherently 2-D; reduce multi-channel to luminance
+        if data.ndim == 3:
+            data = (0.2126 * data[:, :, 0]
+                    + 0.7152 * data[:, :, 1]
+                    + 0.0722 * data[:, :, 2])
 
         H, W = data.shape[:2]
         px_per_um = self._px_per_um

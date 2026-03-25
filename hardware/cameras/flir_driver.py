@@ -240,6 +240,8 @@ class FlirDriver(CameraDriver):
             exposure_us = 0.0,   # microbolometers don't have a settable exposure
             gain_db     = 0.0,
             timestamp   = time.time(),
+            channels    = 1,
+            bit_depth   = 16,
         )
 
     # ------------------------------------------------------------------ #
@@ -292,7 +294,10 @@ class FlirDriver(CameraDriver):
     #  Thermal-camera-specific extras                                      #
     # ------------------------------------------------------------------ #
 
-    def do_ffc(self) -> None:
+    def supports_ffc(self) -> bool:
+        return True
+
+    def do_ffc(self) -> bool:
         """
         Execute an on-demand Flat Field Correction (Non-Uniformity Correction).
 
@@ -301,13 +306,15 @@ class FlirDriver(CameraDriver):
         temperature changes.
         """
         if self._boson is None or not self._open:
-            return
+            return False
         with self._cmd_lock:
             try:
                 self._boson.do_ffc()
                 log.debug("FlirDriver: FFC executed")
+                return True
             except Exception as exc:
                 log.warning("FlirDriver: do_ffc failed: %s", exc)
+                return False
 
     # ------------------------------------------------------------------ #
     #  Private helpers                                                     #

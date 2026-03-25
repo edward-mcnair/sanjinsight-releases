@@ -22,11 +22,13 @@ import numpy as np
 @dataclass
 class CameraFrame:
     """A single acquired frame with metadata."""
-    data:        np.ndarray          # uint16, shape (height, width)
+    data:        np.ndarray          # (H, W) grayscale or (H, W, 3) RGB
     frame_index: int      = 0
     exposure_us: float    = 0.0
     gain_db:     float    = 0.0
     timestamp:   float    = 0.0      # time.time() at grab
+    channels:    int      = 1        # 1 = mono, 3 = RGB
+    bit_depth:   int      = 12       # native sensor bit depth
 
 
 @dataclass
@@ -40,6 +42,7 @@ class CameraInfo:
     bit_depth:   int   = 12
     max_fps:     float = 0.0
     camera_type: str   = "tr"   # "tr" (thermoreflectance) | "ir" (infrared)
+    pixel_format: str  = "mono" # "mono" | "bayer_rggb" | "rgb" | "bgr"
 
 
 class CameraDriver(ABC):
@@ -164,6 +167,18 @@ class CameraDriver(ABC):
         After returning, info.max_fps reflects the new rate.
         """
         pass
+
+    # ---------------------------------------------------------------- #
+    #  Flat-Field Correction (thermal cameras)                          #
+    # ---------------------------------------------------------------- #
+
+    def supports_ffc(self) -> bool:
+        """Return True if this camera supports Flat-Field Correction."""
+        return False
+
+    def do_ffc(self) -> bool:
+        """Trigger a Flat-Field Correction. Returns True on success."""
+        return False
 
     # ---------------------------------------------------------------- #
     #  Introspection                                                    #

@@ -413,23 +413,13 @@ class MetricsService(QObject):
 
     @staticmethod
     def _compute_focus(data: np.ndarray) -> float:
-        """
-        Variance of the discrete Laplacian on a 4× downsampled frame.
+        """Variance of the discrete Laplacian on a 4x downsampled frame.
 
-        Higher values indicate sharper focus.  Uses second finite differences
-        so no boundary padding is needed.  Fast even on 1920×1200 frames because
-        the downsampled array is only 480×300.
+        Delegates to the shared utility in acquisition.image_metrics so
+        both MetricsService and PreflightValidator use the same algorithm.
         """
-        ds = data[::4, ::4].astype(np.float32)
-        if ds.shape[0] < 3 or ds.shape[1] < 3:
-            return 0.0
-        d2y = ds[2:, :]   - 2.0 * ds[1:-1, :] + ds[:-2, :]
-        d2x = ds[:, 2:]   - 2.0 * ds[:, 1:-1] + ds[:, :-2]
-        # Use the interior region common to both
-        r = min(d2y.shape[0], d2x.shape[0])
-        c = min(d2y.shape[1], d2x.shape[1])
-        lap = d2y[:r, :c] + d2x[:r, :c]
-        return float(np.var(lap))
+        from acquisition.image_metrics import compute_focus
+        return compute_focus(data)
 
     @staticmethod
     def _get_bit_depth() -> int:

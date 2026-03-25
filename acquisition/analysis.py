@@ -163,6 +163,13 @@ class ThermalAnalysisEngine:
                                   notes="No input map available.",
                                   valid=False)
 
+        # Multi-channel (H,W,3) → reduce to luminance for analysis.
+        # Morphology and thresholding require a 2-D map.
+        if data.ndim == 3:
+            data = (0.2126 * data[:, :, 0]
+                    + 0.7152 * data[:, :, 1]
+                    + 0.0722 * data[:, :, 2])
+
         H, W   = data.shape[:2]
         total_px = H * W
 
@@ -313,9 +320,12 @@ class ThermalAnalysisEngine:
                       hotspots, base_image, verdict, cfg) -> np.ndarray:
         H, W = data.shape[:2]
 
-        # Background: base_image (greyscale) or normalised data
+        # Background: base_image (greyscale) or normalised data.
+        # Multi-channel base images are reduced to luminance.
         if base_image is not None:
             bg = base_image.astype(np.float32)
+            if bg.ndim == 3:
+                bg = 0.2126 * bg[:, :, 0] + 0.7152 * bg[:, :, 1] + 0.0722 * bg[:, :, 2]
             bg = ((bg - bg.min()) / (bg.max() - bg.min() + 1e-9) * 200
                   ).clip(0, 200).astype(np.uint8)
         else:

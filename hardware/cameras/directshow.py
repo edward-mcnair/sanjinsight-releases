@@ -60,6 +60,7 @@ class DirectShowDriver(CameraDriver):
         self._W      = cfg.get("width",  640)
         self._H      = cfg.get("height", 512)
         self._fourcc = cfg.get("fourcc", "")   # e.g. "Y16 " for 16-bit mono
+        self._color  = cfg.get("color_mode", False)  # True → keep RGB
 
     def open(self) -> None:
         import cv2
@@ -85,13 +86,15 @@ class DirectShowDriver(CameraDriver):
         self._W    = w
         self._H    = h
         self._open = True
+        _bd = 16 if "16" in self._fourcc else 8
         self._info = CameraInfo(
-            driver    = "directshow",
-            model     = self._cfg.get("model", f"DirectShow device {self._idx}"),
-            width     = w,
-            height    = h,
-            bit_depth = 16 if "16" in self._fourcc else 8,
-            max_fps   = cap.get(cv2.CAP_PROP_FPS),   # cv2 already imported above
+            driver       = "directshow",
+            model        = self._cfg.get("model", f"DirectShow device {self._idx}"),
+            width        = w,
+            height       = h,
+            bit_depth    = _bd,
+            max_fps      = cap.get(cv2.CAP_PROP_FPS),   # cv2 already imported above
+            pixel_format = "rgb" if (self._color and _bd == 8) else "mono",
         )
 
     def start(self) -> None:
@@ -124,11 +127,19 @@ class DirectShowDriver(CameraDriver):
                 return None
             data = raw.copy()
         elif frame.ndim == 3:
-            # 8-bit color → grayscale uint16
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            data = gray.astype(np.uint16) << 4   # scale to 12-bit range
+            if self._color:
+                # Keep RGB — convert BGR→RGB, scale to 12-bit uint16
+                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                data = (rgb.astype(np.uint16) * 4095 // 255).astype(np.uint16)
+                n_ch = 3
+            else:
+                # 8-bit color → grayscale uint16
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                data = (gray.astype(np.uint16) * 4095 // 255).astype(np.uint16)
+                n_ch = 1
         else:
             data = frame.astype(np.uint16)
+            n_ch = 1
 
         return CameraFrame(
             data        = data,
@@ -136,6 +147,8 @@ class DirectShowDriver(CameraDriver):
             exposure_us = self._cfg.get("exposure_us", 0.0),
             gain_db     = self._cfg.get("gain", 0.0),
             timestamp   = time.time(),
+            channels    = n_ch,
+            bit_depth   = self._info.bit_depth,
         )
 
     def set_exposure(self, microseconds: float) -> None:

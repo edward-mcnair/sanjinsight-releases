@@ -1,6 +1,6 @@
 # SanjINSIGHT User Manual
 
-**Microsanj SanjINSIGHT v1.4.1-beta.2**
+**Microsanj SanjINSIGHT v1.5.0-beta.1**
 **Document revision: 2026-03-25**
 
 ---
@@ -777,10 +777,12 @@ After all tiles complete: final stitching pass, enable export buttons.
 
 | Button | Output format | Description |
 |---|---|---|
-| **💾 Save Map** | `.npy` | NumPy float32 array for Python post-processing |
+| **💾 Save Map** | `.npy` | NumPy float64 array for Python post-processing |
 | **🖼 Save Image** | `.png` | Raster image of the stitched ΔR/R map |
 | **📄 PDF Report** | `.pdf` | Multi-page PDF: maps, statistics, scan metadata |
 | **◈ Save as Profile** | (profile store) | Save the ΔR/R map as a material profile for future reference |
+
+> **Example CSV:** See `docs/samples/example_test.csv` for a sample export with columns `x_um, y_um, delta_t_c, delta_r_over_r, verdict, hotspot_count, peak_k, scan_duration_s`. Use this as a template for automated post-processing workflows.
 
 ---
 
@@ -2052,7 +2054,7 @@ logging:
 - Check physical connections: TEC power leads, thermistor wiring.
 - Verify the COM port is not in use by another application.
 - The TEC-1089 requires external DC power (12–36 V) to respond to serial commands. USB only powers the FTDI serial chip — the TEC processor does not boot without DC input.
-- The FTDI VCP driver is bundled with the SanjINSIGHT installer (v1.4.1-beta.2+). If the TEC does not appear as a COM port, reinstall SanjINSIGHT or download the FTDI driver from [ftdichip.com](https://ftdichip.com/drivers/vcp-drivers/).
+- The FTDI VCP driver is bundled with the SanjINSIGHT installer (v1.5.0-beta.1+). If the TEC does not appear as a COM port, reinstall SanjINSIGHT or download the FTDI driver from [ftdichip.com](https://ftdichip.com/drivers/vcp-drivers/).
 
 ### FPGA not found / bitfile error
 

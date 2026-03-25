@@ -20,10 +20,14 @@ log = logging.getLogger(__name__)
 def to_display(
     data: np.ndarray,
     mode: str = "auto",
-    clip_percentile: float = 99.5
+    clip_percentile: float = 99.5,
+    channel: Optional[int] = None,
 ) -> np.ndarray:
     """
-    Convert a float32 or uint16 array to uint8 for display.
+    Convert a float/uint16 array to uint8 for display.
+
+    Supports both (H, W) grayscale and (H, W, 3) RGB input.
+    For RGB input with mode "signed", the luminance is used.
 
     mode:
         "auto"       — stretch to min/max
@@ -31,10 +35,20 @@ def to_display(
         "fixed"      — assume 12-bit data (0–4095 → 0–255)
         "signed"     — for ΔR/R maps, center on zero (blue=negative, red=positive)
                         returns shape (H, W, 3) RGB
+    channel:
+        None = use all channels (or grayscale)
+        0/1/2 = extract single R/G/B channel for display
     """
+    # Extract single channel if requested
+    if channel is not None and data.ndim == 3:
+        data = data[:, :, channel]
+
     d = data.astype(np.float32)
 
     if mode == "signed":
+        # For RGB signed display, use Rec. 709 luminance
+        if d.ndim == 3:
+            d = 0.2126 * d[:, :, 0] + 0.7152 * d[:, :, 1] + 0.0722 * d[:, :, 2]
         return _signed_colormap(d, clip_percentile)
 
     if mode == "percentile":
@@ -49,7 +63,7 @@ def to_display(
 
     span = hi - lo
     if span == 0 or not np.isfinite(span):
-        return np.zeros(d.shape, dtype=np.uint8)
+        return np.zeros(d.shape[:2], dtype=np.uint8)
 
     scaled = np.clip((d - lo) / span * 255, 0, 255)
     # NaN → 0 before cast (NaN.astype(uint8) is undefined behaviour)
@@ -319,6 +333,38 @@ def setup_cmap_combo(combo, saved_cmap: str = "Thermal Delta") -> None:
         combo.model().item(i).setForeground(QBrush(QColor(r, g, b)))
     if saved_cmap in COLORMAP_OPTIONS:
         combo.setCurrentText(saved_cmap)
+
+
+def extract_channel(data: np.ndarray, channel: int) -> np.ndarray:
+    """Extract a single channel from an (H, W, 3) array.
+
+    Parameters
+    ----------
+    data : ndarray, shape (H, W, 3) or (H, W)
+        Multi-channel or single-channel image data.
+    channel : int
+        0 = Red, 1 = Green, 2 = Blue.
+
+    Returns
+    -------
+    ndarray, shape (H, W)
+        The requested channel, or the original 2D array if already mono.
+    """
+    if data.ndim == 3 and data.shape[2] > channel:
+        return data[:, :, channel]
+    return data
+
+
+def to_luminance(data: np.ndarray) -> np.ndarray:
+    """Convert (H, W, 3) RGB to (H, W) luminance using Rec. 709 weights.
+
+    Returns the input unchanged if already 2D.
+    """
+    if data.ndim == 3:
+        return (0.2126 * data[:, :, 0]
+                + 0.7152 * data[:, :, 1]
+                + 0.0722 * data[:, :, 2])
+    return data
 
 
 def export_result(result, output_dir: str = ".") -> dict:

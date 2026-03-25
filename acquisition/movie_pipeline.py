@@ -266,7 +266,7 @@ class MovieAcquisitionPipeline:
         data = frame.data
         if self._roi is not None:
             data = self._roi.crop(data)
-        return data.astype(np.float32), t
+        return data.astype(np.float64), t
 
     def _run(self, n_frames: int, capture_reference: bool, settle_s: float,
              drift_correction: bool = False):
@@ -327,7 +327,11 @@ class MovieAcquisitionPipeline:
                     continue
                 frame_data = r[0]
                 if drift_correction and reference is not None:
-                    dy, dx = _estimate_shift(frame_data, reference)
+                    # Drift estimation requires 2-D input; use
+                    # luminance for multi-channel frames.
+                    f_mono = frame_data.mean(axis=2) if frame_data.ndim == 3 else frame_data
+                    r_mono = reference.mean(axis=2) if reference.ndim == 3 else reference
+                    dy, dx = _estimate_shift(f_mono, r_mono)
                     frame_data = _apply_shift(frame_data, dy, dx)
                 frames.append(frame_data)
                 times_abs.append(r[1])
@@ -344,7 +348,7 @@ class MovieAcquisitionPipeline:
                        frames_done=0, frames_total=0,
                        message="Building frame cube...")
 
-            frame_cube = np.stack(frames, axis=0)         # (N, H, W) float32
+            frame_cube = np.stack(frames, axis=0)         # (N, H, W) float64
             timestamps_s = np.array(times_abs) - times_abs[0]  # relative times
 
             self._result.frame_cube     = frame_cube
@@ -363,13 +367,21 @@ class MovieAcquisitionPipeline:
                 dtype_max  = float(
                     np.iinfo(np.uint16).max)   # assume 16-bit source
                 threshold  = self.DARK_THRESHOLD_FRACTION * dtype_max
-                dark_mask  = reference < threshold
-                ref_safe   = np.where(dark_mask, 1.0, reference)
+
+                # Dark-pixel mask: for multi-channel, threshold on luminance
+                # then broadcast the 2-D mask to match the data shape.
+                if reference.ndim == 3:
+                    ref_lum = reference.mean(axis=2)
+                    dark_mask_2d = ref_lum < threshold
+                    dark_mask = dark_mask_2d[:, :, np.newaxis]
+                else:
+                    dark_mask = reference < threshold
+                ref_safe = np.where(dark_mask, 1.0, reference)
 
                 delta_cube = np.empty_like(frame_cube)
                 for i in range(frame_cube.shape[0]):
                     dr = (frame_cube[i] - reference) / ref_safe
-                    dr[dark_mask] = np.nan
+                    dr[np.broadcast_to(dark_mask, dr.shape)] = np.nan
                     delta_cube[i] = dr
                 self._result.delta_r_cube = delta_cube
 

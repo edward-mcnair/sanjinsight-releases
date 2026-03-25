@@ -142,7 +142,7 @@ from PyQt5.QtWidgets import (
     QComboBox, QTextEdit, QTabWidget, QFileDialog, QFrame,
     QSizePolicy, QButtonGroup, QSplitter, QStatusBar,
     QAction, QMenuBar, QMessageBox, QStackedWidget,
-    QCheckBox, QScrollArea, QDockWidget)
+    QCheckBox, QScrollArea, QDockWidget, QDialog)
 from PyQt5.QtCore  import Qt, QTimer, pyqtSignal, QObject, QSize
 from PyQt5.QtGui   import (QImage, QPixmap, QFont, QColor, QPainter,
                            QPen, QBrush, QPalette, QIcon)
@@ -2754,6 +2754,38 @@ class MainWindow(QMainWindow):
                     pipeline.on_progress = lambda p: hw_service.acq_progress.emit(p)
                     pipeline.on_complete = lambda r: hw_service.acq_complete.emit(r)
                     pipeline.on_error    = lambda e: hw_service.error.emit(e)
+
+                    # Register auto-focus pre-capture hook if enabled.
+                    # Resolve cam/stage from app_state at execution time,
+                    # not at closure creation time, so hardware swaps are
+                    # picked up correctly.
+                    if config.get_pref("autofocus.before_capture", False):
+                        def _af_hook():
+                            _cam = app_state.cam
+                            _stage = app_state.stage
+                            if _stage is None or _cam is None:
+                                return
+                            try:
+                                from hardware.autofocus import create_autofocus
+                                af_cfg = {
+                                    "driver":   config.get_pref("autofocus.strategy", "sweep"),
+                                    "strategy": config.get_pref("autofocus.strategy", "sweep"),
+                                    "metric":   config.get_pref("autofocus.metric", "laplacian"),
+                                    "z_start":  config.get_pref("autofocus.z_start", -500.0),
+                                    "z_end":    config.get_pref("autofocus.z_end", 500.0),
+                                    "coarse_step": config.get_pref("autofocus.coarse_step", 50.0),
+                                    "fine_step":   config.get_pref("autofocus.fine_step", 5.0),
+                                    "n_avg":    config.get_pref("autofocus.n_avg", 2),
+                                    "settle_ms": config.get_pref("autofocus.settle_ms", 50),
+                                    "move_to_best": True,
+                                }
+                                af = create_autofocus(af_cfg, _cam, _stage)
+                                af.run()
+                                log.info("Pre-capture autofocus complete")
+                            except Exception as exc:
+                                log.warning("Pre-capture autofocus failed: %s", exc)
+                        pipeline.pre_capture_hooks.append(_af_hook)
+
                     _as.pipeline = pipeline
                 except Exception:
                     log.debug("Failed to create pipeline for real camera",
@@ -2894,6 +2926,23 @@ class MainWindow(QMainWindow):
         self._acq_start_grade  = grade
         self._acq_start_issues = [r for r in results if r.severity in ("fail", "warn")]
 
+        # ── Pre-capture validation ─────────────────────────────────────
+        # Run one-shot read-only checks (exposure, stability, focus,
+        # hardware) if the user has not disabled the feature.
+        preflight = None
+        if config.get_pref("acquisition.preflight_enabled", True):
+            try:
+                from acquisition.preflight import PreflightValidator
+                metrics_snap = (self._metrics.latest_snapshot()
+                                if hasattr(self._metrics, 'latest_snapshot')
+                                else {})
+                validator = PreflightValidator(app_state, metrics_snap)
+                preflight = validator.run(operation="acquire")
+                self._acq_start_preflight = preflight
+            except Exception:
+                log.debug("Preflight validation failed — proceeding",
+                          exc_info=True)
+
         # Emit ACQ_START to the event bus timeline
         try:
             from events import emit_info, EVT_ACQ_START
@@ -2906,6 +2955,29 @@ class MainWindow(QMainWindow):
             log.debug("_on_acquire_requested: events module not available — "
                       "EVT_ACQ_START not emitted")
 
+        # ── Decision gate ──────────────────────────────────────────────
+        # Fast path: everything green (grade A/B and preflight all-clear)
+        preflight_ok = (preflight is None or preflight.all_clear)
+        if grade in ("A", "B") and preflight_ok:
+            self._acquire_tab.start_acquisition(n_frames, delay)
+            return
+
+        # Show preflight dialog if there are preflight issues
+        if preflight is not None and not preflight.all_clear:
+            try:
+                from ui.widgets.preflight_dialog import PreflightDialog
+                dlg = PreflightDialog(preflight, parent=self)
+                if dlg.exec_() != QDialog.Accepted:
+                    return
+                # User chose to proceed — start acquisition
+                self._acquire_tab.start_acquisition(n_frames, delay)
+                return
+            except Exception:
+                log.debug("PreflightDialog failed — falling back to "
+                          "grade-based gate", exc_info=True)
+
+        # Fall back to grade-based gate (legacy path, also used when
+        # preflight is disabled)
         if grade in ("A", "B"):
             self._acquire_tab.start_acquisition(n_frames, delay)
             return

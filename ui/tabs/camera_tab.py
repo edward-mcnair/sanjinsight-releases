@@ -198,6 +198,40 @@ class CameraTab(QWidget):
         adv_panel.addWidget(adv_inner)
         cl.addWidget(adv_panel, 7, 0, 1, 3)
 
+        # ── Quick Autofocus button ─────────────────────────────────────
+        self._af_btn = QPushButton("Autofocus")
+        set_btn_icon(self._af_btn, "fa5s.crosshairs")
+        self._af_btn.setToolTip(
+            "Run autofocus with last-used settings.\n"
+            "Requires a motorized stage to be connected.")
+        self._af_btn.setFixedWidth(140)
+        self._af_btn.clicked.connect(self._on_quick_af)
+        cl.addWidget(self._af_btn, 8, 0)
+
+        # ── Optimize Throughput button ──────────────────────────────────
+        self._optimize_btn = QPushButton("Optimize Throughput")
+        set_btn_icon(self._optimize_btn, "fa5s.tachometer-alt")
+        self._optimize_btn.setToolTip(
+            "Auto-optimize acquisition settings:\n"
+            "1. Maximize LED pulse width (duty cycle)\n"
+            "2. Set camera to maximum frame rate\n"
+            "3. Adjust exposure for optimal signal level")
+        self._optimize_btn.setFixedWidth(180)
+        self._optimize_btn.clicked.connect(self._on_optimize)
+        cl.addWidget(self._optimize_btn, 8, 1)
+
+        # ── FFC button (thermal cameras only) ──────────────────────────
+        self._ffc_btn = QPushButton("Run FFC")
+        set_btn_icon(self._ffc_btn, "fa5s.adjust")
+        self._ffc_btn.setToolTip(
+            "Trigger Flat-Field Correction (FFC).\n"
+            "Briefly closes the internal shutter to recalibrate pixel offsets.\n"
+            "Run before calibration or after ambient temperature changes.")
+        self._ffc_btn.setFixedWidth(140)
+        self._ffc_btn.clicked.connect(self._on_ffc)
+        self._ffc_btn.setVisible(False)  # shown only when camera supports FFC
+        cl.addWidget(self._ffc_btn, 9, 1)
+
         top.addWidget(ctrl_box, 1)
 
         # ── Signal Quality strip (always visible) ─────────────────────
@@ -348,6 +382,18 @@ class CameraTab(QWidget):
     def set_hardware_available(self, available: bool) -> None:
         """Switch between empty state (page 0) and full controls (page 1)."""
         self._stack.setCurrentIndex(1 if available else 0)
+        cam = app_state.cam
+        # Show FFC button only for cameras that support it
+        self._ffc_btn.setVisible(
+            available and cam is not None and cam.supports_ffc())
+        # AF button: always visible when camera connected, but disabled
+        # without a stage. Tooltip explains the requirement.
+        self._af_btn.setVisible(available)
+        has_stage = app_state.stage is not None
+        self._af_btn.setEnabled(has_stage)
+        if not has_stage:
+            self._af_btn.setToolTip(
+                "Connect a motorized stage to enable autofocus.")
 
     # ── Stat readout widget ────────────────────────────────────────────
 
@@ -449,6 +495,112 @@ class CameraTab(QWidget):
             cam = app_state.cam
             if cam:
                 cam.set_gain(val)
+
+    def _on_quick_af(self):
+        """Run autofocus with last-used settings from a background thread."""
+        cam   = app_state.cam
+        stage = app_state.stage
+        if cam is None:
+            from ui.app_signals import signals
+            signals.log_message.emit("Autofocus: no camera connected.")
+            return
+        if stage is None:
+            from ui.app_signals import signals
+            signals.log_message.emit(
+                "Autofocus: no motorized stage connected.")
+            return
+        self._af_btn.setEnabled(False)
+        self._af_btn.setText("Focusing…")
+
+        import threading
+        def _run():
+            try:
+                from hardware.autofocus import create_autofocus
+                from config import get_pref
+                cfg = {
+                    "driver":      get_pref("autofocus.strategy", "sweep"),
+                    "strategy":    get_pref("autofocus.strategy", "sweep"),
+                    "metric":      get_pref("autofocus.metric", "laplacian"),
+                    "z_start":     get_pref("autofocus.z_start", -500.0),
+                    "z_end":       get_pref("autofocus.z_end", 500.0),
+                    "coarse_step": get_pref("autofocus.coarse_step", 50.0),
+                    "fine_step":   get_pref("autofocus.fine_step", 5.0),
+                    "n_avg":       get_pref("autofocus.n_avg", 2),
+                    "settle_ms":   get_pref("autofocus.settle_ms", 50),
+                    "move_to_best": True,
+                }
+                af = create_autofocus(cfg, cam, stage)
+                result = af.run()
+                from ui.app_signals import signals
+                if result.best_z:
+                    signals.log_message.emit(
+                        f"Autofocus complete: best Z = {result.best_z:.2f} μm "
+                        f"(score = {result.best_score:.4f}, "
+                        f"{result.duration_s:.1f}s)")
+                else:
+                    signals.log_message.emit(
+                        f"Autofocus: {result.message}")
+            except Exception as exc:
+                from ui.app_signals import signals
+                signals.log_message.emit(f"Autofocus failed: {exc}")
+            finally:
+                # Marshal UI updates back to the main thread
+                QTimer.singleShot(0, lambda: self._af_btn.setEnabled(True))
+                QTimer.singleShot(0, lambda: self._af_btn.setText("Autofocus"))
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _on_optimize(self):
+        """Run the FPS optimizer (LED → FPS → exposure) in a background thread."""
+        cam = app_state.cam
+        if cam is None:
+            return
+        self._optimize_btn.setEnabled(False)
+        self._optimize_btn.setText("Optimizing…")
+
+        import threading
+        def _run():
+            try:
+                from acquisition.fps_optimizer import FpsOptimizer
+                fpga = app_state.fpga
+                opt = FpsOptimizer(cam, fpga=fpga)
+                result = opt.optimize()
+                from ui.app_signals import signals
+                if result.get("skipped"):
+                    signals.log_message.emit(
+                        "Optimize: skipped (IR camera has no adjustable FPS/exposure).")
+                else:
+                    signals.log_message.emit(
+                        f"Optimize: duty={result['duty_cycle']:.0%}  "
+                        f"fps={result['fps']:.1f}  "
+                        f"exp={result['exposure_us']:.0f} μs  "
+                        f"intensity={result['mean_intensity']:.1%}")
+                    # Sync UI sliders with new exposure on the main thread
+                    exp_val = int(result["exposure_us"])
+                    QTimer.singleShot(0, lambda: self._exp_slider.setValue(exp_val))
+            except Exception as exc:
+                from ui.app_signals import signals
+                signals.log_message.emit(f"Optimize failed: {exc}")
+            finally:
+                QTimer.singleShot(0, lambda: self._optimize_btn.setEnabled(True))
+                QTimer.singleShot(0, lambda: self._optimize_btn.setText("Optimize Throughput"))
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _on_ffc(self):
+        """Trigger Flat-Field Correction on the active camera."""
+        cam = app_state.cam
+        if cam and cam.supports_ffc():
+            self._ffc_btn.setEnabled(False)
+            self._ffc_btn.setText("Running FFC…")
+            ok = cam.do_ffc()
+            self._ffc_btn.setEnabled(True)
+            self._ffc_btn.setText("Run FFC")
+            from ui.app_signals import signals
+            if ok:
+                signals.log_message.emit("FFC completed successfully.")
+            else:
+                signals.log_message.emit("FFC failed — see log for details.")
 
     def _save(self):
         import cv2

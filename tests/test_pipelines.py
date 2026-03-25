@@ -260,7 +260,7 @@ class TestMoviePipeline:
         assert result.frame_cube is not None, "frame_cube is None"
         assert result.frame_cube.shape == (10, 24, 32), \
             f"Unexpected cube shape: {result.frame_cube.shape}"
-        assert result.frame_cube.dtype == np.float32
+        assert result.frame_cube.dtype == np.float64
 
     def test_run_with_reference_produces_delta_r_cube(self, camera):
         from acquisition.movie_pipeline import MovieAcquisitionPipeline

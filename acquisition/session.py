@@ -97,6 +97,14 @@ class SessionMeta:
     camera_id:  str        = ""    # e.g. "TR-Andor-iStar-SN12345"
     notes_log:  List[dict] = field(default_factory=list)  # NoteEntry dicts
 
+    # ── Multi-channel / bit-depth metadata (v3) ────────────────────
+    frame_channels:  int = 1       # 1 = mono, 3 = RGB
+    frame_bit_depth: int = 16      # native sensor bit depth
+    pixel_format:    str = "mono"  # "mono" | "bayer_rggb" | "rgb"
+
+    # ── Pre-capture validation (v3) ──────────────────────────────────
+    preflight:       Optional[dict] = None  # PreflightResult.to_dict()
+
     def to_dict(self) -> dict:
         d = asdict(self)
         d.pop("path", None)

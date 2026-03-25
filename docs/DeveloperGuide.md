@@ -1,6 +1,6 @@
 # SanjINSIGHT — Developer Guide
 
-**Version**: 1.4.1-beta.2
+**Version**: 1.5.0-beta.1
 **Platform**: Windows 10/11 (64-bit); macOS/Linux supported for development
 **Stack**: Python 3.10 · PyQt5 · NumPy · PyInstaller · Inno Setup
 **Repository**: Private source (`edward-mcnair/sanjinsight`) · Public releases (`edward-mcnair/sanjinsight-releases`)
@@ -1278,7 +1278,7 @@ main_app.MainWindow.__init__()
 ### 17.1 GitHub Actions (`.github/workflows/build-installer.yml`)
 
 **Triggers:**
-- `git push origin v1.4.1-beta.2` — builds + creates GitHub Release on `sanjinsight`
+- `git push origin v1.5.0-beta.1` — builds + creates GitHub Release on `sanjinsight`
 - Manual **Run workflow** in Actions UI — builds only (artifact available for 1 day)
 
 **Steps:**
@@ -1298,19 +1298,19 @@ main_app.MainWindow.__init__()
 ```bash
 # 1. Update version
 # Edit version.py: __version__, PRERELEASE, VERSION_TUPLE, BUILD_DATE
-# Beta example:  __version__ = "1.4.1-beta.2",  PRERELEASE = "beta.2"
+# Beta example:  __version__ = "1.5.0-beta.1",  PRERELEASE = "beta.2"
 # GA example:    __version__ = "1.4.1",          PRERELEASE = ""
 
-# 2. Update CHANGELOG.md: add ## [1.4.1-beta.2] — YYYY-MM-DD section
+# 2. Update CHANGELOG.md: add ## [1.5.0-beta.1] — YYYY-MM-DD section
 
 # 3. Commit
 git add version.py CHANGELOG.md
-git commit -m "chore: bump to v1.4.1-beta.2"
+git commit -m "chore: bump to v1.5.0-beta.1"
 
 # 4. Tag and push — this triggers CI
-git tag v1.4.1-beta.2
+git tag v1.5.0-beta.1
 git push origin main
-git push origin v1.4.1-beta.2
+git push origin v1.5.0-beta.1
 
 # 5. CI builds installer and publishes release automatically
 # 6. Verify at https://github.com/edward-mcnair/sanjinsight-releases/releases
@@ -1628,5 +1628,5 @@ pytest>=7.4            Test runner
 
 ---
 
-*This document was last updated for SanjINSIGHT v1.4.1-beta.2 (2026-03-25).
+*This document was last updated for SanjINSIGHT v1.5.0-beta.1 (2026-03-25).
 Update it whenever significant architectural changes are made.*

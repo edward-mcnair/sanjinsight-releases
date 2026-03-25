@@ -1,6 +1,6 @@
 # SanjINSIGHT — Quick Start Guide
 
-**Microsanj SanjINSIGHT v1.4.1-beta.2**
+**Microsanj SanjINSIGHT v1.5.0-beta.1**
 *Get from first launch to your first thermoreflectance measurement in minutes.*
 
 ---
@@ -288,6 +288,8 @@ Operator Mode is a simplified interface for technicians who run repeatably again
 | 📄 PDF Report | `.pdf` | Formal report with stats and maps |
 | 💾 Save Map | `.npy` | NumPy array for Python post-processing |
 | 💾 Save .cal | `.npz` | Calibration file (C_T map + R² map) |
+
+> **Example CSV:** An example test output CSV is included at `docs/samples/example_test.csv`. It contains 20 representative thermoreflectance measurements with spatial coordinates, ΔT, ΔR/R, verdict, hotspot count, and scan timing — useful as a template for post-processing scripts or for understanding the export format.
 
 ---
 

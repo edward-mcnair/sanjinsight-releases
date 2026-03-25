@@ -214,7 +214,7 @@ class LiveProcessor:
 
             # ---- ΔR/R ----
             cold_safe = np.where(cold_ema > 1.0, cold_ema, 1.0)
-            drr = ((hot_ema - cold_ema) / cold_safe).astype(np.float32)
+            drr = ((hot_ema - cold_ema) / cold_safe).astype(np.float64)
 
             # ---- SNR estimate ----
             snr = self._estimate_snr(drr)
@@ -283,7 +283,7 @@ class LiveProcessor:
             time.sleep(cfg.trigger_delay_ms / 1000.0)
 
     def _grab_avg(self, n: int, cfg: LiveConfig) -> Optional[np.ndarray]:
-        """Grab N frames and return their float32 average, with optional ROI crop.
+        """Grab N frames and return their float64 average, with optional ROI crop.
 
         If the frame shape changes mid-accumulation (e.g. because set_resolution()
         was called on a simulated camera), the accumulator is restarted so we never
@@ -316,7 +316,7 @@ class LiveProcessor:
 
         if acc is None or count == 0:
             return None
-        return (acc / count).astype(np.float32)
+        return (acc / count).astype(np.float64)
 
     def _synthetic_frame(self, cfg: LiveConfig) -> np.ndarray:
         """Generate a synthetic camera frame for simulation."""

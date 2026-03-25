@@ -553,6 +553,50 @@ class SettingsTab(QWidget):
             lambda v: cfg_mod.set_pref("lab.confirm_at_scan", v))
         lay.addWidget(self._lab_confirm_chk)
 
+        lay.addWidget(_sep())
+
+        # ── Pre-Capture Validation ────────────────────────────────────
+        pf_lbl = QLabel("Pre-Capture Validation")
+        pf_lbl.setStyleSheet(
+            f"font-size:{FONT['label']}pt; font-weight:700; color:{_TEXT()};")
+        lay.addWidget(pf_lbl)
+
+        self._preflight_chk = QCheckBox(
+            "Run pre-capture validation checks (exposure, stability, focus)")
+        self._preflight_chk.setStyleSheet(_CHECK())
+        self._preflight_chk.setChecked(
+            cfg_mod.get_pref("acquisition.preflight_enabled", True))
+        self._preflight_chk.toggled.connect(
+            lambda v: cfg_mod.set_pref("acquisition.preflight_enabled", v))
+        lay.addWidget(self._preflight_chk)
+
+        pf_desc = QLabel(
+            "When enabled, the system checks exposure quality, frame "
+            "stability, focus, and hardware readiness before each "
+            "acquisition.  You can always override warnings and proceed.")
+        pf_desc.setWordWrap(True)
+        pf_desc.setStyleSheet(
+            f"font-size:{FONT['caption']}pt; color:{_MUTED()}; "
+            f"padding-left:22px;")
+        lay.addWidget(pf_desc)
+
+        lay.addWidget(_sep())
+
+        # ── Autofocus ─────────────────────────────────────────────────
+        af_lbl = QLabel("Autofocus")
+        af_lbl.setStyleSheet(
+            f"font-size:{FONT['label']}pt; font-weight:700; color:{_TEXT()};")
+        lay.addWidget(af_lbl)
+
+        self._af_before_chk = QCheckBox(
+            "Auto-focus before each capture (requires motorized stage)")
+        self._af_before_chk.setStyleSheet(_CHECK())
+        self._af_before_chk.setChecked(
+            cfg_mod.get_pref("autofocus.before_capture", False))
+        self._af_before_chk.toggled.connect(
+            lambda v: cfg_mod.set_pref("autofocus.before_capture", v))
+        lay.addWidget(self._af_before_chk)
+
         # Collect admin-gated widgets (Active operator selector is NOT gated)
         self._lab_admin_widgets = [
             self._lab_op_list_w,

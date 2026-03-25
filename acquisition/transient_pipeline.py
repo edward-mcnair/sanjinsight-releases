@@ -302,7 +302,7 @@ class TransientAcquisitionPipeline:
         data = frame.data
         if self._roi is not None:
             data = self._roi.crop(data)
-        return data.astype(np.float32)
+        return data.astype(np.float64)
 
     def _run(self,
              n_delays:         int,
@@ -358,10 +358,9 @@ class TransientAcquisitionPipeline:
             self._result.reference = reference
 
             # ── Per-delay accumulation ───────────────────────────────────
-            # raw_accum[i] accumulates the averaged frame for delay i
-            # Use [:2] to support both 2-D (H, W) and 3-D (H, W, C) frames.
-            h, w = reference.shape[:2]
-            raw_accum = np.zeros((n_delays, h, w), dtype=np.float64)
+            # raw_accum[i] accumulates the averaged frame for delay i.
+            # Shape matches the reference: (H, W) mono or (H, W, C) RGB.
+            raw_accum = np.zeros((n_delays,) + reference.shape, dtype=np.float64)
 
             for di, delay_s in enumerate(delays):
                 if self._abort_flag:
@@ -370,7 +369,7 @@ class TransientAcquisitionPipeline:
                     self._restore_fpga_continuous()   # M-7: restore on abort
                     return
 
-                acc = np.zeros((h, w), dtype=np.float64)
+                acc = np.zeros(reference.shape, dtype=np.float64)
                 for ai in range(n_averages):
                     if self._abort_flag:
                         self._state = TransientAcqState.ABORTED
@@ -401,7 +400,11 @@ class TransientAcquisitionPipeline:
 
                     if frame is not None:
                         if drift_correction:
-                            dy, dx = _estimate_shift(frame, reference)
+                            # Drift estimation requires 2-D input; use
+                            # luminance for multi-channel frames.
+                            f_mono = frame.mean(axis=2) if frame.ndim == 3 else frame
+                            r_mono = reference.mean(axis=2) if reference.ndim == 3 else reference
+                            dy, dx = _estimate_shift(f_mono, r_mono)
                             frame  = _apply_shift(frame, dy, dx)
                         acc += frame
 
@@ -422,19 +425,27 @@ class TransientAcquisitionPipeline:
                        message="Computing ΔR/R cube...")
 
             # Infer camera bit-depth from the actual reference frame values.
-            # _grab_one() casts to float32 so dtype is always float32, but
+            # _grab_one() casts to float64 so dtype is always float64, but
             # the *values* still reflect the original uint8/uint16 range.
             ref_peak  = float(reference.max())
             dtype_max = 65535.0 if ref_peak > 256.0 else 255.0 if ref_peak > 1.0 else 1.0
             threshold  = self.DARK_THRESHOLD_FRACTION * dtype_max
-            dark_mask  = reference < threshold
-            ref_safe   = np.where(dark_mask, 1.0, reference)
 
-            raw_cube    = raw_accum.astype(np.float32)
+            # Dark-pixel mask: for multi-channel, threshold on luminance
+            # then broadcast the 2-D mask to match the data shape.
+            if reference.ndim == 3:
+                ref_lum = reference.mean(axis=2)
+                dark_mask_2d = ref_lum < threshold
+                dark_mask = dark_mask_2d[:, :, np.newaxis]
+            else:
+                dark_mask = reference < threshold
+            ref_safe = np.where(dark_mask, 1.0, reference)
+
+            raw_cube    = raw_accum.astype(np.float64)
             delta_cube  = np.empty_like(raw_cube)
             for i in range(n_delays):
                 dr = (raw_cube[i] - reference) / ref_safe
-                dr[dark_mask] = np.nan
+                dr[np.broadcast_to(dark_mask, dr.shape)] = np.nan
                 delta_cube[i] = dr
 
             self._result.raw_cube     = raw_cube

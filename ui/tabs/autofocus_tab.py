@@ -284,8 +284,8 @@ class AutofocusTab(QWidget):
             f"coarse={coarse:.0f} µm  fine={fine:.1f} µm")
 
     def _build_cfg(self) -> dict:
-        """Read current UI settings into a config dict."""
-        return {
+        """Read current UI settings into a config dict and persist them."""
+        cfg = {
             "driver":       "sweep" if self._strategy.currentText() == "sweep"
                             else "hill_climb",
             "strategy":     self._strategy.currentText(),
@@ -298,6 +298,15 @@ class AutofocusTab(QWidget):
             "settle_ms":    self._settle.value(),
             "move_to_best": True,
         }
+        # Persist last-used settings for quick-AF button
+        try:
+            from config import set_pref
+            for key in ("strategy", "metric", "z_start", "z_end",
+                        "coarse_step", "fine_step", "n_avg", "settle_ms"):
+                set_pref(f"autofocus.{key}", cfg[key])
+        except Exception:
+            pass
+        return cfg
 
     def _run(self):
         global af_driver

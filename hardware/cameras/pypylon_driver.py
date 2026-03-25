@@ -145,16 +145,36 @@ class PylonDriver(CameraDriver):
 
         nm = self._cam.GetNodeMap()
 
+        # Detect color vs mono sensor from pixel format name
+        pf_name = self._cam.PixelFormat.GetValue() if hasattr(self._cam, 'PixelFormat') else ""
+        self._is_color = ("Bayer" in str(pf_name))
+        self._color_mode = self._cfg.get("color_mode", self._is_color)
+
+        # Set up Bayer converter if color sensor is detected
+        self._converter = None
+        if self._color_mode and self._is_color:
+            try:
+                self._converter = pylon.ImageFormatConverter()
+                self._converter.OutputPixelFormat = pylon.PixelType_RGB8packed
+                self._converter.OutputBitAlignment = pylon.OutputBitAlignment_MsbAligned
+                log.info("pypylon: Color sensor detected (%s), RGB conversion enabled.",
+                         pf_name)
+            except Exception as exc:
+                log.warning("pypylon: Failed to set up Bayer converter: %s", exc)
+                self._converter = None
+                self._color_mode = False
+
         self._info = CameraInfo(
-            driver      = "pypylon",
-            model       = self._cam.GetDeviceInfo().GetModelName(),
-            serial      = self._cam.GetDeviceInfo().GetSerialNumber(),
-            width       = self._cam.Width.GetValue(),
-            height      = self._cam.Height.GetValue(),
-            bit_depth   = 12,
-            max_fps     = self._cam.ResultingFrameRate.GetValue()
-                          if hasattr(self._cam, 'ResultingFrameRate') else 0.0,
-            camera_type = self._cfg.get("camera_type", "tr"),
+            driver       = "pypylon",
+            model        = self._cam.GetDeviceInfo().GetModelName(),
+            serial       = self._cam.GetDeviceInfo().GetSerialNumber(),
+            width        = self._cam.Width.GetValue(),
+            height       = self._cam.Height.GetValue(),
+            bit_depth    = 12,
+            max_fps      = self._cam.ResultingFrameRate.GetValue()
+                           if hasattr(self._cam, 'ResultingFrameRate') else 0.0,
+            camera_type  = self._cfg.get("camera_type", "tr"),
+            pixel_format = "rgb" if self._color_mode else "mono",
         )
         self._open = True
 
@@ -181,15 +201,32 @@ class PylonDriver(CameraDriver):
             result = self._cam.RetrieveResult(
                 timeout_ms, pylon.TimeoutHandling_ThrowException)
             if result.GrabSucceeded():
-                data = result.Array.copy()
-                idx  = result.ImageNumber
+                idx = result.ImageNumber
+
+                # Color: demosaic Bayer → RGB via pypylon converter
+                if self._converter is not None:
+                    try:
+                        converted = self._converter.Convert(result)
+                        # RGB8packed → (H, W, 3) uint8 → scale to 12-bit uint16
+                        rgb = converted.GetArray().copy()
+                        data = (rgb.astype(np.uint16) * 4095 // 255).astype(np.uint16)
+                        n_ch = 3
+                    except Exception:
+                        data = result.Array.copy().astype(np.uint16)
+                        n_ch = 1
+                else:
+                    data = result.Array.copy().astype(np.uint16)
+                    n_ch = 1
+
                 result.Release()
                 return CameraFrame(
-                    data        = data.astype(np.uint16),
+                    data        = data,
                     frame_index = idx,
                     exposure_us = self._cfg.get("exposure_us", 0.0),
                     gain_db     = self._cfg.get("gain", 0.0),
                     timestamp   = time.time(),
+                    channels    = n_ch,
+                    bit_depth   = 12,
                 )
             result.Release()
         except genicam.TimeoutException:

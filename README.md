@@ -89,9 +89,9 @@ pytest tests/
 3. Commit and tag:
    ```bash
    git add version.py CHANGELOG.md
-   git commit -m "Bump version to v1.4.1-beta.2"
-   git tag -a v1.4.1-beta.2 -m "SanjINSIGHT v1.4.1-beta.2"
-   git push origin main v1.4.1-beta.2
+   git commit -m "Bump version to v1.5.0-beta.1"
+   git tag -a v1.5.0-beta.1 -m "SanjINSIGHT v1.5.0-beta.1"
+   git push origin main v1.5.0-beta.1
    ```
 4. CI builds the installer automatically and creates a GitHub Release with the `.exe` attached
 5. The in-app update checker notifies users on next startup

@@ -76,6 +76,7 @@ class SimulatedDriver(CameraDriver):
         self._exposure_us = float(cfg.get("exposure_us", 5000))
         self._gain_db     = float(cfg.get("gain", 0.0))
         self._camera_type = cfg.get("camera_type", "tr")   # "tr" | "ir"
+        self._color_mode  = cfg.get("color_mode", False)  # True → RGB (H,W,3)
         self._frame_idx   = 0
         self._running     = False
         self._last_grab   = 0.0
@@ -292,14 +293,15 @@ class SimulatedDriver(CameraDriver):
                        else "Simulated IR Camera"))
         _serial = "SIM-TR-001" if self._camera_type == "tr" else "SIM-IR-001"
         self._info = CameraInfo(
-            driver      = "simulated",
-            model       = _model,
-            serial      = _serial,
-            width       = self._W,
-            height      = self._H,
-            bit_depth   = 12,
-            max_fps     = float(self._fps),
-            camera_type = self._camera_type,
+            driver       = "simulated",
+            model        = _model,
+            serial       = _serial,
+            width        = self._W,
+            height       = self._H,
+            bit_depth    = 12,
+            max_fps      = float(self._fps),
+            camera_type  = self._camera_type,
+            pixel_format = "rgb" if self._color_mode else "mono",
         )
         self._open = True
         log.info("[SIM] Camera open (%dx%d @ %.0ffps)", self._W, self._H, self._fps)
@@ -352,13 +354,29 @@ class SimulatedDriver(CameraDriver):
                 frame.astype(np.int32) + drift_arr, 0, 4095
             ).astype(np.uint16)
 
+            # Color mode: replicate grayscale into 3 channels with slight
+            # per-channel gain differences to simulate spectral variation.
+            if self._color_mode:
+                rgb = np.stack([
+                    np.clip(frame * 1.02, 0, 4095).astype(np.uint16),  # R
+                    frame,                                               # G
+                    np.clip(frame * 0.97, 0, 4095).astype(np.uint16),  # B
+                ], axis=-1)
+                out_data = rgb
+                n_ch = 3
+            else:
+                out_data = frame
+                n_ch = 1
+
             self._frame_idx += 1
             return CameraFrame(
-                data        = frame,
+                data        = out_data,
                 frame_index = self._frame_idx,
                 exposure_us = self._exposure_us,
                 gain_db     = self._gain_db,
                 timestamp   = time.time(),
+                channels    = n_ch,
+                bit_depth   = 12,
             )
 
     # ------------------------------------------------------------------ #
@@ -379,13 +397,15 @@ class SimulatedDriver(CameraDriver):
             self._H = height
             self._pattern    = self._make_pattern()   # also updates _signal_map
             self._info = CameraInfo(
-                driver    = self._info.driver,
-                model     = self._info.model,
-                serial    = self._info.serial,
-                width     = self._W,
-                height    = self._H,
-                bit_depth = self._info.bit_depth,
-                max_fps   = self._info.max_fps,
+                driver       = self._info.driver,
+                model        = self._info.model,
+                serial       = self._info.serial,
+                width        = self._W,
+                height       = self._H,
+                bit_depth    = self._info.bit_depth,
+                max_fps      = self._info.max_fps,
+                camera_type  = self._info.camera_type,
+                pixel_format = self._info.pixel_format,
             )
             self._cfg["width"]  = width
             self._cfg["height"] = height
@@ -398,13 +418,15 @@ class SimulatedDriver(CameraDriver):
             self._fps          = fps
             self._cfg["fps"]   = fps
             self._info = CameraInfo(
-                driver    = self._info.driver,
-                model     = self._info.model,
-                serial    = self._info.serial,
-                width     = self._info.width,
-                height    = self._info.height,
-                bit_depth = self._info.bit_depth,
-                max_fps   = fps,
+                driver       = self._info.driver,
+                model        = self._info.model,
+                serial       = self._info.serial,
+                width        = self._info.width,
+                height       = self._info.height,
+                bit_depth    = self._info.bit_depth,
+                max_fps      = fps,
+                camera_type  = self._info.camera_type,
+                pixel_format = self._info.pixel_format,
             )
         log.debug("[SIM] FPS = %.1f", fps)
 

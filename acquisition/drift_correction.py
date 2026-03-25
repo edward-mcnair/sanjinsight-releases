@@ -71,9 +71,15 @@ def apply_shift(frame: np.ndarray, dy: float, dx: float) -> np.ndarray:
     """
     if dy == 0.0 and dx == 0.0:
         return frame
+    # Build shift tuple matching the number of dimensions.
+    # For (H, W, C) arrays, the channel axis is not shifted.
+    if frame.ndim == 3:
+        shift_vec = (dy, dx, 0)
+    else:
+        shift_vec = (dy, dx)
     try:
         from scipy.ndimage import shift as nd_shift
-        return nd_shift(frame, (dy, dx), order=1,
+        return nd_shift(frame, shift_vec, order=1,
                         mode="reflect").astype(frame.dtype)
     except ImportError:
         # Integer approximation — still removes most macroscopic drift artefacts

@@ -23,7 +23,7 @@ import logging
 
 log = logging.getLogger(__name__)
 
-CURRENT_SCHEMA: int = 2
+CURRENT_SCHEMA: int = 3
 
 
 def migrate(data: dict, from_version: int) -> dict:
@@ -49,6 +49,8 @@ def migrate(data: dict, from_version: int) -> dict:
         data = _v0_to_v1(data)
     if from_version < 2:
         data = _v1_to_v2(data)
+    if from_version < 3:
+        data = _v2_to_v3(data)
     return data
 
 
@@ -82,4 +84,24 @@ def _v1_to_v2(data: dict) -> dict:
     data.setdefault("camera_id", "")
     data.setdefault("notes_log", [])
     data["schema_version"] = 2
+    return data
+
+
+def _v2_to_v3(data: dict) -> dict:
+    """v2 → v3: Add multi-channel and bit-depth metadata.
+
+    Adds frame_channels, frame_bit_depth, and pixel_format fields to
+    support color (RGB) cameras alongside traditional monochrome sensors.
+    Existing sessions default to single-channel monochrome.  bit_depth
+    defaults to 16 (conservative upper bound) since the original sensor's
+    native depth cannot be inferred from a v2 session; actual bit depth
+    (12 for TR, 14 for Boson, 16 for FLIR) is recorded at capture time
+    in new sessions.
+    """
+    log.info("Migrating session schema v2 → v3")
+    data = dict(data)
+    data.setdefault("frame_channels", 1)
+    data.setdefault("frame_bit_depth", 16)
+    data.setdefault("pixel_format", "mono")
+    data["schema_version"] = 3
     return data

@@ -176,4 +176,4 @@ class SessionManager:
             return None
         if da.shape != db.shape:
             return None
-        return (da.astype(np.float64) - db.astype(np.float64)).astype(np.float32)
+        return (da.astype(np.float64) - db.astype(np.float64))

@@ -43,11 +43,11 @@ class AcqState(Enum):
 class AcquisitionResult:
     """All data produced by one complete hot/cold acquisition."""
 
-    # Raw averaged frames (uint16, shape H×W)
+    # Raw averaged frames (float64, shape H×W or H×W×3)
     cold_avg:   Optional[np.ndarray] = None
     hot_avg:    Optional[np.ndarray] = None
 
-    # Thermoreflectance signal  ΔR/R  (float32, shape H×W)
+    # Thermoreflectance signal  ΔR/R  (float64, shape H×W or H×W×3)
     # Values typically in range ±1e-4 to ±1e-2
     delta_r_over_r: Optional[np.ndarray] = None
 
@@ -164,6 +164,12 @@ class AcquisitionPipeline:
         self.on_complete: Optional[Callable[[AcquisitionResult],   None]] = None
         self.on_error:    Optional[Callable[[str],                  None]] = None
 
+        # Processing hooks — callables invoked at defined pipeline stages.
+        # pre_capture_hooks run before each capture phase (cold/hot).
+        # post_average_hooks transform the averaged frame after capture.
+        self.pre_capture_hooks:  list = []   # [Callable[[], None], ...]
+        self.post_average_hooks: list = []   # [Callable[[ndarray], ndarray], ...]
+
     def update_hardware(self, fpga=None, bias=None):
         """
         Update the hardware references used for stimulus control.
@@ -254,6 +260,16 @@ class AcquisitionPipeline:
             except Exception:
                 log.debug("Progress callback failed", exc_info=True)
 
+    @staticmethod
+    def _run_hooks(hooks: list, label: str = ""):
+        """Run a list of hook callables, logging failures without aborting."""
+        for hook in hooks:
+            try:
+                hook()
+            except Exception as exc:
+                log.warning("Hook %s (%s) failed: %s",
+                            getattr(hook, '__name__', hook), label, exc)
+
     def _run(self, n_frames: int, inter_phase_delay: float):
         self._state  = AcqState.CAPTURING
         self._result = AcquisitionResult(
@@ -266,6 +282,7 @@ class AcquisitionPipeline:
 
         try:
             # --- Phase 1: Cold (baseline — stimulus OFF) ---
+            self._run_hooks(self.pre_capture_hooks, "pre_capture (cold)")
             self._set_stimulus(False)
             self._emit_progress(
                 state=AcqState.CAPTURING, phase="cold",
@@ -292,6 +309,7 @@ class AcquisitionPipeline:
                 time.sleep(inter_phase_delay)
 
             # --- Phase 2: Hot (stimulus ON) ---
+            self._run_hooks(self.pre_capture_hooks, "pre_capture (hot)")
             self._set_stimulus(True)
             self._emit_progress(
                 state=AcqState.CAPTURING, phase="hot",
@@ -387,7 +405,7 @@ class AcquisitionPipeline:
 
     def _capture_phase(self, phase: str, n_frames: int) -> Optional[np.ndarray]:
         """
-        Capture n_frames and return their float32 average as uint16.
+        Capture n_frames and return their float64 average.
         If a ROI is set, only the cropped region is accumulated.
         """
         accumulator = None
@@ -425,7 +443,13 @@ class AcquisitionPipeline:
                         + (f"  [ROI {self._roi.w}×{self._roi.h}]"
                            if self._roi else ""))
 
-        avg = (accumulator / n_frames).astype(np.float32)
+        avg = (accumulator / n_frames).astype(np.float64)
+        for hook in self.post_average_hooks:
+            try:
+                avg = hook(avg)
+            except Exception as exc:
+                log.warning("post_average hook %s failed: %s",
+                            getattr(hook, '__name__', hook), exc)
         return avg
 
     # Pixels with cold intensity below this threshold are treated as dark/noise.
@@ -481,21 +505,35 @@ class AcquisitionPipeline:
                 )
 
         # ── Dark-pixel mask ───────────────────────────────────────────
-        # cold_avg is float32 (averaged and cast by _capture_phase), so
+        # cold_avg is float64 (averaged and cast by _capture_phase), so
         # np.issubdtype → integer check would always return False and
         # dtype_max would be 1.0, making the threshold 0.005 counts — far
         # too low.  Instead infer range from the actual peak value so we
         # work correctly with both uint8 (≤255) and uint16 (≤65535) cameras.
-        cold_peak  = float(cold.max())
+        #
+        # For multi-channel (RGB) data, compute the dark mask from the
+        # luminance (mean across channels) so a single 2D mask applies
+        # uniformly to all channels.
+        if cold.ndim == 3:
+            cold_lum = cold.mean(axis=2)
+        else:
+            cold_lum = cold
+
+        cold_peak  = float(cold_lum.max())
         dtype_max  = (65535.0 if cold_peak > 256.0
                       else 255.0  if cold_peak > 1.0
                       else 1.0)
         threshold  = AcquisitionPipeline.DARK_THRESHOLD_FRACTION * dtype_max
-        dark_mask  = cold < threshold          # True where pixel is too dark
+        dark_mask_2d = cold_lum < threshold     # (H, W) bool
 
         # ── Safe division — clamp cold to avoid divide-by-zero ────────
         # Dark pixels will be NaN'd out afterward, so the clamped value
         # (1.0) only affects those locations — no scientific impact.
+        if cold.ndim == 3:
+            # Broadcast 2D mask to 3D for element-wise operations
+            dark_mask = dark_mask_2d[:, :, np.newaxis]
+        else:
+            dark_mask = dark_mask_2d
         cold_safe  = np.where(dark_mask, 1.0, cold)
 
         # ── Compute ΔR/R ─────────────────────────────────────────────
@@ -503,11 +541,11 @@ class AcquisitionPipeline:
 
         # Apply mask: set dark pixels to NaN so they don't pollute statistics
         # or appear as false signal in the display.
-        delta_r_r[dark_mask] = np.nan
+        delta_r_r[np.broadcast_to(dark_mask, delta_r_r.shape)] = np.nan
 
-        difference = (hot - cold).astype(np.float32)
+        difference = (hot - cold).astype(np.float64)
 
-        result.delta_r_over_r = delta_r_r.astype(np.float32)
+        result.delta_r_over_r = delta_r_r.astype(np.float64)
         result.difference     = difference
-        result.dark_pixel_count = int(dark_mask.sum())
-        result.dark_pixel_fraction = float(dark_mask.mean())
+        result.dark_pixel_count = int(dark_mask_2d.sum())
+        result.dark_pixel_fraction = float(dark_mask_2d.mean())
