@@ -17,8 +17,8 @@
 6. [User Interface](#6-user-interface)
 7. [AI Assistant & Diagnostics](#7-ai-assistant--diagnostics)
 8. [License System](#8-license-system)
-9. [Auth & RBAC System](#9-auth--rbac-system)
-10. [Operator Shell](#10-operator-shell)
+9. [Auth & RBAC System *(Planned)*](#9-auth--rbac-system-planned-for-v150)
+10. [Operator Shell *(Planned)*](#10-operator-shell-planned-for-v150)
 11. [Configuration & Preferences](#11-configuration--preferences)
 12. [Session Management](#12-session-management)
 13. [Update System](#13-update-system)
@@ -61,13 +61,6 @@ sanjinsight/
 ├── utils.py                   ← Shared helpers (safe_call, etc.)
 ├── logging_config.py          ← Rotating file + console logging setup
 ├── requirements.txt           ← pip dependencies
-│
-├── auth/                      ← RBAC, user management, session auth (pure Python)
-│   ├── __init__.py            ← Exports UserStore, AuditLogger, Authenticator, AuthSession
-│   ├── models.py              ← UserType, User, AuthSession dataclasses
-│   ├── store.py               ← UserStore (SQLite) + AuditLogger (JSON Lines)
-│   ├── authenticator.py       ← Authenticator(QObject) — bcrypt in QThread, lockout, override
-│   └── user_prefs.py          ← Per-user preference layer (extends config dot-notation API)
 │
 ├── hardware/                  ← All device drivers
 │   ├── app_state.py           ← Thread-safe ApplicationState singleton
@@ -113,14 +106,14 @@ sanjinsight/
 ├── ui/                        ← Qt5 UI components
 │   ├── charts.py              ← PyQtGraph chart widgets (calibration, analysis, transient, sessions)
 │   ├── app_signals.py         ← AppSignals singleton (application-wide Qt signals)
-│   ├── sidebar_nav.py         ← Collapsible sidebar navigation (Advanced mode)
-│   ├── wizard.py              ← Guided workflow wizard (Standard mode)
+│   ├── sidebar_nav.py         ← Collapsible sidebar navigation (Manual mode)
+│   ├── wizard.py              ← Guided workflow wizard (Auto mode)
 │   ├── settings_tab.py        ← Preferences / AI setup / license / about
 │   ├── first_run.py           ← First-run hardware setup wizard
 │   ├── device_manager_dialog.py ← Device discovery and management dialog
 │   ├── update_dialog.py       ← Update badge and about dialog
-│   ├── theme.py               ← Dark theme stylesheet
-│   ├── icons.py               ← FontAwesome icon name constants
+│   ├── theme.py               ← Dual-mode (dark/light) theme system: palettes, QSS, QPalette
+│   ├── icons.py               ← MDI icon registry (via qtawesome), IC class, set_btn_icon()
 │   ├── font_utils.py          ← DPI-aware font scaling
 │   ├── button_utils.py        ← Button state/style helpers
 │   ├── notifications.py       ← Toast notification system
@@ -128,18 +121,7 @@ sanjinsight/
 │   ├── help.py                ← Help viewer
 │   ├── scripting_console.py   ← Python REPL for power users
 │   │
-│   ├── auth/                  ← Auth UI screens
-│   │   ├── admin_setup_wizard.py  ← One-time admin account creation wizard
-│   │   ├── login_screen.py        ← Full-window login (replaces content before MainWindow)
-│   │   ├── supervisor_override_dialog.py ← Temporary engineer access at operator station
-│   │   └── user_management_widget.py     ← Admin-only user CRUD, embedded in SettingsTab
-│   ├── operator/              ← Operator Shell (Technician users only; never imports MainWindow)
-│   │   ├── operator_shell.py      ← OperatorShell(QMainWindow) — top-level operator window
-│   │   ├── recipe_selector_panel.py ← Lists only approved/locked scan profiles
-│   │   ├── scan_work_area.py      ← Live camera view + Part ID field + START SCAN button
-│   │   ├── shift_log_panel.py     ← Today's results log with PASS/FAIL badges
-│   │   └── verdict_overlay.py     ← Full-screen PASS/FAIL/REVIEW result after each scan
-│   ├── tabs/                  ← Hardware control tabs (camera, tec, fpga, bias, stage …)
+│   ├── tabs/                  ← Merged tabs (capture, transient_capture, camera_control, stimulus, library)
 │   ├── dialogs/               ← Specialized dialogs (support bundle, etc.)
 │   └── widgets/               ← Reusable widgets (image pane, temp plot, status header …)
 │
@@ -219,13 +201,7 @@ sanjinsight/
 ```
                     main_app.py  (startup routing)
                           │
-              ┌───────────┼────────────────────┐
-              │           │                    │
-              ▼           ▼                    ▼
-     No users?       require_login?      user_type?
-   AdminSetupWizard   LoginScreen     TECHNICIAN → OperatorShell
-                           │          FA/RESEARCHER → MainWindow
-                           ▼
+                          ▼
 ┌──────────────────────────────────────────────────────────┐
 │                      main_app.py                         │
 │                    MainWindow (QMainWindow)               │
@@ -268,8 +244,7 @@ sanjinsight/
 - **No global module-level state.** Hardware references live in `ApplicationState`; preferences live in `config`; signals live in `AppSignals`.
 - **Factory pattern for all drivers.** Each device type has an abstract base class and a `factory.py` that reads `config.yaml` and instantiates the correct implementation.
 - **Simulated drivers for every device.** Demo mode or development without hardware is always possible.
-- **Auth is opt-in.** When `auth.require_login` is `false` (default), the startup flow is identical to pre-v1.3.0 — no login screen, no user management visible.
-- **OperatorShell is a complete separate window.** It never imports MainWindow; Technician users cannot reach the full UI even by accident.
+- **Auth is planned for v1.5.0.** The `auth/` package and `ui/operator/` shell do not exist yet. When implemented, auth will be opt-in — `auth.require_login` defaults to `false`.
 
 ---
 
@@ -750,9 +725,9 @@ Output: a stitched ΔR/R image of size `(n_rows × H, n_cols × W)`.
 `MainWindow(QMainWindow)` is the top-level window. It:
 
 - Instantiates `HardwareService`, `SessionManager`, `ApplicationState`, `AppSignals`
-- Builds two navigation modes: **Standard** (wizard) and **Advanced** (sidebar)
+- Builds two navigation modes: **Auto** (wizard) and **Manual** (sidebar)
 - Connects all Qt signals from `HardwareService` to slot methods
-- Manages the central stack widget (switches between Standard and Advanced views)
+- Manages the central stack widget (switches between Auto and Manual views)
 
 **Key slot methods:**
 
@@ -770,17 +745,18 @@ Output: a stitched ΔR/R image of size `(n_rows × H, n_cols × W)`.
 
 ### 6.2 Navigation Modes
 
-**Standard Mode** (`ui/wizard.py`):
+**Auto Mode** (`ui/wizard.py`):
 - `StandardWizard` — guided step-by-step measurement workflow
 - Steps: Select Profile → Configure Camera → Set Temperature → Acquire → View Result
 - Suitable for new users and routine measurements
 
-**Advanced Mode** (`ui/sidebar_nav.py`):
-- Collapsible sidebar with 20+ tabs grouped by category:
-  - **Hardware**: Camera, TEC, FPGA, Bias, Stage, Autofocus, ROI
-  - **Acquire**: Live, Acquire, Scan, Calibration, Movie, Transient
-  - **Analysis**: Analysis, Comparison, Surface Plot, Data
-  - **System**: Settings, Log, Scripting Console
+**Manual Mode** (`ui/sidebar_nav.py`):
+- Collapsible sidebar with 12 items grouped by category:
+  - **ACQUIRE**: Live, Capture (Single/Grid), Transient (Transient/Movie)
+  - **ANALYZE**: Calibration, Analysis, Sessions
+  - **HARDWARE** (collapsible): Camera (Camera/ROI/Autofocus), Stimulus (Modulation/Bias Source), Temperature, Stage, Prober
+  - **LIBRARY**: Library (Profiles/Recipes)
+  - Settings
 
 ### 6.3 AppSignals (`ui/app_signals.py`)
 
@@ -796,13 +772,17 @@ Key signals: `session_saved`, `profile_changed`, `hardware_ready`, `demo_mode_ch
 
 ### 6.4 StatusHeader (`ui/widgets/status_header.py`)
 
-The orange header bar at the top of the window. Shows:
-- Hardware connection status for each device (colored dots)
-- Mode indicator (Standard / Advanced)
-- DEMO MODE banner (when in demo mode) with `✕ Exit` button
+The PALETTE-themed header bar at the top of the window. Shows:
+- Logo and profile pill
+- `ConnectedDevicesButton` — dropdown showing hardware connection status
+- E-Stop button
+- Mode indicator (Auto / Manual)
+- Demo Mode banner (blue, `_DEMO_BLUE = "#3d8bef"`) when in demo mode
 
 **Signals:**
-- `exit_demo_requested` — emitted when user clicks `✕ Exit` in demo banner
+- `exit_demo_requested` — emitted when user clicks the demo banner
+- `admin_login_requested` — emitted when "Log in" button is clicked
+- `admin_logout_requested` — emitted when "Log out" button is clicked
 
 ### 6.5 Notifications (`ui/notifications.py`)
 
@@ -816,17 +796,17 @@ show_toast(parent_widget, "Acquisition complete", level="success", duration_ms=3
 
 ### 6.6 Theme (`ui/theme.py`)
 
-A single dark stylesheet applied globally via `QApplication.setStyleSheet()`. Colors are defined as module-level constants:
+Dual-mode theme system supporting Auto (OS-adaptive), Dark, and Light modes. The module provides:
 
-```python
-_DARK_BG    = "#1e1e1e"
-_PANEL_BG   = "#2d2d2d"
-_ACCENT     = "#00d4aa"    # Microsanj teal
-_TEXT       = "#e0e0e0"
-_AMBER      = "#f0a500"
-_RED        = "#e05252"
-_GREEN      = "#4caf50"
-```
+- **`_DARK_RAW` / `_LIGHT_RAW`** — raw palette dictionaries for each mode
+- **`PALETTE`** — a live mutable dict updated in-place by `set_theme(mode)`. All widgets reference `PALETTE["key"]` and get the current theme's values without re-importing
+- **`build_style(mode)`** — generates a master QSS string for all widget classes
+- **`build_qt_palette(mode)`** — generates a `QPalette` for native Qt widgets
+- **`detect_system_theme()`** — OS detection (macOS/Windows/Linux), fallback `"dark"`
+
+Theme preference is stored as `config.get_pref("ui.theme", "auto")` with three options controlled by a segmented control in Settings → Appearance. When set to `"auto"`, a 5-second polling timer (`MainWindow._poll_system_theme()`) detects OS theme changes.
+
+Persistent widgets implement `_apply_styles()`, called by `MainWindow._swap_visual_theme()` to re-theme on mode switch. Sidebar palette helpers (`_BG()`, `_ACCENT()`, etc.) are functions, not snapshots, ensuring live updates.
 
 ### 6.7 Charts (`ui/charts.py`)
 
@@ -1003,202 +983,34 @@ if app_state.is_licensed:
 
 ---
 
-## 9. Auth & RBAC System
+## 9. Auth & RBAC System *(Planned for v1.5.0)*
 
-The auth system is in the `auth/` package. It is pure Python (no PyQt5 imports) so it can be tested without a display.
+> **Note:** This section describes the planned authentication and role-based access control system. It is not yet implemented — the `auth/` package does not exist in the current codebase. The design is documented here for forward reference.
 
-### 9.1 User Types (`auth/models.py`)
+Key planned features:
+- **User types**: Technician (Operator Shell), Failure Analyst (full UI), Researcher (full UI)
+- **Admin privilege overlay** — any user type can have `is_admin=True`
+- **SQLite user store** at `~/.microsanj/users.db` with bcrypt password hashing
+- **Audit logging** — JSON Lines to `~/.microsanj/audit.log` (5 MB rotation)
+- **Inactivity lock** — configurable timeout (default 30 min)
+- **Per-user preferences** — `~/.microsanj/users/{uid}/prefs.json`
+- **LDAP stub** — overridable `_verify_credentials()` for future LDAP integration
 
-```python
-class UserType(enum.Enum):
-    TECHNICIAN       = "technician"       # OperatorShell + lab_tech AI
-    FAILURE_ANALYST  = "failure_analyst"  # Full UI + failure_analyst AI
-    RESEARCHER       = "researcher"       # Full UI + new_grad AI
-
-    @property
-    def default_ai_persona(self) -> str: ...
-    @property
-    def uses_operator_shell(self) -> bool: ...  # True only for TECHNICIAN
-    @property
-    def can_edit_recipes(self) -> bool: ...     # False only for TECHNICIAN
-
-@dataclass
-class User:
-    uid:           str
-    username:      str         # COLLATE NOCASE
-    display_name:  str
-    user_type:     UserType
-    is_admin:      bool        # privilege overlay — any type can be admin
-    pw_hash:       str         # bcrypt, work factor 12
-    created_at:    str
-    last_login:    str = ""
-    is_active:     bool = True
-    created_by:    str = ""
-
-@dataclass
-class AuthSession:
-    user:          User
-    login_time:    float
-    last_activity: float
-    session_id:    str
-    supervisor_override_active: bool = False
-
-    def touch(self) -> None: ...
-    def is_expired(self, timeout_s: int) -> bool: ...
-```
-
-**Admin is a privilege overlay, not a separate user type.** Any `UserType` can have `is_admin=True`. The `is_admin` flag adds access to user management and global settings — it does not change the AI persona or UI surface.
-
-### 9.2 UserStore (`auth/store.py`)
-
-SQLite database at `~/.microsanj/users.db`. Schema version tracked via `PRAGMA user_version` for future migration support.
-
-```python
-store = UserStore()
-
-# One-time check at startup
-store.has_users()             # → False on fresh install
-
-# User CRUD
-store.create_user(username="jsmith", display_name="Jane Smith",
-                  user_type=UserType.FAILURE_ANALYST, is_admin=False,
-                  password="secret")
-store.get_by_username("jsmith")  # → User | None
-store.list_users()               # → List[User]
-store.set_admin(uid, True)
-store.set_active(uid, False)     # deactivate (doesn't delete)
-store.update_password(uid, "new_secret")
-store.update_last_login(uid)
-```
-
-### 9.3 AuditLogger (`auth/store.py`)
-
-Appends JSON Lines to `~/.microsanj/audit.log`. 5 MB rotation, 3 backups.
-
-```python
-audit = AuditLogger()
-audit.log(event="login", actor="jsmith", user_type="failure_analyst",
-          detail="success", success=True)
-```
-
-### 9.4 Authenticator (`auth/authenticator.py`)
-
-`Authenticator(QObject)` is the central facade. It owns the current `AuthSession`.
-
-```python
-auth = Authenticator(store, audit)
-
-# Login — bcrypt check runs in QThread; never blocks GUI
-session = auth.authenticate("jsmith", "password")  # → AuthSession | None
-
-# Signals
-auth.session_started.connect(on_login)    # (AuthSession)
-auth.session_ended.connect(on_logout)
-auth.locked.connect(on_lock)
-
-# Supervisor override at operator station
-auth.supervisor_override("rjones", "pw", minimum_role=...)  # → bool
-
-# Inactivity management (call from 30-second QTimer)
-auth.touch()                              # reset inactivity clock
-auth.check_lock_timeout(timeout_s=1800)  # True if session expired
-```
-
-**Lockout:** 5 consecutive failures → 5-minute lockout, countdown shown in LoginScreen.
-
-**LDAP stub:** `_verify_credentials()` is an overridable method; the default implementation uses bcrypt + SQLite. An LDAP implementation drops in without changing any callers.
-
-### 9.5 UserPrefs (`auth/user_prefs.py`)
-
-Per-user preference file: `~/.microsanj/users/{uid}/prefs.json`.
-
-```python
-prefs = UserPrefs.for_session(session)
-
-prefs.get("ui.theme", "auto")         # user file → falls back to config.get_pref()
-prefs.set("ui.theme", "dark")         # writes to user file only
-
-# Users cannot modify hardware.* or auth.* keys (admin-only; raises PermissionError)
-```
-
-### 9.6 Startup Routing (`main_app.py`)
-
-```python
-# ① Create auth objects
-_user_store = UserStore()
-_audit      = AuditLogger()
-_auth       = Authenticator(_user_store, _audit)
-
-# ② First launch: no users → admin setup wizard (one-time)
-if not _user_store.has_users():
-    if AdminSetupWizard(_user_store, _audit).exec_() != QDialog.Accepted:
-        sys.exit(0)
-
-# ③ Login gate (only when require_login is on)
-_auth_session = None
-if config.get_pref("auth.require_login", False):
-    _auth_session = _run_login(_auth, app)
-    if _auth_session is None:
-        sys.exit(0)
-
-# ④ Route by user type
-if _auth_session and _auth_session.user.user_type.uses_operator_shell:
-    _launch_operator_shell(_auth, _auth_session, session_mgr)
-else:
-    window = MainWindow(auth=_auth, auth_session=_auth_session)
-    # ... existing flow unchanged ...
-```
-
-When `auth.require_login` is `false` (the default), steps ③ and ④ are skipped entirely and the application behaves identically to v1.1.x.
-
-### 9.7 Auth-Related Config Keys
-
-Three new keys in `~/.microsanj/preferences.json` (admin-only; not in `config.yaml`):
-
-```python
-config.get_pref("auth.require_login",                False)  # bool
-config.get_pref("auth.lock_timeout_s",               1800)   # int (30 min)
-config.get_pref("auth.supervisor_override_timeout_s", 900)   # int (15 min)
-```
+When `auth.require_login` is `false` (the default), the auth system is bypassed entirely and the application behaves identically to pre-auth versions.
 
 ---
 
-## 10. Operator Shell
+## 10. Operator Shell *(Planned for v1.5.0)*
 
-`OperatorShell(QMainWindow)` in `ui/operator/operator_shell.py` is the complete UI for Technician users. It shares the same `HardwareService` and `ApplicationState` as `MainWindow` but has no code dependencies on it.
+> **Note:** This section describes the planned Operator Shell UI for Technician users. It is not yet implemented — `ui/operator/` does not exist in the current codebase.
 
-### 10.1 Layout
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  Logo │ Operator Mode │ Jane Smith [OP] │ 12 scans · 91%    │
-├─────────────────┬────────────────────┬────────────────────  ┤
-│ RecipeSelectorPanel │  ScanWorkArea  │   ShiftLogPanel       │
-│ (320 px fixed)  │  (flexible)        │  (280 px fixed)       │
-└─────────────────┴────────────────────┴───────────────────── ┘
-```
-
-### 10.2 Panels
-
-**`RecipeSelectorPanel`** — Shows only `recipe.locked == True` scan profiles. Emits `recipe_selected(Recipe)`. Empty state message guides operators to ask an engineer to approve profiles.
-
-**`ScanWorkArea`** — Live camera view (same QImage→QPixmap pipeline as MainWindow) + `Part ID` QLineEdit + START SCAN button (56 px tall, green). `returnPressed` on the line edit auto-starts the scan (barcode scanner support). START SCAN is disabled until a recipe is selected AND a non-empty Part ID is entered.
-
-**`ShiftLogPanel`** — Scrollable card list of today's results. Running totals in the header. `Export CSV` button → `QFileDialog`.
-
-**`VerdictOverlay(QDialog)`** — Full-screen modal after each scan. Background color: green (PASS), red (FAIL), amber (REVIEW). Center card shows verdict text (72 pt), part ID, max hotspot temperature vs. limit, and action buttons (Next Part, Flag for Review, View Details).
-
-### 10.3 Verdict Logic
-
-`VerdictOverlay` reads from `AnalysisResult.verdict` and `Recipe.analysis.fail_peak_k`. No new verdict logic is introduced — the overlay is purely a display wrapper over the existing analysis pipeline.
-
-### 10.4 PDF Auto-generation
-
-On `_on_scan_complete(result)`, `OperatorShell` calls the existing `generate_report()` from `acquisition/report.py`. The report is saved to the session directory automatically. Operators never need to click "Export PDF".
-
-### 10.5 Supervisor Override
-
-`SupervisorOverrideDialog` (340 × 280 px) takes engineer credentials and calls `auth.supervisor_override()`. On success, `session.supervisor_override_active = True`. A 15-minute `QTimer` calls `auth.revert_override()` automatically.
+Key planned features:
+- **`OperatorShell(QMainWindow)`** — simplified three-panel layout (Recipe Selector, Scan Work Area, Shift Log)
+- **Locked recipe profiles** — operators can only run approved scan profiles
+- **Barcode scanner support** — `returnPressed` on Part ID field auto-starts scan
+- **Verdict overlay** — full-screen PASS/FAIL/REVIEW modal after each scan
+- **Auto PDF generation** — report saved to session directory automatically
+- **Supervisor override** — engineer credentials grant temporary elevated access (15-min timeout)
 
 ---
 
@@ -1335,7 +1147,7 @@ Checks GitHub Releases for a newer version. Source repo is private; the public `
 **Callback:**
 
 ```python
-checker = UpdateChecker(current_version="1.3.0", on_update=my_callback)
+checker = UpdateChecker(current_version="1.4.1", on_update=my_callback)
 checker.check_async()    # Non-blocking background thread
 result = checker.check_sync()   # Blocking (used for "Check Now" button)
 ```
@@ -1486,19 +1298,19 @@ main_app.MainWindow.__init__()
 ```bash
 # 1. Update version
 # Edit version.py: __version__, PRERELEASE, VERSION_TUPLE, BUILD_DATE
-# Beta example:  __version__ = "1.4.0-beta.2",  PRERELEASE = "beta.2"
-# GA example:    __version__ = "1.4.0",          PRERELEASE = ""
+# Beta example:  __version__ = "1.4.1-beta.2",  PRERELEASE = "beta.2"
+# GA example:    __version__ = "1.4.1",          PRERELEASE = ""
 
-# 2. Update CHANGELOG.md: add ## [1.4.0-beta.2] — YYYY-MM-DD section
+# 2. Update CHANGELOG.md: add ## [1.4.1-beta.2] — YYYY-MM-DD section
 
 # 3. Commit
 git add version.py CHANGELOG.md
-git commit -m "chore: bump to v1.4.0-beta.2"
+git commit -m "chore: bump to v1.4.1-beta.2"
 
 # 4. Tag and push — this triggers CI
-git tag v1.4.0-beta.2
+git tag v1.4.1-beta.2
 git push origin main
-git push origin v1.4.0-beta.2
+git push origin v1.4.1-beta.2
 
 # 5. CI builds installer and publishes release automatically
 # 6. Verify at https://github.com/edward-mcnair/sanjinsight-releases/releases
@@ -1690,7 +1502,7 @@ No other changes are needed. The `HardwareService` reads the factory and the res
 
 ## 20. Adding a New UI Tab
 
-Example: adding a new "Polarization" tab in Advanced mode.
+Example: adding a new "Polarization" tab in Manual mode.
 
 **Step 1 — Create the tab widget:**
 
@@ -1722,7 +1534,7 @@ class PolarizationTab(QWidget):
 self._add_nav_item(
     group="Hardware",
     label="Polarization",
-    icon="fa5s.adjust",       # FontAwesome 5 icon name
+    icon="mdi6.polarization",  # MDI icon name (fa5s.* auto-upgraded)
     widget_factory=lambda: PolarizationTab(self._hw, self._state),
 )
 ```

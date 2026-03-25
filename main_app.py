@@ -465,10 +465,10 @@ class MainWindow(QMainWindow):
         self._drawer_toggle_bar = DrawerToggleBar()
         root.addWidget(self._drawer_toggle_bar)
 
-        # ---- Standard mode ----
+        # ---- Auto mode ----
         # (built after profile manager; added to stack below)
 
-        # ---- Advanced mode: sidebar navigation ----
+        # ---- Manual mode: sidebar navigation ----
         # _SplitterTop has no layout — see class docstring for why this matters.
         self._nav = SidebarNav(app_name="SanjINSIGHT")
         adv_widget = _SplitterTop(self._nav)

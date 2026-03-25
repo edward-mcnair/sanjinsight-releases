@@ -11,7 +11,7 @@ Steps
     4. Results   — verdict banner, annotated overlay, export
 
 The wizard is a QStackedWidget. The header shows a step progress bar.
-All heavy work delegates to the same backend objects used in Advanced mode
+All heavy work delegates to the same backend objects used in Manual mode
 (AcquisitionPipeline, LiveProcessor, ThermalAnalysisEngine) — there is
 no duplication of logic.
 """
@@ -1084,7 +1084,7 @@ class Step4Results(QWidget):
 
 class StandardWizard(QWidget):
     """
-    The full Standard mode wizard.
+    The full Auto mode wizard.
     Embeds all four steps and the step-progress bar.
     Communicates with the rest of the app through main_app globals.
     """

@@ -251,7 +251,7 @@ from ui.theme import FONT, PALETTE, scaled_qss
 
 class RecipeTab(QWidget):
     """
-    Recipe manager panel for the Microsanj Advanced mode tab bar.
+    Recipe manager panel for the Microsanj Manual mode tab bar.
 
     Signals
     -------
