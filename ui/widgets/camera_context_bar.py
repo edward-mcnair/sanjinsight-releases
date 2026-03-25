@@ -14,7 +14,7 @@ having to navigate to a specific tab first.
 
 Layout (left → right)
 ─────────────────────
-  [Camera icon]  "Active Camera:"  [combo ▾]  |  [mode badge]  [stretch]
+  [Camera icon]  "Active Camera:"  [combo ▾]  |  [mode badge]  ...  [peripheral dots]
 
 The combo lists all configured cameras (from camera_registry.get_cameras()).
 Selecting one sets app_state.active_camera_type globally, persists the
@@ -23,6 +23,10 @@ choice, and emits camera_changed(str) so callers can respond if needed.
 The mode badge shows the current imaging modality:
   •  "THERMOREFLECTANCE"  (teal)  when a TR camera is active
   •  "IR LOCK-IN"         (amber) when an IR camera is active
+
+Peripheral dots (right-aligned) show connection status for non-camera
+hardware: TEC, FPGA, Bias Source, Stage.  Each dot is a coloured circle
+(green = connected, red = error, hidden = not configured).
 """
 from __future__ import annotations
 
@@ -32,6 +36,15 @@ from PyQt5.QtCore import pyqtSignal
 
 import config as _cfg
 from ui.theme import FONT, PALETTE, scaled_qss
+
+
+# Peripheral key → display label (order = display order)
+_PERIPHERAL_LABELS: list[tuple[str, str]] = [
+    ("tec",   "TEC"),
+    ("fpga",  "FPGA"),
+    ("bias",  "Bias"),
+    ("stage", "Stage"),
+]
 
 
 class CameraContextBar(QWidget):
@@ -84,6 +97,24 @@ class CameraContextBar(QWidget):
         lay.addWidget(self._mode_lbl)
 
         lay.addStretch()
+
+        # ── Peripheral status indicators (right-aligned) ─────────────
+        self._periph_sep = QFrame()
+        self._periph_sep.setFrameShape(QFrame.VLine)
+        self._periph_sep.setFixedHeight(22)
+        self._periph_sep.setVisible(False)
+        lay.addWidget(self._periph_sep)
+
+        self._periph_widgets: dict[str, tuple[QLabel, QLabel]] = {}
+        for key, label in _PERIPHERAL_LABELS:
+            dot = QLabel("●")
+            dot.setFixedWidth(12)
+            name = QLabel(label)
+            dot.setVisible(False)
+            name.setVisible(False)
+            lay.addWidget(dot)
+            lay.addWidget(name)
+            self._periph_widgets[key] = (dot, name)
 
         self._combo.currentIndexChanged.connect(self._on_changed)
 
@@ -140,6 +171,56 @@ class CameraContextBar(QWidget):
         finally:
             self._combo.blockSignals(False)
 
+    def set_peripheral(self, key: str, ok: bool | None, tooltip: str = "") -> None:
+        """Update a peripheral device's status indicator.
+
+        Parameters
+        ----------
+        key : str
+            One of ``"tec"``, ``"fpga"``, ``"bias"``, ``"stage"``.
+        ok : bool | None
+            ``True`` = connected (green), ``False`` = error (red),
+            ``None`` = connecting (amber).
+        tooltip : str
+            Tooltip text shown on hover.
+        """
+        entry = self._periph_widgets.get(key)
+        if entry is None:
+            return
+        dot, name = entry
+
+        if ok is True:
+            color = "#00d4aa"
+        elif ok is False:
+            color = "#ff4444"
+        else:
+            color = "#ff9900"   # amber = connecting
+
+        dot.setStyleSheet(
+            f"color:{color}; font-size:9pt; background:transparent;")
+        dot.setVisible(True)
+        name.setVisible(True)
+        if tooltip:
+            dot.setToolTip(tooltip)
+            name.setToolTip(tooltip)
+
+        # Show the separator if any peripheral is visible
+        self._periph_sep.setVisible(True)
+        self._apply_periph_name_style()
+
+    def clear_peripheral(self, key: str) -> None:
+        """Hide a peripheral indicator (device removed / not configured)."""
+        entry = self._periph_widgets.get(key)
+        if entry is None:
+            return
+        dot, name = entry
+        dot.setVisible(False)
+        name.setVisible(False)
+
+        # Hide separator if no peripherals visible
+        any_visible = any(d.isVisible() for d, _ in self._periph_widgets.values())
+        self._periph_sep.setVisible(any_visible)
+
     # ── Private helpers ──────────────────────────────────────────────────
 
     def _on_changed(self, index: int) -> None:
@@ -165,6 +246,13 @@ class CameraContextBar(QWidget):
             f"font-size:{FONT.get('caption', 8)}pt; font-weight:700; "
             f"letter-spacing:1px; background:transparent; padding:0 4px;")
 
+    def _apply_periph_name_style(self) -> None:
+        txt = PALETTE.get("textDim", "#999999")
+        for _, name in self._periph_widgets.values():
+            name.setStyleSheet(
+                f"color:{txt}; font-size:{FONT.get('caption', 8)}pt; "
+                f"font-weight:600; background:transparent;")
+
     def _apply_styles(self) -> None:
         bg  = PALETTE.get("surface",  "#2d2d2d")
         bdr = PALETTE.get("border",   "#484848")
@@ -181,3 +269,5 @@ class CameraContextBar(QWidget):
             f"color:{txt}; font-size:{FONT.get('label', 10)}pt; "
             f"background:transparent;")
         self._sep.setStyleSheet(f"color:{bdr};")
+        self._periph_sep.setStyleSheet(f"color:{bdr};")
+        self._apply_periph_name_style()

@@ -524,24 +524,15 @@ class CalibrationTab(QWidget):
     def refresh_camera_mode(self) -> None:
         """Show/hide TR/IR preset buttons based on active camera type.
 
-        When only one camera modality is active the matching button is
-        relabelled "Standard" (no TR/IR prefix) and the other is hidden,
-        so the user isn't asked to choose something already determined by
-        the connected camera.  When both cameras are connected the
-        original labels are shown.
+        Shows only the preset matching the currently *active* camera as
+        "Standard" and hides the other.  This applies regardless of
+        whether one or both cameras are connected — the calibration
+        temperatures are always determined by the active modality.
         """
         from hardware.app_state import app_state
-        has_tr = app_state.tr_cam is not None
-        has_ir = app_state.ir_cam is not None
         active = app_state.active_camera_type   # "tr" or "ir"
 
-        if has_tr and has_ir:
-            # Hybrid system — show both with full labels
-            self._btn_tr_std.setText("TR Std")
-            self._btn_ir_std.setText("IR Std")
-            self._btn_tr_std.setVisible(True)
-            self._btn_ir_std.setVisible(True)
-        elif active == "ir" or (has_ir and not has_tr):
+        if active == "ir":
             self._btn_ir_std.setText("Standard")
             self._btn_ir_std.setVisible(True)
             self._btn_tr_std.setVisible(False)

@@ -1050,6 +1050,7 @@ class MainWindow(QMainWindow):
         tip = (f"TEC {index+1}: {status.actual_temp:.1f}°C → {status.target_temp:.1f}°C"
                if ok else f"TEC {index+1} error: {status.error}")
         self._header.set_connected(key, ok, tip)
+        self._cam_bar.set_peripheral("tec", ok, tip)
         # Update live BT/dT readout strip from primary TEC (index 0)
         if index == 0 and ok:
             bt = getattr(status, "actual_temp", None)
@@ -1070,6 +1071,7 @@ class MainWindow(QMainWindow):
         tip = ("FPGA: running" if ok else
                f"FPGA error: {status.error}" if status.error else "FPGA: stopped")
         self._header.set_connected("fpga", ok, tip)
+        self._cam_bar.set_peripheral("fpga", ok, tip)
 
     def _on_bias(self, status):
         if app_state.bias is None and not app_state.demo_mode:
@@ -1082,6 +1084,7 @@ class MainWindow(QMainWindow):
                if ok else
                f"Bias error: {status.error}" if status.error else "Bias: output off")
         self._header.set_connected("bias", ok, tip)
+        self._cam_bar.set_peripheral("bias", ok, tip)
 
     def _on_stage(self, status):
         # Ignore stale status updates from simulated stage drivers that
@@ -1094,6 +1097,7 @@ class MainWindow(QMainWindow):
         tip = (f"Stage: {pos.x:.0f} / {pos.y:.0f} / {pos.z:.0f} μm" if ok
                else f"Stage error: {status.error}")
         self._header.set_connected("stage", ok, tip)
+        self._cam_bar.set_peripheral("stage", ok, tip)
 
     def _on_cal_progress(self, prog):
         self._cal_tab.update_progress(prog)
@@ -3662,12 +3666,16 @@ if __name__ == "__main__":
         for _tec_key, _dot_key in [("tec_meerstetter", "tec0"), ("tec_atec", "tec1")]:
             if hw_cfg.get(_tec_key, {}).get("enabled", False):
                 window._header.set_connecting(_dot_key)
+                window._cam_bar.set_peripheral("tec", None, "Connecting…")
         if hw_cfg.get("fpga",  {}).get("enabled", False):
             window._header.set_connecting("fpga")
+            window._cam_bar.set_peripheral("fpga", None, "Connecting…")
         if hw_cfg.get("bias",  {}).get("enabled", False):
             window._header.set_connecting("bias")
+            window._cam_bar.set_peripheral("bias", None, "Connecting…")
         if hw_cfg.get("stage", {}).get("enabled", False):
             window._header.set_connecting("stage")
+            window._cam_bar.set_peripheral("stage", None, "Connecting…")
 
         # Show a status-bar advisory when any device falls back to simulation
         # (so the user can distinguish "real HW connected" from "simulated").
