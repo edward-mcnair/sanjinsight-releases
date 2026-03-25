@@ -1079,6 +1079,19 @@ Both panels share a linked x-axis, so panning or zooming one panel moves the oth
 | **Export** | Export session data in TIFF, HDF5, NumPy, or PDF format |
 | **Delete** | Permanently remove the session folder from disk *(confirmation required)* |
 
+### 13.5 Session Schema *(v1.5.0 — Schema v3)*
+
+The `session.json` metadata file uses schema version 3. New fields added in v3:
+
+| Field | Type | Description |
+|---|---|---|
+| `frame_channels` | int | 1 = mono, 3 = RGB |
+| `frame_bit_depth` | int | Native sensor bit depth (12, 14, or 16) |
+| `pixel_format` | string | `"mono"`, `"bayer_rggb"`, or `"rgb"` |
+| `preflight` | dict or null | Pre-capture validation results (pass/fail per check, timestamps) |
+
+**Auto-migration:** Sessions saved by older versions (schema v1 or v2) are automatically migrated to v3 when loaded. Migrated sessions default to `frame_channels: 1`, `frame_bit_depth: 16`, `pixel_format: "mono"`, and `preflight: null`.
+
 ---
 
 ## 14. Hardware Panels
@@ -1839,6 +1852,7 @@ Leave `serial_port` blank to use the Boson without SDK control. The driver captu
 
 FFC corrects non-uniformity across the sensor and should be run before measurements, especially after the camera has warmed up or the scene temperature has changed significantly. Trigger FFC via:
 
+- **Camera panel** — click the **Run FFC** button in the Camera sub-tab (visible only when the connected camera supports FFC).
 - **Device Manager** — select the Boson entry and click **Run FFC** in the action bar.
 - **SDK** — call `driver.send_ffc()` from the scripting console or Python API.
 
@@ -2006,6 +2020,7 @@ hardware:
     driver: pypylon          # pypylon | boson | ni_imaqdx | directshow | simulated
     serial: ""               # Basler serial number (blank = first found)
     camera_name: ""          # NI IMAQdx camera name (e.g. "cam4")
+    color_mode: false        # true = enable RGB color output (pypylon, directshow, simulated)
 
     # boson driver keys (used when driver: boson)
     serial_port: ""          # CDC serial port for SDK/FFC commands (blank = video-only mode)
@@ -2042,6 +2057,7 @@ acquisition:
   default_exposure_us: 5000   # Default exposure (microseconds)
   default_gain_db: 0          # Default camera gain
   inter_phase_delay_s: 0.1    # Delay between cold and hot phases
+  preflight_enabled: true     # Run pre-capture validation before each acquisition
 
 logging:
   level: INFO                 # INFO | DEBUG

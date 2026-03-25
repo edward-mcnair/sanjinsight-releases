@@ -658,20 +658,22 @@ The core measurement loop. Given a camera (+ optional FPGA/bias for stimulus con
 **Full measurement sequence:**
 
 ```
-1. Safety check: ensure required hardware is ready
-2. Emit AcquisitionProgress(state=CAPTURING, phase="cold")
-3. Set stimulus OFF  (FPGA.set_output(False)  or  Bias.disable())
-4. Capture n_frames frames → stack[0..N-1] (uint16)
-5. Average stack → cold_avg (float64)
-6. Wait inter_phase_delay seconds
-7. Emit AcquisitionProgress(phase="hot")
-8. Set stimulus ON   (FPGA.set_output(True)   or  Bias.enable())
-9. Capture n_frames frames → average → hot_avg (float64)
-10. Set stimulus OFF (restore safe state)
-11. Compute:  ΔR/R = (hot_avg - cold_avg) / cold_avg
-12. Mask dark pixels (cold_avg < 5th percentile) as NaN
-13. Compute SNR_dB = 20·log10(mean|ΔR/R| / std(ΔR/R))
-14. Emit AcquisitionResult
+ 1. Run pre_capture_hooks (before cold phase)
+ 2. Set stimulus OFF  (FPGA.set_stimulus(False) or Bias.disable())
+ 3. Emit AcquisitionProgress(state=CAPTURING, phase="cold")
+ 4. Capture n_frames frames → accumulate as float64
+ 5. Average → cold_avg (float64); run post_average_hooks
+ 6. Wait inter_phase_delay seconds
+ 7. Run pre_capture_hooks (before hot phase)
+ 8. Set stimulus ON  (FPGA.set_stimulus(True) or Bias.enable())
+ 9. Emit AcquisitionProgress(phase="hot")
+10. Capture n_frames frames → accumulate as float64
+11. Average → hot_avg (float64); run post_average_hooks
+12. Compute:  ΔR/R = (hot_avg - cold_avg) / cold_safe  (float64)
+13. Mask dark pixels (cold intensity < 0.5% full scale) as NaN
+14. Compute SNR_dB = 20·log10(mean|ΔR/R| / std(ΔR/R))
+15. Emit AcquisitionResult
+16. finally: _stimulus_safe_off() — guarantee DUT is unpowered
 ```
 
 **Usage:**
@@ -719,15 +721,17 @@ class AcquisitionResult:
 ### 5.3 ΔR/R Computation
 
 ```python
-# Inputs: float64 arrays, shape (H, W)
-drr = (hot_avg - cold_avg) / cold_avg
+# Inputs: float64 arrays, shape (H, W) or (H, W, 3)
+cold_safe = np.where(dark_mask, 1.0, cold)   # clamp dark pixels to avoid /0
+drr = (hot - cold) / cold_safe
 
 # Typical value range: ±1e-4 to ±1e-2
 # (0.01% to 1% reflectance change per degree)
 
-# Mask low-signal pixels (their noise dominates)
-dark_threshold = np.percentile(cold_avg, 5)
-drr[cold_avg < dark_threshold] = np.nan
+# Dark-pixel masking: pixels where cold intensity < 0.5% of full scale
+# are set to NaN. For RGB data, the mask is computed on luminance
+# (cold.mean(axis=2)) and broadcast to (H, W, 1) via np.newaxis.
+drr[dark_mask] = np.nan
 ```
 
 ### 5.4 Calibration (`acquisition/calibration.py`)
@@ -830,6 +834,95 @@ When all checks pass, acquisition starts immediately (no dialog). When any check
 | CSV | text | Reduced to Rec. 709 luminance (`0.2126·R + 0.7152·G + 0.0722·B`) | Inherently 2D |
 | NumPy (`.npy`) | float64 (native) | Full array preserved | Direct `np.save` |
 | MATLAB (`.mat`) | float64 | Full array preserved | Via `scipy.io.savemat` |
+
+### 5.11 New Module APIs (v1.5.0)
+
+#### FpsOptimizer (`acquisition/fps_optimizer.py`)
+
+Auto-optimizes acquisition throughput using a three-step priority: maximize LED duty cycle, maximize frame rate, then binary-search exposure to hit a target intensity fraction.
+
+```python
+from acquisition.fps_optimizer import FpsOptimizer
+
+optimizer = FpsOptimizer(camera, fpga=fpga_driver, target_intensity=0.0)
+# target_intensity=0.0 → uses default 0.70 (70% of dynamic range)
+
+summary = optimizer.optimize()
+# Returns dict:
+#   duty_cycle:      float  — final FPGA duty cycle (0–1)
+#   fps:             float  — camera max_fps after optimization
+#   exposure_us:     float  — final camera exposure (μs)
+#   mean_intensity:  float  — measured image mean (fraction of full scale)
+#   skipped:         bool   — True if camera is IR (no optimization possible)
+```
+
+IR cameras (e.g. Boson) have no user-controllable FPS or exposure; `optimize()` returns immediately with `skipped=True`.
+
+#### PreflightValidator (`acquisition/preflight.py`)
+
+Read-only pre-capture validation. See section 5.9 for check details.
+
+```python
+from acquisition.preflight import PreflightValidator, PreflightResult
+
+validator = PreflightValidator(app_state, metrics_snapshot=latest_metrics)
+result = validator.run(operation="acquire")
+# operation: "acquire" | "scan" | "transient" | "movie"
+
+result.passed        # bool — True if no checks failed
+result.has_warnings  # bool — True if any check is "warn"
+result.all_clear     # bool — True if every check is "pass"
+result.duration_ms   # float — wall-clock time for all checks
+result.to_dict()     # dict — serializable for session metadata
+```
+
+#### Image Metrics (`acquisition/image_metrics.py`)
+
+Stateless, pure-NumPy image-quality functions. No Qt, no hardware, no side-effects.
+
+```python
+from acquisition.image_metrics import (
+    compute_focus, compute_intensity_stats, compute_frame_stability,
+)
+
+# Focus score: variance of discrete Laplacian on 4x downsampled frame.
+# Higher = sharper. Multi-channel input is reduced to luminance.
+score = compute_focus(data)  # -> float
+
+# Exposure statistics as fractions of dynamic range.
+stats = compute_intensity_stats(data, bit_depth=12)
+# Returns dict: mean_frac, max_frac, sat_pct, under_pct
+
+# Frame-to-frame stability: coefficient of variation across per-frame means.
+# Returns 0.0 if fewer than 2 values or mean is zero.
+cv = compute_frame_stability(means_list)  # -> float
+```
+
+#### RGB Analysis (`acquisition/rgb_analysis.py`)
+
+Per-channel RGB thermoreflectance utilities for color-camera data.
+
+```python
+from acquisition.rgb_analysis import (
+    split_channels, to_luminance, per_channel_stats, per_channel_analysis,
+)
+
+# Split (H,W,3) ΔR/R into individual channel maps.
+# Returns {"red": (H,W), "green": (H,W), "blue": (H,W)} for RGB,
+# or {"mono": (H,W)} for single-channel input.
+channels = split_channels(drr_rgb)
+
+# Convert (H,W,3) to (H,W) using Rec. 709 weights.
+# Y = 0.2126·R + 0.7152·G + 0.0722·B. Returns input unchanged if 2D.
+lum = to_luminance(drr_rgb)
+
+# Per-channel statistics: mean, std, min, max, peak_abs for each channel.
+stats = per_channel_stats(drr_rgb)
+
+# Run the analysis engine on each channel independently.
+# Returns {channel_name: AnalysisResult} for each channel.
+results = per_channel_analysis(drr_rgb, analysis_engine, calibration=cal)
+```
 
 ---
 
@@ -1222,7 +1315,13 @@ config.get_pref("license.key", "")
 | `profile_uid` | str | Material profile ID |
 | `ct_value` | float | C_T coefficient used |
 | `snr_db` | float | Computed SNR |
-| `schema_version` | int | For migrations |
+| `camera_id` | str | Hardware identity (e.g. `"TR-Andor-iStar-SN12345"`) *(v2)* |
+| `notes_log` | List[dict] | Structured append-only notes (NoteEntry dicts) *(v2)* |
+| `frame_channels` | int | `1` (mono) or `3` (RGB) *(v3)* |
+| `frame_bit_depth` | int | Native sensor bit depth (12, 14, 16) *(v3)* |
+| `pixel_format` | str | `"mono"`, `"bayer_rggb"`, or `"rgb"` *(v3)* |
+| `preflight` | Optional[dict] | PreflightResult snapshot, or None *(v3)* |
+| `schema_version` | int | For migrations (currently 3) |
 
 ### 12.3 Loading Sessions
 
