@@ -78,13 +78,31 @@ class MeerstetterDriver(TecDriver):
         _connected_ok = False
         try:
             from mecom import MeCom
+            log.info("Meerstetter: opening %s (address=%d, timeout=%.1fs)",
+                     self._port, self._address, self._timeout)
             self._tec = MeCom(serialport=self._port,
                               timeout=self._timeout,
                               metype='TEC')
-            self._tec.identify()
+            # Try configured address first, then broadcast (0) as fallback.
+            # Some firmware versions don't respond to broadcast.
+            _identified = False
+            for _try_addr in (self._address, 0):
+                try:
+                    dev_addr = self._tec.identify(address=_try_addr)
+                    log.info("Meerstetter TEC-1089 identified at MeCom "
+                             "address %s (queried %d) on %s",
+                             dev_addr, _try_addr, self._port)
+                    _identified = True
+                    break
+                except Exception as _id_err:
+                    log.debug("identify(address=%d) failed: %s",
+                              _try_addr, _id_err)
+            if not _identified:
+                raise RuntimeError(
+                    f"TEC did not respond to identify on {self._port} "
+                    f"(tried address {self._address} and broadcast 0)")
             self._connected = True
             _connected_ok = True
-            log.info("Meerstetter TEC-1089 connected on %s", self._port)
         except ImportError:
             raise RuntimeError(
                 "pyMeCom library not found.\n\n"
