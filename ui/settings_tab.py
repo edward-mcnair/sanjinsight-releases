@@ -262,6 +262,7 @@ class SettingsTab(QWidget):
 
     check_for_updates_requested   = pyqtSignal()
     theme_changed                 = pyqtSignal(str)   # emits "auto", "dark", or "light"
+    workspace_changed             = pyqtSignal(str)   # emits "guided", "standard", or "expert"
     ai_enable_requested           = pyqtSignal(str, int)
     ai_disable_requested          = pyqtSignal()
     download_model_requested      = pyqtSignal(str, str)
@@ -440,7 +441,66 @@ class SettingsTab(QWidget):
         lay.addLayout(row)
 
         self._refresh_seg_style()
+
+        # ── Workspace mode selector ─────────────────────────────────
+        from ui.workspace import get_manager, MODE_DESCRIPTORS
+
+        ws_row = QHBoxLayout()
+        ws_lbl = QLabel("Workspace")
+        ws_lbl.setStyleSheet(
+            f"font-size:{FONT['body']}pt; color:{PALETTE.get('text', '#dde3f2')};")
+        ws_row.addWidget(ws_lbl)
+        ws_row.addStretch()
+
+        self._guided_btn  = QPushButton("  Guided")
+        self._standard_btn = QPushButton("  Standard")
+        self._expert_btn  = QPushButton("  Expert")
+        for btn in (self._guided_btn, self._standard_btn, self._expert_btn):
+            btn.setCheckable(True)
+            btn.setFixedWidth(90)
+
+        self._ws_btn_grp = QButtonGroup(self)
+        self._ws_btn_grp.addButton(self._guided_btn,  0)
+        self._ws_btn_grp.addButton(self._standard_btn, 1)
+        self._ws_btn_grp.addButton(self._expert_btn,  2)
+        self._ws_btn_grp.setExclusive(True)
+
+        current_ws = cfg_mod.get_pref("ui.workspace", "standard")
+        self._guided_btn.setChecked(current_ws == "guided")
+        self._standard_btn.setChecked(current_ws == "standard")
+        self._expert_btn.setChecked(current_ws == "expert")
+
+        self._ws_btn_grp.idClicked.connect(self._on_workspace_btn)
+
+        ws_seg = QWidget()
+        ws_seg_lay = QHBoxLayout(ws_seg)
+        ws_seg_lay.setContentsMargins(0, 0, 0, 0)
+        ws_seg_lay.setSpacing(0)
+        ws_seg_lay.addWidget(self._guided_btn)
+        ws_seg_lay.addWidget(self._standard_btn)
+        ws_seg_lay.addWidget(self._expert_btn)
+        ws_row.addWidget(ws_seg)
+        lay.addLayout(ws_row)
+
+        # Descriptor label below the segmented control
+        self._ws_desc_lbl = QLabel(MODE_DESCRIPTORS.get(current_ws, ""))
+        self._ws_desc_lbl.setStyleSheet(
+            f"font-size:{FONT['caption']}pt; color:{PALETTE.get('textDim', '#8892aa')}; "
+            "font-style: italic;")
+        self._ws_desc_lbl.setWordWrap(True)
+        desc_row = QHBoxLayout()
+        desc_row.addStretch()
+        desc_row.addWidget(self._ws_desc_lbl)
+        lay.addLayout(desc_row)
+
+        self._refresh_ws_seg_style()
         return grp
+
+    def _on_workspace_btn(self, idx: int) -> None:
+        from ui.workspace import MODE_DESCRIPTORS
+        mode = "guided" if idx == 0 else "standard" if idx == 1 else "expert"
+        self._ws_desc_lbl.setText(MODE_DESCRIPTORS.get(mode, ""))
+        self.workspace_changed.emit(mode)
 
     def _refresh_seg_style(self) -> None:
         """Re-apply segmented Auto/Dark/Light control styling with current PALETTE."""
@@ -460,6 +520,26 @@ class SettingsTab(QWidget):
         self._dark_btn.setStyleSheet(
             base + "QPushButton { border-radius:0; border-left:none; }")
         self._light_btn.setStyleSheet(
+            base + "QPushButton { border-radius:0 4px 4px 0; border-left:none; }")
+
+    def _refresh_ws_seg_style(self) -> None:
+        """Re-apply segmented Guided/Standard/Expert styling with current PALETTE."""
+        base = (
+            f"QPushButton {{"
+            f" background:{PALETTE.get('surface2', '#20232e')};"
+            f" color:{PALETTE.get('textDim', '#8892aa')};"
+            f" border:1px solid {PALETTE.get('border', '#2e3245')};"
+            f" padding:5px 0; font-size:{FONT['label']}pt;"
+            f"}}"
+            f"QPushButton:checked {{"
+            f" background:{_ACCENT()}; color:#fff; border-color:{_ACCENT()};"
+            f"}}"
+        )
+        self._guided_btn.setStyleSheet(
+            base + "QPushButton { border-radius:4px 0 0 4px; }")
+        self._standard_btn.setStyleSheet(
+            base + "QPushButton { border-radius:0; border-left:none; }")
+        self._expert_btn.setStyleSheet(
             base + "QPushButton { border-radius:0 4px 4px 0; border-left:none; }")
 
     def _build_lab_group(self) -> QGroupBox:
@@ -779,6 +859,10 @@ class SettingsTab(QWidget):
         # Theme segment control
         if hasattr(self, "_auto_btn"):
             self._refresh_seg_style()
+
+        # Workspace mode segment control
+        if hasattr(self, "_guided_btn"):
+            self._refresh_ws_seg_style()
 
         # AI persona selector buttons
         for btn in getattr(self, "_ai_persona_btns", {}).values():

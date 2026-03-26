@@ -128,6 +128,14 @@ class AIService(QObject):
         """Track which tab is visible for context building."""
         self._ctx.set_active_tab(tab_name)
 
+    def set_workspace_mode(self, mode: str) -> None:
+        """Adapt AI behaviour to the workspace mode.
+
+        The mode prefix is prepended to the persona's system prompt
+        at inference time, so it layers on top of the existing persona.
+        """
+        self._workspace_mode = mode
+
     def enable(self, model_path: str, n_gpu_layers: int = 0) -> None:
         """Load the model. Transitions to 'loading' then 'ready' or 'error'."""
         if self._status in ("loading", "thinking"):
@@ -295,9 +303,21 @@ class AIService(QObject):
     #  Persona helpers                                                     #
     # ------------------------------------------------------------------ #
 
+    _MODE_PROMPT_PREFIX = {
+        "guided":   ("Be explanatory and proactive. Suggest next steps. "
+                     "Use simple language. Offer to help the user."),
+        "standard": ("Be concise and action-oriented. Alert on anomalies. "
+                     "Skip explanations unless asked."),
+        "expert":   ("Be terse and technical. Assume deep domain knowledge. "
+                     "Only speak when asked. Skip pleasantries."),
+    }
+
     def _active_system_prompt(self) -> str:
         """
         Build the system prompt for the current persona and loaded model.
+
+        The workspace mode prefix is prepended so the AI adapts its tone
+        and proactivity to the user's experience level.
 
         The Quickstart Guide is only embedded when the model's n_ctx is
         large enough (>= 8 192); smaller models receive domain knowledge
@@ -305,7 +325,13 @@ class AIService(QObject):
         """
         pid     = cfg_mod.get_pref("ai.persona", DEFAULT_PERSONA_ID)
         persona = PERSONAS.get(pid, PERSONAS[DEFAULT_PERSONA_ID])
-        return tmpl.build_system_prompt(persona.system_prompt, self._n_ctx)
+        base    = tmpl.build_system_prompt(persona.system_prompt, self._n_ctx)
+
+        mode = getattr(self, "_workspace_mode", "standard")
+        prefix = self._MODE_PROMPT_PREFIX.get(mode, "")
+        if prefix:
+            return f"{prefix}\n\n{base}"
+        return base
 
     # ------------------------------------------------------------------ #
     #  Internal                                                            #

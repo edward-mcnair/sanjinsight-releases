@@ -43,7 +43,11 @@ class ContextBuilder:
 
     def build(self) -> str:
         """Return a compact JSON string describing current instrument state."""
-        data: dict = {"tab": self._active_tab}
+        from ui.workspace import get_manager
+        data: dict = {
+            "tab": self._active_tab,
+            "workspace_mode": get_manager().mode.value,
+        }
         # Tracks which sections raised an exception; written into the JSON so
         # the LLM knows the context may be incomplete.
         _incomplete: list = []

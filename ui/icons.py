@@ -138,35 +138,39 @@ class IC:
 # Keys match NavItem label exactly (case-sensitive).
 
 NAV_ICONS: dict[str, str] = {
-    # ACQUIRE
+    # ── Phase 1: CONFIGURATION ────────────────────────────────────────────────
+    "Modality":              IC.CAMERA,
+    "Stimulus":              IC.STIMULUS,
+    "Timing":                IC.TIMING,
+    "Temperature":           IC.TEMPERATURE,
+    "Acquisition Settings":  "mdi.tune-variant",
+    # ── Phase 2: IMAGE ACQUISITION ────────────────────────────────────────────
+    "Live View":             IC.LIVE,
+    "Focus & Stage":         IC.AUTOFOCUS,
+    "Signal Check":          "mdi.signal-cellular-3",
+    # ── Phase 3: MEASUREMENT & ANALYSIS ───────────────────────────────────────
+    "Capture":               IC.CAPTURE,
+    "Calibration":           IC.CALIBRATION,
+    "Sessions":              IC.SESSIONS,
+    "Emissivity":            IC.EMISSIVITY,
+    # ── SYSTEM ────────────────────────────────────────────────────────────────
+    "Settings":              IC.SETTINGS,
+    # ── Legacy names kept for backward compat during migration ────────────────
     "AutoScan":    IC.NEW_SCAN,
     "Live":        IC.LIVE,
-    "Capture":     IC.CAPTURE,
     "Transient":   IC.TRANSIENT,
-    # ANALYZE
-    "Calibration": IC.CALIBRATION,
     "Analysis":    IC.ANALYSIS,
-    "Sessions":    IC.SESSIONS,
-    # HARDWARE
     "Camera":      IC.CAMERA,
-    "Stimulus":    IC.STIMULUS,
     "Wavelength":  IC.WAVELENGTH,
-    "Temperature": IC.TEMPERATURE,
     "Stage":       IC.STAGE,
     "Prober":      IC.PROBER,
-    # LIBRARY
     "Library":     IC.LIBRARY,
-    # SETTINGS
-    "Settings":    IC.SETTINGS,
-    # ── Legacy names kept for backward compat during migration ────────────────
     "Acquire":     IC.CAPTURE,
     "Scan":        IC.SCAN_GRID,
     "Movie":       IC.MOVIE,
     "Compare":     IC.COMPARE,
     "3D Surface":  IC.SURFACE_3D,
-    "Emissivity":  IC.EMISSIVITY,
     "IV Sweep":    IC.IV_SWEEP,
-    "Timing":      IC.TIMING,
     "FPGA":        IC.FPGA,
     "Bias Source": IC.BIAS,
     "ROI":         IC.ROI,

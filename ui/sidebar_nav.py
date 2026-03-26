@@ -7,7 +7,7 @@ Collapsed: thin blue accent bar (22px) with a ▶ arrow — click to expand
 Toggle lives in the logo header row (◀ arrow, right-aligned).
 """
 from __future__ import annotations
-from typing import List, Optional, NamedTuple
+from typing import List, Optional, NamedTuple, Dict
 
 from PyQt5.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QToolTip,
@@ -47,11 +47,25 @@ def _HDR_BG():     return PALETTE.get("surface4",    "#3a3a3c")
 
 # ── Sizes ──────────────────────────────────────────────────────────
 _ITEM_H    = 30    # menu row height
+_ITEM_H_COMPACT = 28  # compact item height (Expert mode)
 _SECTION_H = 24    # section label height
 _COLL_H    = 32    # collapsible group header height
+_PHASE_H   = 38    # phase group header height
+_PHASE_HINT_H = 20 # guidance hint height (Guided mode)
+_PHASE_SEP_H  = 8  # phase separator height
 _LOGO_H    = 56    # logo/header area
 _W_FULL    = 240   # expanded width
 _W_MINI    = 22    # collapsed — thin blue bar
+
+# ── Label aliases (old name → new name) for backward compatibility ─
+_LABEL_ALIASES: Dict[str, str] = {
+    "Live":       "Live View",
+    "Stage":      "Focus & Stage",
+    "Autofocus":  "Focus & Stage",
+    "Analysis":   "Sessions",
+    "Compare":    "Sessions",
+    "3D Surface": "Sessions",
+}
 
 # ── Fonts ──────────────────────────────────────────────────────────
 # Font point sizes are NOT cached here as module-level constants.
@@ -330,6 +344,7 @@ class _CollapseHeader(QWidget):
 # ================================================================== #
 class _LogoHeader(QWidget):
     collapse_clicked = pyqtSignal()
+    mode_clicked = pyqtSignal(str)
 
     _ARROW_W = 34   # width of the clickable arrow zone on the right
 
@@ -340,6 +355,15 @@ class _LogoHeader(QWidget):
         self.setFixedHeight(_LOGO_H)
         self.setStyleSheet(f"background:{_HDR_BG()};")
         self.setMouseTracking(True)
+
+        # Mode indicator (three dots)
+        self._mode_ind = _ModeIndicator(self)
+        self._mode_ind.mode_clicked.connect(self.mode_clicked)
+        self._mode_ind.move(self.width() - self._ARROW_W - 56, (_LOGO_H - 20) // 2)
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        self._mode_ind.move(self.width() - self._ARROW_W - 56, (_LOGO_H - 20) // 2)
 
     def _arrow_rect(self):
         """Returns (x, y, w, h) of the clickable arrow area."""
@@ -392,6 +416,61 @@ class _LogoHeader(QWidget):
 
 
 # ================================================================== #
+#  _ModeIndicator  — three dots in logo header showing workspace mode #
+# ================================================================== #
+class _ModeIndicator(QWidget):
+    """Three small dots indicating the active workspace mode.
+
+    Click cycles through Guided → Standard → Expert.
+    Sits inside _LogoHeader, between app name and collapse arrow.
+    """
+    mode_clicked = pyqtSignal(str)
+
+    _MODES = ("guided", "standard", "expert")
+    _LABELS = ("G", "S", "E")
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._mode_idx = 1  # standard
+        self.setFixedSize(50, 20)
+        self.setCursor(QCursor(Qt.PointingHandCursor))
+        self.setToolTip("Workspace mode (click to cycle)")
+
+    def set_mode(self, mode: str) -> None:
+        try:
+            self._mode_idx = self._MODES.index(mode)
+        except ValueError:
+            self._mode_idx = 1
+        self.update()
+
+    def mousePressEvent(self, e):
+        if e.button() == Qt.LeftButton:
+            self._mode_idx = (self._mode_idx + 1) % 3
+            self.mode_clicked.emit(self._MODES[self._mode_idx])
+            self.update()
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        w, h = self.width(), self.height()
+        r = 4  # dot radius
+        spacing = 14
+        start_x = (w - spacing * 2) // 2
+
+        for i in range(3):
+            x = start_x + i * spacing
+            y = h // 2
+            if i == self._mode_idx:
+                p.setBrush(QColor(_ACCENT()))
+                p.setPen(Qt.NoPen)
+            else:
+                p.setBrush(Qt.NoBrush)
+                p.setPen(QPen(QColor(_TEXT_DIM()), 1))
+            p.drawEllipse(x - r, y - r, r * 2, r * 2)
+        p.end()
+
+
+# ================================================================== #
 #  _CollapseBar  — the thin blue bar shown when sidebar is collapsed  #
 # ================================================================== #
 class _CollapseBar(QWidget):
@@ -431,11 +510,173 @@ class _CollapseBar(QWidget):
 
 
 # ================================================================== #
+#  _PhaseHeader  — numbered phase group header                       #
+# ================================================================== #
+class _PhaseHeader(QWidget):
+    """Phase group header: ① CONFIGURATION, ② IMAGE ACQUISITION, etc.
+
+    Shows a numbered circle, uppercase title, and optional completion badge.
+    Clickable — toggles visibility of the phase's nav items.
+    Hidden entirely in Expert mode.
+    """
+    toggled = pyqtSignal(bool)   # emits collapsed state
+
+    def __init__(self, number: int, title: str, parent=None):
+        super().__init__(parent)
+        self._number    = number
+        self._title     = title
+        self._badge     = ""      # e.g. "3/5" or "✓"
+        self._collapsed = False
+        self._hover     = False
+        self.setFixedHeight(_PHASE_H)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.setCursor(QCursor(Qt.PointingHandCursor))
+        self.setMouseTracking(True)
+
+    def set_badge(self, text: str) -> None:
+        self._badge = text
+        self.update()
+
+    def set_collapsed(self, collapsed: bool) -> None:
+        if self._collapsed != collapsed:
+            self._collapsed = collapsed
+            self.toggled.emit(collapsed)
+            self.update()
+
+    @property
+    def collapsed(self) -> bool:
+        return self._collapsed
+
+    def enterEvent(self, e):
+        self._hover = True
+        self.update()
+
+    def leaveEvent(self, e):
+        self._hover = False
+        self.update()
+
+    def mousePressEvent(self, e):
+        if e.button() == Qt.LeftButton:
+            self.set_collapsed(not self._collapsed)
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        w, h = self.width(), self.height()
+
+        # Background
+        p.fillRect(0, 0, w, h, QColor(_BG_HOVER() if self._hover else _BG()))
+
+        # Thin top divider (skip for first phase)
+        if self._number > 1:
+            p.setPen(QPen(QColor(_DIVIDER()), 1))
+            p.drawLine(16, 4, w - 16, 4)
+
+        # ── Numbered circle (20×20) ─────────────────────────────
+        cx, cy, cr = 18, (h - 20) // 2 + 2, 10
+        circle_path = QPainterPath()
+        circle_path.addEllipse(cx, cy, cr * 2, cr * 2)
+
+        if self._badge == "✓":
+            # Completed: filled accent circle with checkmark
+            p.fillPath(circle_path, QColor(_ACCENT()))
+            p.setFont(_sans_font(_FONT["caption"], bold=True))
+            p.setPen(QColor("#ffffff"))
+            p.drawText(cx, cy, cr * 2, cr * 2, Qt.AlignCenter, "✓")
+        else:
+            # Numbered: outlined circle
+            p.setPen(QPen(QColor(_ACCENT()), 1.5))
+            p.drawPath(circle_path)
+            p.setFont(_sans_font(_FONT["caption"], bold=True))
+            p.setPen(QColor(_ACCENT()))
+            p.drawText(cx, cy, cr * 2, cr * 2, Qt.AlignCenter, str(self._number))
+
+        # ── Title — bold small caps ──────────────────────────────
+        tx = cx + cr * 2 + 10
+        f = _sans_font(_FONT["sublabel"])
+        f.setWeight(QFont.Black)
+        f.setLetterSpacing(QFont.AbsoluteSpacing, 1.4)
+        p.setFont(f)
+        p.setPen(QColor(_TEXT_NORM()))
+        p.drawText(tx, 0, w - tx - 40, h,
+                   Qt.AlignVCenter | Qt.AlignLeft, self._title.upper())
+
+        # ── Badge pill (right side, e.g. "3/5") ─────────────────
+        if self._badge and self._badge != "✓":
+            bf = _sans_font(_FONT["caption"])
+            p.setFont(bf)
+            fm = QFontMetrics(bf)
+            bw = fm.horizontalAdvance(self._badge) + 10
+            bh = 16
+            bx = w - bw - 30
+            by = (h - bh) // 2
+            badge_path = QPainterPath()
+            badge_path.addRoundedRect(bx, by, bw, bh, 8, 8)
+            p.fillPath(badge_path, QColor(PALETTE.get("surface2", "#2a2d3a")))
+            p.setPen(QColor(_TEXT_DIM()))
+            p.drawText(bx, by, bw, bh, Qt.AlignCenter, self._badge)
+
+        # ── Collapse chevron ─────────────────────────────────────
+        p.setFont(_sans_font(_FONT["body"]))
+        p.setPen(QColor(_TEXT_DIM()))
+        p.drawText(w - 24, 0, 20, h, Qt.AlignVCenter | Qt.AlignLeft,
+                   "▸" if self._collapsed else "▾")
+
+        p.end()
+
+
+# ================================================================== #
+#  _PhaseHint  — guidance text below phase header (Guided mode only)  #
+# ================================================================== #
+class _PhaseHint(QWidget):
+    """Small text hint shown below a phase header in Guided mode."""
+
+    def __init__(self, text: str, parent=None):
+        super().__init__(parent)
+        self._text = text
+        self.setFixedHeight(_PHASE_HINT_H)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        w, h = self.width(), self.height()
+        p.fillRect(0, 0, w, h, QColor(_BG()))
+        f = _sans_font(_FONT["caption"])
+        f.setItalic(True)
+        p.setFont(f)
+        p.setPen(QColor(_TEXT_DIM()))
+        p.drawText(50, 0, w - 60, h,
+                   Qt.AlignVCenter | Qt.AlignLeft, self._text)
+        p.end()
+
+
+# ================================================================== #
+#  _PhaseSeparator  — thin divider between phase groups               #
+# ================================================================== #
+class _PhaseSeparator(QWidget):
+    """Thin horizontal line separating phase groups from SYSTEM."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedHeight(_PHASE_SEP_H)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        w, h = self.width(), self.height()
+        p.fillRect(0, 0, w, h, QColor(_BG()))
+        p.setPen(QPen(QColor(_DIVIDER()), 1))
+        p.drawLine(16, h // 2, w - 16, h // 2)
+        p.end()
+
+
+# ================================================================== #
 #  _Sidebar  — the full expandable panel                             #
 # ================================================================== #
 class _Sidebar(QWidget):
     item_selected    = pyqtSignal(object)
     collapse_clicked = pyqtSignal()
+    mode_changed     = pyqtSignal(str)
 
     def __init__(self, app_name: str = "SanjINSIGHT", parent=None):
         super().__init__(parent)
@@ -446,6 +687,13 @@ class _Sidebar(QWidget):
         self._coll_states: List[bool]            = []
         self._active:      Optional[_MenuItem]   = None
 
+        # Phase-aware state
+        self._phase_headers:    List[_PhaseHeader]  = []
+        self._phase_hints:      List[_PhaseHint]    = []
+        self._phase_containers: List[QWidget]       = []
+        self._phase_separators: List[_PhaseSeparator] = []
+        self._workspace_mode:   str = "standard"
+
         self.setFixedWidth(_W_FULL)
         self.setStyleSheet(f"background:{_BG()};")
 
@@ -453,9 +701,11 @@ class _Sidebar(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # Logo header with built-in collapse arrow
+        # Logo header with built-in collapse arrow + mode indicator
         self._logo_hdr = _LogoHeader(app_name)
         self._logo_hdr.collapse_clicked.connect(self.collapse_clicked)
+        self._logo_hdr.mode_clicked.connect(
+            lambda mode: self.mode_changed.emit(mode))
         root.addWidget(self._logo_hdr)
 
         # Scrollable menu
@@ -484,7 +734,89 @@ class _Sidebar(QWidget):
             "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height:0; }"
         )
 
-    # ── Group builders ──────────────────────────────────────────────
+    # ── Phase-aware group builders ───────────────────────────────────
+
+    def add_phase(self, number: int, title: str, hint: str,
+                  items: List[NavItem]) -> None:
+        """Add a phase group with numbered header, hint, and nav items."""
+        header = _PhaseHeader(number, title)
+        self._phase_headers.append(header)
+        self._lay.addWidget(header)
+
+        hint_w = _PhaseHint(hint)
+        hint_w.setVisible(self._workspace_mode == "guided")
+        self._phase_hints.append(hint_w)
+        self._lay.addWidget(hint_w)
+
+        # Container for the phase's nav items
+        container = QWidget()
+        container.setStyleSheet(f"background:{_BG()};")
+        cl = QVBoxLayout(container)
+        cl.setContentsMargins(0, 0, 0, 0)
+        cl.setSpacing(0)
+        for item in items:
+            mi = _MenuItem(item)
+            mi.clicked.connect(self._on_click)
+            self._items.append(mi)
+            cl.addWidget(mi)
+        self._phase_containers.append(container)
+        self._lay.addWidget(container)
+
+        # Wire header collapse to container visibility
+        header.toggled.connect(lambda col, _c=container: _c.setVisible(not col))
+
+    def add_separator(self) -> None:
+        """Add a thin horizontal separator (used before SYSTEM group)."""
+        sep = _PhaseSeparator()
+        self._phase_separators.append(sep)
+        self._lay.addWidget(sep)
+
+    def set_workspace_mode(self, mode: str) -> None:
+        """Reconfigure sidebar presentation for the given workspace mode."""
+        self._workspace_mode = mode
+        self._logo_hdr._mode_ind.set_mode(mode)
+
+        for header in self._phase_headers:
+            if mode == "expert":
+                header.setVisible(False)
+            else:
+                header.setVisible(True)
+                # In Guided mode, collapse non-active phases
+                if mode == "guided" and self._active:
+                    active_in_phase = False
+                    idx = self._phase_headers.index(header)
+                    if idx < len(self._phase_containers):
+                        container = self._phase_containers[idx]
+                        for mi in self._items:
+                            if mi.parent() is container and mi._active:
+                                active_in_phase = True
+                                break
+                    if not active_in_phase:
+                        header.set_collapsed(True)
+                    else:
+                        header.set_collapsed(False)
+                elif mode == "standard":
+                    header.set_collapsed(False)
+
+        for hint in self._phase_hints:
+            hint.setVisible(mode == "guided")
+
+        for sep in self._phase_separators:
+            sep.setVisible(mode != "expert")
+
+        # Adjust item height for Expert compact mode
+        compact_h = _ITEM_H_COMPACT if mode == "expert" else _ITEM_H
+        for mi in self._items:
+            mi.setFixedHeight(compact_h)
+
+    def set_phase_badge(self, phase_number: int, text: str) -> None:
+        """Update the completion badge on a phase header."""
+        for header in self._phase_headers:
+            if header._number == phase_number:
+                header.set_badge(text)
+                break
+
+    # ── Legacy group builders (still used for SYSTEM section) ────
 
     def add_section(self, title: str, items: List[NavItem]):
         lbl = _SectionLabel(title)
@@ -523,9 +855,13 @@ class _Sidebar(QWidget):
         self._lay.addWidget(c)
 
     def set_item_visible(self, label: str, visible: bool) -> None:
-        """Show or hide a specific sidebar item by its label."""
+        """Show or hide a specific sidebar item by its label.
+
+        Supports legacy label aliases (e.g. "Live" → "Live View").
+        """
+        resolved = _LABEL_ALIASES.get(label, label)
         for mi in self._items:
-            if mi._item.label == label:
+            if mi._item.label == resolved or mi._item.label == label:
                 mi.setVisible(visible)
                 break
 
@@ -564,6 +900,7 @@ class SidebarNav(QWidget):
     Collapse : click the ◀ arrow in the logo header area.
     """
     panel_changed = pyqtSignal(object)
+    mode_cycle_requested = pyqtSignal(str)  # from mode indicator in header
 
     def __init__(self, app_name: str = "SanjINSIGHT", parent=None):
         super().__init__(parent)
@@ -591,6 +928,7 @@ class SidebarNav(QWidget):
 
         self._sidebar.item_selected.connect(self._on_select)
         self._sidebar.collapse_clicked.connect(self._collapse)
+        self._sidebar.mode_changed.connect(self.mode_cycle_requested)
         self._bar.expand_clicked.connect(self._expand)
 
     # ── Public API ──────────────────────────────────────────────────
@@ -601,12 +939,32 @@ class SidebarNav(QWidget):
                 self._stack.addWidget(item.panel)
         self._sidebar.add_section(title, items)
 
+    def add_phase(self, number: int, title: str, hint: str,
+                  items: List[NavItem]) -> None:
+        """Add a phase group with numbered header and nav items."""
+        for item in items:
+            if self._stack.indexOf(item.panel) == -1:
+                self._stack.addWidget(item.panel)
+        self._sidebar.add_phase(number, title, hint, items)
+
+    def add_separator(self) -> None:
+        """Add a thin horizontal separator."""
+        self._sidebar.add_separator()
+
     def add_collapsible(self, title: str, icon: str,
                         items: List[NavItem], collapsed: bool = False):
         for item in items:
             if self._stack.indexOf(item.panel) == -1:
                 self._stack.addWidget(item.panel)
         self._sidebar.add_collapsible(title, icon, items, collapsed=collapsed)
+
+    def set_workspace_mode(self, mode: str) -> None:
+        """Reconfigure sidebar presentation for the given workspace mode."""
+        self._sidebar.set_workspace_mode(mode)
+
+    def set_phase_badge(self, phase_number: int, text: str) -> None:
+        """Update completion badge on a phase header."""
+        self._sidebar.set_phase_badge(phase_number, text)
 
     def finish(self):       self._sidebar.finish()
     def select_first(self): self._sidebar.select_first()
@@ -628,9 +986,14 @@ class SidebarNav(QWidget):
             self.panel_changed.emit(panel)
 
     def select_by_label(self, label: str):
-        """Navigate to the sidebar item whose label matches (case-insensitive)."""
+        """Navigate to the sidebar item whose label matches (case-insensitive).
+
+        Supports legacy label aliases (e.g. ``"Live"`` → ``"Live View"``).
+        """
+        resolved = _LABEL_ALIASES.get(label, label)
         for item in self._sidebar._items:
-            if item._item.label.lower() == label.lower():
+            lbl = item._item.label.lower()
+            if lbl == resolved.lower() or lbl == label.lower():
                 self.navigate_to(item.panel)
                 return
 
@@ -654,8 +1017,12 @@ class SidebarNav(QWidget):
         self._stack.setStyleSheet(f"background:{_BG()};")
         self._sep.setStyleSheet(f"color:{_DIVIDER()}; max-width:1px;")
 
+        for c in s._phase_containers:
+            c.setStyleSheet(f"background:{_BG()};")
+
         # Trigger a repaint on all custom-drawn sidebar widgets
-        for w in [s, s._logo_hdr] + s._sections + s._cheaders + s._items:
+        for w in ([s, s._logo_hdr] + s._sections + s._cheaders + s._items
+                  + s._phase_headers + s._phase_hints + s._phase_separators):
             w.update()
 
     # ── Collapse / expand ────────────────────────────────────────────

@@ -304,6 +304,12 @@ from ui.tabs.library_tab           import LibraryTab
 from ui.tabs.wavelength_tab        import WavelengthTab
 from ui.tabs.emissivity_cal_tab    import EmissivityCalTab
 from ui.tabs.timing_diagram_tab    import TimingDiagramTab
+from ui.tabs.focus_stage_tab       import FocusStageTab
+from ui.tabs.modality_section      import ModalitySection
+from ui.tabs.acquisition_settings_section import AcquisitionSettingsSection
+from ui.tabs.signal_check_section  import SignalCheckSection
+from ui.workspace                  import get_manager as _get_ws_manager
+from ui.phase_tracker              import PhaseTracker
 from ui.widgets.bottom_drawer      import BottomDrawer, DrawerToggleBar
 from ui.widgets.measurement_strip  import MeasurementReadoutStrip
 from ui.charts                     import dTSparklineWidget
@@ -559,6 +565,15 @@ class MainWindow(QMainWindow):
         self._library_tab           = LibraryTab(self._profile_tab, self._recipe_tab)
         self._autoscan_tab          = AutoScanTab()
 
+        # ── Phase-aware sections (new) ─────────────────────────────────
+        self._modality_section      = ModalitySection()
+        self._acq_settings_section  = AcquisitionSettingsSection()
+        self._signal_check_section  = SignalCheckSection()
+        self._focus_stage_tab       = FocusStageTab(
+            self._af_tab, self._stage_tab, self._prober_tab)
+        self._focus_stage_tab.open_device_manager.connect(
+            self._open_device_manager)
+
         # ── Bottom drawer (Console + Log) ────────────────────────────────
         self._bottom_drawer = BottomDrawer(self._console_tab, self._log_tab)
         self._content_splitter.addWidget(adv_widget)          # index 0 — nav
@@ -597,6 +612,9 @@ class MainWindow(QMainWindow):
         # Wire Settings tab → theme toggle (Auto / Dark / Light)
         self._settings_tab.theme_changed.connect(self.apply_theme)
 
+        # Wire Settings tab → workspace mode (Guided / Standard / Expert)
+        self._settings_tab.workspace_changed.connect(self._on_workspace_changed)
+
         # Wire Settings tab → manual update check
         self._settings_tab.check_for_updates_requested.connect(
             self._on_manual_update_check)
@@ -630,42 +648,56 @@ class MainWindow(QMainWindow):
 
         # ── Register all panels with the sidebar nav ──────────────────
         from ui.sidebar_nav import NavItem as NI
-        from ui.icons import NAV_ICONS as _I, GROUP_ICONS as _G
-        self._nav.add_section("ACQUIRE", [
-            NI("AutoScan",    _I["AutoScan"],          self._autoscan_tab,         badge="★"),
-            NI("Live",        _I["Live"],              self._live_tab,             badge="★"),
-            NI("Capture",     _I["Capture"],           self._capture_tab,          badge="★"),
-            NI("Transient",   _I["Transient"],         self._transient_capture_tab),
+        from ui.icons import NAV_ICONS as _I
+
+        # Phase 1: CONFIGURATION
+        self._nav.add_phase(1, "CONFIGURATION",
+            "Set up your hardware and measurement parameters", [
+            NI("Modality",             _I["Modality"],             self._modality_section),
+            NI("Stimulus",             _I["Stimulus"],             self._stimulus_tab),
+            NI("Timing",               _I["Timing"],               self._timing_tab),
+            NI("Temperature",          _I["Temperature"],          self._temp_tab),
+            NI("Acquisition Settings", _I["Acquisition Settings"], self._acq_settings_section),
         ])
-        self._nav.add_section("ANALYZE", [
-            NI("Calibration", _I["Calibration"],       self._cal_tab),
-            NI("Analysis",    _I["Analysis"],          self._analysis_tab,         badge="★"),
-            NI("Sessions",    _I["Sessions"],          self._data_tab),
-            NI("Compare",     _I["Compare"],           self._compare_tab),
-            NI("3D Surface",  _I["3D Surface"],        self._surface_tab),
-            NI("Emissivity",  _I["Emissivity"],        self._emissivity_tab),
-            NI("Timing",      _I["Timing"],            self._timing_tab),
+
+        # Phase 2: IMAGE ACQUISITION
+        self._nav.add_phase(2, "IMAGE ACQUISITION",
+            "Preview, focus, and verify your signal", [
+            NI("Live View",     _I["Live View"],     self._live_tab),
+            NI("Focus & Stage", _I["Focus & Stage"], self._focus_stage_tab),
+            NI("Signal Check",  _I["Signal Check"],  self._signal_check_section),
         ])
-        self._nav.add_collapsible("Hardware", _G["Hardware"], [
-            NI("Camera",      _I["Camera"],            self._camera_ctrl_tab),
-            NI("Stimulus",    _I["Stimulus"],          self._stimulus_tab),
-            NI("Wavelength",  _I["Wavelength"],        self._wavelength_tab),
-            NI("Temperature", _I["Temperature"],       self._temp_tab),
-            NI("Stage",       _I["Stage"],             self._stage_tab),
-            NI("Prober",      _I["Prober"],            self._prober_tab),
-        ], collapsed=False)
-        self._nav.add_section("LIBRARY", [
-            NI("Profiles",    _I["Library"],           self._library_tab),
+
+        # Phase 3: MEASUREMENT & ANALYSIS
+        self._nav.add_phase(3, "MEASUREMENT & ANALYSIS",
+            "Capture data and analyze results", [
+            NI("Capture",     _I["Capture"],     self._capture_tab),
+            NI("Calibration", _I["Calibration"], self._cal_tab),
+            NI("Sessions",    _I["Sessions"],    self._data_tab),
+            NI("Emissivity",  _I["Emissivity"],  self._emissivity_tab),
         ])
-        self._nav.add_section("", [
+
+        # ─── separator ───
+        self._nav.add_separator()
+
+        # SYSTEM
+        self._nav.add_section("SYSTEM", [
             NI("Settings",    _I["Settings"],    self._settings_tab),
         ])
         self._nav.finish()
 
-        # ── Auto-hide unconfigured hardware items ─────────────────────────
-        # Items whose device is disabled in config are hidden by default.
-        # The "Show all…" toggle at the bottom of the Hardware group reveals
-        # them if the user wants to browse or re-enable them.
+        # Apply initial workspace mode
+        ws_mgr = _get_ws_manager()
+        self._nav.set_workspace_mode(ws_mgr.mode.value)
+        ws_mgr.mode_changed.connect(self._nav.set_workspace_mode)
+        # Mode indicator in sidebar header cycles through modes
+        self._nav.mode_cycle_requested.connect(self._on_workspace_changed)
+
+        # Phase completion tracker
+        self._phase_tracker = PhaseTracker(parent=self)
+        self._phase_tracker.phase_updated.connect(self._nav.set_phase_badge)
+
+        # ── Auto-hide unconfigured items ──────────────────────────────────
         _hw_cfg = config.get("hardware", {})
         # Temperature: shown if at least one TEC is enabled
         if n_tecs == 0:
@@ -673,13 +705,6 @@ class MainWindow(QMainWindow):
         # Stimulus (FPGA+Bias): shown if FPGA is enabled
         if not _hw_cfg.get("fpga", {}).get("enabled", True):
             self._nav.set_item_visible("Stimulus", False)
-        # Stage: hidden unless explicitly enabled
-        if not _hw_cfg.get("stage", {}).get("enabled", False):
-            self._nav.set_item_visible("Stage", False)
-        # Prober: always shown (was previously behind "Show more…" toggle)
-        # Wavelength: hidden unless monochromator is enabled
-        if not _hw_cfg.get("monochromator", {}).get("enabled", False):
-            self._nav.set_item_visible("Wavelength", False)
         # Emissivity: always shown (applies to both real + simulated IR cameras)
 
         # Wire monochromator driver into WavelengthTab if available
@@ -788,47 +813,49 @@ class MainWindow(QMainWindow):
     def _build_palette_items(self) -> list:
         """Return all PaletteItems for the command palette (Ctrl+K)."""
         return [
-            # ACQUIRE
-            PaletteItem("Live",        "Acquire",  lambda: self._nav.navigate_to(self._live_tab),
-                        keywords=["live", "stream", "preview", "camera"]),
-            PaletteItem("Capture",     "Acquire",  lambda: self._nav.navigate_to(self._capture_tab),
-                        keywords=["capture", "acquire", "scan", "sweep", "map", "run", "start"]),
-            PaletteItem("Transient",   "Acquire",  lambda: self._nav.navigate_to(self._transient_capture_tab),
-                        keywords=["transient", "time-resolved", "pulsed", "movie", "burst"]),
-            # ANALYZE
-            PaletteItem("Calibration", "Analyze",  lambda: self._nav.navigate_to(self._cal_tab),
-                        keywords=["calibration", "cal", "reference"]),
-            PaletteItem("Analysis",    "Analyze",  lambda: self._nav.navigate_to(self._analysis_tab),
-                        keywords=["analysis", "process", "result"]),
-            PaletteItem("Sessions",    "Analyze",  lambda: self._nav.navigate_to(self._data_tab),
-                        keywords=["sessions", "data", "history", "export"]),
-            PaletteItem("Compare",     "Analyze",  lambda: self._nav.navigate_to(self._compare_tab),
-                        keywords=["compare", "comparison", "overlay", "diff", "side by side"]),
-            PaletteItem("3D Surface",  "Analyze",  lambda: self._nav.navigate_to(self._surface_tab),
-                        keywords=["3d", "surface", "plot", "topography", "three dimensional"]),
-            PaletteItem("Emissivity",  "Analyze",  lambda: self._nav.navigate_to(self._emissivity_tab),
-                        keywords=["emissivity", "ir", "infrared", "thermal", "blackbody", "calibration"]),
-            PaletteItem("Timing",      "Analyze",  lambda: self._nav.navigate_to(self._timing_tab),
-                        keywords=["timing", "diagram", "waveform", "pulse", "pulsed", "trigger", "transient mask", "double pulse", "rf"]),
-            # HARDWARE
-            PaletteItem("Camera",      "Hardware", lambda: self._nav.navigate_to(self._camera_ctrl_tab),
-                        keywords=["camera", "sensor", "exposure", "gain", "roi", "autofocus"]),
-            PaletteItem("Stimulus",    "Hardware", lambda: self._nav.navigate_to(self._stimulus_tab),
-                        keywords=["stimulus", "fpga", "modulation", "lock-in", "bias", "voltage", "iv", "sweep"]),
-            PaletteItem("Wavelength",  "Hardware", lambda: self._nav.navigate_to(self._wavelength_tab),
-                        keywords=["wavelength", "monochromator", "spectrum", "nanometer", "nm", "shutter", "newport"]),
-            PaletteItem("Temperature", "Hardware", lambda: self._nav.navigate_to(self._temp_tab),
+            # ── CONFIGURATION ─────────────────────────────────────────
+            PaletteItem("Modality",             "Configuration",
+                        lambda: self._nav.navigate_to(self._modality_section),
+                        keywords=["modality", "camera", "objective", "fov", "lens"]),
+            PaletteItem("Stimulus",             "Configuration",
+                        lambda: self._nav.navigate_to(self._stimulus_tab),
+                        keywords=["stimulus", "fpga", "modulation", "bias", "voltage", "iv", "sweep"]),
+            PaletteItem("Timing",               "Configuration",
+                        lambda: self._nav.navigate_to(self._timing_tab),
+                        keywords=["timing", "diagram", "waveform", "pulse", "trigger"]),
+            PaletteItem("Temperature",          "Configuration",
+                        lambda: self._nav.navigate_to(self._temp_tab),
                         keywords=["temperature", "tec", "thermoelectric", "heat"]),
-            PaletteItem("Stage",       "Hardware", lambda: self._nav.navigate_to(self._stage_tab),
-                        keywords=["stage", "motion", "xy", "position"]),
-            PaletteItem("Prober",      "Hardware", lambda: self._nav.navigate_to(self._prober_tab),
-                        keywords=["prober", "probe", "chuck"]),
-            # LIBRARY
-            PaletteItem("Profiles",    "Library",  lambda: self._nav.navigate_to(self._library_tab),
-                        keywords=["library", "profiles", "recipes", "materials", "presets"]),
-            # SETTINGS
-            PaletteItem("Settings",    "Settings", lambda: self._nav.navigate_to(self._settings_tab),
-                        keywords=["settings", "preferences", "config", "theme", "updates"]),
+            PaletteItem("Acquisition Settings", "Configuration",
+                        lambda: self._nav.navigate_to(self._acq_settings_section),
+                        keywords=["acquisition", "frames", "exposure", "gain", "averaging"]),
+            # ── IMAGE ACQUISITION ─────────────────────────────────────
+            PaletteItem("Live View",            "Image Acquisition",
+                        lambda: self._nav.navigate_to(self._live_tab),
+                        keywords=["live", "stream", "preview", "camera"]),
+            PaletteItem("Focus & Stage",        "Image Acquisition",
+                        lambda: self._nav.navigate_to(self._focus_stage_tab),
+                        keywords=["focus", "autofocus", "stage", "motion", "position", "prober"]),
+            PaletteItem("Signal Check",         "Image Acquisition",
+                        lambda: self._nav.navigate_to(self._signal_check_section),
+                        keywords=["signal", "snr", "noise", "check", "verify"]),
+            # ── MEASUREMENT & ANALYSIS ────────────────────────────────
+            PaletteItem("Capture",              "Measurement",
+                        lambda: self._nav.navigate_to(self._capture_tab),
+                        keywords=["capture", "acquire", "scan", "sweep", "map", "run", "start"]),
+            PaletteItem("Calibration",          "Measurement",
+                        lambda: self._nav.navigate_to(self._cal_tab),
+                        keywords=["calibration", "cal", "reference"]),
+            PaletteItem("Sessions",             "Measurement",
+                        lambda: self._nav.navigate_to(self._data_tab),
+                        keywords=["sessions", "data", "history", "export", "compare", "analysis"]),
+            PaletteItem("Emissivity",           "Measurement",
+                        lambda: self._nav.navigate_to(self._emissivity_tab),
+                        keywords=["emissivity", "ir", "infrared", "thermal", "blackbody"]),
+            # ── SYSTEM ────────────────────────────────────────────────
+            PaletteItem("Settings",             "System",
+                        lambda: self._nav.navigate_to(self._settings_tab),
+                        keywords=["settings", "preferences", "config", "theme", "workspace"]),
         ]
 
     def _connect_signals(self):
@@ -990,6 +1017,31 @@ class MainWindow(QMainWindow):
             effective = mode
         config.set_pref("ui.theme", mode)
         self._swap_visual_theme(effective)
+
+    def _on_workspace_changed(self, mode: str) -> None:
+        """Handle workspace mode switch from Settings or sidebar indicator."""
+        mgr = _get_ws_manager()
+        mgr.set_mode(mode)
+        # Adjust bottom drawer visibility based on mode
+        if mode == "expert" and not self._bottom_drawer.isVisible():
+            self._toggle_bottom_drawer()
+        elif mode == "guided" and self._bottom_drawer.isVisible():
+            self._toggle_bottom_drawer()
+        # Update log verbosity
+        if hasattr(self._log_tab, "set_verbosity"):
+            self._log_tab.set_verbosity(mgr.console_verbosity())
+        # Update AI agent behaviour
+        if hasattr(self, "_ai_service"):
+            self._ai_service.set_workspace_mode(mode)
+        # Sync settings tab buttons if change came from sidebar indicator
+        if hasattr(self, "_settings_tab"):
+            idx = {"guided": 0, "standard": 1, "expert": 2}.get(mode, 1)
+            if hasattr(self._settings_tab, "_ws_btn_grp"):
+                btn = self._settings_tab._ws_btn_grp.button(idx)
+                if btn and not btn.isChecked():
+                    btn.setChecked(True)
+                    # Update descriptor label too
+                    self._settings_tab._on_workspace_btn(idx)
 
     def _poll_system_theme(self) -> None:
         """Called every 5 s while auto mode is active; swaps if OS theme changed."""
@@ -1624,30 +1676,30 @@ class MainWindow(QMainWindow):
         # ── View menu ────────────────────────────────────────────
         view_menu = mb.addMenu("View")
 
-        act_acquire_view = view_menu.addAction("Acquire")
-        act_acquire_view.setShortcut(QKeySequence("Ctrl+1"))
-        act_acquire_view.triggered.connect(
+        act_live_view = view_menu.addAction("Live View")
+        act_live_view.setShortcut(QKeySequence("Ctrl+1"))
+        act_live_view.triggered.connect(
+            lambda: self._nav.navigate_to(self._live_tab))
+
+        act_capture_view = view_menu.addAction("Capture")
+        act_capture_view.setShortcut(QKeySequence("Ctrl+2"))
+        act_capture_view.triggered.connect(
             lambda: self._nav.navigate_to(self._capture_tab))
 
-        act_camera_view = view_menu.addAction("Camera")
-        act_camera_view.setShortcut(QKeySequence("Ctrl+2"))
-        act_camera_view.triggered.connect(
-            lambda: self._nav.navigate_to(self._camera_ctrl_tab))
+        act_sessions_view = view_menu.addAction("Sessions")
+        act_sessions_view.setShortcut(QKeySequence("Ctrl+3"))
+        act_sessions_view.triggered.connect(
+            lambda: self._nav.navigate_to(self._data_tab))
 
-        act_temp_view = view_menu.addAction("Temperature")
-        act_temp_view.setShortcut(QKeySequence("Ctrl+3"))
-        act_temp_view.triggered.connect(
-            lambda: self._nav.navigate_to(self._temp_tab))
+        act_focus_view = view_menu.addAction("Focus && Stage")
+        act_focus_view.setShortcut(QKeySequence("Ctrl+4"))
+        act_focus_view.triggered.connect(
+            lambda: self._nav.navigate_to(self._focus_stage_tab))
 
-        act_stage_view = view_menu.addAction("Stage")
-        act_stage_view.setShortcut(QKeySequence("Ctrl+4"))
-        act_stage_view.triggered.connect(
-            lambda: self._nav.navigate_to(self._stage_tab))
-
-        act_analysis_view = view_menu.addAction("Analysis")
-        act_analysis_view.setShortcut(QKeySequence("Ctrl+5"))
-        act_analysis_view.triggered.connect(
-            lambda: self._nav.navigate_to(self._analysis_tab))
+        act_settings_view = view_menu.addAction("Settings")
+        act_settings_view.setShortcut(QKeySequence("Ctrl+5"))
+        act_settings_view.triggered.connect(
+            lambda: self._nav.navigate_to(self._settings_tab))
 
         view_menu.addSeparator()
 

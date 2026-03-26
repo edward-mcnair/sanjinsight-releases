@@ -41,7 +41,26 @@ class LogTab(QWidget):
             f"border:none;")
         self._ts_color = sub   # used by append()
 
-    def append(self, msg):
+    def set_verbosity(self, level: str) -> None:
+        """Set log verbosity: 'simplified', 'standard', or 'debug'."""
+        self._verbosity = level
+
+    def append(self, msg, level: str = "info"):
+        """Append a timestamped message.
+
+        Parameters
+        ----------
+        msg : str
+            The message text.
+        level : str
+            Severity: "debug", "info", "warn", "error".
+            In simplified verbosity, only "warn" and "error" are shown.
+        """
+        verbosity = getattr(self, "_verbosity", "standard")
+        if verbosity == "simplified" and level in ("debug", "info"):
+            return
+        if verbosity == "standard" and level == "debug":
+            return
         ts    = time.strftime("%H:%M:%S")
         tscol = getattr(self, "_ts_color", PALETTE.get("textSub", "#6a6a6a"))
         self._log.append(f"<span style='color:{tscol}'>[{ts}]</span>  {msg}")

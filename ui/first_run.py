@@ -1987,6 +1987,75 @@ class _PageAI(_PageBase):
         return {}
 
 
+class _PageWorkspace(_PageBase):
+    """Workspace mode selection: Guided / Standard / Expert."""
+
+    def __init__(self, parent=None):
+        super().__init__(
+            "How would you like to use SanjINSIGHT?",
+            "Choose a workspace mode that matches your workflow. "
+            "You can change this at any time in Settings → Appearance.",
+            parent)
+
+        from ui.workspace import MODE_DESCRIPTORS
+        import config as cfg_mod
+
+        self._selected_mode = cfg_mod.get_pref("ui.workspace", "standard")
+        self._cards: list[QPushButton] = []
+
+        modes = [
+            ("guided",   "Guided",   MODE_DESCRIPTORS["guided"]),
+            ("standard", "Standard", MODE_DESCRIPTORS["standard"]),
+            ("expert",   "Expert",   MODE_DESCRIPTORS["expert"]),
+        ]
+
+        cards_lay = QHBoxLayout()
+        cards_lay.setSpacing(14)
+
+        for mode_id, label, desc in modes:
+            card = QPushButton()
+            card.setCheckable(True)
+            card.setChecked(mode_id == self._selected_mode)
+            card.setMinimumHeight(120)
+            card.setStyleSheet(self._card_qss())
+            card.setText(f"{label}\n\n{desc}")
+
+            card.clicked.connect(
+                lambda checked, m=mode_id: self._on_card_clicked(m))
+            cards_lay.addWidget(card, 1)
+            self._cards.append(card)
+
+        self._content.addLayout(cards_lay)
+        self._content.addStretch(1)
+
+    def _on_card_clicked(self, mode: str) -> None:
+        self._selected_mode = mode
+        for i, card in enumerate(self._cards):
+            card.setChecked(
+                ["guided", "standard", "expert"][i] == mode)
+
+    def values(self) -> dict:
+        return {"ui.workspace": self._selected_mode}
+
+    def _card_qss(self) -> str:
+        return (
+            f"QPushButton {{"
+            f"  background:{PALETTE.get('surface', '#2d2d2d')};"
+            f"  color:{PALETTE.get('text', '#ebebeb')};"
+            f"  border:1px solid {PALETTE.get('border', '#484848')};"
+            f"  border-radius:8px; padding:16px;"
+            f"  font-size:{FONT['label']}pt; text-align:left;"
+            f"}}"
+            f"QPushButton:checked {{"
+            f"  border:2px solid {PALETTE.get('accent', '#00d4aa')};"
+            f"  background:{PALETTE.get('accentDim', '#00d4aa2e')};"
+            f"}}"
+            f"QPushButton:hover:!checked {{"
+            f"  background:{PALETTE.get('surfaceHover', '#3a3a3a')};"
+            f"}}"
+        )
+
+
 class _PageDone(_PageBase):
     def __init__(self, parent=None):
         super().__init__(
@@ -2072,7 +2141,7 @@ class FirstRunWizard(QDialog):
         pb_lay = QHBoxLayout(prog_bar)
         pb_lay.setContentsMargins(30, 0, 30, 0)
         self._dots: list[QLabel] = []
-        step_labels = ["Welcome", "TEC", "Camera", "FPGA", "Bias", "Stage", "AI", "Done"]
+        step_labels = ["Welcome", "Workspace", "TEC", "Camera", "FPGA", "Bias", "Stage", "AI", "Done"]
         for i, lbl in enumerate(step_labels):
             dot = QLabel(f"● {lbl}")
             dot.setAlignment(Qt.AlignCenter)
@@ -2086,18 +2155,19 @@ class FirstRunWizard(QDialog):
         root.addWidget(prog_bar)
 
         # ── Page stack ────────────────────────────────────────────────
-        self._page_welcome = _PageWelcome()
-        self._page_tec     = _PageTEC(self._cfg_hw)
-        self._page_camera  = _PageCamera(self._cfg_hw)
-        self._page_fpga    = _PageFPGA(self._cfg_hw)
-        self._page_bias    = _PageBias(self._cfg_hw)
-        self._page_stage   = _PageStage(self._cfg_hw)
-        self._page_ai      = _PageAI()
-        self._page_done    = _PageDone()
+        self._page_welcome   = _PageWelcome()
+        self._page_workspace = _PageWorkspace()
+        self._page_tec       = _PageTEC(self._cfg_hw)
+        self._page_camera    = _PageCamera(self._cfg_hw)
+        self._page_fpga      = _PageFPGA(self._cfg_hw)
+        self._page_bias      = _PageBias(self._cfg_hw)
+        self._page_stage     = _PageStage(self._cfg_hw)
+        self._page_ai        = _PageAI()
+        self._page_done      = _PageDone()
 
         self._stack = QStackedWidget()
-        for p in [self._page_welcome, self._page_tec,
-                  self._page_camera, self._page_fpga,
+        for p in [self._page_welcome, self._page_workspace,
+                  self._page_tec, self._page_camera, self._page_fpga,
                   self._page_bias, self._page_stage,
                   self._page_ai, self._page_done]:
             self._stack.addWidget(p)
@@ -2216,7 +2286,12 @@ class FirstRunWizard(QDialog):
         """
         Merge self._all_values into config.yaml using dotted key paths.
         e.g.  "tec_meerstetter.port" → config["hardware"]["tec_meerstetter"]["port"]
+
+        Keys prefixed with ``ui.`` are user preferences — they are saved via
+        ``config.set_pref()`` instead of being written into config.yaml.
         """
+        import config as cfg_mod
+
         try:
             with open(self._config_path, "r") as f:
                 raw = yaml.safe_load(f) or {}
@@ -2226,6 +2301,10 @@ class FirstRunWizard(QDialog):
 
         hw = raw.setdefault("hardware", {})
         for dotted_key, value in self._all_values.items():
+            # User preferences (ui.*) are stored via set_pref, not config.yaml
+            if dotted_key.startswith("ui."):
+                cfg_mod.set_pref(dotted_key, value)
+                continue
             parts = dotted_key.split(".")
             node = hw
             for part in parts[:-1]:
