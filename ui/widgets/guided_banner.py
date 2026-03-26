@@ -24,7 +24,7 @@ from ui.icons import IC, set_btn_icon
 # The first incomplete step is shown as the suggestion.
 
 _STEPS = [
-    (1, "camera_selected",     "Connect a camera",
+    (1, "camera_selected",     "Review your imaging modality",
      "Modality", IC.CAMERA),
     (1, "stimulus_configured", "Configure the stimulus source",
      "Stimulus", IC.SETTINGS),

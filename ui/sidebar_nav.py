@@ -1052,10 +1052,15 @@ class SidebarNav(QWidget):
         Supports legacy label aliases (e.g. ``"Live"`` → ``"Live View"``).
         """
         resolved = _LABEL_ALIASES.get(label, label)
-        for item in self._sidebar._items:
-            lbl = item._item.label.lower()
+        for mi in self._sidebar._items:
+            lbl = mi._item.label.lower()
             if lbl == resolved.lower() or lbl == label.lower():
-                self.navigate_to(item.panel)
+                # Simulate a full sidebar click so highlight + panel both update
+                self._sidebar._on_click(mi.panel)
+                idx = self._stack.indexOf(mi.panel)
+                if idx >= 0:
+                    self._stack.setCurrentIndex(idx)
+                self.panel_changed.emit(mi.panel)
                 return
 
     # ── Theme support ────────────────────────────────────────────────

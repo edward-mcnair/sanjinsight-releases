@@ -950,8 +950,7 @@ class MainWindow(QMainWindow):
             self._settings_tab.set_download_failed)
 
         # Sidebar tab changes → AI context
-        self._nav.panel_changed.connect(
-            lambda p: self._ai_service.set_active_tab(type(p).__name__))
+        self._nav.panel_changed.connect(self._on_panel_changed)
 
         # ReadinessWidget "Fix it →" buttons → sidebar navigation
         self._readiness_widget.navigate_requested.connect(
@@ -1030,6 +1029,14 @@ class MainWindow(QMainWindow):
             effective = mode
         config.set_pref("ui.theme", mode)
         self._swap_visual_theme(effective)
+
+    def _on_panel_changed(self, panel: QWidget) -> None:
+        """Track which section the user visits for phase completion."""
+        # AI context
+        self._ai_service.set_active_tab(type(panel).__name__)
+        # Phase 1: visiting Modality with a camera connected → camera_selected
+        if panel is self._modality_section and app_state.cam is not None:
+            self._phase_tracker.mark(1, "camera_selected")
 
     def _on_workspace_changed(self, mode: str) -> None:
         """Handle workspace mode switch from Settings or sidebar indicator."""
@@ -1358,11 +1365,9 @@ class MainWindow(QMainWindow):
         # Camera connect/disconnect → rebuild all camera selectors (global bar
         # + per-tab combos) so the IR entry appears as soon as the IR driver
         # finishes initialising on its background thread.
-        # Phase tracker: camera connected / disconnected
-        if "camera" in key:
-            self._phase_tracker.mark(1, "camera_selected", ok)
-
-        # Phase tracker: stimulus (FPGA) connected / disconnected
+        # Phase tracker: camera hardware is available but not yet "selected"
+        # until the user visits the Modality section (see panel_changed handler).
+        # Stimulus is marked when FPGA connects (less ambiguous).
         if "fpga" in key:
             self._phase_tracker.mark(1, "stimulus_configured", ok)
 
