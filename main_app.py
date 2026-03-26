@@ -3762,6 +3762,13 @@ if __name__ == "__main__":
         signals.log_message.emit("Running in demo mode \u2014 all hardware is simulated")
         hw_service.start_demo()
         window._show_all_tabs()  # demo mode: all tabs show full controls
+        # Register demo devices in the header so they appear immediately
+        # (tec_status callbacks will update the actual status later).
+        window._header.set_connecting("tec0")
+        window._header.set_connecting("tec1")
+        window._header.set_connecting("fpga")
+        window._header.set_connecting("bias")
+        window._header.set_connecting("stage")
 
         # Auto-connect all previously-used devices in the background.
         if _remembered_uids:

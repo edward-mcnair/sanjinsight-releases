@@ -197,6 +197,9 @@ class CalibrationTab(QWidget):
         splitter.addWidget(self._build_right())
         splitter.setSizes([340, 860])
 
+        # Ensure preset buttons match active camera type from the start
+        self.refresh_camera_mode()
+
     # ---------------------------------------------------------------- #
     #  Left panel — setup + controls                                   #
     # ---------------------------------------------------------------- #
