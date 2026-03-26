@@ -1,10 +1,11 @@
 """
 ui/widgets/status_header.py
 
-StatusHeader           — app header bar (logo · profile pill · devices · e-stop).
+StatusHeader           — app header bar (logo · profile pill · devices · system · e-stop).
 _DevicesPopup          — floating dropdown listing connected devices.
 ConnectedDevicesButton — header button: colored status dot + dropdown on click.
-StatusHeader           — top header bar with logo, mode toggle, devices button, and E-Stop.
+_SystemPopup           — floating dropdown showing diagnostic health details.
+SystemStatusButton     — header button: grade dot + 'System' + dropdown on click.
 """
 
 from __future__ import annotations
@@ -677,6 +678,379 @@ class ProfileButton(QWidget):
             f"background:transparent; padding-bottom:6px;")
 
         # Dot and name styles are set by set_profile(); only touch arrow here.
+        if self._popup:
+            self._popup._apply_styles()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  _SystemPopup   — floating dropdown showing diagnostic health details
+# ──────────────────────────────────────────────────────────────────────────────
+
+class _SystemPopup(QWidget):
+    """
+    Floating dropdown showing system health at a glance.
+
+    Layout:
+      ┌──────────────────────────────┐
+      │ ●  System Health — Grade A   │  header (grade coloured)
+      ├──────────────────────────────┤
+      │ ●  Saturation        0.1%   │  result rows
+      │ ●  Focus quality     Good   │
+      │ ●  Thermal drift     0.3%   │
+      │ …                           │
+      ├──────────────────────────────┤
+      │   View AI Diagnostics…      │  footer
+      └──────────────────────────────┘
+    """
+
+    diagnostics_requested = pyqtSignal()
+
+    _GRADE_COLORS = {
+        "A": "#00d4aa",
+        "B": "#4499ff",
+        "C": "#ffaa44",
+        "D": "#ff4444",
+    }
+    _SEVERITY_COLORS = {
+        "ok":   "#00d4aa",
+        "warn": "#ffaa44",
+        "fail": "#ff4444",
+    }
+
+    def __init__(self):
+        super().__init__(None, Qt.Popup | Qt.FramelessWindowHint)
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        self.setFixedWidth(320)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        # ── Header ────────────────────────────────────────────────────
+        self._hdr = QWidget()
+        hdr_lay = QHBoxLayout(self._hdr)
+        hdr_lay.setContentsMargins(14, 10, 14, 10)
+        hdr_lay.setSpacing(7)
+        self._hdr_dot  = QLabel("●")
+        self._hdr_text = QLabel("System Health")
+        self._grade_lbl = QLabel("")
+        hdr_lay.addWidget(self._hdr_dot)
+        hdr_lay.addWidget(self._hdr_text)
+        hdr_lay.addStretch()
+        hdr_lay.addWidget(self._grade_lbl)
+        outer.addWidget(self._hdr)
+
+        # ── Top separator ─────────────────────────────────────────────
+        self._sep1 = QFrame()
+        self._sep1.setFrameShape(QFrame.HLine)
+        self._sep1.setFixedHeight(1)
+        outer.addWidget(self._sep1)
+
+        # ── Result rows container ─────────────────────────────────────
+        self._rows_w = QWidget()
+        self._rows_lay = QVBoxLayout(self._rows_w)
+        self._rows_lay.setContentsMargins(0, 4, 0, 4)
+        self._rows_lay.setSpacing(0)
+        outer.addWidget(self._rows_w)
+
+        # Empty-state label
+        self._empty_lbl = QLabel("No diagnostic data yet")
+        self._empty_lbl.setContentsMargins(14, 10, 14, 10)
+        outer.addWidget(self._empty_lbl)
+
+        # ── Bottom separator ──────────────────────────────────────────
+        self._sep2 = QFrame()
+        self._sep2.setFrameShape(QFrame.HLine)
+        self._sep2.setFixedHeight(1)
+        outer.addWidget(self._sep2)
+
+        # ── Footer: open diagnostics ──────────────────────────────────
+        self._diag_btn = QPushButton("View AI Diagnostics…")
+        self._diag_btn.setCursor(Qt.PointingHandCursor)
+        self._diag_btn.setFixedHeight(38)
+        self._diag_btn.clicked.connect(self._on_diag)
+        outer.addWidget(self._diag_btn)
+
+        self._apply_styles()
+
+    # ── Popup lifecycle ───────────────────────────────────────────────
+
+    def show_below(self, anchor: QWidget):
+        pos = anchor.mapToGlobal(anchor.rect().bottomLeft())
+        self.adjustSize()
+        self.move(pos.x(), pos.y())
+        self.show()
+        self.raise_()
+
+    # ── Data ──────────────────────────────────────────────────────────
+
+    def update_results(self, grade: str, results: list):
+        """Rebuild rows from a list of RuleResult objects."""
+        # Clear old rows
+        for i in reversed(range(self._rows_lay.count())):
+            item = self._rows_lay.itemAt(i)
+            if item and item.widget():
+                item.widget().deleteLater()
+
+        # Update header
+        color = self._GRADE_COLORS.get(grade, PALETTE.get("textSub", "#6a6a6a"))
+        self._hdr_dot.setStyleSheet(
+            f"color:{color}; font-size:{FONT['label']}pt; background:transparent;")
+        self._grade_lbl.setText(f"Grade {grade}")
+        self._grade_lbl.setStyleSheet(
+            f"color:{color}; font-size:{FONT['label']}pt; font-weight:700; "
+            f"background:transparent;")
+
+        # Sort: fail first, then warn, then ok
+        severity_order = {"fail": 0, "warn": 1, "ok": 2}
+        sorted_results = sorted(results, key=lambda r: severity_order.get(r.severity, 3))
+
+        for r in sorted_results:
+            row = self._make_row(r)
+            self._rows_lay.addWidget(row)
+
+        has = bool(results)
+        self._empty_lbl.setVisible(not has)
+        self._rows_w.setVisible(has)
+        self._apply_styles()
+        self.adjustSize()
+
+    def _make_row(self, result) -> QWidget:
+        row = QWidget()
+        row.setFixedHeight(32)
+        lay = QHBoxLayout(row)
+        lay.setContentsMargins(14, 0, 14, 0)
+        lay.setSpacing(8)
+
+        dot      = QLabel("●")
+        name_lbl = QLabel(result.display_name)
+        val_lbl  = QLabel(result.observed)
+
+        dot_color = self._SEVERITY_COLORS.get(result.severity, "#999999")
+        dot.setStyleSheet(
+            f"color:{dot_color}; font-size:{FONT['caption']}pt; background:transparent;")
+
+        lay.addWidget(dot)
+        lay.addWidget(name_lbl, 1)
+        lay.addWidget(val_lbl)
+
+        row._dot_lbl  = dot
+        row._name_lbl = name_lbl
+        row._val_lbl  = val_lbl
+        row._severity = result.severity
+
+        if result.hint:
+            row.setToolTip(f"{result.hint}\nThreshold: {result.threshold}")
+
+        return row
+
+    # ── Styling ───────────────────────────────────────────────────────
+
+    def _apply_styles(self):
+        P   = PALETTE
+        bg  = P.get("bg",           "#242424")
+        bg2 = P.get("surface",      "#2d2d2d")
+        bdr = P.get("border",       "#484848")
+        dim = P.get("textDim",      "#999999")
+        sub = P.get("textSub",      "#6a6a6a")
+        txt = P.get("text",         "#ebebeb")
+        acc = P.get("accent",       "#00d4aa")
+
+        self.setStyleSheet(
+            f"_SystemPopup {{ background:{bg}; border:1px solid {bdr}; "
+            f"border-top:none; border-radius:0 0 8px 8px; }}")
+
+        # Header
+        self._hdr.setStyleSheet(f"background:{bg2}; border-radius:0;")
+        self._hdr_text.setStyleSheet(
+            f"font-size:{FONT['label']}pt; font-weight:700; "
+            f"color:{txt}; background:transparent;")
+
+        # Separators
+        for sep in (self._sep1, self._sep2):
+            sep.setStyleSheet(f"background:{bdr}; border:none;")
+
+        # Empty state
+        self._empty_lbl.setStyleSheet(
+            f"font-size:{FONT['label']}pt; color:{sub}; background:{bg};")
+
+        # Footer button
+        self._diag_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {bg};
+                color: {acc};
+                border: none;
+                border-radius: 0 0 7px 7px;
+                font-size: {FONT['label']}pt;
+                font-weight: 600;
+                text-align: left;
+                padding-left: 14px;
+            }}
+            QPushButton:hover {{
+                background: {bg2};
+            }}
+        """)
+
+        # Result rows
+        for i in range(self._rows_lay.count()):
+            item = self._rows_lay.itemAt(i)
+            if item and item.widget():
+                row = item.widget()
+                self._style_row(row, bg, bg2, txt, sub)
+
+    def _style_row(self, row, bg, bg2, txt, sub):
+        row.setStyleSheet(
+            f"QWidget {{ background:{bg}; }}"
+            f"QWidget:hover {{ background:{bg2}; }}")
+        if hasattr(row, "_name_lbl"):
+            row._name_lbl.setStyleSheet(
+                f"font-size:{FONT['label']}pt; color:{txt}; background:transparent;")
+        if hasattr(row, "_val_lbl"):
+            row._val_lbl.setStyleSheet(
+                f"font-size:{FONT['caption']}pt; color:{sub}; background:transparent;")
+
+    def _on_diag(self):
+        self.hide()
+        self.diagnostics_requested.emit()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  SystemStatusButton — header button: grade dot + "System" + dropdown
+# ──────────────────────────────────────────────────────────────────────────────
+
+class SystemStatusButton(QWidget):
+    """
+    Header widget: coloured grade dot + 'System ▾'.
+    Click to open _SystemPopup with diagnostic detail.
+    Signals forward diagnostics_requested from popup.
+    """
+
+    diagnostics_requested = pyqtSignal()
+
+    _GRADE_COLORS = _SystemPopup._GRADE_COLORS
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._grade: str = ""
+        self._results: list = []
+        self._popup: _SystemPopup | None = None
+        self._open: bool = False
+
+        self.setAttribute(Qt.WA_Hover)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setFixedHeight(30)
+        self.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(10, 0, 10, 0)
+        lay.setSpacing(6)
+
+        self._dot_lbl   = QLabel("●")
+        self._text_lbl  = QLabel("System")
+        self._arrow_lbl = QLabel("▾")
+
+        for lbl in (self._dot_lbl, self._text_lbl, self._arrow_lbl):
+            lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
+
+        lay.addWidget(self._dot_lbl)
+        lay.addWidget(self._text_lbl)
+        lay.addWidget(self._arrow_lbl)
+
+        self._apply_styles()
+
+    # ── Popup ─────────────────────────────────────────────────────────
+
+    def _ensure_popup(self) -> _SystemPopup:
+        if self._popup is None:
+            self._popup = _SystemPopup()
+            self._popup.diagnostics_requested.connect(self.diagnostics_requested)
+        return self._popup
+
+    def mousePressEvent(self, e):
+        if e.button() == Qt.LeftButton:
+            p = self._ensure_popup()
+            if p.isVisible():
+                p.hide()
+                self._set_open(False)
+            else:
+                p.update_results(self._grade, self._results)
+                p._apply_styles()
+                p.show_below(self)
+                self._set_open(True)
+                p.installEventFilter(self)
+        super().mousePressEvent(e)
+
+    def eventFilter(self, obj, event):
+        if obj is self._popup and event.type() == event.Hide:
+            self._set_open(False)
+        return False
+
+    def _set_open(self, open_: bool):
+        self._open = open_
+        self._apply_styles()
+
+    # ── State ─────────────────────────────────────────────────────────
+
+    def set_readiness(self, grade: str, results: list):
+        """Update grade and full results list (for popup rebuild on next open)."""
+        self._grade = grade
+        self._results = results
+        self._refresh()
+        if self._popup and self._popup.isVisible():
+            self._popup.update_results(grade, results)
+
+    def _refresh(self):
+        color = self._GRADE_COLORS.get(
+            self._grade, PALETTE.get("textSub", "#6a6a6a"))
+        self._dot_lbl.setStyleSheet(
+            f"color:{color}; font-size:{FONT['label']}pt; background:transparent;")
+
+        suffix = f" ({self._grade})" if self._grade else ""
+        self._text_lbl.setText(f"System{suffix}")
+
+        tip = f"System readiness: Grade {self._grade}" if self._grade else "System readiness: unknown"
+        n_fail = sum(1 for r in self._results if r.severity == "fail")
+        n_warn = sum(1 for r in self._results if r.severity == "warn")
+        n_ok   = sum(1 for r in self._results if r.severity == "ok")
+        if self._results:
+            tip += f"\n  {n_ok} ok · {n_warn} warnings · {n_fail} failures"
+        self.setToolTip(tip)
+
+    # ── Styling ───────────────────────────────────────────────────────
+
+    def _apply_styles(self):
+        P     = PALETTE
+        surf  = P.get("surface",      "#2d2d2d")
+        bdr   = P.get("border",       "#484848")
+        hover = P.get("surfaceHover", "#404040")
+        txt   = P.get("text",         "#ebebeb")
+
+        if self._open:
+            radius   = "5px 5px 0 0"
+            border_b = "none"
+        else:
+            radius   = "5px"
+            border_b = f"1px solid {bdr}"
+
+        self.setStyleSheet(f"""
+            SystemStatusButton {{
+                background: {surf};
+                border: 1px solid {bdr};
+                border-bottom: {border_b};
+                border-radius: {radius};
+            }}
+            SystemStatusButton:hover {{
+                background: {hover};
+            }}
+        """)
+        self._text_lbl.setStyleSheet(
+            f"font-size:{FONT['label']}pt; font-weight:600; "
+            f"color:{txt}; background:transparent;")
+        self._arrow_lbl.setStyleSheet(
+            f"font-size:{int(FONT['label'] * 2.4)}pt; color:{txt}; "
+            f"background:transparent; padding-bottom:6px;")
+        self._refresh()
+
         if self._popup:
             self._popup._apply_styles()
 
@@ -1464,11 +1838,11 @@ class StatusHeader(QWidget):
         if hasattr(self, "_logout_btn"):
             self._logout_btn.setStyleSheet(_btn_qss)
 
-        # Readiness dot (if added)
-        if hasattr(self, "_readiness_dot"):
-            rd = self._readiness_dot
-            rd._lbl.setStyleSheet(
-                f"font-size:{FONT['label']}pt; color:{dim}; letter-spacing:1px;")
+        # System status button (if added)
+        if hasattr(self, "_system_btn"):
+            self._system_btn._apply_styles()
+        if hasattr(self, "_div_system"):
+            self._div_system.setStyleSheet(f"color:{bdr};")
 
         # Demo banner
         if hasattr(self, "_demo_banner"):
@@ -1702,43 +2076,26 @@ class StatusHeader(QWidget):
         self._restyle_ai_btn()
 
     def add_readiness_dot(self):
-        """Add a persistent system-readiness dot to the header bar."""
-        dim = PALETTE.get("textDim", "#999999")
-        sub = PALETTE.get("textSub", "#6a6a6a")
-        w = QWidget()
-        h = QHBoxLayout(w)
-        h.setContentsMargins(8, 0, 8, 0)
-        h.setSpacing(5)
-        dot = QLabel("●")
-        dot.setStyleSheet(f"color:{sub}; font-size:{FONT['label']}pt;")
-        lbl = QLabel("System")
-        lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{dim}; letter-spacing:1px;")
-        h.addWidget(dot)
-        h.addWidget(lbl)
-        w._dot = dot
-        w._lbl = lbl
+        """Add the System status dropdown button to the header bar."""
+        self._system_btn = SystemStatusButton()
 
         lay = self.layout()
         dev_idx = lay.indexOf(self._devices_btn)
-        lay.insertWidget(dev_idx, w)
+        lay.insertWidget(dev_idx, self._system_btn)
 
-        self._readiness_dot = w
-        w.setToolTip("System readiness: unknown")
+        # Divider between System and Connected Devices
+        div = QFrame()
+        div.setFrameShape(QFrame.VLine)
+        div.setFixedHeight(28)
+        lay.insertWidget(dev_idx + 1, div)
+        self._div_system = div
 
-    def set_readiness_grade(self, grade: str, issues: list = None):
-        """Update the readiness dot colour and tooltip."""
-        if not hasattr(self, "_readiness_dot"):
+    @property
+    def system_btn(self) -> "SystemStatusButton | None":
+        return getattr(self, "_system_btn", None)
+
+    def set_readiness_grade(self, grade: str, results: list = None):
+        """Update the system status button grade and diagnostic results."""
+        if not hasattr(self, "_system_btn"):
             return
-        _colors = {
-            "A": "#00d4aa",
-            "B": "#4499ff",
-            "C": "#ffaa44",
-            "D": "#ff4444",
-        }
-        color = _colors.get(grade, PALETTE.get("textSub", "#6a6a6a"))
-        self._readiness_dot._dot.setStyleSheet(
-            f"color:{color}; font-size:{FONT['label']}pt;")
-        tip = f"System readiness: Grade {grade}"
-        if issues:
-            tip += "\n" + "\n".join(f"  • {i}" for i in issues[:8])
-        self._readiness_dot.setToolTip(tip)
+        self._system_btn.set_readiness(grade, results or [])

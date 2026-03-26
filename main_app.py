@@ -776,8 +776,11 @@ class MainWindow(QMainWindow):
         )
         hw_service.emergency_stop_complete.connect(self._on_estop_complete)
 
-        # Persistent readiness dot — always-visible grade indicator
+        # Persistent system-health dropdown button
         self._header.add_readiness_dot()
+        if self._header.system_btn is not None:
+            self._header.system_btn.diagnostics_requested.connect(
+                self._toggle_ai_panel)
 
         # Update badge in header
         self._update_badge = self._header.add_update_badge()
@@ -2966,8 +2969,7 @@ class MainWindow(QMainWindow):
             self._ai_panel.refresh_evidence(results)
 
             grade = self._compute_grade(results)
-            issues = [r for r in results if r.severity in ("fail", "warn")]
-            self._header.set_readiness_grade(grade, issues)
+            self._header.set_readiness_grade(grade, results)
 
             if grade != self._last_grade:
                 prev, self._last_grade = self._last_grade, grade
