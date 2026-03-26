@@ -1452,6 +1452,15 @@ class MainWindow(QMainWindow):
         elif "bias" in key:
             self._bias_tab.set_bias_driver(app_state.bias if ok else None)
 
+        # Refresh Modality section immediately when any camera connects
+        # (regardless of demo mode) so the combo populates without waiting
+        # for the 10-second _on_startup_done timer.
+        if "camera" in key:
+            try:
+                self._modality_section.set_hardware_available(ok)
+            except Exception:
+                log.debug("Modality hotplug refresh failed", exc_info=True)
+
         # Toggle Tier-1 tab empty-state placeholders.
         # In demo mode all tabs stay fully visible.
         if not app_state.demo_mode:
