@@ -1780,30 +1780,68 @@ class MainWindow(QMainWindow):
         act_start_scan.triggered.connect(self._toggle_scan)
 
         # ── View menu ────────────────────────────────────────────
+        # Ctrl+1–9 map to sections in workflow order (phase 1→2→3),
+        # Ctrl+0 goes to Settings.  All modes get these; Expert users
+        # benefit most from muscle memory.
         view_menu = mb.addMenu("View")
 
+        # Phase 1: Configuration
+        act_modality = view_menu.addAction("Modality")
+        act_modality.setShortcut(QKeySequence("Ctrl+1"))
+        act_modality.triggered.connect(
+            lambda: self._nav.navigate_to(self._modality_section))
+
+        act_stimulus = view_menu.addAction("Stimulus")
+        act_stimulus.setShortcut(QKeySequence("Ctrl+2"))
+        act_stimulus.triggered.connect(
+            lambda: self._nav.navigate_to(self._stimulus_tab))
+
+        act_timing = view_menu.addAction("Timing")
+        act_timing.setShortcut(QKeySequence("Ctrl+3"))
+        act_timing.triggered.connect(
+            lambda: self._nav.navigate_to(self._timing_tab))
+
+        view_menu.addSeparator()
+
+        # Phase 2: Image Acquisition
         act_live_view = view_menu.addAction("Live View")
-        act_live_view.setShortcut(QKeySequence("Ctrl+1"))
+        act_live_view.setShortcut(QKeySequence("Ctrl+4"))
         act_live_view.triggered.connect(
             lambda: self._nav.navigate_to(self._live_tab))
 
-        act_capture_view = view_menu.addAction("Capture")
-        act_capture_view.setShortcut(QKeySequence("Ctrl+2"))
-        act_capture_view.triggered.connect(
-            lambda: self._nav.navigate_to(self._capture_tab))
-
-        act_sessions_view = view_menu.addAction("Sessions")
-        act_sessions_view.setShortcut(QKeySequence("Ctrl+3"))
-        act_sessions_view.triggered.connect(
-            lambda: self._nav.navigate_to(self._data_tab))
-
         act_focus_view = view_menu.addAction("Focus && Stage")
-        act_focus_view.setShortcut(QKeySequence("Ctrl+4"))
+        act_focus_view.setShortcut(QKeySequence("Ctrl+5"))
         act_focus_view.triggered.connect(
             lambda: self._nav.navigate_to(self._focus_stage_tab))
 
+        act_signal = view_menu.addAction("Signal Check")
+        act_signal.setShortcut(QKeySequence("Ctrl+6"))
+        act_signal.triggered.connect(
+            lambda: self._nav.navigate_to(self._signal_check_section))
+
+        view_menu.addSeparator()
+
+        # Phase 3: Analysis
+        act_capture_view = view_menu.addAction("Capture")
+        act_capture_view.setShortcut(QKeySequence("Ctrl+7"))
+        act_capture_view.triggered.connect(
+            lambda: self._nav.navigate_to(self._capture_tab))
+
+        act_cal_view = view_menu.addAction("Calibration")
+        act_cal_view.setShortcut(QKeySequence("Ctrl+8"))
+        act_cal_view.triggered.connect(
+            lambda: self._nav.navigate_to(self._cal_tab))
+
+        act_sessions_view = view_menu.addAction("Sessions")
+        act_sessions_view.setShortcut(QKeySequence("Ctrl+9"))
+        act_sessions_view.triggered.connect(
+            lambda: self._nav.navigate_to(self._data_tab))
+
+        view_menu.addSeparator()
+
+        # System
         act_settings_view = view_menu.addAction("Settings")
-        act_settings_view.setShortcut(QKeySequence("Ctrl+5"))
+        act_settings_view.setShortcut(QKeySequence("Ctrl+0"))
         act_settings_view.triggered.connect(
             lambda: self._nav.navigate_to(self._settings_tab))
 

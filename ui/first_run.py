@@ -1990,35 +1990,47 @@ class _PageAI(_PageBase):
 class _PageWorkspace(_PageBase):
     """Workspace mode selection: Guided / Standard / Expert."""
 
+    # Each tuple: (id, title, subtitle, detail bullets)
+    _MODES = [
+        ("guided", "Guided", "New to thermoreflectance",
+         "Phase-by-phase walkthrough\n"
+         "Step completion indicators\n"
+         "Simplified console output"),
+        ("standard", "Standard", "Daily investigation & testing",
+         "All sections visible at once\n"
+         "Phase headers for orientation\n"
+         "Balanced console verbosity"),
+        ("expert", "Expert", "Research & experiment design",
+         "Compact sidebar, no phase headers\n"
+         "Console with debug output\n"
+         "Ctrl+1\u20139 section shortcuts"),
+    ]
+
     def __init__(self, parent=None):
         super().__init__(
             "How would you like to use SanjINSIGHT?",
             "Choose a workspace mode that matches your workflow. "
-            "You can change this at any time in Settings → Appearance.",
+            "You can change this at any time in Settings \u2192 Appearance.",
             parent)
 
-        from ui.workspace import MODE_DESCRIPTORS
         import config as cfg_mod
 
         self._selected_mode = cfg_mod.get_pref("ui.workspace", "standard")
         self._cards: list[QPushButton] = []
 
-        modes = [
-            ("guided",   "Guided",   MODE_DESCRIPTORS["guided"]),
-            ("standard", "Standard", MODE_DESCRIPTORS["standard"]),
-            ("expert",   "Expert",   MODE_DESCRIPTORS["expert"]),
-        ]
-
         cards_lay = QHBoxLayout()
         cards_lay.setSpacing(14)
 
-        for mode_id, label, desc in modes:
+        for mode_id, title, subtitle, details in self._MODES:
             card = QPushButton()
             card.setCheckable(True)
             card.setChecked(mode_id == self._selected_mode)
-            card.setMinimumHeight(120)
+            card.setMinimumHeight(140)
             card.setStyleSheet(self._card_qss())
-            card.setText(f"{label}\n\n{desc}")
+            # Build rich-ish text: bold title, dim subtitle, bullet details
+            bullet_lines = "\n".join(f"  \u2022 {ln}" for ln in details.split("\n"))
+            recommended = "   (recommended)" if mode_id == "standard" else ""
+            card.setText(f"{title}{recommended}\n{subtitle}\n\n{bullet_lines}")
 
             card.clicked.connect(
                 lambda checked, m=mode_id: self._on_card_clicked(m))

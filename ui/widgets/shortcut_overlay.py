@@ -27,42 +27,47 @@ from ui.font_utils import mono_family_css
 
 # Each group is (header_label, [(key_string, description), ...])
 _SHORTCUT_GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
+    ("Sections  (Ctrl + number)", [
+        ("Ctrl+1", "Modality"),
+        ("Ctrl+2", "Stimulus"),
+        ("Ctrl+3", "Timing"),
+        ("Ctrl+4", "Live View"),
+        ("Ctrl+5", "Focus & Stage"),
+        ("Ctrl+6", "Signal Check"),
+        ("Ctrl+7", "Capture"),
+        ("Ctrl+8", "Calibration"),
+        ("Ctrl+9", "Sessions"),
+        ("Ctrl+0", "Settings"),
+    ]),
     ("Acquisition", [
-        ("Ctrl+R",       "Start / Stop Acquisition"),
-        ("Ctrl+Shift+S", "Start / Stop Scan"),
-        ("Ctrl+Q",       "Emergency Stop (E-Stop)"),
+        ("Ctrl+R",       "Run / Stop Acquisition"),
+        ("F5",           "Start Live Stream"),
+        ("F6",           "Stop Live Stream"),
+        ("F7",           "Freeze / Resume"),
+        ("F8",           "Run Analysis"),
+        ("F9",           "Start / Stop Scan"),
+        ("Ctrl+.",       "Emergency Stop"),
     ]),
     ("Navigation", [
         ("Ctrl+K",  "Command Palette"),
+        ("Ctrl+`",  "Toggle Console"),
+        ("Ctrl+D",  "Device Manager"),
+        ("Ctrl+,",  "Settings (alt)"),
+    ]),
+    ("Profiles & Data", [
+        ("Ctrl+S",       "Save Profile"),
+        ("Ctrl+O",       "Open Profile"),
+        ("Ctrl+Shift+H", "Hardware Setup"),
+    ]),
+    ("Help", [
         ("Ctrl+?",  "Show Shortcuts (this overlay)"),
-        ("1 – 9",   "Jump to sidebar item"),
-    ]),
-    ("View", [
-        ("Ctrl+[", "Toggle Sidebar"),
-        ("Ctrl+\\","Toggle AI Panel"),
-        ("Ctrl+F", "Find / Filter"),
-    ]),
-    ("Hardware", [
-        ("Ctrl+D", "Device Manager"),
-        ("Ctrl+T", "Temperature Tab"),
-        ("Ctrl+B", "Bias Tab"),
-        ("Ctrl+G", "FPGA Tab"),
-    ]),
-    ("Data", [
-        ("Ctrl+E", "Export Conversation"),
-        ("Ctrl+S", "Save Result"),
-        ("Ctrl+Z", "Undo Last Action"),
-    ]),
-    ("Other", [
-        ("Ctrl+,", "Settings"),
-        ("Ctrl+?", "Shortcuts"),
-        ("Escape", "Close / Cancel"),
+        ("Escape",  "Close / Cancel"),
     ]),
 ]
 
 # Split the groups into two columns for the layout
-_LEFT_GROUPS  = _SHORTCUT_GROUPS[:3]   # Acquisition, Navigation, View
-_RIGHT_GROUPS = _SHORTCUT_GROUPS[3:]   # Hardware, Data, Other
+_LEFT_GROUPS  = _SHORTCUT_GROUPS[:2]   # Sections, Acquisition
+_RIGHT_GROUPS = _SHORTCUT_GROUPS[2:]   # Navigation, Profiles, Help
 
 
 # ── Internal helpers ───────────────────────────────────────────────────────────
