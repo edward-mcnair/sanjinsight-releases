@@ -308,7 +308,7 @@ class HardwareService(QObject):
         _sim_tr = {"driver": "simulated", "camera_type": "tr",
                    "model": "Basler acA1920-155um",
                    "width": 1920, "height": 1200,
-                   "fps": 30, "exposure_us": 5000, "noise_level": 40}
+                   "fps": 30, "exposure_us": 5000, "noise_level": 12}
         _sim_ir = {"driver": "simulated", "camera_type": "ir",
                    "model": "Microsanj IR Camera",
                    "width": 320, "height": 240,
