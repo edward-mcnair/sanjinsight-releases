@@ -172,6 +172,7 @@ class ModalitySection(QWidget):
         self._refresh_camera_combo()
         self._refresh_turret()
         self._refresh_sensor_info()
+        self._profile_picker.filter_by_modality(app_state.active_camera_type)
 
     # ── Camera combo ───────────────────────────────────────────────────
 

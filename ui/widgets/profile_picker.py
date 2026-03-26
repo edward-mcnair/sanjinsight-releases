@@ -52,7 +52,8 @@ class ProfilePicker(QWidget):
 
         # ── Dropdown ───────────────────────────────────────────────────
         self._combo = QComboBox()
-        self._combo.setMinimumWidth(200)
+        self._combo.setFixedWidth(190)
+        self._combo.setSizeAdjustPolicy(QComboBox.AdjustToContents)
         self._combo.currentIndexChanged.connect(self._on_combo_changed)
         root.addWidget(self._combo)
 
