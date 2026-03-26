@@ -140,6 +140,7 @@ class GuidedBanner(QWidget):
         self._dismissed = False
         self._celebrating = False
         self._on_target_section = False  # True when user is viewing the step's section
+        self._next_nav_override = None   # set when "Next →" should go to a different section
         self._apply_styles()
         self.setVisible(False)
 
@@ -201,13 +202,25 @@ class GuidedBanner(QWidget):
 
         If the user is already viewing the step's target section,
         update the banner text to show the contextual hint instead
-        of the generic "Next step:" prompt.
+        of the generic "Next step:" prompt, and change the action
+        button to "Next →" pointing to the following step's section.
         """
         self._on_target_section = (nav_label == self._current_nav)
         if self._on_target_section and 0 <= self._current_step_idx < len(_STEPS):
             _phase, _key, _text, _nav, _icon, hint = _STEPS[self._current_step_idx]
             self._label.setText(hint)
-            self._action_btn.setVisible(False)  # already here, no need to navigate
+            # Show "Next →" pointing to the following step's section
+            next_idx = self._current_step_idx + 1
+            if next_idx < len(_STEPS):
+                _np, _nk, next_text, next_nav, _ni, _nh = _STEPS[next_idx]
+                self._next_nav_override = next_nav
+                self._action_btn.setText(f"Next: {next_text} →")
+                self._action_btn.setVisible(True)
+            else:
+                self._next_nav_override = None
+                self._action_btn.setVisible(False)
+        else:
+            self._next_nav_override = None
 
     def set_guided_visible(self, guided: bool) -> None:
         """Show/hide based on workspace mode."""
@@ -306,10 +319,11 @@ class GuidedBanner(QWidget):
             self.navigate_requested.emit("Sessions")
             self.setVisible(False)
             return
-        log.info("GuidedBanner: Go → clicked, navigating to %r",
-                 self._current_nav)
-        if self._current_nav:
-            self.navigate_requested.emit(self._current_nav)
+        # If on the target section, "Next →" points to the following step
+        nav = getattr(self, '_next_nav_override', None) or self._current_nav
+        log.info("GuidedBanner: Go → clicked, navigating to %r", nav)
+        if nav:
+            self.navigate_requested.emit(nav)
 
     def _on_skip(self) -> None:
         """Skip the current step — mark it as done and advance."""
