@@ -574,6 +574,15 @@ class CalibrationTab(QWidget):
     #  Temperature sequence helpers                                    #
     # ---------------------------------------------------------------- #
 
+    def set_temp_sequence(self, csv: str) -> None:
+        """Set temperature sequence from comma-separated string, e.g. '25,30,35,40,45'."""
+        try:
+            temps = [float(t.strip()) for t in csv.split(",") if t.strip()]
+            if temps:
+                self._set_preset(temps)
+        except ValueError:
+            log.warning("Invalid temperature sequence: %r", csv)
+
     def _set_preset(self, temps: list):
         self._clear_temps()
         for t in temps:

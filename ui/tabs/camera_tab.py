@@ -125,6 +125,13 @@ class CameraTab(QWidget):
             b.setMinimumWidth(70)
             b.clicked.connect(lambda _, val=v: self._set_exp(val))
             pr.addWidget(b)
+
+        self._auto_exp_btn = QPushButton("Auto-Expose")
+        self._auto_exp_btn.setMinimumWidth(90)
+        self._auto_exp_btn.setToolTip(
+            "Automatically adjust exposure to target ~70% of sensor range")
+        self._auto_exp_btn.clicked.connect(self._run_auto_expose)
+        pr.addWidget(self._auto_exp_btn)
         pr.addStretch()
         cl.addLayout(pr, 2, 1)
 
@@ -763,3 +770,42 @@ class CameraTab(QWidget):
             cam = app_state.cam
             if cam:
                 cam.set_gain(db)
+
+    # ── Auto-Exposure ────────────────────────────────────────────────
+
+    auto_expose_complete = pyqtSignal(float)  # final exposure µs
+
+    def _run_auto_expose(self):
+        """Run auto-exposure in a background thread."""
+        cam = app_state.cam
+        if cam is None:
+            return
+
+        self._auto_exp_btn.setEnabled(False)
+        self._auto_exp_btn.setText("Adjusting…")
+
+        import threading
+        from acquisition.auto_exposure import AutoExposure
+
+        def _worker():
+            ae = AutoExposure(cam)
+            result = ae.run()
+            QTimer.singleShot(0, lambda: self._on_auto_expose_done(result))
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _on_auto_expose_done(self, result):
+        """Handle auto-exposure completion on the GUI thread."""
+        self._auto_exp_btn.setEnabled(True)
+        self._auto_exp_btn.setText("Auto-Expose")
+
+        if result.skipped:
+            return
+
+        exp = result.final_exposure_us
+        self.set_exposure(exp)
+
+        status = "converged" if result.converged else "best effort"
+        log.info("Auto-expose %s: %.0f µs (%.1f%% intensity, %d iters)",
+                 status, exp, result.mean_intensity * 100, result.iterations)
+        self.auto_expose_complete.emit(exp)

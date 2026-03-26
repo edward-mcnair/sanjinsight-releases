@@ -91,8 +91,37 @@ class MaterialProfile:
     n_frames:       int   = 16
     accumulation:   int   = 16
 
+    # ── Tier 1: Stimulus ─────────────────────────────────────────────
+    stimulus_freq_hz:   float = 1000.0   # FPGA modulation frequency
+    stimulus_duty:      float = 0.50     # FPGA duty cycle (0–1)
+    stimulus_waveform:  str   = "square" # "square" | "sine"
+
+    # ── Tier 1: Temperature / calibration ────────────────────────────
+    tec_setpoint_c:     float = 25.0     # default TEC temperature
+    tec_enabled:        bool  = True     # whether profile needs TEC
+    cal_temps:          str   = ""       # comma-separated cal sequence, e.g. "25,30,35,40,45"
+    cal_settle_s:       float = 60.0     # settle time per cal step (seconds)
+
+    # ── Tier 1: Bias source ──────────────────────────────────────────
+    bias_voltage_v:     float = 0.0      # default bias voltage
+    bias_compliance_ma: float = 100.0    # current compliance (mA)
+    bias_enabled:       bool  = False    # whether device needs bias
+
+    # ── Tier 1: Signal quality ───────────────────────────────────────
+    snr_threshold_db:   float = 20.0     # minimum acceptable SNR
+    roi_strategy:       str   = "center50"  # "full" | "center50" | "center25"
+
+    # ── Tier 1: Scan / grid defaults ─────────────────────────────────
+    grid_step_um:       float = 50.0     # default grid step size (µm)
+    grid_overlap_pct:   float = 10.0     # overlap percentage for stitching
+
     # Display / analysis helpers
     dt_range_k:     float = 10.0   # expected ΔT range (for display scaling)
+    expected_dr_r:  str   = ""     # expected ΔR/R range, e.g. "1e-4,5e-3"
+
+    # Optics guidance (informational, shown in Guided mode)
+    recommended_objective: str = ""  # e.g. "10×" or "20×"
+    illumination_note:     str = ""  # e.g. "LED at 70%"
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -130,70 +159,163 @@ BUILTIN_PROFILES: list = [
     MaterialProfile(uid="si_532",   name="Silicon — 532 nm",
                     material="Silicon",       category=CATEGORY_SEMICONDUCTOR,
                     ct_value=1.5e-4,          wavelength_nm=532,
-                    description="Crystalline silicon, green illumination"),
+                    description="Crystalline silicon, green illumination",
+                    stimulus_freq_hz=1000.0,  stimulus_duty=0.50,
+                    tec_enabled=True,         cal_temps="25,30,35,40,45",
+                    cal_settle_s=60.0,        snr_threshold_db=20.0,
+                    roi_strategy="center50",  recommended_objective="10×",
+                    expected_dr_r="5e-5,5e-3"),
     MaterialProfile(uid="gaas_532", name="GaAs — 532 nm",
                     material="GaAs",          category=CATEGORY_SEMICONDUCTOR,
                     ct_value=2.0e-4,          wavelength_nm=532,
-                    description="Gallium arsenide, green illumination"),
+                    description="Gallium arsenide, green illumination",
+                    stimulus_freq_hz=1000.0,  stimulus_duty=0.50,
+                    tec_enabled=True,         cal_temps="25,30,35,40,45",
+                    cal_settle_s=60.0,        snr_threshold_db=18.0,
+                    roi_strategy="center50",  recommended_objective="10×",
+                    expected_dr_r="1e-4,8e-3"),
     MaterialProfile(uid="gan_532",  name="GaN — 532 nm",
                     material="GaN",           category=CATEGORY_SEMICONDUCTOR,
                     ct_value=1.8e-4,          wavelength_nm=532,
-                    description="Gallium nitride, green illumination"),
+                    description="Gallium nitride, green illumination",
+                    stimulus_freq_hz=1000.0,  stimulus_duty=0.50,
+                    tec_enabled=True,         cal_temps="25,30,40,50,60,70,80",
+                    cal_settle_s=60.0,        snr_threshold_db=18.0,
+                    roi_strategy="center50",  recommended_objective="10×",
+                    expected_dr_r="5e-5,5e-3"),
     MaterialProfile(uid="inp_532",  name="InP — 532 nm",
                     material="InP",           category=CATEGORY_SEMICONDUCTOR,
                     ct_value=2.5e-4,          wavelength_nm=532,
-                    description="Indium phosphide, green illumination"),
+                    description="Indium phosphide, green illumination",
+                    stimulus_freq_hz=1000.0,  stimulus_duty=0.50,
+                    tec_enabled=True,         cal_temps="25,30,35,40,45",
+                    cal_settle_s=60.0,        snr_threshold_db=18.0,
+                    roi_strategy="center50",  recommended_objective="10×",
+                    expected_dr_r="1e-4,1e-2"),
     MaterialProfile(uid="sic_532",  name="SiC — 532 nm",
                     material="SiC",           category=CATEGORY_SEMICONDUCTOR,
                     ct_value=1.2e-4,          wavelength_nm=532,
-                    description="Silicon carbide, green illumination"),
+                    description="Silicon carbide, green illumination",
+                    stimulus_freq_hz=1000.0,  stimulus_duty=0.50,
+                    tec_enabled=True,         cal_temps="25,35,45,55,65,75",
+                    cal_settle_s=90.0,        snr_threshold_db=20.0,
+                    roi_strategy="center50",  recommended_objective="10×",
+                    expected_dr_r="3e-5,3e-3"),
     # ── Semiconductors — 785 nm ────────────────────────────────────
     MaterialProfile(uid="si_785",   name="Silicon — 785 nm",
                     material="Silicon",       category=CATEGORY_SEMICONDUCTOR,
                     ct_value=1.0e-4,          wavelength_nm=785,
-                    description="Crystalline silicon, NIR illumination"),
+                    description="Crystalline silicon, NIR illumination",
+                    stimulus_freq_hz=500.0,   stimulus_duty=0.50,
+                    tec_enabled=True,         cal_temps="25,30,35,40,45",
+                    cal_settle_s=60.0,        snr_threshold_db=18.0,
+                    roi_strategy="center50",  recommended_objective="10×",
+                    expected_dr_r="3e-5,3e-3"),
     MaterialProfile(uid="gaas_785", name="GaAs — 785 nm",
                     material="GaAs",          category=CATEGORY_SEMICONDUCTOR,
                     ct_value=1.4e-4,          wavelength_nm=785,
-                    description="Gallium arsenide, NIR illumination"),
+                    description="Gallium arsenide, NIR illumination",
+                    stimulus_freq_hz=500.0,   stimulus_duty=0.50,
+                    tec_enabled=True,         cal_temps="25,30,35,40,45",
+                    cal_settle_s=60.0,        snr_threshold_db=18.0,
+                    roi_strategy="center50",  recommended_objective="10×",
+                    expected_dr_r="5e-5,5e-3"),
     MaterialProfile(uid="gan_785",  name="GaN — 785 nm",
                     material="GaN",           category=CATEGORY_SEMICONDUCTOR,
                     ct_value=1.3e-4,          wavelength_nm=785,
-                    description="Gallium nitride, NIR illumination"),
+                    description="Gallium nitride, NIR illumination",
+                    stimulus_freq_hz=500.0,   stimulus_duty=0.50,
+                    tec_enabled=True,         cal_temps="25,30,40,50,60,70,80",
+                    cal_settle_s=60.0,        snr_threshold_db=18.0,
+                    roi_strategy="center50",  recommended_objective="10×",
+                    expected_dr_r="3e-5,3e-3"),
     # ── Metals — 532 nm ───────────────────────────────────────────
     MaterialProfile(uid="cu_532",   name="Copper — 532 nm",
                     material="Copper",        category=CATEGORY_METAL,
                     ct_value=0.8e-4,          wavelength_nm=532,
-                    description="Bulk copper, green illumination"),
+                    description="Bulk copper, green illumination",
+                    stimulus_freq_hz=500.0,   stimulus_duty=0.50,
+                    tec_enabled=True,         cal_temps="25,35,45,55",
+                    cal_settle_s=45.0,        snr_threshold_db=15.0,
+                    roi_strategy="center25",  recommended_objective="10×",
+                    illumination_note="Metals reflect strongly — start at low exposure",
+                    expected_dr_r="2e-5,2e-3"),
     MaterialProfile(uid="au_532",   name="Gold — 532 nm",
                     material="Gold",          category=CATEGORY_METAL,
                     ct_value=1.2e-4,          wavelength_nm=532,
-                    description="Gold film or bulk, green illumination"),
+                    description="Gold film or bulk, green illumination",
+                    stimulus_freq_hz=500.0,   stimulus_duty=0.50,
+                    tec_enabled=True,         cal_temps="25,35,45,55",
+                    cal_settle_s=45.0,        snr_threshold_db=15.0,
+                    roi_strategy="center25",  recommended_objective="10×",
+                    illumination_note="Metals reflect strongly — start at low exposure",
+                    expected_dr_r="3e-5,4e-3"),
     MaterialProfile(uid="al_532",   name="Aluminum — 532 nm",
                     material="Aluminum",      category=CATEGORY_METAL,
                     ct_value=0.5e-4,          wavelength_nm=532,
-                    description="Aluminum film or bulk, green illumination"),
+                    description="Aluminum film or bulk, green illumination",
+                    stimulus_freq_hz=500.0,   stimulus_duty=0.50,
+                    tec_enabled=True,         cal_temps="25,35,45,55",
+                    cal_settle_s=45.0,        snr_threshold_db=15.0,
+                    roi_strategy="center25",  recommended_objective="10×",
+                    illumination_note="Weak TR signal — use maximum averaging",
+                    n_frames=32,              accumulation=32,
+                    expected_dr_r="1e-5,1e-3"),
     # ── Metals — 785 nm ───────────────────────────────────────────
     MaterialProfile(uid="cu_785",   name="Copper — 785 nm",
                     material="Copper",        category=CATEGORY_METAL,
                     ct_value=0.6e-4,          wavelength_nm=785,
-                    description="Bulk copper, NIR illumination"),
+                    description="Bulk copper, NIR illumination",
+                    stimulus_freq_hz=500.0,   stimulus_duty=0.50,
+                    tec_enabled=True,         cal_temps="25,35,45,55",
+                    cal_settle_s=45.0,        snr_threshold_db=15.0,
+                    roi_strategy="center25",  recommended_objective="10×",
+                    expected_dr_r="1e-5,1e-3"),
     # ── PCB / packaging ───────────────────────────────────────────
     MaterialProfile(uid="fr4_532",  name="FR4 — 532 nm",
                     material="FR4",           category=CATEGORY_PCB,
                     ct_value=0.3e-4,          wavelength_nm=532,
-                    description="Standard PCB substrate, green illumination"),
+                    description="Standard PCB substrate, green illumination",
+                    stimulus_freq_hz=500.0,   stimulus_duty=0.50,
+                    tec_enabled=False,        bias_enabled=True,
+                    bias_voltage_v=3.3,       bias_compliance_ma=500.0,
+                    cal_temps="25,35,45",     cal_settle_s=45.0,
+                    snr_threshold_db=12.0,    roi_strategy="full",
+                    grid_step_um=200.0,       grid_overlap_pct=15.0,
+                    n_frames=32,              accumulation=32,
+                    recommended_objective="5×",
+                    illumination_note="Large area — use low magnification and grid scan",
+                    expected_dr_r="5e-6,5e-4"),
     MaterialProfile(uid="cuw_532",  name="Cu/W composite — 532 nm",
                     material="Cu/W",          category=CATEGORY_PCB,
                     ct_value=0.7e-4,          wavelength_nm=532,
-                    description="Copper-tungsten heat spreader, green illumination"),
+                    description="Copper-tungsten heat spreader, green illumination",
+                    stimulus_freq_hz=500.0,   stimulus_duty=0.50,
+                    tec_enabled=True,         cal_temps="25,35,45,55",
+                    cal_settle_s=45.0,        snr_threshold_db=15.0,
+                    roi_strategy="center50",  recommended_objective="10×",
+                    expected_dr_r="2e-5,2e-3"),
     # ── Automotive / EV ───────────────────────────────────────────
     MaterialProfile(uid="sic_ev",   name="SiC MOSFET — 532 nm",
                     material="SiC",           category=CATEGORY_AUTOMOTIVE,
                     ct_value=1.1e-4,          wavelength_nm=532,
-                    description="SiC power device for EV / automotive"),
+                    description="SiC power device for EV / automotive",
+                    stimulus_freq_hz=1000.0,  stimulus_duty=0.50,
+                    tec_enabled=True,         bias_enabled=True,
+                    bias_voltage_v=12.0,      bias_compliance_ma=1000.0,
+                    cal_temps="25,35,45,55,65,75",
+                    cal_settle_s=90.0,        snr_threshold_db=18.0,
+                    roi_strategy="center50",  recommended_objective="10×",
+                    expected_dr_r="3e-5,3e-3"),
     MaterialProfile(uid="gan_ev",   name="GaN HEMT — 532 nm",
                     material="GaN",           category=CATEGORY_AUTOMOTIVE,
                     ct_value=1.7e-4,          wavelength_nm=532,
-                    description="GaN-on-Si power device for EV / automotive"),
+                    description="GaN-on-Si power device for EV / automotive",
+                    stimulus_freq_hz=1000.0,  stimulus_duty=0.50,
+                    tec_enabled=True,         bias_enabled=True,
+                    bias_voltage_v=48.0,      bias_compliance_ma=500.0,
+                    cal_temps="25,35,45,55,65,75,85",
+                    cal_settle_s=90.0,        snr_threshold_db=18.0,
+                    roi_strategy="center50",  recommended_objective="10×",
+                    expected_dr_r="5e-5,5e-3"),
 ]

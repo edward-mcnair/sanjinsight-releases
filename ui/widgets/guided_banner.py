@@ -32,9 +32,9 @@ log = logging.getLogger(__name__)
 # hint: shown when the user is already on this step's section.
 
 _STEPS = [
-    (1, "camera_selected",     "Review your imaging modality",
+    (1, "camera_selected",     "Select camera and material profile",
      "Modality", IC.CAMERA,
-     "Confirm your camera type and imaging mode, then skip or proceed."),
+     "Choose your camera, then select a material profile to auto-fill settings."),
     (1, "stimulus_configured", "Configure the stimulus source",
      "Stimulus", IC.SETTINGS,
      "Set the modulation frequency and duty cycle, or skip if pre-configured."),
@@ -46,10 +46,10 @@ _STEPS = [
      "The live feed starts automatically — verify you can see the sample."),
     (2, "focused",             "Focus and position the stage",
      "Focus & Stage", IC.AUTOFOCUS,
-     "Run autofocus or manually adjust the focus, then skip when satisfied."),
+     "Run autofocus or manually adjust focus. Use Auto-Expose in Camera to optimise brightness."),
     (2, "signal_checked",      "Check the signal quality",
      "Signal Check", IC.CHECK,
-     "Run the signal check. If it fails, adjust exposure or focus, or skip to continue."),
+     "Run the signal check. If it fails, try Auto-Expose or adjust focus, then retry."),
     (3, "captured",            "Run an acquisition",
      "Capture", IC.PLAY,
      "Start a single-point or grid acquisition."),

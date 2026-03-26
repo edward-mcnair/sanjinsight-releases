@@ -571,6 +571,8 @@ class MainWindow(QMainWindow):
             self._open_device_manager)
         self._modality_section.modality_changed.connect(
             self._on_modality_changed)
+        self._modality_section.profile_selected.connect(
+            self._on_profile_applied)
         self._acq_settings_section  = AcquisitionSettingsSection()
         self._signal_check_section  = SignalCheckSection()
         self._focus_stage_tab       = FocusStageTab(
@@ -2399,7 +2401,59 @@ class MainWindow(QMainWindow):
         except Exception as _e:
             log.debug("Profile apply — scan n_frames: %s", _e)
 
-        # 6. Log
+        # 6. Push stimulus settings to FPGA tab
+        try:
+            freq = getattr(profile, "stimulus_freq_hz", 0)
+            duty = getattr(profile, "stimulus_duty", 0)
+            if freq > 0:
+                hw_service.fpga_set_frequency(freq)
+                self._fpga_tab._freq_spin.setValue(freq)
+            if duty > 0:
+                hw_service.fpga_set_duty_cycle(duty)
+                self._fpga_tab._duty_spin.setValue(duty * 100)
+        except Exception as _e:
+            log.debug("Profile apply — stimulus settings: %s", _e)
+
+        # 7. Push TEC setpoint
+        try:
+            if getattr(profile, "tec_enabled", False):
+                sp = getattr(profile, "tec_setpoint_c", 25.0)
+                hw_service.tec_set_target(0, sp)
+        except Exception as _e:
+            log.debug("Profile apply — TEC settings: %s", _e)
+
+        # 8. Push bias source settings
+        try:
+            if getattr(profile, "bias_enabled", False):
+                self._bias_tab._level_spin.setValue(
+                    getattr(profile, "bias_voltage_v", 0))
+                comp_ma = getattr(profile, "bias_compliance_ma", 100)
+                self._bias_tab._comp_spin.setValue(comp_ma / 1000.0)
+        except Exception as _e:
+            log.debug("Profile apply — bias settings: %s", _e)
+
+        # 9. Push calibration temperature sequence
+        try:
+            cal_temps = getattr(profile, "cal_temps", "")
+            settle = getattr(profile, "cal_settle_s", 60.0)
+            if cal_temps:
+                self._cal_tab.set_temp_sequence(cal_temps)
+            if settle > 0:
+                self._cal_tab._settle.setValue(settle)
+        except Exception as _e:
+            log.debug("Profile apply — calibration settings: %s", _e)
+
+        # 10. Mark phase tracker checks (for guided walkthrough)
+        try:
+            tracker = self._phase_tracker
+            tracker.mark(1, "camera_selected", True)
+            tracker.mark(1, "stimulus_configured", True)
+            if getattr(profile, "tec_enabled", False):
+                tracker.mark(1, "temperature_set", True)
+        except Exception as _e:
+            log.debug("Profile apply — phase tracker: %s", _e)
+
+        # 11. Log
         self._log_tab.append(
             f"Profile applied: {profile.name}  ·  "
             f"C_T = {profile.ct_value:.3e} K⁻¹  ·  "
@@ -2408,7 +2462,7 @@ class MainWindow(QMainWindow):
             f"frames = {profile.n_frames}  ·  "
             f"EMA = {profile.accumulation}")
 
-        # 7. Status bar
+        # 12. Status bar
         self._status.showMessage(
             f"Profile active: {profile.name}   "
             f"C_T = {profile.ct_value:.3e} K⁻¹",

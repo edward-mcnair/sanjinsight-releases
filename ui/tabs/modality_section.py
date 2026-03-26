@@ -19,6 +19,7 @@ from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from hardware.app_state import app_state
 from ui.theme import PALETTE, FONT
 from ui.icons import IC, make_icon, make_icon_label, set_btn_icon
+from ui.widgets.profile_picker import ProfilePicker
 
 log = logging.getLogger(__name__)
 
@@ -49,6 +50,8 @@ class ModalitySection(QWidget):
 
     open_device_manager = pyqtSignal()
     modality_changed = pyqtSignal(str)          # "tr" | "ir"
+    profile_selected = pyqtSignal(object)       # MaterialProfile
+    custom_selected  = pyqtSignal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -93,6 +96,12 @@ class ModalitySection(QWidget):
         self._modality_desc.setWordWrap(True)
         self._modality_desc.setStyleSheet(_dim_style())
         grid.addWidget(self._modality_desc, 1, 1, 1, 2)
+
+        # ── Profile picker ──────────────────────────────────────────
+        self._profile_picker = ProfilePicker()
+        self._profile_picker.profile_selected.connect(self._on_profile_picked)
+        self._profile_picker.custom_selected.connect(self.custom_selected)
+        root.addWidget(self._profile_picker)
 
         # Objective selector (hidden when no turret)
         self._obj_label = QLabel("Objective")
@@ -210,7 +219,12 @@ class ModalitySection(QWidget):
         app_state.active_camera_type = cam_type
         self._update_modality_desc(cam_type)
         self._refresh_sensor_info()
+        self._profile_picker.filter_by_modality(cam_type)
         self.modality_changed.emit(cam_type)
+
+    def _on_profile_picked(self, profile) -> None:
+        """Forward profile selection to external listeners."""
+        self.profile_selected.emit(profile)
 
     def _update_modality_desc(self, cam_type: str) -> None:
         name, desc = _MODALITY_INFO.get(cam_type, ("", ""))
@@ -373,6 +387,8 @@ class ModalitySection(QWidget):
         self._modality_desc.setStyleSheet(_dim_style())
         self._obj_fov_lbl.setStyleSheet(_dim_style())
         self._sensor_lbl.setStyleSheet(_mono_style())
+        if hasattr(self, "_profile_picker"):
+            self._profile_picker._apply_styles()
         if hasattr(self, "_es_btn"):
             self._apply_empty_state_styles()
         self.update()
