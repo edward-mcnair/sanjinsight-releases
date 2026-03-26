@@ -181,8 +181,8 @@ class GuidedBanner(QWidget):
             self.setVisible(True)
         else:
             # All steps complete
-            self._label.setText("All steps complete — view your results in Analysis")
-            self._current_nav = "Analysis"
+            self._label.setText("All steps complete — ready for analysis!")
+            self._current_nav = "Sessions"
             self._current_step_idx = total
             self._current_phase = 0
             self._current_key = ""
@@ -284,8 +284,8 @@ class GuidedBanner(QWidget):
                 # Auto-navigate to the next step
                 self.navigate_requested.emit(nav)
             else:
-                self._label.setText("All steps complete — view your results in Analysis")
-                self._current_nav = "Analysis"
+                self._label.setText("All steps complete — ready for analysis!")
+                self._current_nav = "Sessions"
                 self._current_step_idx = len(_STEPS)
                 self._current_phase = 0
                 self._current_key = ""
@@ -298,9 +298,9 @@ class GuidedBanner(QWidget):
 
     def _on_go(self) -> None:
         if self._current_step_idx >= len(_STEPS):
-            # All steps complete — navigate to Analysis and dismiss banner
-            log.info("GuidedBanner: View → clicked, navigating to Analysis")
-            self.navigate_requested.emit("Analysis")
+            # All steps complete — navigate to Sessions and dismiss banner
+            log.info("GuidedBanner: View → clicked, navigating to Sessions")
+            self.navigate_requested.emit("Sessions")
             self.setVisible(False)
             return
         log.info("GuidedBanner: Go → clicked, navigating to %r",

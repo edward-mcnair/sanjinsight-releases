@@ -2248,7 +2248,7 @@ class MainWindow(QMainWindow):
 
         self._recipe_store.save(recipe)
         self._header._profile_btn.set_active_recipe(label)
-        self._toasts.show_success(f"Profile saved: {label}", auto_dismiss_ms=3000)
+        self._toasts.show_success(f"Profile saved: {label}")
         log.info("Profile saved: %s", label)
 
     def _open_profile_dialog(self):
@@ -2257,7 +2257,7 @@ class MainWindow(QMainWindow):
 
         recipes = self._recipe_store.list()
         if not recipes:
-            self._toasts.show_warning("No saved profiles found.", auto_dismiss_ms=3000)
+            self._toasts.show_warning("No saved profiles found.")
             return
 
         labels = [r.label for r in recipes]
@@ -2329,7 +2329,7 @@ class MainWindow(QMainWindow):
         # Track active recipe in header button
         self._header._profile_btn.set_active_recipe(recipe.label)
         self._toasts.show_success(
-            f"Profile loaded: {recipe.label}", auto_dismiss_ms=3000)
+            f"Profile loaded: {recipe.label}")
 
     def _on_autoscan_scan_requested(self, cfg: dict) -> None:
         """Route an AutoScan scan/preview config to the appropriate engine."""
@@ -3056,18 +3056,17 @@ class MainWindow(QMainWindow):
 
         if fix.auto:
             # Run the automatic fix
-            self._toasts.show_info(
-                f"Fixing: {fix.description}…", auto_dismiss_ms=2000)
+            self._toasts.show_info(f"Fixing: {fix.description}…")
 
             def _on_complete(success, msg):
                 # Called from background thread — use QTimer to get to GUI thread
                 from PyQt5.QtCore import QTimer
                 if success:
                     QTimer.singleShot(0, lambda: self._toasts.show_success(
-                        f"Fixed: {msg}", auto_dismiss_ms=3000))
+                        f"Fixed: {msg}"))
                 else:
                     QTimer.singleShot(0, lambda: self._toasts.show_warning(
-                        f"Fix failed: {msg}", auto_dismiss_ms=5000))
+                        f"Fix failed: {msg}"))
 
             apply_fix(rule_id, hw_service, app_state, on_complete=_on_complete)
         elif fix.navigate_to:
