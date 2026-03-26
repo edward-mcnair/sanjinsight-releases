@@ -89,6 +89,22 @@ class CollapsiblePanel(QWidget):
         """Add a layout to the collapsible content area."""
         self.content_layout.addLayout(layout)
 
+    # ── Theme support ────────────────────────────────────────────────
+
+    def _apply_styles(self) -> None:
+        """Re-apply PALETTE-derived styles after a theme switch."""
+        self.btn.setStyleSheet(f"""
+            QToolButton {{
+                color: {PALETTE["textDim"]};
+                border: none;
+                font-size: {FONT["sublabel"]}pt;
+                padding: 4px 0;
+                background: transparent;
+            }}
+            QToolButton:hover   {{ color: {PALETTE["text"]}; }}
+            QToolButton:checked {{ color: {PALETTE["text"]}; }}
+        """)
+
     # ── Internal ──────────────────────────────────────────────────────
 
     def _on_toggle(self, expanded: bool) -> None:

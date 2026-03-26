@@ -46,10 +46,10 @@ def _dim_style() -> str:
 def _color_for_level(level: str) -> str:
     """Return PALETTE colour for 'good', 'warn', 'bad'."""
     if level == "good":
-        return PALETTE.get("pass", "#00d479")
+        return PALETTE.get("success", "#30d158")
     elif level == "warn":
-        return PALETTE.get("warning", "#ffb300")
-    return PALETTE.get("error", "#ff4444")
+        return PALETTE.get("warning", "#ff9f0a")
+    return PALETTE.get("danger", "#ff453a")
 
 
 class SignalCheckSection(QWidget):

@@ -155,7 +155,7 @@ class GuidedBanner(QWidget):
             self._label.setText("All steps complete — ready for analysis!")
             self._current_nav = "Sessions"
             self._current_step_idx = total
-            self._set_icon(IC.CHECK, color="#00d479")
+            self._set_icon(IC.CHECK, color=PALETTE.get("success", "#30d158"))
             self._progress_lbl.setText(f"{total}/{total}")
             self._action_btn.setText("View →")
             self._action_btn.setVisible(True)
@@ -210,7 +210,7 @@ class GuidedBanner(QWidget):
                             next_idx: int) -> None:
         """Briefly show a checkmark before advancing to the next step."""
         self._celebrating = True
-        self._set_icon(IC.CHECK, color="#00d479")
+        self._set_icon(IC.CHECK, color=PALETTE.get("success", "#30d158"))
         self._label.setText("Step complete!")
         self._action_btn.setVisible(False)
         self._progress_lbl.setText(f"{completed}/{total}")
@@ -231,7 +231,7 @@ class GuidedBanner(QWidget):
                 self._label.setText("All steps complete — ready for analysis!")
                 self._current_nav = "Sessions"
                 self._current_step_idx = len(_STEPS)
-                self._set_icon(IC.CHECK, color="#00d479")
+                self._set_icon(IC.CHECK, color=PALETTE.get("success", "#30d158"))
                 self._action_btn.setText("View →")
                 self._action_btn.setVisible(True)
 
