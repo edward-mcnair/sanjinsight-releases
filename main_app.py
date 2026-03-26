@@ -696,6 +696,8 @@ class MainWindow(QMainWindow):
         # Phase completion tracker
         self._phase_tracker = PhaseTracker(parent=self)
         self._phase_tracker.phase_updated.connect(self._nav.set_phase_badge)
+        self._live_viewed_marked = False
+        self._tec_target_marked = False
 
         # ── Auto-hide unconfigured items ──────────────────────────────────
         _hw_cfg = config.get("hardware", {})
@@ -891,6 +893,10 @@ class MainWindow(QMainWindow):
         # Device hotplug → refresh HW indicators in acquisition tabs
         hw_service.device_connected.connect(self._on_device_hotplug)
 
+        # Signal check section → phase tracker
+        self._signal_check_section.signal_check_passed.connect(
+            lambda: self._phase_tracker.mark(2, "signal_checked"))
+
         # Camera selection from Connected Devices dropdown
         self._header.connect_camera_selection(self._on_camera_selected)
 
@@ -1075,6 +1081,14 @@ class MainWindow(QMainWindow):
             f"Frame {frame.frame_index}  |  "
             f"Exp {frame.exposure_us:.0f}μs")
 
+        # Phase tracker: mark live view as visited (one-shot)
+        if not self._live_viewed_marked:
+            self._live_viewed_marked = True
+            self._phase_tracker.mark(2, "live_viewed")
+
+        # Feed signal check section
+        self._signal_check_section.update_frame(frame)
+
     def _read_ir_camera_temp(self) -> float:
         """Return the mean pixel value of the latest IR frame (°C-equivalent).
 
@@ -1103,6 +1117,14 @@ class MainWindow(QMainWindow):
                if ok else f"TEC {index+1} error: {status.error}")
         self._header.set_connected(key, ok, tip)
         self._cam_bar.set_peripheral("tec", ok, tip)
+
+        # Phase tracker: mark temperature_set once a non-zero setpoint is active
+        if ok and not self._tec_target_marked:
+            sp = getattr(status, "target_temp", None)
+            if sp is not None and sp != 0:
+                self._tec_target_marked = True
+                self._phase_tracker.mark(1, "temperature_set")
+
         # Update live BT/dT readout strip from primary TEC (index 0)
         if index == 0 and ok:
             bt = getattr(status, "actual_temp", None)
@@ -1157,6 +1179,7 @@ class MainWindow(QMainWindow):
 
     def _on_cal_complete(self, result):
         self._cal_tab.update_complete(result)
+        self._phase_tracker.mark(3, "calibrated", result.valid)
         if result.valid:
             self._live_tab.set_calibration(result)
             self._log_tab.append(
@@ -1328,6 +1351,14 @@ class MainWindow(QMainWindow):
         # Camera connect/disconnect → rebuild all camera selectors (global bar
         # + per-tab combos) so the IR entry appears as soon as the IR driver
         # finishes initialising on its background thread.
+        # Phase tracker: camera connected / disconnected
+        if "camera" in key:
+            self._phase_tracker.mark(1, "camera_selected", ok)
+
+        # Phase tracker: stimulus (FPGA) connected / disconnected
+        if "fpga" in key:
+            self._phase_tracker.mark(1, "stimulus_configured", ok)
+
         if "camera" in key:
             # Set header entry for this camera so Connected Devices count is correct.
             # Live-frame handler only sets the *active* camera; this ensures
@@ -1403,31 +1434,38 @@ class MainWindow(QMainWindow):
         Called from _on_device_hotplug and during startup.  If *key* is empty
         every tab is re-evaluated; otherwise only the tab matching *key*.
         """
-        _map = {
-            "stage":     (self._stage_tab,   lambda: app_state.stage is not None),
-            "prober":    (self._prober_tab,  lambda: app_state.prober is not None),
-            "camera":    (self._camera_tab,  lambda: app_state.cam is not None),
-            "ir_camera": (self._camera_tab,  lambda: app_state.cam is not None),
-            "fpga":      (self._fpga_tab,    lambda: app_state.fpga is not None),
-            "bias":      (self._bias_tab,    lambda: app_state.bias is not None),
-            "tec":       (self._temp_tab,    lambda: len(app_state.tecs) > 0),
-        }
+        _cam_test = lambda: app_state.cam is not None
+        _map = [
+            ("stage",     self._stage_tab,              lambda: app_state.stage is not None),
+            ("prober",    self._prober_tab,             lambda: app_state.prober is not None),
+            ("camera",    self._camera_tab,             _cam_test),
+            ("ir_camera", self._camera_tab,             _cam_test),
+            ("fpga",      self._fpga_tab,               lambda: app_state.fpga is not None),
+            ("bias",      self._bias_tab,               lambda: app_state.bias is not None),
+            ("tec",       self._temp_tab,               lambda: len(app_state.tecs) > 0),
+            # New phase-aware sections (camera-dependent)
+            ("camera",    self._modality_section,       _cam_test),
+            ("camera",    self._acq_settings_section,   _cam_test),
+            ("camera",    self._signal_check_section,   _cam_test),
+        ]
         if key:
             # Refresh only the matching tab(s)
-            for k, (tab, test) in _map.items():
+            for k, tab, test in _map:
                 if k in key:
                     if hasattr(tab, 'set_hardware_available'):
                         tab.set_hardware_available(test())
         else:
             # Full refresh (startup)
-            for tab, test in _map.values():
+            for _k, tab, test in _map:
                 if hasattr(tab, 'set_hardware_available'):
                     tab.set_hardware_available(test())
 
     def _show_all_tabs(self) -> None:
         """Show full controls on every Tier-1 tab (for demo mode)."""
         for tab in (self._stage_tab, self._prober_tab, self._camera_tab,
-                    self._fpga_tab, self._bias_tab, self._temp_tab):
+                    self._fpga_tab, self._bias_tab, self._temp_tab,
+                    self._modality_section, self._acq_settings_section,
+                    self._signal_check_section):
             if hasattr(tab, 'set_hardware_available'):
                 tab.set_hardware_available(True)
 
@@ -2319,12 +2357,18 @@ class MainWindow(QMainWindow):
     def _on_af_complete(self, result):
         self._af_tab.update_complete(result)
         self._log_tab.append(result.message)
+        # Phase tracker: mark focused if autofocus succeeded
+        if getattr(result, 'best_z', None) is not None:
+            self._phase_tracker.mark(2, "focused")
 
     def _on_acq_progress(self, p):
         self._acquire_tab.update_progress(p)
         self._log_tab.append(p.message)
 
     def _on_acq_complete(self, r):
+        # Phase tracker: mark captured if result has data
+        if getattr(r, 'delta_r_over_r', None) is not None:
+            self._phase_tracker.mark(3, "captured")
         # Attach current calibration if available — enables ΔT display
         cal = app_state.active_calibration
         if cal and cal.valid:
