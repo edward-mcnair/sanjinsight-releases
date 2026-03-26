@@ -164,18 +164,29 @@ class ModalitySection(QWidget):
         self._cam_combo.blockSignals(True)
         self._cam_combo.clear()
 
-        tr = app_state.tr_cam
-        ir = app_state.ir_cam
+        active = app_state.active_camera_type   # "tr" or "ir"
+        tr_drv = app_state.tr_cam               # primary slot
+        ir_drv = app_state.ir_cam               # secondary slot (hybrid only)
 
-        if tr is not None:
-            model = getattr(getattr(tr, 'info', None), 'model', 'TR Camera')
-            self._cam_combo.addItem(f"TR — {model}", "tr")
-        if ir is not None:
-            model = getattr(getattr(ir, 'info', None), 'model', 'IR Camera')
-            self._cam_combo.addItem(f"IR — {model}", "ir")
+        if ir_drv is not None:
+            # Hybrid system — both cameras available
+            tr_model = getattr(getattr(tr_drv, 'info', None), 'model', 'TR Camera')
+            ir_model = getattr(getattr(ir_drv, 'info', None), 'model', 'IR Camera')
+            self._cam_combo.addItem(
+                f"Thermoreflectance — {tr_model}", "tr")
+            self._cam_combo.addItem(
+                f"IR Lock-in — {ir_model}", "ir")
+        elif tr_drv is not None:
+            # Single camera — may be TR or IR depending on active_camera_type
+            model = getattr(getattr(tr_drv, 'info', None), 'model', 'Camera')
+            if active == "ir":
+                self._cam_combo.addItem(
+                    f"IR Lock-in — {model}", "ir")
+            else:
+                self._cam_combo.addItem(
+                    f"Thermoreflectance — {model}", "tr")
 
         # Select the currently active type
-        active = app_state.active_camera_type
         for i in range(self._cam_combo.count()):
             if self._cam_combo.itemData(i) == active:
                 self._cam_combo.setCurrentIndex(i)

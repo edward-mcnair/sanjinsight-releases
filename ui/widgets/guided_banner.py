@@ -147,8 +147,12 @@ class GuidedBanner(QWidget):
     # ── Private ───────────────────────────────────────────────────────
 
     def _on_go(self) -> None:
+        import logging
+        _log = logging.getLogger(__name__)
+        _log.info("GuidedBanner: Go → clicked, navigating to %r", self._current_nav)
         if self._current_nav:
             self.navigate_requested.emit(self._current_nav)
+            _log.info("GuidedBanner: navigate_requested emitted")
 
     def _on_dismiss(self) -> None:
         self._dismissed = True
