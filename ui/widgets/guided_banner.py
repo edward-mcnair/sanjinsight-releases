@@ -181,8 +181,8 @@ class GuidedBanner(QWidget):
             self.setVisible(True)
         else:
             # All steps complete
-            self._label.setText("All steps complete — ready for analysis!")
-            self._current_nav = "Sessions"
+            self._label.setText("All steps complete — view your results in Analysis")
+            self._current_nav = "Analysis"
             self._current_step_idx = total
             self._current_phase = 0
             self._current_key = ""
@@ -284,8 +284,8 @@ class GuidedBanner(QWidget):
                 # Auto-navigate to the next step
                 self.navigate_requested.emit(nav)
             else:
-                self._label.setText("All steps complete — ready for analysis!")
-                self._current_nav = "Sessions"
+                self._label.setText("All steps complete — view your results in Analysis")
+                self._current_nav = "Analysis"
                 self._current_step_idx = len(_STEPS)
                 self._current_phase = 0
                 self._current_key = ""
@@ -297,14 +297,16 @@ class GuidedBanner(QWidget):
         QTimer.singleShot(1200, _advance)
 
     def _on_go(self) -> None:
-        if not self._current_nav:
-            # All steps complete — navigate to Sessions to review results
-            log.info("GuidedBanner: View → clicked, navigating to Sessions")
-            self.navigate_requested.emit("Sessions")
+        if self._current_step_idx >= len(_STEPS):
+            # All steps complete — navigate to Analysis and dismiss banner
+            log.info("GuidedBanner: View → clicked, navigating to Analysis")
+            self.navigate_requested.emit("Analysis")
+            self.setVisible(False)
             return
         log.info("GuidedBanner: Go → clicked, navigating to %r",
                  self._current_nav)
-        self.navigate_requested.emit(self._current_nav)
+        if self._current_nav:
+            self.navigate_requested.emit(self._current_nav)
 
     def _on_skip(self) -> None:
         """Skip the current step — mark it as done and advance."""
