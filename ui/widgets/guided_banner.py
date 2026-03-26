@@ -319,12 +319,32 @@ class GuidedBanner(QWidget):
             self.navigate_requested.emit("Sessions")
             self.setVisible(False)
             return
-        # If on the target section, "Next →" also marks the current step done
+        # "Next →" — mark current step done and navigate forward.
+        # Suppress the celebration animation so the banner advances instantly.
         if self._next_nav_override and self._current_phase and self._current_key:
+            nav = self._next_nav_override
+            self._next_nav_override = None
             log.info("GuidedBanner: Next → completing step %s.%s, navigating to %r",
-                     self._current_phase, self._current_key, self._next_nav_override)
+                     self._current_phase, self._current_key, nav)
+            self._celebrating = True
             self.skip_requested.emit(self._current_phase, self._current_key)
-            self.navigate_requested.emit(self._next_nav_override)
+            self._celebrating = False
+            # If mark() was a no-op (step already done), update_from_tracker
+            # didn't run.  Force-advance to the next step in the list.
+            next_idx = self._current_step_idx + 1
+            if next_idx < len(_STEPS):
+                _p, _k, text, step_nav, icon_name, _h = _STEPS[next_idx]
+                self._current_nav = step_nav
+                self._current_step_idx = next_idx
+                self._current_phase = _p
+                self._current_key = _k
+                self._label.setText(f"Next step: {text}")
+                self._set_icon(icon_name)
+                self._action_btn.setText("Go →")
+                self._action_btn.setVisible(True)
+                self._skip_btn.setVisible(True)
+            # Navigate to the next section
+            self.navigate_requested.emit(nav)
             return
         log.info("GuidedBanner: Go → clicked, navigating to %r",
                  self._current_nav)
