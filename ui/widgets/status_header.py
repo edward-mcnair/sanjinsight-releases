@@ -1280,6 +1280,14 @@ class StatusHeader(QWidget):
 
         lay.addWidget(logo_col)
 
+        # ── App name ─────────────────────────────────────────────────
+        self._app_name_lbl = QLabel("SanjINSIGHT")
+        self._app_name_lbl.setStyleSheet(
+            f"font-size:{FONT.get('heading', 14)}pt; font-weight:bold; "
+            f"color:{PALETTE.get('text', '#ebebeb')}; background:transparent; "
+            "letter-spacing:0.5px;")
+        lay.addWidget(self._app_name_lbl)
+
         # ── Divider ──────────────────────────────────────────────────
         self._div1 = QFrame()
         self._div1.setFrameShape(QFrame.VLine)
@@ -1429,6 +1437,12 @@ class StatusHeader(QWidget):
             self._logo_fallback.setStyleSheet(
                 f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['body']}pt; "
                 f"color:{text}; letter-spacing:3px; background:transparent;")
+
+        # App name label
+        if hasattr(self, "_app_name_lbl"):
+            self._app_name_lbl.setStyleSheet(
+                f"font-size:{FONT.get('heading', 14)}pt; font-weight:bold; "
+                f"color:{text}; background:transparent; letter-spacing:0.5px;")
 
         # Connected Devices button
         self._devices_btn._apply_styles()

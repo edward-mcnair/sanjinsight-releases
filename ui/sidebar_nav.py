@@ -343,98 +343,97 @@ class _CollapseHeader(QWidget):
 #  _LogoHeader  — app name + collapse arrow                          #
 # ================================================================== #
 class _LogoHeader(QWidget):
+    """Sidebar header containing the workspace mode pill toggle and collapse arrow."""
     collapse_clicked = pyqtSignal()
     mode_clicked = pyqtSignal(str)
 
-    _ARROW_W = 34   # width of the clickable arrow zone on the right
+    _ARROW_W = 28   # width of the clickable arrow zone on the right
 
     def __init__(self, app_name: str, parent=None):
         super().__init__(parent)
-        self._app_name   = app_name
         self._arrow_hover = False
         self.setFixedHeight(_LOGO_H)
         self.setStyleSheet(f"background:{_HDR_BG()};")
         self.setMouseTracking(True)
 
-        # Mode indicator (three dots)
-        self._mode_ind = _ModeIndicator(self)
-        self._mode_ind.mode_clicked.connect(self.mode_clicked)
-        self._mode_ind.move(self.width() - self._ARROW_W - 56, (_LOGO_H - 20) // 2)
+        # Layout: [pill toggle] [stretch] [collapse arrow]
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(8, 0, 4, 0)
+        lay.setSpacing(0)
 
-    def resizeEvent(self, e):
-        super().resizeEvent(e)
-        self._mode_ind.move(self.width() - self._ARROW_W - 56, (_LOGO_H - 20) // 2)
+        # Mode pill toggle (Guided / Standard / Expert)
+        self._mode_pill = _ModePill()
+        self._mode_pill.mode_clicked.connect(self.mode_clicked)
+        lay.addWidget(self._mode_pill)
 
-    def _arrow_rect(self):
-        """Returns (x, y, w, h) of the clickable arrow area."""
-        return (self.width() - self._ARROW_W, 0, self._ARROW_W, self.height())
+        lay.addStretch()
+
+        # Collapse arrow
+        self._arrow_lbl = QLabel("◀")
+        self._arrow_lbl.setFixedWidth(self._ARROW_W)
+        self._arrow_lbl.setAlignment(Qt.AlignCenter)
+        self._arrow_lbl.setStyleSheet(
+            f"color:{_TEXT_DIM()}; font-size:{_FONT['body']}pt; background:transparent;")
+        self._arrow_lbl.setCursor(QCursor(Qt.PointingHandCursor))
+        lay.addWidget(self._arrow_lbl)
 
     def mouseMoveEvent(self, e):
-        ax, ay, aw, ah = self._arrow_rect()
-        in_arrow = ax <= e.x() < ax + aw
+        in_arrow = e.x() >= self.width() - self._ARROW_W
         if in_arrow != self._arrow_hover:
             self._arrow_hover = in_arrow
-            self.setCursor(QCursor(Qt.PointingHandCursor if in_arrow else Qt.ArrowCursor))
-            self.update()
+            self._arrow_lbl.setStyleSheet(
+                f"color:{_TEXT_WHITE() if in_arrow else _TEXT_DIM()}; "
+                f"font-size:{_FONT['body']}pt; background:transparent;")
 
     def leaveEvent(self, e):
         if self._arrow_hover:
             self._arrow_hover = False
-            self.update()
+            self._arrow_lbl.setStyleSheet(
+                f"color:{_TEXT_DIM()}; font-size:{_FONT['body']}pt; background:transparent;")
 
     def mousePressEvent(self, e):
         if e.button() == Qt.LeftButton:
-            ax, ay, aw, ah = self._arrow_rect()
-            if ax <= e.x() < ax + aw:
+            if e.x() >= self.width() - self._ARROW_W:
                 self.collapse_clicked.emit()
 
     def paintEvent(self, event):
         p = QPainter(self)
-        p.setRenderHint(QPainter.Antialiasing)
         w, h = self.width(), self.height()
-
         p.fillRect(0, 0, w, h, QColor(_HDR_BG()))
-
         # Bottom border
         p.setPen(QPen(QColor(_DIVIDER()), 1))
         p.drawLine(0, h - 1, w, h - 1)
-
-        # App name
-        p.setFont(_sans_font(_FONT["title"], bold=True))
-        p.setPen(QColor(_TEXT_WHITE()))
-        p.drawText(18, 0, w - self._ARROW_W - 20, h,
-                   Qt.AlignVCenter | Qt.AlignLeft, self._app_name)
-
-        # Collapse arrow ◀  (right edge, subtle unless hovered)
-        p.setFont(_sans_font(_FONT["body"]))
-        arrow_col = QColor(_TEXT_WHITE()) if self._arrow_hover else QColor(_TEXT_DIM())
-        p.setPen(arrow_col)
-        ax, ay, aw, ah = self._arrow_rect()
-        p.drawText(ax, ay, aw - 4, ah, Qt.AlignVCenter | Qt.AlignLeft, "◀")
-
         p.end()
 
+    def _apply_styles(self) -> None:
+        self.setStyleSheet(f"background:{_HDR_BG()};")
+        self._arrow_lbl.setStyleSheet(
+            f"color:{_TEXT_DIM()}; font-size:{_FONT['body']}pt; background:transparent;")
+        self._mode_pill._apply_styles()
+
 
 # ================================================================== #
-#  _ModeIndicator  — three dots in logo header showing workspace mode #
+#  _ModePill  — three-way pill toggle: Guided / Standard / Expert     #
 # ================================================================== #
-class _ModeIndicator(QWidget):
-    """Three small dots indicating the active workspace mode.
+class _ModePill(QWidget):
+    """Three-segment pill toggle for workspace mode selection.
 
-    Click cycles through Guided → Standard → Expert.
-    Sits inside _LogoHeader, between app name and collapse arrow.
+    Renders as a rounded-rect track containing three labelled segments.
+    The active segment is accent-coloured; inactive ones are dim.
     """
     mode_clicked = pyqtSignal(str)
 
-    _MODES = ("guided", "standard", "expert")
-    _LABELS = ("G", "S", "E")
+    _MODES  = ("guided", "standard", "expert")
+    _LABELS = ("Guided", "Standard", "Expert")
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._mode_idx = 1  # standard
-        self.setFixedSize(50, 20)
+        self._hover_idx = -1
+        self.setFixedSize(198, 28)
         self.setCursor(QCursor(Qt.PointingHandCursor))
-        self.setToolTip("Workspace mode (click to cycle)")
+        self.setMouseTracking(True)
+        self.setToolTip("Workspace mode — click to switch")
 
     def set_mode(self, mode: str) -> None:
         try:
@@ -443,31 +442,75 @@ class _ModeIndicator(QWidget):
             self._mode_idx = 1
         self.update()
 
+    def _idx_at(self, x: int) -> int:
+        seg_w = self.width() / 3
+        idx = int(x / seg_w)
+        return max(0, min(2, idx))
+
+    def mouseMoveEvent(self, e):
+        idx = self._idx_at(e.x())
+        if idx != self._hover_idx:
+            self._hover_idx = idx
+            self.update()
+
+    def leaveEvent(self, e):
+        self._hover_idx = -1
+        self.update()
+
     def mousePressEvent(self, e):
         if e.button() == Qt.LeftButton:
-            self._mode_idx = (self._mode_idx + 1) % 3
-            self.mode_clicked.emit(self._MODES[self._mode_idx])
-            self.update()
+            idx = self._idx_at(e.x())
+            if idx != self._mode_idx:
+                self._mode_idx = idx
+                self.mode_clicked.emit(self._MODES[idx])
+                self.update()
 
     def paintEvent(self, event):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         w, h = self.width(), self.height()
-        r = 4  # dot radius
-        spacing = 14
-        start_x = (w - spacing * 2) // 2
+        seg_w = w / 3
 
-        for i in range(3):
-            x = start_x + i * spacing
-            y = h // 2
+        # Track background
+        track = QPainterPath()
+        track.addRoundedRect(0.5, 0.5, w - 1, h - 1, h / 2, h / 2)
+        p.fillPath(track, QColor(_BG()))
+        p.setPen(QPen(QColor(_DIVIDER()), 1))
+        p.drawPath(track)
+
+        # Active segment highlight
+        ax = self._mode_idx * seg_w + 2
+        aw = seg_w - 4
+        ah = h - 4
+        ay = 2
+        pill = QPainterPath()
+        pill.addRoundedRect(ax, ay, aw, ah, ah / 2, ah / 2)
+        p.fillPath(pill, QColor(_ACCENT()))
+
+        # Labels
+        font = _sans_font(_FONT.get("caption", 8), bold=False)
+        p.setFont(font)
+
+        for i, label in enumerate(self._LABELS):
+            sx = i * seg_w
             if i == self._mode_idx:
-                p.setBrush(QColor(_ACCENT()))
-                p.setPen(Qt.NoPen)
+                # Active: dark text on accent background
+                p.setPen(QColor("#000000"))
+                f = _sans_font(_FONT.get("caption", 8), bold=True)
+                p.setFont(f)
+            elif i == self._hover_idx:
+                p.setPen(QColor(_TEXT_NORM()))
+                p.setFont(font)
             else:
-                p.setBrush(Qt.NoBrush)
-                p.setPen(QPen(QColor(_TEXT_DIM()), 1))
-            p.drawEllipse(x - r, y - r, r * 2, r * 2)
+                p.setPen(QColor(_TEXT_DIM()))
+                p.setFont(font)
+            p.drawText(int(sx), 0, int(seg_w), h,
+                       Qt.AlignCenter, label)
+
         p.end()
+
+    def _apply_styles(self) -> None:
+        self.update()
 
 
 # ================================================================== #
@@ -774,7 +817,7 @@ class _Sidebar(QWidget):
     def set_workspace_mode(self, mode: str) -> None:
         """Reconfigure sidebar presentation for the given workspace mode."""
         self._workspace_mode = mode
-        self._logo_hdr._mode_ind.set_mode(mode)
+        self._logo_hdr._mode_pill.set_mode(mode)
 
         for header in self._phase_headers:
             if mode == "expert":
@@ -1008,7 +1051,7 @@ class SidebarNav(QWidget):
         s = self._sidebar
         s.setStyleSheet(f"background:{_BG()};")
         s._menu_w.setStyleSheet(f"background:{_BG()};")
-        s._logo_hdr.setStyleSheet(f"background:{_HDR_BG()};")
+        s._logo_hdr._apply_styles()
         s._restyle_scroll()
 
         for c in s._containers:
