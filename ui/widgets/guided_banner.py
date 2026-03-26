@@ -6,17 +6,22 @@ the workspace is in Guided mode.  Hidden in Standard/Expert.
 
 The banner observes PhaseTracker state and suggests what the user
 should do next.  Clicking the suggestion navigates to the relevant
-section.
+section.  When a step completes, the banner briefly shows a checkmark
+before auto-advancing to the next step.
 """
 from __future__ import annotations
 
-from PyQt5.QtCore import Qt, pyqtSignal
+import logging
+
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QSize
 from PyQt5.QtWidgets import (
     QWidget, QHBoxLayout, QLabel, QPushButton, QSizePolicy,
 )
 
 from ui.theme import FONT, PALETTE
-from ui.icons import IC, set_btn_icon
+from ui.icons import IC, _FA5_TO_MDI, _safe_icon
+
+log = logging.getLogger(__name__)
 
 
 # ── Step definitions ──────────────────────────────────────────────────
@@ -43,6 +48,19 @@ _STEPS = [
 ]
 
 
+def _icon_pixmap(icon_name: str, size: int = 16, color: str | None = None):
+    """Return a QPixmap for the given MDI icon name, or None."""
+    icon_name = _FA5_TO_MDI.get(icon_name, icon_name)
+    icon_name = _safe_icon(icon_name)
+    if color is None:
+        color = PALETTE.get("textDim", "#8892aa")
+    try:
+        import qtawesome as qta
+        return qta.icon(icon_name, color=color).pixmap(QSize(size, size))
+    except Exception:
+        return None
+
+
 class GuidedBanner(QWidget):
     """Horizontal banner suggesting the next workflow step.
 
@@ -66,11 +84,16 @@ class GuidedBanner(QWidget):
 
         self._icon = QLabel()
         self._icon.setFixedSize(20, 20)
+        self._icon.setAlignment(Qt.AlignCenter)
         lay.addWidget(self._icon)
 
         self._label = QLabel()
         self._label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         lay.addWidget(self._label, 1)
+
+        self._progress_lbl = QLabel()
+        self._progress_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        lay.addWidget(self._progress_lbl)
 
         self._action_btn = QPushButton("Go →")
         self._action_btn.setFixedHeight(26)
@@ -86,7 +109,9 @@ class GuidedBanner(QWidget):
         lay.addWidget(self._dismiss_btn)
 
         self._current_nav: str = ""
+        self._current_step_idx: int = -1
         self._dismissed = False
+        self._celebrating = False
         self._apply_styles()
         self.setVisible(False)
 
@@ -97,20 +122,44 @@ class GuidedBanner(QWidget):
         if self._dismissed:
             return
 
-        for phase, key, text, nav, icon_name in _STEPS:
+        # Count completed steps
+        completed = 0
+        first_incomplete_idx = -1
+        for idx, (phase, key, text, nav, icon_name) in enumerate(_STEPS):
             checks = tracker._checks.get(phase, {})
-            if not checks.get(key, False):
-                self._current_nav = nav
-                self._label.setText(f"Next step: {text}")
-                set_btn_icon(self._icon, icon_name, size=16)
-                self.setVisible(True)
-                return
+            if checks.get(key, False):
+                completed += 1
+            elif first_incomplete_idx < 0:
+                first_incomplete_idx = idx
 
-        # All steps complete
-        self._label.setText("All steps complete — ready for analysis!")
-        self._current_nav = "Sessions"
-        self._icon.clear()
-        self.setVisible(True)
+        total = len(_STEPS)
+
+        # If a step just completed, show brief celebration
+        if (self._current_step_idx >= 0
+                and first_incomplete_idx != self._current_step_idx
+                and not self._celebrating):
+            self._show_step_complete(completed, total, first_incomplete_idx)
+            return
+
+        if first_incomplete_idx >= 0:
+            _phase, _key, text, nav, icon_name = _STEPS[first_incomplete_idx]
+            self._current_nav = nav
+            self._current_step_idx = first_incomplete_idx
+            self._label.setText(f"Next step: {text}")
+            self._set_icon(icon_name)
+            self._progress_lbl.setText(f"{completed}/{total}")
+            self._action_btn.setVisible(True)
+            self.setVisible(True)
+        else:
+            # All steps complete
+            self._label.setText("All steps complete — ready for analysis!")
+            self._current_nav = "Sessions"
+            self._current_step_idx = total
+            self._set_icon(IC.CHECK, color="#00d479")
+            self._progress_lbl.setText(f"{total}/{total}")
+            self._action_btn.setText("View →")
+            self._action_btn.setVisible(True)
+            self.setVisible(True)
 
     def set_guided_visible(self, guided: bool) -> None:
         """Show/hide based on workspace mode."""
@@ -128,12 +177,15 @@ class GuidedBanner(QWidget):
         text = PALETTE.get("text", "#ebebeb")
         border = PALETTE.get("accent", "#00d4aa")
         surface = PALETTE.get("surface", "#2d2d2d")
+        dim = PALETTE.get("textDim", "#8892aa")
 
         self.setStyleSheet(
             f"GuidedBanner {{ background:{bg}; "
             f"border:1px solid {border}44; border-radius:6px; }}")
         self._label.setStyleSheet(
             f"color:{text}; font-size:{FONT['body']}pt; background:transparent;")
+        self._progress_lbl.setStyleSheet(
+            f"color:{dim}; font-size:{FONT['caption']}pt; background:transparent;")
         self._action_btn.setStyleSheet(
             f"QPushButton {{ background:{accent}; color:#000; "
             f"border-radius:4px; font-size:{FONT['sublabel']}pt; "
@@ -146,13 +198,50 @@ class GuidedBanner(QWidget):
 
     # ── Private ───────────────────────────────────────────────────────
 
+    def _set_icon(self, icon_name: str, color: str | None = None) -> None:
+        """Set icon pixmap on the QLabel (not QPushButton.setIcon)."""
+        pix = _icon_pixmap(icon_name, size=16, color=color)
+        if pix is not None:
+            self._icon.setPixmap(pix)
+        else:
+            self._icon.clear()
+
+    def _show_step_complete(self, completed: int, total: int,
+                            next_idx: int) -> None:
+        """Briefly show a checkmark before advancing to the next step."""
+        self._celebrating = True
+        self._set_icon(IC.CHECK, color="#00d479")
+        self._label.setText("Step complete!")
+        self._action_btn.setVisible(False)
+        self._progress_lbl.setText(f"{completed}/{total}")
+
+        def _advance():
+            self._celebrating = False
+            if next_idx >= 0 and next_idx < len(_STEPS):
+                _phase, _key, text, nav, icon_name = _STEPS[next_idx]
+                self._current_nav = nav
+                self._current_step_idx = next_idx
+                self._label.setText(f"Next step: {text}")
+                self._set_icon(icon_name)
+                self._action_btn.setText("Go →")
+                self._action_btn.setVisible(True)
+                # Auto-navigate to the next step
+                self.navigate_requested.emit(nav)
+            else:
+                self._label.setText("All steps complete — ready for analysis!")
+                self._current_nav = "Sessions"
+                self._current_step_idx = len(_STEPS)
+                self._set_icon(IC.CHECK, color="#00d479")
+                self._action_btn.setText("View →")
+                self._action_btn.setVisible(True)
+
+        QTimer.singleShot(1200, _advance)
+
     def _on_go(self) -> None:
-        import logging
-        _log = logging.getLogger(__name__)
-        _log.info("GuidedBanner: Go → clicked, navigating to %r", self._current_nav)
+        log.info("GuidedBanner: Go → clicked, navigating to %r",
+                 self._current_nav)
         if self._current_nav:
             self.navigate_requested.emit(self._current_nav)
-            _log.info("GuidedBanner: navigate_requested emitted")
 
     def _on_dismiss(self) -> None:
         self._dismissed = True
