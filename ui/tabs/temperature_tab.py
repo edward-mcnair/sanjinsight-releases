@@ -29,7 +29,7 @@ from PyQt5.QtCore    import Qt, QTimer, pyqtSignal
 
 from hardware.app_state    import app_state
 from ui.widgets.temp_plot  import TempPlot
-from ui.widgets.collapsible_panel import CollapsiblePanel
+from ui.widgets.more_options import MoreOptionsPanel
 from ui.theme import FONT, PALETTE, scaled_qss
 from ui.icons import make_icon_label, IC
 
@@ -266,7 +266,7 @@ class TemperatureTab(QWidget):
         main.addLayout(ctrl)
 
         # ── Safety limits (collapsible Advanced section) ──────────────
-        lim_panel = CollapsiblePanel("Safety limits", start_collapsed=True)
+        lim_panel = MoreOptionsPanel("Safety Limits", section_key="temperature_safety")
 
         lim_row = QHBoxLayout()
 

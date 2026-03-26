@@ -34,6 +34,7 @@ from PyQt5.QtCore    import Qt, QTimer, pyqtSignal
 from hardware.app_state    import app_state
 from ui.widgets.image_pane import ImagePane
 from ui.widgets.collapsible_panel import CollapsiblePanel
+from ui.widgets.more_options import MoreOptionsPanel
 from ui.theme import FONT, PALETTE, scaled_qss
 from ui.icons import IC, make_icon_label, set_btn_icon
 
@@ -171,7 +172,7 @@ class CameraTab(QWidget):
         cl.addWidget(self._obj_fov_lbl, 6, 1, 1, 2)
 
         # ── Advanced section (collapsible) ────────────────────────────
-        adv_panel = CollapsiblePanel("Display & save", start_collapsed=True)
+        adv_panel = MoreOptionsPanel("Display & Save", section_key="camera_display")
 
         adv_inner = QWidget()
         adv_grid  = QGridLayout(adv_inner)
@@ -319,7 +320,7 @@ class CameraTab(QWidget):
         root.addWidget(self._simcam_panel)
 
         # ── Frame Statistics (collapsible) ────────────────────────────
-        stats_panel = CollapsiblePanel("Frame statistics", start_collapsed=True)
+        stats_panel = MoreOptionsPanel("Frame Statistics", section_key="camera_stats")
 
         stats_row = QWidget()
         stats_lay = QHBoxLayout(stats_row)

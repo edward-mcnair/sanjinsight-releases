@@ -26,10 +26,11 @@ from PyQt5.QtWidgets import (
     QDoubleSpinBox, QSpinBox, QGroupBox, QGridLayout, QSplitter,
     QSizePolicy, QCheckBox, QTableWidget, QTableWidgetItem,
     QHeaderView, QAbstractItemView, QFileDialog, QMessageBox,
-    QFrame, QStackedWidget, QToolButton)
+    QFrame, QStackedWidget)
 from PyQt5.QtCore  import Qt, pyqtSignal
 from PyQt5.QtGui   import QImage, QPixmap, QPainter, QColor
 
+from ui.widgets.more_options import MoreOptionsPanel
 from .analysis import (ThermalAnalysisEngine, AnalysisConfig,
                         AnalysisResult, Hotspot,
                         VERDICT_PASS, VERDICT_WARNING, VERDICT_FAIL)
@@ -546,22 +547,10 @@ class AnalysisTab(QWidget):
         lay.addWidget(pf_box)
 
         # ── Advanced collapsible: Warning rules + Noise Filtering ────────
-        adv_toggle = QToolButton()
-        adv_toggle.setText("▸  Warning rules & noise filter")
-        adv_toggle.setCheckable(True)
-        adv_toggle.setChecked(False)
-        adv_toggle.setToolButtonStyle(Qt.ToolButtonTextOnly)
-        adv_toggle.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        adv_toggle.setStyleSheet(
-            f"QToolButton {{ background:transparent; color:{PALETTE.get('textDim','#999')}; "
-            f"font-size:{FONT['body']}pt; border:none; text-align:left; padding:2px 4px; }}"
-            f"QToolButton:hover {{ color:{PALETTE.get('text','#ebebeb')}; }}")
-        lay.addWidget(adv_toggle)
-
-        adv_body = QWidget()
-        adv_inner = QVBoxLayout(adv_body)
-        adv_inner.setContentsMargins(0, 0, 0, 0)
-        adv_inner.setSpacing(8)
+        adv_panel = MoreOptionsPanel(
+            "Warning Rules & Noise Filter",
+            section_key="analysis_advanced",
+        )
 
         warn_box = QGroupBox("Warning Rules")
         wl = QGridLayout(warn_box)
@@ -573,7 +562,7 @@ class AnalysisTab(QWidget):
         ]):
             wl.addWidget(help_label(lbl, topic), row, 0)
             wl.addWidget(widget, row, 1)
-        adv_inner.addWidget(warn_box)
+        adv_panel.addWidget(warn_box)
 
         mo_box = QGroupBox("Noise Filtering")
         ml = QGridLayout(mo_box)
@@ -590,18 +579,9 @@ class AnalysisTab(QWidget):
             l.setStyleSheet(f"font-size:{FONT['label']}pt; color:{PALETTE.get('textSub','#6a6a6a')};")
             ml.addWidget(l, row, 0)
             ml.addWidget(widget, row, 1)
-        adv_inner.addWidget(mo_box)
+        adv_panel.addWidget(mo_box)
 
-        adv_body.setVisible(False)
-        lay.addWidget(adv_body)
-
-        def _on_adv_toggled(checked: bool):
-            adv_toggle.setText(
-                "▾  Warning rules & noise filter" if checked
-                else "▸  Warning rules & noise filter")
-            adv_body.setVisible(checked)
-
-        adv_toggle.toggled.connect(_on_adv_toggled)
+        lay.addWidget(adv_panel)
 
         # ── Quick Presets ─────────────────────────────────────────────────
         pre_box = QGroupBox("Quick Presets")
