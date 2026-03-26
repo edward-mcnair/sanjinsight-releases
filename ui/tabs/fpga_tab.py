@@ -30,6 +30,7 @@ from PyQt5.QtCore    import Qt, pyqtSignal
 
 from hardware.app_state import app_state
 from ui.widgets.collapsible_panel import CollapsiblePanel
+from ui.widgets.more_options import MoreOptionsPanel
 from ui.theme import FONT, PALETTE, scaled_qss
 from ui.icons import IC, make_icon_label, set_btn_icon
 
@@ -212,8 +213,8 @@ class FpgaTab(QWidget):
         root.addWidget(ctrl_box)
 
         # ── Advanced: exact value spinboxes (collapsible) ─────────────
-        adv_panel = CollapsiblePanel(
-            "Manual frequency & duty cycle", start_collapsed=True)
+        adv_panel = MoreOptionsPanel(
+            "Manual frequency & duty cycle", section_key="fpga_manual")
 
         adv_inner = QWidget()
         adv_grid  = QGridLayout(adv_inner)

@@ -26,6 +26,7 @@ from acquisition        import export_result
 from acquisition.processing import COLORMAP_OPTIONS, COLORMAP_TOOLTIPS, setup_cmap_combo
 import config as cfg_mod
 from ui.widgets.image_pane import ImagePane
+from ui.widgets.more_options import MoreOptionsPanel
 
 
 class AcquireTab(QWidget):
@@ -152,15 +153,13 @@ class AcquireTab(QWidget):
 
         left.addWidget(ctrl_box)
 
-        # Log
-        log_box = QGroupBox("Log")
-        logl = QVBoxLayout(log_box)
-        self._log = QTextEdit()
-        self._log.setReadOnly(True)
-        self._log.setMinimumHeight(80)
-        self._log.setMaximumHeight(140)
-        logl.addWidget(self._log)
-        left.addWidget(log_box)
+        # Notes & Log — collapsed in Guided mode, expanded in Expert
+        self._notes_more = MoreOptionsPanel(
+            "Session Notes & Log", section_key="acquire_notes_log")
+        notes_log_w = QWidget()
+        notes_log_lay = QVBoxLayout(notes_log_w)
+        notes_log_lay.setContentsMargins(0, 0, 0, 0)
+        notes_log_lay.setSpacing(6)
 
         # Session notes — annotate before saving
         notes_box = QGroupBox("Session Notes")
@@ -202,7 +201,20 @@ class AcquireTab(QWidget):
             self._chip_btns.append(btn)
         chips_row.addStretch()
         nl.addLayout(chips_row)
-        left.addWidget(notes_box)
+        notes_log_lay.addWidget(notes_box)
+
+        # Log
+        log_box = QGroupBox("Log")
+        logl = QVBoxLayout(log_box)
+        self._log = QTextEdit()
+        self._log.setReadOnly(True)
+        self._log.setMinimumHeight(80)
+        self._log.setMaximumHeight(140)
+        logl.addWidget(self._log)
+        notes_log_lay.addWidget(log_box)
+
+        self._notes_more.addWidget(notes_log_w)
+        left.addWidget(self._notes_more)
 
         # RIGHT — results
         right = QVBoxLayout()

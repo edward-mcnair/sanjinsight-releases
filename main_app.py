@@ -696,6 +696,10 @@ class MainWindow(QMainWindow):
         # Phase completion tracker
         self._phase_tracker = PhaseTracker(parent=self)
         self._phase_tracker.phase_updated.connect(self._nav.set_phase_badge)
+        self._phase_tracker.phase_updated.connect(
+            lambda *_: self._nav.update_guided_banner(self._phase_tracker))
+        # Initial banner state
+        self._nav.update_guided_banner(self._phase_tracker)
         self._live_viewed_marked = False
         self._tec_target_marked = False
 

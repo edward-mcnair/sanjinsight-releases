@@ -18,7 +18,7 @@ from PyQt5.QtCore import Qt, pyqtSignal
 
 from hardware.app_state import app_state
 from ui.theme import PALETTE, FONT
-from ui.icons import IC, make_icon_label
+from ui.icons import IC, make_icon, make_icon_label
 
 log = logging.getLogger(__name__)
 
@@ -288,42 +288,53 @@ class SignalCheckSection(QWidget):
         lay.setAlignment(Qt.AlignCenter)
         lay.setSpacing(16)
 
-        icon_lbl = make_icon_label(IC.LINK_OFF, color="#555555", size=64)
-        icon_lbl.setAlignment(Qt.AlignCenter)
+        self._es_icon = make_icon_label(
+            IC.LINK_OFF, color=PALETTE.get("textDim", "#555555"), size=64)
+        self._es_icon.setAlignment(Qt.AlignCenter)
 
-        title_lbl = QLabel("No Live Feed")
-        title_lbl.setAlignment(Qt.AlignCenter)
-        title_lbl.setStyleSheet(
-            f"font-size:{FONT['readoutSm']}pt; font-weight:bold; color:#888;")
+        self._es_title = QLabel("No Live Feed")
+        self._es_title.setAlignment(Qt.AlignCenter)
 
-        tip_lbl = QLabel(
+        self._es_tip = QLabel(
             "Connect a camera and start the live view to verify signal quality.")
-        tip_lbl.setAlignment(Qt.AlignCenter)
-        tip_lbl.setWordWrap(True)
-        tip_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:#555;")
-        tip_lbl.setMaximumWidth(400)
+        self._es_tip.setAlignment(Qt.AlignCenter)
+        self._es_tip.setWordWrap(True)
+        self._es_tip.setMaximumWidth(400)
 
-        btn = QPushButton("Open Device Manager")
-        btn.setFixedWidth(200)
-        btn.setFixedHeight(36)
-        btn.setStyleSheet(f"""
+        self._es_btn = QPushButton("Open Device Manager")
+        self._es_btn.setFixedWidth(200)
+        self._es_btn.setFixedHeight(36)
+        self._es_btn.clicked.connect(self.open_device_manager)
+
+        self._apply_empty_state_styles()
+
+        lay.addStretch()
+        lay.addWidget(self._es_icon)
+        lay.addWidget(self._es_title)
+        lay.addWidget(self._es_tip)
+        lay.addSpacing(8)
+        lay.addWidget(self._es_btn, 0, Qt.AlignCenter)
+        lay.addStretch()
+        return w
+
+    def _apply_empty_state_styles(self) -> None:
+        dim = PALETTE.get("textDim", "#888888")
+        accent = PALETTE.get("accent", "#00d4aa")
+        self._es_title.setStyleSheet(
+            f"font-size:{FONT['readoutSm']}pt; font-weight:bold; color:{dim};")
+        self._es_tip.setStyleSheet(
+            f"font-size:{FONT['label']}pt; color:{dim};")
+        self._es_btn.setStyleSheet(f"""
             QPushButton {{
-                background:{PALETTE.get('surface','#2d2d2d')}; color:#00d4aa;
-                border:1px solid #00d4aa66; border-radius:5px;
+                background:{PALETTE.get('surface','#2d2d2d')}; color:{accent};
+                border:1px solid {accent}66; border-radius:5px;
                 font-size:{FONT['label']}pt; font-weight:600;
             }}
             QPushButton:hover {{ background:{PALETTE.get('surface2','#3d3d3d')}; }}
         """)
-        btn.clicked.connect(self.open_device_manager)
-
-        lay.addStretch()
-        lay.addWidget(icon_lbl)
-        lay.addWidget(title_lbl)
-        lay.addWidget(tip_lbl)
-        lay.addSpacing(8)
-        lay.addWidget(btn, 0, Qt.AlignCenter)
-        lay.addStretch()
-        return w
+        icon = make_icon(IC.LINK_OFF, color=dim, size=64)
+        if icon:
+            self._es_icon.setPixmap(icon.pixmap(64, 64))
 
     # ── Theme ──────────────────────────────────────────────────────────
 
@@ -331,4 +342,6 @@ class SignalCheckSection(QWidget):
         for w in [self._snr_val, self._sat_val, self._verdict]:
             w._sub.setStyleSheet(
                 f"font-size:{FONT['sublabel']}pt; color:{PALETTE['textDim']};")
+        if hasattr(self, "_es_btn"):
+            self._apply_empty_state_styles()
         self.update()

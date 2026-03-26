@@ -954,6 +954,19 @@ class SidebarNav(QWidget):
         self._stack   = QStackedWidget()
         self._stack.setStyleSheet(f"background:{_BG()};")
 
+        # Right-side container: optional GuidedBanner + page stack
+        from ui.widgets.guided_banner import GuidedBanner
+        self._guided_banner = GuidedBanner()
+        self._guided_banner.navigate_requested.connect(
+            lambda label: self.select_by_label(label))
+
+        self._right = QWidget()
+        _right_lay = QVBoxLayout(self._right)
+        _right_lay.setContentsMargins(0, 0, 0, 0)
+        _right_lay.setSpacing(0)
+        _right_lay.addWidget(self._guided_banner)
+        _right_lay.addWidget(self._stack, 1)
+
         self._sep = QFrame()
         self._sep.setFrameShape(QFrame.VLine)
         self._sep.setStyleSheet(f"color:{_DIVIDER()}; max-width:1px;")
@@ -963,7 +976,7 @@ class SidebarNav(QWidget):
         self._lay.setSpacing(0)
         self._lay.addWidget(self._sidebar)
         self._lay.addWidget(self._sep)
-        self._lay.addWidget(self._stack, 1)
+        self._lay.addWidget(self._right, 1)
 
         # Collapse bar is hidden by default
         self._bar.setParent(self)
@@ -1004,10 +1017,15 @@ class SidebarNav(QWidget):
     def set_workspace_mode(self, mode: str) -> None:
         """Reconfigure sidebar presentation for the given workspace mode."""
         self._sidebar.set_workspace_mode(mode)
+        self._guided_banner.set_guided_visible(mode == "guided")
 
     def set_phase_badge(self, phase_number: int, text: str) -> None:
         """Update completion badge on a phase header."""
         self._sidebar.set_phase_badge(phase_number, text)
+
+    def update_guided_banner(self, tracker) -> None:
+        """Refresh the guided walkthrough banner from PhaseTracker state."""
+        self._guided_banner.update_from_tracker(tracker)
 
     def finish(self):       self._sidebar.finish()
     def select_first(self): self._sidebar.select_first()
@@ -1062,6 +1080,9 @@ class SidebarNav(QWidget):
 
         for c in s._phase_containers:
             c.setStyleSheet(f"background:{_BG()};")
+
+        # Refresh guided banner theme
+        self._guided_banner._apply_styles()
 
         # Trigger a repaint on all custom-drawn sidebar widgets
         for w in ([s, s._logo_hdr] + s._sections + s._cheaders + s._items

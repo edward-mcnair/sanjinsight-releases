@@ -31,6 +31,7 @@ from PyQt5.QtGui  import (QImage, QPixmap, QPainter, QPen, QColor,
 from .scan       import ScanProgress, ScanResult
 from .processing import to_display, apply_colormap, COLORMAP_OPTIONS, COLORMAP_TOOLTIPS, setup_cmap_combo
 import config as cfg_mod
+from ui.widgets.more_options import MoreOptionsPanel
 
 
 # ------------------------------------------------------------------ #
@@ -381,17 +382,20 @@ class ScanTab(QWidget):
         rl.addWidget(self._tile_lbl)
         lay.addWidget(run_box)
 
-        # ---- Log ----
+        # ---- Log (collapsed in Guided, expanded in Expert) ----
+        self._scan_log_more = MoreOptionsPanel(
+            "Scan Log", section_key="scan_log")
         log_box = QGroupBox("Log")
         ll = QVBoxLayout(log_box)
         self._log = QTextEdit()
         self._log.setReadOnly(True)
         self._log.setFixedHeight(120)
         self._log.setStyleSheet(
-            f"background:#111; color:#555; "
+            f"background:{PALETTE.get('bg','#242424')}; color:{PALETTE.get('textDim','#888')}; "
             f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['sublabel']}pt;")
         ll.addWidget(self._log)
-        lay.addWidget(log_box)
+        self._scan_log_more.addWidget(log_box)
+        lay.addWidget(self._scan_log_more)
         lay.addStretch()
 
         self._run_btn.clicked.connect(self._run)

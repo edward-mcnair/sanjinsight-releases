@@ -24,7 +24,8 @@ from PyQt5.QtGui  import (QImage, QPixmap, QPainter, QPen, QColor,
                            QBrush, QLinearGradient)
 
 from ui.font_utils import mono_font
-from ui.theme import FONT, scaled_qss
+from ui.theme import FONT, PALETTE, scaled_qss
+from ui.widgets.more_options import MoreOptionsPanel
 from .calibration        import Calibration, CalibrationResult
 from .calibration_runner import CalibrationRunner, CalibrationProgress
 from .processing         import (to_display, apply_colormap,
@@ -296,46 +297,63 @@ class CalibrationTab(QWidget):
 
         # ---- Capture settings ----
         cfg_box = QGroupBox("Capture Settings")
-        cl = QGridLayout(cfg_box)
-        cl.setSpacing(6)
-        cl.setColumnStretch(1, 1)
+        cfg_lay = QVBoxLayout(cfg_box)
+        cfg_lay.setSpacing(6)
 
-        def row(lbl, widget, r):
-            cl.addWidget(self._sub(lbl), r, 0)
-            cl.addWidget(widget, r, 1)
+        # Essential controls — always visible
+        main_grid = QGridLayout()
+        main_grid.setSpacing(6)
+        main_grid.setColumnStretch(1, 1)
 
-        self._n_avg     = QSpinBox();   self._n_avg.setRange(5, 500)
-        self._n_avg.setValue(CAL_N_AVERAGES)   # 100 frames — standard (SanjANALYZER)
+        def _row(grid, lbl, widget, r):
+            grid.addWidget(self._sub(lbl), r, 0)
+            grid.addWidget(widget, r, 1)
+
+        self._n_avg = QSpinBox(); self._n_avg.setRange(5, 500)
+        self._n_avg.setValue(CAL_N_AVERAGES)
         self._n_avg.setMinimumWidth(80)
         self._n_avg.setToolTip(
             f"Frames averaged per temperature step.\n"
             f"Standard calibration uses {CAL_N_AVERAGES} frames (SanjANALYZER default).")
 
-        self._settle    = QDoubleSpinBox(); self._settle.setRange(1, CAL_SETTLE_TIMEOUT_S)
-        self._settle.setValue(60.0);        self._settle.setSuffix(" s")
+        self._settle = QDoubleSpinBox(); self._settle.setRange(1, CAL_SETTLE_TIMEOUT_S)
+        self._settle.setValue(60.0); self._settle.setSuffix(" s")
         self._settle.setMinimumWidth(80)
         self._settle.setToolTip(
             f"Maximum time to wait for each setpoint to stabilise before capturing.\n"
             f"Hardware timeout limit: {CAL_SETTLE_TIMEOUT_S} s (SanjANALYZER).\n"
             f"Ramp time to reach setpoint is ~{TEC_RAMP_TIME_S} s (not included here).")
 
+        _row(main_grid, "Avg frames/step", self._n_avg, 0)
+        _row(main_grid, "Max settle time", self._settle, 1)
+        cfg_lay.addLayout(main_grid)
+
+        # Advanced controls — collapsed in Guided, expanded in Expert
+        self._cal_more = MoreOptionsPanel(
+            "Stability & Quality", section_key="calibration_capture")
+        adv_w = QWidget()
+        adv_grid = QGridLayout(adv_w)
+        adv_grid.setSpacing(6)
+        adv_grid.setColumnStretch(1, 1)
+        adv_grid.setContentsMargins(0, 0, 0, 0)
+
         self._stable_tol = QDoubleSpinBox(); self._stable_tol.setRange(0.01, 2.0)
-        self._stable_tol.setValue(0.2);      self._stable_tol.setSuffix(" °C")
+        self._stable_tol.setValue(0.2); self._stable_tol.setSuffix(" °C")
         self._stable_tol.setMinimumWidth(80)
 
         self._stable_dur = QDoubleSpinBox(); self._stable_dur.setRange(1, 60)
-        self._stable_dur.setValue(5.0);      self._stable_dur.setSuffix(" s")
+        self._stable_dur.setValue(5.0); self._stable_dur.setSuffix(" s")
         self._stable_dur.setMinimumWidth(80)
 
         self._min_r2 = QDoubleSpinBox(); self._min_r2.setRange(0.1, 1.0)
-        self._min_r2.setValue(0.80);     self._min_r2.setDecimals(2)
+        self._min_r2.setValue(0.80); self._min_r2.setDecimals(2)
         self._min_r2.setMinimumWidth(80)
 
-        row("Avg frames/step",  self._n_avg,       0)
-        row("Max settle time",  self._settle,      1)
-        row("Stable tolerance", self._stable_tol,  2)
-        row("Stable duration",  self._stable_dur,  3)
-        row("Min R² threshold", self._min_r2,      4)
+        _row(adv_grid, "Stable tolerance", self._stable_tol, 0)
+        _row(adv_grid, "Stable duration", self._stable_dur, 1)
+        _row(adv_grid, "Min R² threshold", self._min_r2, 2)
+        self._cal_more.addWidget(adv_w)
+        cfg_lay.addWidget(self._cal_more)
 
         # Update time estimate when capture settings change
         self._n_avg.valueChanged.connect(lambda _: self._update_time_est())
