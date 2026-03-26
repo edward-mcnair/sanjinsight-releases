@@ -923,6 +923,10 @@ class SettingsTab(QWidget):
             self._ai_privacy_frame.setStyleSheet(
                 f"QFrame {{ background:{_BG2()}; border:1px solid {_GREEN}55; "
                 f"border-radius:5px; }}")
+        if hasattr(self, "_ai_no_llama_frame"):
+            self._ai_no_llama_frame.setStyleSheet(
+                f"QFrame {{ background:{_BG2()}; border:1px solid {_AMBER}55; "
+                f"border-radius:5px; }}")
         if hasattr(self, "_ai_hw_frame"):
             self._ai_hw_frame.setStyleSheet(
                 f"QFrame {{ background:{_BG2()}; border:1px solid {_BORDER()}; "
@@ -1219,6 +1223,60 @@ class SettingsTab(QWidget):
         privacy_text.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_GREEN}; border:none;")
         pf_lay.addWidget(privacy_text, 1)
         lay.addWidget(privacy_frame)
+
+        # ── Check if llama-cpp-python is available ────────────────────────
+        from ai.model_runner import llama_available as _llama_ok
+        self._llama_available = _llama_ok()
+
+        if not self._llama_available:
+            # Show a helpful message instead of the broken local-model UI
+            self._ai_no_llama_frame = QFrame()
+            nf = self._ai_no_llama_frame
+            nf.setStyleSheet(
+                f"QFrame {{ background:{_BG2()}; border:1px solid {_AMBER}55; "
+                f"border-radius:5px; }}")
+            nf_lay = QVBoxLayout(nf)
+            nf_lay.setContentsMargins(12, 10, 12, 10)
+            nf_lay.setSpacing(6)
+            nf_title = QLabel("Local AI runtime not installed")
+            nf_title.setStyleSheet(
+                f"font-size:{FONT['label']}pt; font-weight:bold; "
+                f"color:{_AMBER}; border:none;")
+            nf_lay.addWidget(nf_title)
+            nf_body = QLabel(
+                "The <b>llama-cpp-python</b> package is required for local "
+                "GGUF model inference but is not installed on this machine."
+                "<br><br>"
+                "You can still use AI through <b>Cloud AI</b> (Claude or "
+                "ChatGPT with an API key) or <b>Ollama</b> (free, local, "
+                "no Python compilation needed) in the section below."
+                "<br><br>"
+                "<i>To install the local runtime later:</i><br>"
+                "<code>pip install llama-cpp-python</code>")
+            nf_body.setWordWrap(True)
+            nf_body.setTextFormat(Qt.RichText)
+            nf_body.setStyleSheet(
+                f"font-size:{FONT['sublabel']}pt; color:{_TEXT()}; border:none;")
+            nf_lay.addWidget(nf_body)
+            lay.addWidget(nf)
+
+            # Hide the download/enable controls — skip the rest of the group
+            self._ai_disabled_notice = QLabel()
+            self._ai_disabled_notice.setVisible(False)
+            self._ai_enable_chk = QCheckBox()
+            self._ai_enable_chk.setVisible(False)
+            self._ai_download_widget = QWidget()
+            self._ai_download_widget.setVisible(False)
+            # Create stub attributes so the rest of the code doesn't crash
+            self._ai_model_combo = QComboBox()
+            self._ai_model_ids = []
+            self._ai_path_edit = QLineEdit()
+            self._ai_gpu_slider = QSlider()
+            self._ai_status_lbl = QLabel()
+            self._ai_load_btn = QPushButton()
+            self._ai_dl_btn = QPushButton()
+            self._ai_dl_progress = QProgressBar()
+            return g
 
         # ── "AI disabled" notice (hidden when enabled) ────────────────────
         self._ai_disabled_notice = _body(
@@ -1552,6 +1610,13 @@ class SettingsTab(QWidget):
             )
 
         toggle.toggled.connect(_toggle)
+        self._alt_ai_toggle = toggle
+
+        # Auto-expand when local AI is unavailable so users find the
+        # working alternatives immediately.
+        if not getattr(self, "_llama_available", True):
+            toggle.setChecked(True)
+
         return g
 
     def _build_cloud_ai_group(self) -> QGroupBox:
