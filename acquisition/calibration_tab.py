@@ -252,6 +252,10 @@ class CalibrationTab(QWidget):
             lambda: self._set_preset(CAL_IR_TEMPS_C))
         pre_row2.addWidget(self._btn_ir_std)
 
+        # Hide both until refresh_camera_mode() decides which to show
+        self._btn_tr_std.setVisible(False)
+        self._btn_ir_std.setVisible(False)
+
         pre_row2.addStretch()
         sl.addLayout(pre_row2)
 

@@ -31,11 +31,11 @@ _DEVICE_LABELS: dict[str, str] = {
     "camera":          "Camera",
     "tr_camera":       "TR Camera",
     "ir_camera":       "IR Camera",
-    "tec0":            "TEC 1",
-    "tec1":            "TEC 2",
-    "tec2":            "TEC 2",
-    "tec_meerstetter": "TEC",
-    "tec_atec":        "TEC",
+    "tec0":            "TEC-1089",
+    "tec1":            "ATEC-302",
+    "tec2":            "TEC 3",
+    "tec_meerstetter": "TEC-1089",
+    "tec_atec":        "ATEC-302",
     "fpga":            "FPGA",
     "bias":            "Bias Source",
     "stage":           "Stage",
@@ -946,7 +946,7 @@ class SystemStatusButton(QWidget):
         lay.setSpacing(6)
 
         self._dot_lbl   = QLabel("●")
-        self._text_lbl  = QLabel("System")
+        self._text_lbl  = QLabel("System Health")
         self._arrow_lbl = QLabel("▾")
 
         for lbl in (self._dot_lbl, self._text_lbl, self._arrow_lbl):
@@ -1006,9 +1006,9 @@ class SystemStatusButton(QWidget):
             f"color:{color}; font-size:{FONT['label']}pt; background:transparent;")
 
         suffix = f" ({self._grade})" if self._grade else ""
-        self._text_lbl.setText(f"System{suffix}")
+        self._text_lbl.setText(f"System Health{suffix}")
 
-        tip = f"System readiness: Grade {self._grade}" if self._grade else "System readiness: unknown"
+        tip = f"System Health: Grade {self._grade}" if self._grade else "System Health: unknown"
         n_fail = sum(1 for r in self._results if r.severity == "fail")
         n_warn = sum(1 for r in self._results if r.severity == "warn")
         n_ok   = sum(1 for r in self._results if r.severity == "ok")
