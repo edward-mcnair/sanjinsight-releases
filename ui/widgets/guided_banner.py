@@ -297,10 +297,14 @@ class GuidedBanner(QWidget):
         QTimer.singleShot(1200, _advance)
 
     def _on_go(self) -> None:
+        if not self._current_nav:
+            # All steps complete — navigate to Sessions to review results
+            log.info("GuidedBanner: View → clicked, navigating to Sessions")
+            self.navigate_requested.emit("Sessions")
+            return
         log.info("GuidedBanner: Go → clicked, navigating to %r",
                  self._current_nav)
-        if self._current_nav:
-            self.navigate_requested.emit(self._current_nav)
+        self.navigate_requested.emit(self._current_nav)
 
     def _on_skip(self) -> None:
         """Skip the current step — mark it as done and advance."""
