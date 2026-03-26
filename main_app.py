@@ -704,6 +704,9 @@ class MainWindow(QMainWindow):
             lambda *_: self._nav.update_guided_banner(self._phase_tracker))
         # Initial banner state
         self._nav.update_guided_banner(self._phase_tracker)
+        # Skip button in guided banner → force-mark the step as done
+        self._nav.guided_skip_requested.connect(
+            lambda phase, key: self._phase_tracker.mark(phase, key, True))
         self._live_viewed_marked = False
         self._tec_target_marked = False
 

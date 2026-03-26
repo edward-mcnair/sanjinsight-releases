@@ -1027,6 +1027,11 @@ class SidebarNav(QWidget):
         """Refresh the guided walkthrough banner from PhaseTracker state."""
         self._guided_banner.update_from_tracker(tracker)
 
+    @property
+    def guided_skip_requested(self):
+        """Signal forwarded from GuidedBanner: (phase, check_key)."""
+        return self._guided_banner.skip_requested
+
     def finish(self):       self._sidebar.finish()
     def select_first(self): self._sidebar.select_first()
 
@@ -1126,4 +1131,9 @@ class SidebarNav(QWidget):
         idx = self._stack.indexOf(panel)
         if idx >= 0:
             self._stack.setCurrentIndex(idx)
+        # Notify the guided banner which section the user is viewing
+        for mi in self._sidebar._items:
+            if mi.panel is panel:
+                self._guided_banner.notify_current_section(mi._item.label)
+                break
         self.panel_changed.emit(panel)
