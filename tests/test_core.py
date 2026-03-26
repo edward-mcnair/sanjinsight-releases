@@ -394,9 +394,12 @@ class TestProfiles:
         for p in BUILTIN_PROFILES:
             assert p.uid,       f"Profile missing uid: {p.name}"
             assert p.name,      f"Profile missing name"
-            assert p.ct_value > 0, f"Profile {p.name} has non-positive ct_value"
-            assert p.wavelength_nm > 0, f"Profile {p.name} has non-positive wavelength"
             assert p.category,  f"Profile {p.name} missing category"
+            # IR profiles don't have a thermoreflectance coefficient or
+            # specific illumination wavelength — only TR profiles require these.
+            if getattr(p, "modality", "tr") != "ir":
+                assert p.ct_value > 0, f"Profile {p.name} has non-positive ct_value"
+                assert p.wavelength_nm > 0, f"Profile {p.name} has non-positive wavelength"
 
 
 # ================================================================== #
