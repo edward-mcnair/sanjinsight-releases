@@ -567,6 +567,10 @@ class MainWindow(QMainWindow):
 
         # ── Phase-aware sections (new) ─────────────────────────────────
         self._modality_section      = ModalitySection()
+        self._modality_section.open_device_manager.connect(
+            self._open_device_manager)
+        self._modality_section.modality_changed.connect(
+            self._on_modality_changed)
         self._acq_settings_section  = AcquisitionSettingsSection()
         self._signal_check_section  = SignalCheckSection()
         self._focus_stage_tab       = FocusStageTab(
@@ -1313,6 +1317,10 @@ class MainWindow(QMainWindow):
 
         # Update mode-dependent UI in other tabs
         try:
+            self._modality_section.refresh()
+        except Exception:
+            log.debug("ModalitySection refresh failed on camera switch", exc_info=True)
+        try:
             self._cal_tab.refresh_camera_mode()
         except Exception:
             log.debug("CalibrationTab camera refresh failed", exc_info=True)
@@ -1322,6 +1330,30 @@ class MainWindow(QMainWindow):
             log.debug("AcquireTab camera refresh failed", exc_info=True)
 
         log.info("Global camera bar: active camera → %s", cam_type)
+
+    def _on_modality_changed(self, cam_type: str) -> None:
+        """Handle camera type change from ModalitySection's combo.
+
+        Syncs the global camera bar and all other camera-mode-dependent UI.
+        """
+        # Sync the camera context bar (it checks for redundant updates internally)
+        try:
+            self._cam_bar.set_camera_type(cam_type)
+        except AttributeError:
+            # Older CameraContextBar without set_camera_type — update manually
+            app_state.active_camera_type = cam_type
+        key = "tr_camera" if cam_type == "tr" else "ir_camera"
+        self._header.set_active_device(key)
+        self._refresh_all_camera_selectors()
+        try:
+            self._cal_tab.refresh_camera_mode()
+        except Exception:
+            pass
+        try:
+            self._acquire_tab.refresh_camera_mode()
+        except Exception:
+            pass
+        log.info("Modality section: active camera → %s", cam_type)
 
     def _refresh_all_camera_selectors(self) -> None:
         """
