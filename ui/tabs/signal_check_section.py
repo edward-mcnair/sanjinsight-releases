@@ -162,6 +162,7 @@ class SignalCheckSection(QWidget):
     def reset(self) -> None:
         self._passed = False
         self._check_frames.clear()
+        self._temporal_buf: list = []   # rolling buffer for temporal SNR
         self._set_readout(self._snr_val, "--", "text")
         self._set_readout(self._sat_val, "--", "text")
         self._set_readout(self._verdict, "--", "text")
@@ -180,7 +181,7 @@ class SignalCheckSection(QWidget):
         try:
             import numpy as np
             roi = self._extract_roi(data)
-            snr = self._compute_snr(roi)
+            snr = self._compute_temporal_snr(roi)
             sat_pct = self._compute_saturation(data)
 
             # Update readouts
@@ -218,14 +219,47 @@ class SignalCheckSection(QWidget):
 
     # ── Internal ───────────────────────────────────────────────────────
 
-    @staticmethod
-    def _compute_snr(data) -> float:
+    _TEMPORAL_BUF_SIZE = 8  # frames to accumulate for temporal SNR
+
+    def _compute_temporal_snr(self, roi) -> float:
+        """Compute temporal SNR from a rolling buffer of ROI frames.
+
+        Temporal SNR = mean(signal) / mean(temporal_noise) where temporal
+        noise is the standard deviation at each pixel across frames.
+        This correctly measures noise without being confused by spatial
+        signal structure (die edges, bond pads, etc.).
+
+        Falls back to single-frame spatial SNR until enough frames
+        accumulate.
+        """
         import numpy as np
-        mean = float(np.mean(data))
-        std = float(np.std(data))
-        if std < 1e-10:
-            return 60.0  # effectively no noise
-        return 10.0 * math.log10(mean / std) if mean > 0 else 0.0
+
+        if not hasattr(self, '_temporal_buf'):
+            self._temporal_buf = []
+
+        # Downsample to keep memory bounded (every 4th pixel)
+        small = roi[::4, ::4].astype(np.float32) if roi.ndim == 2 else roi[::4, ::4, 0].astype(np.float32)
+        self._temporal_buf.append(small)
+        if len(self._temporal_buf) > self._TEMPORAL_BUF_SIZE:
+            self._temporal_buf.pop(0)
+
+        mean_signal = float(np.mean(small))
+        if mean_signal <= 0:
+            return 0.0
+
+        if len(self._temporal_buf) >= 3:
+            # Temporal noise: per-pixel std across frames
+            stack = np.stack(self._temporal_buf, axis=0)
+            temporal_std = np.mean(np.std(stack, axis=0))
+            if temporal_std < 1e-10:
+                return 60.0
+            return 10.0 * math.log10(mean_signal / temporal_std)
+        else:
+            # Not enough frames yet — show a provisional estimate
+            std = float(np.std(small))
+            if std < 1e-10:
+                return 60.0
+            return 10.0 * math.log10(mean_signal / std)
 
     @staticmethod
     def _compute_saturation(data) -> float:
