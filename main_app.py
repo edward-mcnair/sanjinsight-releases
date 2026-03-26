@@ -702,8 +702,13 @@ class MainWindow(QMainWindow):
         self._phase_tracker.phase_updated.connect(self._nav.set_phase_badge)
         self._phase_tracker.phase_updated.connect(
             lambda *_: self._nav.update_guided_banner(self._phase_tracker))
-        # Initial banner state
+        self._phase_tracker.phase_updated.connect(
+            lambda *_: self._nav.update_guided_states(
+                self._phase_tracker, _get_ws_manager().mode.value))
+        # Initial banner + sidebar step indicators
         self._nav.update_guided_banner(self._phase_tracker)
+        self._nav.update_guided_states(
+            self._phase_tracker, _get_ws_manager().mode.value)
         # Skip button in guided banner → force-mark the step as done
         self._nav.guided_skip_requested.connect(
             lambda phase, key: self._phase_tracker.mark(phase, key, True))
@@ -1060,6 +1065,9 @@ class MainWindow(QMainWindow):
         # Update AI agent behaviour
         if hasattr(self, "_ai_service"):
             self._ai_service.set_workspace_mode(mode)
+        # Refresh sidebar step indicators for the new mode
+        if hasattr(self, "_phase_tracker"):
+            self._nav.update_guided_states(self._phase_tracker, mode)
         # Sync settings tab buttons if change came from sidebar indicator
         if hasattr(self, "_settings_tab"):
             idx = {"guided": 0, "standard": 1, "expert": 2}.get(mode, 1)

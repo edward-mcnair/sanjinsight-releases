@@ -138,6 +138,7 @@ class _MenuItem(QWidget):
         self._indent = indent
         self._active = False
         self._hover  = False
+        self._guided_state = None   # None | "complete" | "current" | "pending"
         self.setFixedHeight(_ITEM_H)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.setCursor(QCursor(Qt.PointingHandCursor))
@@ -150,6 +151,12 @@ class _MenuItem(QWidget):
     def set_active(self, v):
         if self._active != v:
             self._active = v
+            self.update()
+
+    def set_guided_state(self, state):
+        """Set guided walkthrough state: None, 'complete', 'current', 'pending'."""
+        if self._guided_state != state:
+            self._guided_state = state
             self.update()
 
     def event(self, e):
@@ -240,6 +247,34 @@ class _MenuItem(QWidget):
             p.fillPath(path, QColor(_ACCENT()))
             p.setPen(QColor("#fff"))
             p.drawText(bx, by, bw, bh, Qt.AlignCenter, self._item.badge)
+
+        # ── Guided walkthrough step indicator ────────────────────────
+        if self._guided_state is not None:
+            cx = w - 14          # right margin
+            cy = h // 2
+            if self._guided_state == "complete":
+                # Filled green circle with white checkmark
+                success = PALETTE.get("success", "#30d158")
+                p.setBrush(QColor(success))
+                p.setPen(Qt.NoPen)
+                p.drawEllipse(cx - 5, cy - 5, 10, 10)
+                # Draw a small checkmark
+                p.setPen(QPen(QColor("#fff"), 1.4))
+                p.drawLine(cx - 2, cy, cx - 1, cy + 2)
+                p.drawLine(cx - 1, cy + 2, cx + 3, cy - 2)
+            elif self._guided_state == "current":
+                # Pulsing accent ring (solid for now, animation later)
+                accent = QColor(_ACCENT())
+                p.setBrush(accent)
+                p.setPen(Qt.NoPen)
+                p.drawEllipse(cx - 4, cy - 4, 8, 8)
+            elif self._guided_state == "pending":
+                # Dim hollow circle
+                dim = QColor(_TEXT_DIM())
+                dim.setAlpha(100)
+                p.setBrush(Qt.NoBrush)
+                p.setPen(QPen(dim, 1.2))
+                p.drawEllipse(cx - 4, cy - 4, 8, 8)
 
         p.end()
 
@@ -859,6 +894,46 @@ class _Sidebar(QWidget):
                 header.set_badge(text)
                 break
 
+    # Mapping from (phase, check_key) → sidebar nav label
+    _STEP_NAV_MAP: list[tuple[int, str, str]] = [
+        (1, "camera_selected",     "Modality"),
+        (1, "stimulus_configured", "Stimulus"),
+        (1, "temperature_set",     "Temperature"),
+        (2, "live_viewed",         "Live View"),
+        (2, "focused",             "Focus & Stage"),
+        (2, "signal_checked",      "Signal Check"),
+        (3, "captured",            "Capture"),
+        (3, "calibrated",          "Calibration"),
+    ]
+
+    def update_guided_states(self, tracker, workspace_mode: str) -> None:
+        """Update guided step indicators on each nav item.
+
+        In guided mode, items participating in the walkthrough show:
+        - 'complete': green check dot
+        - 'current': accent dot (first incomplete step)
+        - 'pending': dim hollow circle (future steps)
+
+        In standard/expert modes, all indicators are cleared.
+        """
+        # Build a label → state map
+        state_map: dict[str, str] = {}
+        if workspace_mode == "guided":
+            found_current = False
+            for phase, key, nav_label in self._STEP_NAV_MAP:
+                checks = tracker._checks.get(phase, {})
+                if checks.get(key, False):
+                    state_map[nav_label] = "complete"
+                elif not found_current:
+                    state_map[nav_label] = "current"
+                    found_current = True
+                else:
+                    state_map[nav_label] = "pending"
+
+        # Apply to all menu items
+        for mi in self._items:
+            mi.set_guided_state(state_map.get(mi._item.label))
+
     # ── Legacy group builders (still used for SYSTEM section) ────
 
     def add_section(self, title: str, items: List[NavItem]):
@@ -1026,6 +1101,10 @@ class SidebarNav(QWidget):
     def update_guided_banner(self, tracker) -> None:
         """Refresh the guided walkthrough banner from PhaseTracker state."""
         self._guided_banner.update_from_tracker(tracker)
+
+    def update_guided_states(self, tracker, workspace_mode: str) -> None:
+        """Update per-item guided step indicators from PhaseTracker state."""
+        self._sidebar.update_guided_states(tracker, workspace_mode)
 
     @property
     def guided_skip_requested(self):
