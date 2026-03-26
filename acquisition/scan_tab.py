@@ -341,9 +341,16 @@ class ScanTab(QWidget):
             f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['label']}pt; color:#666;")
         self._summary_lbl.setWordWrap(True)
         lay.addWidget(self._summary_lbl)
+
+        self._time_est_lbl = QLabel("")
+        self._time_est_lbl.setStyleSheet(
+            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['label']}pt; color:#666;")
+        self._time_est_lbl.setWordWrap(True)
+        lay.addWidget(self._time_est_lbl)
+
         self._update_summary()
         for spin in [self._n_cols, self._n_rows, self._step_x, self._step_y,
-                     self._n_frames]:
+                     self._n_frames, self._settle]:
             spin.valueChanged.connect(self._update_summary)
 
         # ---- Run controls ----
@@ -855,6 +862,37 @@ class ScanTab(QWidget):
             f"{nc}×{nr} = {nc*nr} tiles  ·  "
             f"FOV {nc*sx:.0f}×{nr*sy:.0f} μm  ·  "
             f"{nf} frames/tile")
+        self._update_time_estimate()
+
+    def _update_time_estimate(self):
+        _STAGE_OVERHEAD_S = 0.3
+        n_tiles    = self._n_cols.value() * self._n_rows.value()
+        settle_s   = self._settle.value()
+        n_frames   = self._n_frames.value()
+
+        try:
+            from hardware.app_state import app_state
+            fps = getattr(getattr(app_state.cam, 'info', None),
+                          'max_fps', 30)
+        except Exception:
+            fps = 30
+
+        fps = max(fps, 1)
+        est = n_tiles * (settle_s + n_frames / fps + _STAGE_OVERHEAD_S)
+        self._time_est_lbl.setText(
+            f"Est. time: {self._fmt_duration(est)}")
+
+    @staticmethod
+    def _fmt_duration(seconds: float) -> str:
+        if seconds < 60:
+            return f"~{int(seconds)} sec"
+        elif seconds < 3600:
+            m = int(seconds / 60)
+            return f"~{m} min"
+        else:
+            h = int(seconds / 3600)
+            m = int((seconds % 3600) / 60)
+            return f"~{h} hr {m} min" if m else f"~{h} hr"
 
     def _redisplay(self):
         if self._result and self._result.valid:

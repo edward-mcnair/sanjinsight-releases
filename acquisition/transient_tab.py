@@ -382,9 +382,23 @@ class TransientTab(QWidget):
         lay.addWidget(vs_box)
         self._update_vsweep_label()
 
+        # Connect time-estimation updates
+        self._n_delays.valueChanged.connect(self._update_time_est)
+        self._n_avg.valueChanged.connect(self._update_time_est)
+        self._vsweep_box.toggled.connect(lambda _: self._update_time_est())
+        for sp in [self._vsweep_start, self._vsweep_step, self._vsweep_end]:
+            sp.valueChanged.connect(self._update_time_est)
+
         # ── Run controls ──────────────────────────────────────────────
         run_box = QGroupBox("Run")
         rl = QVBoxLayout(run_box)
+
+        self._time_est_lbl = QLabel("")
+        self._time_est_lbl.setStyleSheet(
+            f"color:{PALETTE.get('textDim', '#888')}; font-size:{FONT['caption']}pt;")
+        self._time_est_lbl.setWordWrap(True)
+        rl.addWidget(self._time_est_lbl)
+        self._update_time_est()
 
         self._run_btn   = QPushButton("Run Transient")
         set_btn_icon(self._run_btn, "fa5s.play", "#00d4aa")
@@ -869,6 +883,50 @@ class TransientTab(QWidget):
         else:
             self._vsweep_n_lbl.setText(
                 f"{n} steps: {vlist[0]:.3f} – {vlist[-1]:.3f} V")
+
+    # ---------------------------------------------------------------- #
+    #  Time estimation                                                   #
+    # ---------------------------------------------------------------- #
+
+    @staticmethod
+    def _fmt_duration(seconds: float) -> str:
+        if seconds < 60:
+            return f"~{int(seconds)} sec"
+        elif seconds < 3600:
+            m = int(seconds / 60)
+            return f"~{m} min"
+        else:
+            h = int(seconds / 3600)
+            m = int((seconds % 3600) / 60)
+            return f"~{h} hr {m} min" if m else f"~{h} hr"
+
+    def _update_time_est(self):
+        """Recompute and display estimated acquisition time."""
+        n_delays  = self._n_delays.value()
+        n_avg     = self._n_avg.value()
+
+        # Trigger cycle time from FPGA frequency, fallback 1 kHz (1 ms)
+        try:
+            from hardware.app_state import app_state
+            fpga = app_state.fpga
+            freq = getattr(fpga, 'frequency', 1000.0) if fpga else 1000.0
+        except Exception:
+            freq = 1000.0
+        cycle = 1.0 / max(freq, 1.0)  # seconds
+
+        total = n_delays * n_avg * cycle
+
+        # Voltage sweep multiplier
+        if self._vsweep_box.isChecked():
+            vlist = self._vsweep_voltage_list()
+            n_vsteps = max(len(vlist), 1)
+            total *= n_vsteps
+
+        # 10% overhead for readout/processing
+        total *= 1.10
+
+        self._time_est_lbl.setText(
+            f"Est. time: {self._fmt_duration(total)}")
 
     def _start_vsweep(self, voltages: List[float], cam, fpga, bias):
         """Launch the voltage-series sweep worker thread."""

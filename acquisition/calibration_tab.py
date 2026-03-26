@@ -804,10 +804,21 @@ class CalibrationTab(QWidget):
         n_avg  = self._n_avg.value()      # frames per step
         capture = n_avg / 5.0             # s — at ~5 fps
         secs    = n * (ramp + settle + capture)
-        m, s    = divmod(int(secs), 60)
         if n == 0:
             self._time_est_lbl.setText("Estimated time: — (add temperature steps)")
+            return
+        # Human-readable time string
+        total_min = int(round(secs / 60))
+        if total_min < 1:
+            time_str = "<1 min"
+        elif total_min < 60:
+            time_str = f"{total_min} min"
         else:
-            self._time_est_lbl.setText(
-                f"Estimated time: ~{m} min {s} s  "
-                f"({n} steps × [{ramp} s ramp + {settle:.0f} s settle + {n_avg} frames])")
+            hrs, mins = divmod(total_min, 60)
+            if mins == 0:
+                time_str = f"{hrs} hr"
+            else:
+                time_str = f"{hrs} hr {mins} min"
+        self._time_est_lbl.setText(
+            f"Estimated time: ~{time_str}  "
+            f"({n} steps × [{ramp} s ramp + {settle:.0f} s settle + {n_avg} frames])")

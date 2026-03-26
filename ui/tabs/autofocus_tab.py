@@ -148,6 +148,24 @@ class AutofocusTab(QWidget):
 
         adv_toggle.toggled.connect(_on_af_adv_toggled)
 
+        # ── Time estimate label (row 7) ─────────────────────────────────
+        self._time_est_lbl = QLabel("")
+        self._time_est_lbl.setStyleSheet(
+            f"color:{PALETTE.get('textDim','#888')}; font-size:{FONT['caption']}pt;")
+        cl.addWidget(self._time_est_lbl, 7, 0, 1, 2)
+
+        # Connect signals that affect the time estimate
+        self._z_start.valueChanged.connect(self._update_time_est)
+        self._z_end.valueChanged.connect(self._update_time_est)
+        self._strategy.currentIndexChanged.connect(self._update_time_est)
+        self._coarse.valueChanged.connect(self._update_time_est)
+        self._fine.valueChanged.connect(self._update_time_est)
+        self._n_avg.valueChanged.connect(self._update_time_est)
+        self._settle.valueChanged.connect(self._update_time_est)
+
+        # Compute initial estimate
+        self._update_time_est()
+
         mid.addWidget(cfg_box, 1)
 
         # Focus curve plot
@@ -236,6 +254,57 @@ class AutofocusTab(QWidget):
         if suffix:
             s.setSuffix(f" {suffix}")
         return s
+
+    # ── Time estimation ─────────────────────────────────────────────────
+
+    @staticmethod
+    def _fmt_duration(seconds: float) -> str:
+        if seconds < 60:
+            return f"~{int(seconds)} sec"
+        elif seconds < 3600:
+            m = int(seconds / 60)
+            s = int(seconds % 60)
+            return f"~{m} min {s} sec" if s else f"~{m} min"
+        else:
+            h = int(seconds / 3600)
+            m = int((seconds % 3600) / 60)
+            return f"~{h} hr {m} min" if m else f"~{h} hr"
+
+    def _update_time_est(self):
+        """Recompute and display the estimated autofocus duration."""
+        strategy   = self._strategy.currentText()
+        z_start    = self._z_start.value()
+        z_end      = self._z_end.value()
+        coarse     = self._coarse.value()
+        fine       = self._fine.value()
+        n_avg      = self._n_avg.value()
+        settle_ms  = self._settle.value()
+
+        # Determine number of positions
+        if strategy == "sweep":
+            n_coarse = abs(z_end - z_start) / max(coarse, 0.01)
+            n_fine   = coarse / max(fine, 0.01)
+            n_positions = n_coarse + n_fine
+        else:  # hill_climb
+            n_positions = 15  # empirical estimate
+
+        # Camera FPS (best-effort from hardware state)
+        try:
+            fps = getattr(getattr(app_state.cam, 'info', None),
+                          'max_fps', 30)
+        except Exception:
+            fps = 30
+        fps = fps or 30  # guard against None / 0
+
+        time_per_pos = (settle_ms / 1000.0) + (n_avg / fps)
+        total = n_positions * time_per_pos
+
+        self._time_est_lbl.setText(
+            f"Estimated time: {self._fmt_duration(total)}")
+        # Keep style in sync with current palette
+        self._time_est_lbl.setStyleSheet(
+            f"color:{PALETTE.get('textDim','#888')}; "
+            f"font-size:{FONT['caption']}pt;")
 
     # ── Objective Z-range preset ──────────────────────────────────────
 

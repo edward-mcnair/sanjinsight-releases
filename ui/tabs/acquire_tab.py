@@ -82,13 +82,18 @@ class AcquireTab(QWidget):
             "Set to 0 for rapid alternating measurements.")
         cl.addWidget(self._delay, 1, 1)
 
-        cl.addWidget(self._sub("ΔR/R colormap"), 2, 0)
+        self._time_est_lbl = QLabel("")
+        self._time_est_lbl.setStyleSheet(
+            f"color:{PALETTE.get('textDim','#888')}; font-size:{FONT['caption']}pt;")
+        cl.addWidget(self._time_est_lbl, 2, 0, 1, 2)
+
+        cl.addWidget(self._sub("ΔR/R colormap"), 3, 0)
         self._cmap = QComboBox()
         self._cmap.setMinimumWidth(160)
         saved_cmap = cfg_mod.get_pref("display.colormap", "Thermal Delta")
         setup_cmap_combo(self._cmap, saved_cmap)
         self._cmap.currentTextChanged.connect(self._on_cmap_changed)
-        cl.addWidget(self._cmap, 2, 1)
+        cl.addWidget(self._cmap, 3, 1)
 
         # Buttons
         btn_row = QHBoxLayout()
@@ -124,12 +129,12 @@ class AcquireTab(QWidget):
         for b in [self._cold_btn, self._hot_btn,
                   self._run_btn, self._abort_btn]:
             btn_row.addWidget(b)
-        cl.addLayout(btn_row, 3, 0, 1, 2)
+        cl.addLayout(btn_row, 4, 0, 1, 2)
 
         self._progress = QProgressBar()
         self._progress.setRange(0, 100)
         self._progress.setStyleSheet(progress_bar_qss())
-        cl.addWidget(self._progress, 4, 0, 1, 2)
+        cl.addWidget(self._progress, 5, 0, 1, 2)
 
         # Recipe quick-access row
         from PyQt5.QtWidgets import QFrame as _QFrame
@@ -149,7 +154,7 @@ class AcquireTab(QWidget):
             "acquisition configuration preset")
         self._load_recipe_btn.clicked.connect(self._open_recipe_manager)
         recipe_row.addWidget(self._load_recipe_btn)
-        cl.addLayout(recipe_row, 5, 0, 1, 2)
+        cl.addLayout(recipe_row, 6, 0, 1, 2)
 
         left.addWidget(ctrl_box)
 
@@ -256,6 +261,39 @@ class AcquireTab(QWidget):
         self._abort_btn.clicked.connect(self._abort)
         self._export_btn.clicked.connect(self._export)
 
+        # Time estimation updates
+        self._frames.valueChanged.connect(self._update_time_est)
+        self._delay.valueChanged.connect(self._update_time_est)
+        self._update_time_est()
+
+    @staticmethod
+    def _fmt_duration(seconds: float) -> str:
+        if seconds < 60:
+            return f"~{int(seconds)} sec"
+        elif seconds < 3600:
+            m = int(seconds / 60)
+            return f"~{m} min"
+        else:
+            h = int(seconds / 3600)
+            m = int((seconds % 3600) / 60)
+            return f"~{h} hr {m} min" if m else f"~{h} hr"
+
+    def _update_time_est(self) -> None:
+        """Recalculate and display the estimated acquisition time."""
+        try:
+            cam_info = getattr(app_state.cam, "info", None)
+            fps = getattr(cam_info, "max_fps", 30) if cam_info else 30
+        except Exception:
+            fps = 30
+        fps = max(fps, 1)  # guard against zero/negative
+        frames = self._frames.value()
+        delay = self._delay.value()
+        total = 2 * (frames / fps) + delay
+        self._time_est_lbl.setText(
+            f"Est. time: {self._fmt_duration(total)}")
+        self._time_est_lbl.setStyleSheet(
+            f"color:{PALETTE.get('textDim','#888')}; font-size:{FONT['caption']}pt;")
+
     def _apply_styles(self) -> None:
         P = PALETTE
         bg  = P.get("bg",      "#242424")
@@ -268,6 +306,9 @@ class AcquireTab(QWidget):
         acc = P.get("accent",   "#00d4aa")
         su2 = P.get("surface2", "#3d3d3d")
         sur = P.get("surface",  "#2d2d2d")
+        if hasattr(self, "_time_est_lbl"):
+            self._time_est_lbl.setStyleSheet(
+                f"color:{P.get('textDim','#888')}; font-size:{FONT['caption']}pt;")
         for btn in getattr(self, "_chip_btns", []):
             btn.setStyleSheet(
                 f"QPushButton {{ background:{su2}; color:{acc}; "
@@ -482,9 +523,10 @@ class AcquireTab(QWidget):
         # Phase buttons (TR only)
         self._cold_btn.setVisible(not is_ir)
         self._hot_btn.setVisible(not is_ir)
-        # Phase delay (TR only — IR has no stimulus switching)
+        # Phase delay and time estimate (TR only — IR has no stimulus switching)
         self._delay.setVisible(not is_ir)
         self._delay_label.setVisible(not is_ir)
+        self._time_est_lbl.setVisible(not is_ir)
         # Update RUN button label
         if is_ir:
             self._run_btn.setText("CAPTURE")
