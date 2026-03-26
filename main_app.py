@@ -672,8 +672,8 @@ class MainWindow(QMainWindow):
             NI("Signal Check",  _I["Signal Check"],  self._signal_check_section),
         ])
 
-        # Phase 3: MEASUREMENT & ANALYSIS
-        self._nav.add_phase(3, "MEASUREMENT & ANALYSIS",
+        # Phase 3: ANALYSIS
+        self._nav.add_phase(3, "ANALYSIS",
             "Capture data and analyze results", [
             NI("Capture",     _I["Capture"],     self._capture_tab),
             NI("Calibration", _I["Calibration"], self._cal_tab),
@@ -860,7 +860,7 @@ class MainWindow(QMainWindow):
             PaletteItem("Signal Check",         "Image Acquisition",
                         lambda: self._nav.navigate_to(self._signal_check_section),
                         keywords=["signal", "snr", "noise", "check", "verify"]),
-            # ── MEASUREMENT & ANALYSIS ────────────────────────────────
+            # ── ANALYSIS ──────────────────────────────────────────────
             PaletteItem("Capture",              "Measurement",
                         lambda: self._nav.navigate_to(self._capture_tab),
                         keywords=["capture", "acquire", "scan", "sweep", "map", "run", "start"]),
