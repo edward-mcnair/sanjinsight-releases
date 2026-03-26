@@ -1342,6 +1342,16 @@ class MainWindow(QMainWindow):
         except Exception:
             log.debug("AcquireTab camera refresh failed", exc_info=True)
 
+        # Update profile filters to match camera modality
+        try:
+            self._profile_tab.set_modality_filter(cam_type)
+        except Exception:
+            log.debug("Profile modality filter update failed", exc_info=True)
+        try:
+            self._modality_section._profile_picker.filter_by_modality(cam_type)
+        except Exception:
+            log.debug("Profile picker modality filter failed", exc_info=True)
+
         log.info("Global camera bar: active camera → %s", cam_type)
 
     def _on_modality_changed(self, cam_type: str) -> None:
@@ -2432,7 +2442,7 @@ class MainWindow(QMainWindow):
         except Exception as _e:
             log.debug("Profile apply — bias settings: %s", _e)
 
-        # 9. Push calibration temperature sequence
+        # 9. Push calibration temperature sequence + quality settings
         try:
             cal_temps = getattr(profile, "cal_temps", "")
             settle = getattr(profile, "cal_settle_s", 60.0)
@@ -2440,20 +2450,128 @@ class MainWindow(QMainWindow):
                 self._cal_tab.set_temp_sequence(cal_temps)
             if settle > 0:
                 self._cal_tab._settle.setValue(settle)
+            cal_n_avg = getattr(profile, "cal_n_avg", 0)
+            if cal_n_avg > 0:
+                self._cal_tab._n_avg.setValue(cal_n_avg)
+            cal_tol = getattr(profile, "cal_stability_tol_c", 0)
+            if cal_tol > 0:
+                self._cal_tab._stable_tol.setValue(cal_tol)
+            cal_dur = getattr(profile, "cal_stability_dur_s", 0)
+            if cal_dur > 0:
+                self._cal_tab._stable_dur.setValue(cal_dur)
+            cal_r2 = getattr(profile, "cal_min_r2", 0)
+            if cal_r2 > 0:
+                self._cal_tab._min_r2.setValue(cal_r2)
         except Exception as _e:
             log.debug("Profile apply — calibration settings: %s", _e)
 
-        # 10. Mark phase tracker checks (for guided walkthrough)
+        # 10. Push signal check SNR threshold + ROI strategy
+        try:
+            snr_thr = getattr(profile, "snr_threshold_db", 20.0)
+            self._signal_check_section.set_snr_threshold(snr_thr)
+            roi = getattr(profile, "roi_strategy", "")
+            if roi:
+                self._signal_check_section.set_roi_strategy(roi)
+        except Exception as _e:
+            log.debug("Profile apply — signal check settings: %s", _e)
+
+        # 11. Push grid scan defaults
+        try:
+            step = getattr(profile, "grid_step_um", 0)
+            if step > 0:
+                self._scan_tab.set_grid_from_profile(step,
+                    getattr(profile, "grid_overlap_pct", 10.0))
+        except Exception as _e:
+            log.debug("Profile apply — grid scan settings: %s", _e)
+
+        # 12. Push autofocus defaults
+        try:
+            af_strat = getattr(profile, "af_strategy", "")
+            if af_strat:
+                idx = self._af_tab._strategy.findText(
+                    af_strat, Qt.MatchFixedString)
+                if idx >= 0:
+                    self._af_tab._strategy.setCurrentIndex(idx)
+            af_metric = getattr(profile, "af_metric", "")
+            if af_metric:
+                idx = self._af_tab._metric.findText(
+                    af_metric, Qt.MatchFixedString)
+                if idx >= 0:
+                    self._af_tab._metric.setCurrentIndex(idx)
+            af_z = getattr(profile, "af_z_range_um", 0)
+            if af_z > 0:
+                self._af_tab._z_start.setValue(-af_z / 2)
+                self._af_tab._z_end.setValue(af_z / 2)
+            af_c = getattr(profile, "af_coarse_um", 0)
+            if af_c > 0:
+                self._af_tab._coarse.setValue(af_c)
+            af_f = getattr(profile, "af_fine_um", 0)
+            if af_f > 0:
+                self._af_tab._fine.setValue(af_f)
+            af_n = getattr(profile, "af_n_avg", 0)
+            if af_n > 0:
+                self._af_tab._n_avg.setValue(af_n)
+        except Exception as _e:
+            log.debug("Profile apply — autofocus settings: %s", _e)
+
+        # 13. Push FPGA trigger mode
+        try:
+            trig = getattr(profile, "trigger_mode", "continuous")
+            if trig == "single_shot":
+                self._fpga_tab._trig_single_rb.setChecked(True)
+            else:
+                self._fpga_tab._trig_cont_rb.setChecked(True)
+        except Exception as _e:
+            log.debug("Profile apply — trigger mode: %s", _e)
+
+        # 14. Push BILT pulse settings (only if BILT tab has pulse widgets)
+        try:
+            if getattr(profile, "bias_enabled", False) and \
+               hasattr(self._bias_tab, "_g_bias_sp"):
+                self._bias_tab._g_bias_sp.setValue(
+                    getattr(profile, "bilt_gate_bias_v", -5.0))
+                self._bias_tab._g_pulse_sp.setValue(
+                    getattr(profile, "bilt_gate_pulse_v", -2.2))
+                self._bias_tab._g_width_sp.setValue(
+                    getattr(profile, "bilt_gate_width_us", 110.0))
+                self._bias_tab._g_delay_sp.setValue(
+                    getattr(profile, "bilt_gate_delay_us", 5.0))
+                self._bias_tab._d_bias_sp.setValue(
+                    getattr(profile, "bilt_drain_bias_v", 0.0))
+                self._bias_tab._d_pulse_sp.setValue(
+                    getattr(profile, "bilt_drain_pulse_v", 1.0))
+                self._bias_tab._d_width_sp.setValue(
+                    getattr(profile, "bilt_drain_width_us", 100.0))
+                self._bias_tab._d_delay_sp.setValue(
+                    getattr(profile, "bilt_drain_delay_us", 10.0))
+        except Exception as _e:
+            log.debug("Profile apply — BILT pulse settings: %s", _e)
+
+        # 15. Push analysis thresholds
+        try:
+            at = getattr(profile, "analysis_threshold_k", 0)
+            if at > 0:
+                self._analysis_tab.set_thresholds_from_profile(
+                    threshold_k=at,
+                    fail_hotspot_n=getattr(profile, "analysis_fail_hotspot_n", 0),
+                    fail_peak_k=getattr(profile, "analysis_fail_peak_k", 0),
+                    warn_hotspot_n=getattr(profile, "analysis_warn_hotspot_n", 0),
+                    warn_peak_k=getattr(profile, "analysis_warn_peak_k", 0))
+        except Exception as _e:
+            log.debug("Profile apply — analysis thresholds: %s", _e)
+
+        # 16. Mark phase tracker checks (for guided walkthrough)
         try:
             tracker = self._phase_tracker
             tracker.mark(1, "camera_selected", True)
+            tracker.mark(1, "profile_selected", True)
             tracker.mark(1, "stimulus_configured", True)
             if getattr(profile, "tec_enabled", False):
                 tracker.mark(1, "temperature_set", True)
         except Exception as _e:
             log.debug("Profile apply — phase tracker: %s", _e)
 
-        # 11. Log
+        # 17. Log
         self._log_tab.append(
             f"Profile applied: {profile.name}  ·  "
             f"C_T = {profile.ct_value:.3e} K⁻¹  ·  "
@@ -2462,11 +2580,42 @@ class MainWindow(QMainWindow):
             f"frames = {profile.n_frames}  ·  "
             f"EMA = {profile.accumulation}")
 
-        # 12. Status bar
+        # 18. Status bar
         self._status.showMessage(
             f"Profile active: {profile.name}   "
             f"C_T = {profile.ct_value:.3e} K⁻¹",
             8000)
+
+        # 19. Auto-exposure (runs on background thread, updates UI on complete)
+        if getattr(profile, "auto_exposure", False) and app_state.cam is not None:
+            target = getattr(profile, "exposure_target_pct", 70.0)
+            roi = getattr(profile, "roi_strategy", "center50")
+
+            import threading
+
+            def _run_ae():
+                from hardware.cameras.auto_exposure import auto_expose
+                result = auto_expose(
+                    hw_service, target_pct=target, roi=roi, max_iters=6)
+                from PyQt5.QtCore import QTimer
+                QTimer.singleShot(0, lambda: self._on_auto_expose_done(result))
+
+            threading.Thread(target=_run_ae, daemon=True,
+                             name="auto-exposure").start()
+            self._toasts.show_info("Auto-exposure running…")
+
+    def _on_auto_expose_done(self, result) -> None:
+        """Handle auto-exposure completion (called on GUI thread)."""
+        try:
+            self._camera_tab.set_exposure(result.exposure_us)
+            hw_service.cam_set_exposure(result.exposure_us)
+        except Exception as _e:
+            log.debug("Auto-expose UI update failed: %s", _e)
+        if result.converged:
+            self._toasts.show_success(result.message)
+        else:
+            self._toasts.show_warning(result.message)
+        self._log_tab.append(result.message)
 
     def _on_af_progress(self, result):
         self._af_tab.update_progress(result)

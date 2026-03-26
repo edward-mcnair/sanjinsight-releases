@@ -707,6 +707,23 @@ class AnalysisTab(QWidget):
     #  Public API                                                       #
     # ---------------------------------------------------------------- #
 
+    def set_thresholds_from_profile(self, threshold_k: float = 0,
+                                     fail_hotspot_n: int = 0,
+                                     fail_peak_k: float = 0,
+                                     warn_hotspot_n: int = 0,
+                                     warn_peak_k: float = 0) -> None:
+        """Apply analysis thresholds from a material profile."""
+        if threshold_k > 0:
+            self._thresh_spin.setValue(threshold_k)
+        if fail_hotspot_n > 0:
+            self._fail_count.setValue(fail_hotspot_n)
+        if fail_peak_k > 0:
+            self._fail_peak.setValue(fail_peak_k)
+        if warn_hotspot_n > 0:
+            self._warn_count.setValue(warn_hotspot_n)
+        if warn_peak_k > 0:
+            self._warn_peak.setValue(warn_peak_k)
+
     def push_result(self, dt_map: Optional[np.ndarray],
                     drr_map: Optional[np.ndarray],
                     base_image: Optional[np.ndarray] = None,

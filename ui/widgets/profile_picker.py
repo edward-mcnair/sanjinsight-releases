@@ -132,6 +132,7 @@ class ProfilePicker(QWidget):
         self._cards: list[_ProfileCard] = []
         self._active_profile: Optional[MaterialProfile] = None
         self._active_category: str = "All"
+        self._modality_filter: str = ""  # "" = all, "tr"/"ir" = filter
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 4, 0, 0)
@@ -218,17 +219,10 @@ class ProfilePicker(QWidget):
                 card.setVisible(matches_wl and matches_cat)
 
     def filter_by_modality(self, cam_type: str) -> None:
-        """Filter to TR (visible/NIR) or IR profiles."""
-        if cam_type == "ir":
-            # IR profiles would have wavelength > 1000
-            for card in self._cards:
-                card.setVisible(card.profile.wavelength_nm > 1000
-                                and self._matches_category(card.profile))
-        else:
-            # TR — show all visible/NIR wavelengths
-            for card in self._cards:
-                card.setVisible(card.profile.wavelength_nm <= 1000
-                                and self._matches_category(card.profile))
+        """Filter profiles by camera modality ('tr' or 'ir')."""
+        self._modality_filter = cam_type
+        for card in self._cards:
+            card.setVisible(self._matches_filter(card.profile))
 
     # ── Internal ─────────────────────────────────────────────────────
 
@@ -273,7 +267,24 @@ class ProfilePicker(QWidget):
         cat = btn.property("cat") if btn else "All"
         self._active_category = cat
         for card in self._cards:
-            card.setVisible(self._matches_category(card.profile))
+            card.setVisible(self._matches_filter(card.profile))
+
+    def set_modality_filter(self, modality: str) -> None:
+        """Filter profiles by camera modality ('tr', 'ir', or '' for all)."""
+        if modality != self._modality_filter:
+            self._modality_filter = modality
+            for card in self._cards:
+                card.setVisible(self._matches_filter(card.profile))
+
+    def _matches_filter(self, profile: MaterialProfile) -> bool:
+        """Check both category and modality filters."""
+        if not self._matches_category(profile):
+            return False
+        if self._modality_filter:
+            pm = getattr(profile, "modality", "tr")
+            if pm not in (self._modality_filter, "any"):
+                return False
+        return True
 
     def _matches_category(self, profile: MaterialProfile) -> bool:
         if self._active_category == "All":

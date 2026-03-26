@@ -31,6 +31,7 @@ class PhaseTracker(QObject):
         self._checks: dict[int, dict[str, bool]] = {
             1: {  # CONFIGURATION
                 "camera_selected":      False,
+                "profile_selected":     False,
                 "stimulus_configured":  False,
                 "temperature_set":      False,
             },

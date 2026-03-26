@@ -57,6 +57,7 @@ class ProfileTab(QWidget):
         self._mgr = manager
         self._profiles: list[MaterialProfile] = []
         self._selected: MaterialProfile | None = None
+        self._modality_filter: str = ""  # "" = show all, "tr"/"ir" = filter
 
         self._build_ui()
         self._refresh()
@@ -64,6 +65,12 @@ class ProfileTab(QWidget):
     # ---------------------------------------------------------------- #
     #  Public API                                                       #
     # ---------------------------------------------------------------- #
+
+    def set_modality_filter(self, modality: str) -> None:
+        """Filter profiles by camera modality ('tr', 'ir', or '' for all)."""
+        if modality != self._modality_filter:
+            self._modality_filter = modality
+            self._refresh()
 
     @property
     def active_profile(self) -> MaterialProfile | None:
@@ -342,6 +349,13 @@ class ProfileTab(QWidget):
             self._profiles = self._mgr.all()
         else:
             self._profiles = self._mgr.by_category(cat)
+
+        # Filter by camera modality if set
+        if self._modality_filter:
+            self._profiles = [
+                p for p in self._profiles
+                if getattr(p, "modality", "tr") in (self._modality_filter, "any")
+            ]
 
         self._table.setRowCount(0)
         for p in self._profiles:

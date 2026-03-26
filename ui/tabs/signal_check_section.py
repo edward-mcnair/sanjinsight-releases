@@ -62,6 +62,8 @@ class SignalCheckSection(QWidget):
         super().__init__(parent)
         self._last_update = 0.0
         self._passed = False
+        self._snr_good = _SNR_GOOD
+        self._snr_warn = _SNR_WARN
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -140,7 +142,7 @@ class SignalCheckSection(QWidget):
         opts_grid.addWidget(self._roi_combo, 0, 1)
 
         opts_grid.addWidget(QLabel("Min SNR Threshold"), 1, 0)
-        self._thresh_lbl = QLabel(f"{_SNR_GOOD:.0f} dB")
+        self._thresh_lbl = QLabel(f"{self._snr_good:.0f} dB")
         self._thresh_lbl.setStyleSheet(_mono_style())
         opts_grid.addWidget(self._thresh_lbl, 1, 1)
 
@@ -153,6 +155,19 @@ class SignalCheckSection(QWidget):
         self._check_target = 10
 
     # ── Public API ─────────────────────────────────────────────────────
+
+    def set_snr_threshold(self, good_db: float, warn_db: float | None = None) -> None:
+        """Set SNR pass/warn thresholds. Called when a profile is applied."""
+        self._snr_good = good_db
+        if warn_db is not None:
+            self._snr_warn = warn_db
+        self._thresh_lbl.setText(f"{self._snr_good:.0f} dB")
+
+    def set_roi_strategy(self, strategy: str) -> None:
+        """Set ROI combo from profile ('full', 'center50', 'center25')."""
+        _map = {"full": 0, "center50": 1, "center25": 2}
+        idx = _map.get(strategy, 1)
+        self._roi_combo.setCurrentIndex(idx)
 
     def set_hardware_available(self, available: bool) -> None:
         self._stack.setCurrentIndex(1 if available else 0)
@@ -185,7 +200,7 @@ class SignalCheckSection(QWidget):
             sat_pct = self._compute_saturation(data)
 
             # Update readouts
-            snr_level = "good" if snr >= _SNR_GOOD else ("warn" if snr >= _SNR_WARN else "bad")
+            snr_level = "good" if snr >= self._snr_good else ("warn" if snr >= self._snr_warn else "bad")
             self._set_readout(self._snr_val, f"{snr:.1f}", snr_level)
 
             if sat_pct >= 100.0:
@@ -200,7 +215,7 @@ class SignalCheckSection(QWidget):
             self._set_readout(self._sat_val, sat_text, sat_level)
 
             # Evaluate pass/fail
-            passed = snr >= _SNR_GOOD and sat_pct < 95.0
+            passed = snr >= self._snr_good and sat_pct < 95.0
             if passed:
                 self._set_readout(self._verdict, "PASS", "good")
                 if not self._passed and self._auto_cb.isChecked():

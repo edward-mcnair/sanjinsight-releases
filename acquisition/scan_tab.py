@@ -541,6 +541,12 @@ class ScanTab(QWidget):
     #  Public API                                                       #
     # ---------------------------------------------------------------- #
 
+    def set_grid_from_profile(self, step_um: float, overlap_pct: float) -> None:
+        """Apply grid scan defaults from a material profile."""
+        if step_um > 0:
+            self._step_x.setValue(step_um)
+            self._step_y.setValue(step_um)
+
     def update_progress(self, prog: ScanProgress):
         n   = prog.total_tiles or 1
         pct = int(prog.tile / n * 100)

@@ -81,6 +81,11 @@ class MaterialProfile:
     notes:          str   = ""
     created_at:     str   = ""
 
+    # ── Camera & modality ───────────────────────────────────────────
+    modality:           str   = "tr"     # "tr" | "ir" | "any"
+    auto_exposure:      bool  = True     # enable auto-exposure on profile load
+    exposure_target_pct: float = 70.0    # histogram target (% of dynamic range)
+
     # Thermoreflectance coefficient (dR/R per kelvin)
     ct_value:       float = 1.5e-4   # K⁻¹ — typical GaAs at 532 nm
     wavelength_nm:  int   = 532      # illumination wavelength
@@ -91,37 +96,76 @@ class MaterialProfile:
     n_frames:       int   = 16
     accumulation:   int   = 16
 
-    # ── Tier 1: Stimulus ─────────────────────────────────────────────
+    # ── Stimulus ────────────────────────────────────────────────────
     stimulus_freq_hz:   float = 1000.0   # FPGA modulation frequency
     stimulus_duty:      float = 0.50     # FPGA duty cycle (0–1)
     stimulus_waveform:  str   = "square" # "square" | "sine"
+    trigger_mode:       str   = "continuous"  # "continuous" | "single_shot"
+    pulse_duration_us:  float = 100.0    # BNC 745 pulse width
 
-    # ── Tier 1: Temperature / calibration ────────────────────────────
+    # ── Temperature / calibration ───────────────────────────────────
     tec_setpoint_c:     float = 25.0     # default TEC temperature
     tec_enabled:        bool  = True     # whether profile needs TEC
     cal_temps:          str   = ""       # comma-separated cal sequence, e.g. "25,30,35,40,45"
     cal_settle_s:       float = 60.0     # settle time per cal step (seconds)
+    cal_n_avg:          int   = 100      # frames per calibration step
+    cal_stability_tol_c: float = 0.2     # °C tolerance for "settled"
+    cal_stability_dur_s: float = 5.0     # seconds at stable before capture
+    cal_min_r2:         float = 0.80     # minimum R² fit quality
 
-    # ── Tier 1: Bias source ──────────────────────────────────────────
+    # ── Bias source ─────────────────────────────────────────────────
     bias_voltage_v:     float = 0.0      # default bias voltage
     bias_compliance_ma: float = 100.0    # current compliance (mA)
     bias_enabled:       bool  = False    # whether device needs bias
 
-    # ── Tier 1: Signal quality ───────────────────────────────────────
+    # ── BILT pulse configuration (power device testing) ─────────────
+    bilt_gate_bias_v:   float = -5.0
+    bilt_gate_pulse_v:  float = -2.2
+    bilt_gate_width_us: float = 110.0
+    bilt_gate_delay_us: float = 5.0
+    bilt_drain_bias_v:  float = 0.0
+    bilt_drain_pulse_v: float = 1.0
+    bilt_drain_width_us: float = 100.0
+    bilt_drain_delay_us: float = 10.0
+
+    # ── Signal quality ──────────────────────────────────────────────
     snr_threshold_db:   float = 20.0     # minimum acceptable SNR
     roi_strategy:       str   = "center50"  # "full" | "center50" | "center25"
 
-    # ── Tier 1: Scan / grid defaults ─────────────────────────────────
+    # ── Autofocus defaults ──────────────────────────────────────────
+    af_strategy:    str   = "sweep"      # "sweep" | "hill_climb"
+    af_metric:      str   = "laplacian"  # "laplacian"|"tenengrad"|"normalized"|"fft"|"brenner"
+    af_z_range_um:  float = 1000.0       # total Z sweep range
+    af_coarse_um:   float = 50.0         # coarse step
+    af_fine_um:     float = 5.0          # fine step
+    af_n_avg:       int   = 2            # frames per Z position
+
+    # ── Analysis thresholds ─────────────────────────────────────────
+    analysis_threshold_k:    float = 5.0   # temperature threshold for hotspot detection
+    analysis_fail_hotspot_n: int   = 0     # 0 = use recipe/tab default
+    analysis_fail_peak_k:    float = 0.0
+    analysis_warn_hotspot_n: int   = 0
+    analysis_warn_peak_k:    float = 0.0
+
+    # ── Scan / grid defaults ────────────────────────────────────────
     grid_step_um:       float = 50.0     # default grid step size (µm)
     grid_overlap_pct:   float = 10.0     # overlap percentage for stitching
+
+    # ── Transient capture defaults ──────────────────────────────────
+    transient_n_delays:     int   = 50
+    transient_delay_end_ms: float = 1000.0
+    transient_pulse_us:     float = 100.0
+    transient_n_avg:        int   = 10
 
     # Display / analysis helpers
     dt_range_k:     float = 10.0   # expected ΔT range (for display scaling)
     expected_dr_r:  str   = ""     # expected ΔR/R range, e.g. "1e-4,5e-3"
+    colormap:       str   = "Thermal Delta"  # preferred colormap
 
     # Optics guidance (informational, shown in Guided mode)
     recommended_objective: str = ""  # e.g. "10×" or "20×"
     illumination_note:     str = ""  # e.g. "LED at 70%"
+    sample_prep_note:      str = ""  # e.g. "Clean surface with IPA"
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -304,9 +348,17 @@ BUILTIN_PROFILES: list = [
                     tec_enabled=True,         bias_enabled=True,
                     bias_voltage_v=12.0,      bias_compliance_ma=1000.0,
                     cal_temps="25,35,45,55,65,75",
-                    cal_settle_s=90.0,        snr_threshold_db=18.0,
-                    roi_strategy="center50",  recommended_objective="10×",
-                    expected_dr_r="3e-5,3e-3"),
+                    cal_settle_s=90.0,        cal_n_avg=200,
+                    cal_stability_tol_c=0.15, cal_min_r2=0.90,
+                    snr_threshold_db=18.0,    roi_strategy="center50",
+                    recommended_objective="10×",
+                    af_z_range_um=1500.0,     af_coarse_um=75.0,
+                    bilt_gate_bias_v=-8.0,    bilt_gate_pulse_v=-4.0,
+                    bilt_drain_bias_v=0.0,    bilt_drain_pulse_v=12.0,
+                    analysis_threshold_k=10.0,
+                    analysis_fail_peak_k=50.0, analysis_warn_peak_k=25.0,
+                    expected_dr_r="3e-5,3e-3",
+                    sample_prep_note="Remove lid. Clean die surface with IPA."),
     MaterialProfile(uid="gan_ev",   name="GaN HEMT — 532 nm",
                     material="GaN",           category=CATEGORY_AUTOMOTIVE,
                     ct_value=1.7e-4,          wavelength_nm=532,
@@ -315,7 +367,95 @@ BUILTIN_PROFILES: list = [
                     tec_enabled=True,         bias_enabled=True,
                     bias_voltage_v=48.0,      bias_compliance_ma=500.0,
                     cal_temps="25,35,45,55,65,75,85",
-                    cal_settle_s=90.0,        snr_threshold_db=18.0,
-                    roi_strategy="center50",  recommended_objective="10×",
-                    expected_dr_r="5e-5,5e-3"),
+                    cal_settle_s=90.0,        cal_n_avg=200,
+                    cal_stability_tol_c=0.15, cal_min_r2=0.90,
+                    snr_threshold_db=18.0,    roi_strategy="center50",
+                    recommended_objective="10×",
+                    af_z_range_um=1500.0,     af_coarse_um=75.0,
+                    bilt_gate_bias_v=-5.0,    bilt_gate_pulse_v=-2.2,
+                    bilt_gate_width_us=110.0, bilt_gate_delay_us=5.0,
+                    bilt_drain_bias_v=0.0,    bilt_drain_pulse_v=48.0,
+                    bilt_drain_width_us=100.0, bilt_drain_delay_us=10.0,
+                    analysis_threshold_k=15.0,
+                    analysis_fail_peak_k=80.0, analysis_warn_peak_k=40.0,
+                    expected_dr_r="5e-5,5e-3",
+                    sample_prep_note="Caution: high bias voltage. Verify compliance before powering."),
+    # ── IR Camera Profiles ───────────────────────────────────────
+    MaterialProfile(uid="si_ir",    name="Silicon IC — IR",
+                    material="Silicon",       category=CATEGORY_SEMICONDUCTOR,
+                    modality="ir",            ct_value=0.0,
+                    wavelength_nm=0,          exposure_us=8333.0,
+                    description="Standard IC thermal imaging via IR camera",
+                    stimulus_freq_hz=100.0,   stimulus_duty=0.50,
+                    n_frames=32,              accumulation=32,
+                    tec_enabled=True,         cal_temps="25,35,45",
+                    snr_threshold_db=15.0,    roi_strategy="full",
+                    exposure_target_pct=60.0,
+                    af_z_range_um=500.0,      af_coarse_um=25.0,
+                    dt_range_k=20.0,          recommended_objective="5×",
+                    illumination_note="IR mode — no active illumination needed"),
+    MaterialProfile(uid="gan_ir",   name="GaN Power — IR",
+                    material="GaN",           category=CATEGORY_AUTOMOTIVE,
+                    modality="ir",            ct_value=0.0,
+                    wavelength_nm=0,          exposure_us=8333.0,
+                    description="GaN power device thermal mapping via IR camera",
+                    stimulus_freq_hz=100.0,   stimulus_duty=0.50,
+                    n_frames=64,              accumulation=64,
+                    tec_enabled=True,         bias_enabled=True,
+                    bias_voltage_v=48.0,      bias_compliance_ma=500.0,
+                    cal_temps="25,45,65,85",  snr_threshold_db=12.0,
+                    roi_strategy="full",      exposure_target_pct=60.0,
+                    af_z_range_um=1500.0,     af_coarse_um=75.0,
+                    dt_range_k=50.0,          recommended_objective="5×",
+                    analysis_threshold_k=20.0, analysis_fail_peak_k=100.0),
+    MaterialProfile(uid="sic_ir",   name="SiC Power — IR",
+                    material="SiC",           category=CATEGORY_AUTOMOTIVE,
+                    modality="ir",            ct_value=0.0,
+                    wavelength_nm=0,          exposure_us=8333.0,
+                    description="SiC power device thermal mapping via IR camera",
+                    stimulus_freq_hz=100.0,   stimulus_duty=0.50,
+                    n_frames=64,              accumulation=64,
+                    tec_enabled=True,         bias_enabled=True,
+                    bias_voltage_v=12.0,      bias_compliance_ma=1000.0,
+                    cal_temps="25,45,65",     snr_threshold_db=12.0,
+                    roi_strategy="full",      exposure_target_pct=60.0,
+                    dt_range_k=50.0,          recommended_objective="5×",
+                    analysis_threshold_k=15.0, analysis_fail_peak_k=80.0),
+    MaterialProfile(uid="pcb_ir",   name="PCB — IR",
+                    material="FR4",           category=CATEGORY_PCB,
+                    modality="ir",            ct_value=0.0,
+                    wavelength_nm=0,          exposure_us=8333.0,
+                    description="Board-level thermal survey via IR camera",
+                    stimulus_freq_hz=50.0,    stimulus_duty=0.50,
+                    n_frames=64,              accumulation=64,
+                    tec_enabled=False,        bias_enabled=True,
+                    bias_voltage_v=3.3,       bias_compliance_ma=500.0,
+                    snr_threshold_db=10.0,    roi_strategy="full",
+                    grid_step_um=500.0,       grid_overlap_pct=15.0,
+                    exposure_target_pct=60.0,
+                    dt_range_k=30.0,          recommended_objective="2×",
+                    illumination_note="IR mode — large area, use low magnification"),
+    MaterialProfile(uid="led_ir",   name="LED/Laser — IR",
+                    material="GaAs",          category=CATEGORY_SEMICONDUCTOR,
+                    modality="ir",            ct_value=0.0,
+                    wavelength_nm=0,          exposure_us=8333.0,
+                    description="Active LED/laser chip thermal imaging via IR camera",
+                    stimulus_freq_hz=200.0,   stimulus_duty=0.50,
+                    n_frames=32,              accumulation=32,
+                    tec_enabled=True,         bias_enabled=True,
+                    bias_voltage_v=3.0,       bias_compliance_ma=200.0,
+                    cal_temps="25,35,45",     snr_threshold_db=15.0,
+                    roi_strategy="center50",  exposure_target_pct=55.0,
+                    dt_range_k=15.0,          recommended_objective="10×",
+                    analysis_threshold_k=8.0),
+    MaterialProfile(uid="general_ir", name="General — IR Steady State",
+                    material="Any",           category=CATEGORY_USER,
+                    modality="ir",            ct_value=0.0,
+                    wavelength_nm=0,          exposure_us=8333.0,
+                    description="General-purpose direct thermal imaging, no lock-in",
+                    stimulus_freq_hz=0.0,     stimulus_duty=0.0,
+                    n_frames=32,              accumulation=32,
+                    tec_enabled=False,        snr_threshold_db=10.0,
+                    roi_strategy="full",      exposure_target_pct=65.0,
+                    dt_range_k=30.0,          recommended_objective="5×"),
 ]

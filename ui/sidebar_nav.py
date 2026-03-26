@@ -897,6 +897,7 @@ class _Sidebar(QWidget):
     # Mapping from (phase, check_key) → sidebar nav label
     _STEP_NAV_MAP: list[tuple[int, str, str]] = [
         (1, "camera_selected",     "Modality"),
+        (1, "profile_selected",    "Modality"),
         (1, "stimulus_configured", "Stimulus"),
         (1, "temperature_set",     "Temperature"),
         (2, "live_viewed",         "Live View"),
