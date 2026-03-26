@@ -84,7 +84,7 @@ class ModalitySection(QWidget):
         # Camera type
         grid.addWidget(QLabel("Camera Type"), 0, 0)
         self._cam_combo = QComboBox()
-        self._cam_combo.setFixedWidth(200)
+        self._cam_combo.setMinimumWidth(320)
         self._cam_combo.currentIndexChanged.connect(self._on_camera_type_changed)
         grid.addWidget(self._cam_combo, 0, 1)
 
@@ -146,6 +146,12 @@ class ModalitySection(QWidget):
         root.addStretch()
 
     # ── Public API ─────────────────────────────────────────────────────
+
+    def showEvent(self, event):
+        """Refresh combos every time the section becomes visible."""
+        super().showEvent(event)
+        if app_state.cam is not None:
+            self.refresh()
 
     def set_hardware_available(self, available: bool) -> None:
         self._stack.setCurrentIndex(1 if available else 0)

@@ -3263,6 +3263,12 @@ class MainWindow(QMainWindow):
         # hides controls for unconnected devices (stage, TEC, etc.).
         if not app_state.demo_mode:
             self._refresh_tab_availability()
+        # Always refresh the modality section so the camera combo is populated
+        # even in demo mode (where _refresh_tab_availability is skipped).
+        try:
+            self._modality_section.refresh()
+        except Exception:
+            log.debug("Modality startup refresh failed", exc_info=True)
 
     def _restore_layout(self):
         """Restore persisted window geometry and tab splitter sizes."""
