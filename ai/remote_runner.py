@@ -166,8 +166,25 @@ def ollama_download_url() -> str:
     return "https://ollama.com/install.sh"
 
 
+_CONNECT_TIMEOUT = 30   # seconds — connection + validation timeout
+_STREAM_TIMEOUT  = 120  # seconds — long timeout for streaming responses
+
+
 def _ssl_ctx() -> ssl.SSLContext:
-    ctx = ssl.create_default_context()
+    try:
+        ctx = ssl.create_default_context()
+    except ssl.SSLError:
+        # Fallback for Windows machines with restricted/corporate CA stores
+        log.warning("ssl.create_default_context() failed; using permissive context")
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        ctx.check_hostname = True
+        ctx.verify_mode = ssl.CERT_REQUIRED
+        try:
+            import certifi
+            ctx.load_verify_locations(certifi.where())
+        except (ImportError, OSError):
+            # Last resort: use system default store (may be empty on some Windows)
+            ctx.load_default_certs()
     return ctx
 
 
@@ -523,6 +540,11 @@ class RemoteRunner(QObject):
     def _close_stream(resp_obj) -> None:
         """Close the HTTP connection attached to a streaming response."""
         try:
+            # Drain any unread data to prevent broken pipe errors
+            try:
+                resp_obj.read()
+            except Exception:
+                pass
             conn = getattr(resp_obj, "_conn_ref", None)
             if conn is not None:
                 conn.close()
@@ -539,7 +561,9 @@ class RemoteRunner(QObject):
             "content-type":      "application/json",
         }
         body = json.dumps(payload).encode()
-        conn = http.client.HTTPSConnection(_ANTHROPIC_HOST, context=_ssl_ctx())
+        timeout = _STREAM_TIMEOUT if stream else _CONNECT_TIMEOUT
+        conn = http.client.HTTPSConnection(
+            _ANTHROPIC_HOST, context=_ssl_ctx(), timeout=timeout)
         conn.request("POST", path, body=body, headers=headers)
         resp = conn.getresponse()
         if stream:
@@ -556,7 +580,9 @@ class RemoteRunner(QObject):
             "content-type":  "application/json",
         }
         body = json.dumps(payload).encode()
-        conn = http.client.HTTPSConnection(_OPENAI_HOST, context=_ssl_ctx())
+        timeout = _STREAM_TIMEOUT if stream else _CONNECT_TIMEOUT
+        conn = http.client.HTTPSConnection(
+            _OPENAI_HOST, context=_ssl_ctx(), timeout=timeout)
         conn.request("POST", path, body=body, headers=headers)
         resp = conn.getresponse()
         if stream:
@@ -568,7 +594,8 @@ class RemoteRunner(QObject):
 
     def _get_openai(self, path: str) -> tuple[int, bytes]:
         headers = {"Authorization": f"Bearer {self._api_key}"}
-        conn = http.client.HTTPSConnection(_OPENAI_HOST, context=_ssl_ctx())
+        conn = http.client.HTTPSConnection(
+            _OPENAI_HOST, context=_ssl_ctx(), timeout=_CONNECT_TIMEOUT)
         conn.request("GET", path, headers=headers)
         resp = conn.getresponse()
         data = resp.read()

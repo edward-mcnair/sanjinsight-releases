@@ -526,6 +526,8 @@ class MainWindow(QMainWindow):
         self._ai_service = AIService(parent=self)
         self._ai_service.set_metrics(self._metrics)
         self._ai_service.set_diagnostics(self._diagnostic_engine)
+        self._ai_service.set_workspace_mode(
+            cfg_mod.get_pref("ui.workspace", "standard"))
         self._model_downloader = ModelDownloader(parent=self)
 
         self._ai_panel = AIPanelWidget(llama_installed=llama_available())
@@ -625,9 +627,10 @@ class MainWindow(QMainWindow):
         self._settings_tab.check_for_updates_requested.connect(
             self._on_manual_update_check)
 
-        # Wire Settings tab → AI service (local)
-        self._settings_tab.ai_enable_requested.connect(self._on_ai_enable)
-        self._settings_tab.ai_disable_requested.connect(self._ai_service.disable)
+        # NOTE: AI service + downloader signals are connected below (after
+        # AI panel signals) in the "AI service signals" block near line 920+.
+        # Cloud and Ollama signals are connected here because they don't
+        # appear in that block.
 
         # Wire Settings tab → AI service (cloud)
         self._settings_tab.cloud_ai_connect_requested.connect(
@@ -640,17 +643,6 @@ class MainWindow(QMainWindow):
             self._on_ollama_connect)
         self._settings_tab.ollama_disconnect_requested.connect(
             self._on_ollama_disconnect)
-
-        # Wire Settings tab ↔ ModelDownloader
-        self._settings_tab.download_model_requested.connect(
-            self._on_download_model_requested)
-        self._settings_tab.download_cancel_requested.connect(
-            self._model_downloader.cancel)
-        self._model_downloader.progress.connect(
-            self._settings_tab.set_download_progress)
-        self._model_downloader.complete.connect(self._on_download_complete)
-        self._model_downloader.failed.connect(
-            self._settings_tab.set_download_failed)
 
         # ── Register all panels with the sidebar nav ──────────────────
         from ui.sidebar_nav import NavItem as NI
