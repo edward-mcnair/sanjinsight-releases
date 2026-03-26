@@ -319,11 +319,17 @@ class GuidedBanner(QWidget):
             self.navigate_requested.emit("Sessions")
             self.setVisible(False)
             return
-        # If on the target section, "Next →" points to the following step
-        nav = getattr(self, '_next_nav_override', None) or self._current_nav
-        log.info("GuidedBanner: Go → clicked, navigating to %r", nav)
-        if nav:
-            self.navigate_requested.emit(nav)
+        # If on the target section, "Next →" also marks the current step done
+        if self._next_nav_override and self._current_phase and self._current_key:
+            log.info("GuidedBanner: Next → completing step %s.%s, navigating to %r",
+                     self._current_phase, self._current_key, self._next_nav_override)
+            self.skip_requested.emit(self._current_phase, self._current_key)
+            self.navigate_requested.emit(self._next_nav_override)
+            return
+        log.info("GuidedBanner: Go → clicked, navigating to %r",
+                 self._current_nav)
+        if self._current_nav:
+            self.navigate_requested.emit(self._current_nav)
 
     def _on_skip(self) -> None:
         """Skip the current step — mark it as done and advance."""
