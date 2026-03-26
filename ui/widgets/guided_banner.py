@@ -190,7 +190,8 @@ class GuidedBanner(QWidget):
             f"QPushButton {{ background:{accent}; color:#000; "
             f"border-radius:4px; font-size:{FONT['sublabel']}pt; "
             f"font-weight:bold; padding:0 12px; border:none; }}"
-            f"QPushButton:hover {{ background:{accent}cc; }}")
+            f"QPushButton:hover {{ background:{accent}; color:#000; "
+            f"border:1px solid #fff4; }}")
         self._dismiss_btn.setStyleSheet(
             f"QPushButton {{ background:transparent; color:{text}; "
             f"border:none; font-size:{FONT['body']}pt; }}"
