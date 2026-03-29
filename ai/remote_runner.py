@@ -78,6 +78,7 @@ def get_ollama_models(timeout: float = 3.0) -> list[dict]:
 
     Returns an empty list if Ollama is not running or reachable.
     """
+    conn = None
     try:
         conn = http.client.HTTPConnection(_OLLAMA_HOST, _OLLAMA_PORT, timeout=timeout)
         conn.request("GET", "/api/tags")
@@ -85,7 +86,6 @@ def get_ollama_models(timeout: float = 3.0) -> list[dict]:
         if resp.status != 200:
             return []
         data = json.loads(resp.read())
-        conn.close()
         models = []
         for m in data.get("models", []):
             mid  = m.get("name", "")
@@ -95,18 +95,24 @@ def get_ollama_models(timeout: float = 3.0) -> list[dict]:
         return models
     except Exception:
         return []
+    finally:
+        if conn is not None:
+            conn.close()
 
 
 def is_ollama_running(timeout: float = 2.0) -> bool:
     """Return True if an Ollama server is reachable on localhost:11434."""
+    conn = None
     try:
         conn = http.client.HTTPConnection(_OLLAMA_HOST, _OLLAMA_PORT, timeout=timeout)
         conn.request("GET", "/api/tags")
         resp = conn.getresponse()
-        conn.close()
         return resp.status == 200
     except Exception:
         return False
+    finally:
+        if conn is not None:
+            conn.close()
 
 
 def is_ollama_installed() -> bool:
