@@ -163,13 +163,16 @@ class ModalitySection(QWidget):
 
         cam_left = QVBoxLayout()
         cam_left.setSpacing(6)
-        cam_row.addLayout(cam_left, 1)
+        cam_row.addLayout(cam_left, 3)
 
         cam_lbl = QLabel("Camera")
-        cam_lbl.setStyleSheet(_dim_style())
+        cam_lbl.setStyleSheet(
+            f"font-size:{FONT['label']}pt; font-weight:600; "
+            f"color:{PALETTE['text']}; padding-left:2px;")
         cam_left.addWidget(cam_lbl)
 
         self._cam_combo = QComboBox()
+        self._cam_combo.setMaximumWidth(700)
         self._cam_combo.currentIndexChanged.connect(self._on_camera_type_changed)
         cam_left.addWidget(self._cam_combo)
 
@@ -182,7 +185,7 @@ class ModalitySection(QWidget):
         preview_col = QVBoxLayout()
         preview_col.setSpacing(4)
         preview_col.setContentsMargins(0, 0, 0, 0)
-        cam_row.addLayout(preview_col, 0)
+        cam_row.addLayout(preview_col, 2)
 
         self._preview_lbl = QLabel()
         self._preview_lbl.setFixedSize(_PREVIEW_W, _PREVIEW_H)
