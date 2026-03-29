@@ -297,28 +297,29 @@ class TestCalibrationTabPresets:
         assert self._get_temps(tab) == pytest.approx(sorted(CAL_IR_TEMPS_C))
 
     def test_time_est_label_after_tr_std(self, tab):
-        """After loading TR Std (6 steps), time-estimate must mention '6 steps'."""
+        """After loading TR Std (6 steps), time-estimate must show a duration."""
         from ai.instrument_knowledge import CAL_TR_TEMPS_C
         tab._set_preset(CAL_TR_TEMPS_C)
         tab._update_time_est()
         text = tab._time_est_lbl.text()
-        assert "6" in text, f"Expected '6' in time estimate, got: {text!r}"
-        assert "min" in text
+        # TimeEstimateLabel uses clock format: "⏱ ~00:09:49"
+        assert "~" in text, f"Expected clock-format duration, got: {text!r}"
+        assert ":" in text
 
     def test_time_est_label_after_ir_std(self, tab):
-        """After loading IR Std (7 steps), time-estimate must mention '7 steps'."""
+        """After loading IR Std (7 steps), time-estimate must show a duration."""
         from ai.instrument_knowledge import CAL_IR_TEMPS_C
         tab._set_preset(CAL_IR_TEMPS_C)
         tab._update_time_est()
         text = tab._time_est_lbl.text()
-        assert "7" in text, f"Expected '7' in time estimate, got: {text!r}"
-        assert "min" in text
+        assert "~" in text, f"Expected clock-format duration, got: {text!r}"
+        assert ":" in text
 
     def test_time_est_empty_state(self, tab):
-        """With no temperature steps loaded, label must show the em-dash placeholder."""
+        """With no temperature steps loaded, label must be cleared (empty)."""
         tab._set_preset([])
         tab._update_time_est()
-        assert "—" in tab._time_est_lbl.text()
+        assert tab._time_est_lbl.text() == ""
 
     def test_time_est_increases_with_more_steps(self, tab):
         """A 6-step preset must produce a longer estimated time than a 3-step preset."""

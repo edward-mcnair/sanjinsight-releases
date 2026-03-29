@@ -101,6 +101,10 @@ class TimeEstimateLabel(QFrame):
         self._apply_styles()
         self.setVisible(True)
 
+    def text(self) -> str:
+        """Return the current display text (delegates to the inner label)."""
+        return self._text_lbl.text()
+
     def clear(self) -> None:
         """Hide the pill and reset its text."""
         self._text_lbl.clear()
