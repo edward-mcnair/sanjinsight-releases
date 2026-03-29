@@ -634,6 +634,7 @@ class TestDemoModeCamera:
     def test_demo_mode_forces_simulated_driver(self, monkeypatch, qapp):
         """When demo_mode=True the camera factory must receive driver='simulated'."""
         import hardware.hardware_service as hs_mod
+        import hardware.services.camera_service as cam_mod
         from hardware.app_state import app_state
 
         # Capture the config dict passed to create_camera
@@ -652,9 +653,10 @@ class TestDemoModeCamera:
             captured.append(dict(cfg))
             return _FakeCamera()
 
-        monkeypatch.setattr(hs_mod, "create_camera", _fake_create_camera)
+        monkeypatch.setattr(cam_mod, "create_camera", _fake_create_camera)
         # Patch _connect_with_retry to a no-op so it doesn't actually retry
-        monkeypatch.setattr(hs_mod.HardwareService, "_connect_with_retry",
+        from hardware.services.base_device_service import BaseDeviceService
+        monkeypatch.setattr(BaseDeviceService, "_connect_with_retry",
                             lambda self, fn, **kw: fn())
         # Ensure app_state reports demo mode
         with app_state:
@@ -663,7 +665,7 @@ class TestDemoModeCamera:
         try:
             svc = hs_mod.HardwareService()
             svc._running = True          # prevent the thread from exiting early
-            svc._run_camera()            # call directly (no thread needed)
+            svc.camera_service._run_camera()  # call directly (no thread needed)
         except Exception:
             pass                          # cleanup failures from missing pipeline etc.
         finally:
