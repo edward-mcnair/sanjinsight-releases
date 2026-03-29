@@ -27,7 +27,7 @@ from PyQt5.QtWidgets import (
 
 from version import APP_NAME, APP_VENDOR, SUPPORT_EMAIL
 from ui.icons import IC, make_icon_label
-from ui.theme import FONT, scaled_qss
+from ui.theme import FONT, scaled_qss, MONO_FONT
 
 log = logging.getLogger(__name__)
 
@@ -145,7 +145,7 @@ class LicenseActivationPrompt(QDialog):
             QTextEdit {{
                 background:{_BG2}; color:{_TEXT};
                 border:1px solid {_BORDER}; border-radius:4px;
-                font-size:{FONT["caption"]}pt; font-family:Menlo,Consolas,monospace;
+                font-size:{FONT["caption"]}pt; font-family:{MONO_FONT};
                 padding:8px;
             }}
             QTextEdit:focus {{ border-color:{_ACCENT}; }}

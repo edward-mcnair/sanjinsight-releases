@@ -38,7 +38,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QThread, QTimer, pyqtSignal, QObject, QRunnable, QThreadPool
 
-from ui.theme import FONT, PALETTE, scaled_qss
+from ui.theme import FONT, PALETTE, scaled_qss, MONO_FONT
 
 log = logging.getLogger(__name__)
 
@@ -445,7 +445,7 @@ class WavelengthTab(QWidget):
         )
         self._nm_spin.setStyleSheet(err_qss)
         self._wl_readout.setStyleSheet(
-            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size: {FONT['readoutSm']}pt; "
+            f"font-family:{MONO_FONT}; font-size: {FONT['readoutSm']}pt; "
             f"color: {danger};"
         )
 
@@ -495,7 +495,7 @@ class WavelengthTab(QWidget):
 
         # Wavelength readout label
         self._wl_readout.setStyleSheet(
-            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size: {F['readoutSm']}pt; "
+            f"font-family:{MONO_FONT}; font-size: {F['readoutSm']}pt; "
             f"color: {accent};"
         )
 

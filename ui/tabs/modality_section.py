@@ -29,7 +29,7 @@ from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QImage, QPixmap, QPainter, QColor
 
 from hardware.app_state import app_state
-from ui.theme import PALETTE, FONT
+from ui.theme import PALETTE, FONT, MONO_FONT
 from ui.icons import IC, make_icon, make_icon_label, set_btn_icon
 from ui.widgets.profile_picker import ProfilePicker
 from ui.guidance.cards import GuidanceCard, WorkflowFooter
@@ -68,7 +68,7 @@ _NEXT_STEPS = [
 # ── Helpers ────────────────────────────────────────────────────────────
 
 def _mono_style() -> str:
-    return (f"font-family:'Menlo','Consolas','Courier New',monospace; "
+    return (f"font-family:{MONO_FONT}; "
             f"font-size:{FONT['readoutSm']}pt; color:{PALETTE['accent']};")
 
 

@@ -31,7 +31,7 @@ log = logging.getLogger(__name__)
 
 from ui.button_utils import RunningButton, apply_hand_cursor
 from ui.icons import set_btn_icon
-from ui.theme import FONT, PALETTE
+from ui.theme import FONT, PALETTE, MONO_FONT
 from ui.widgets.time_estimate_label import TimeEstimateLabel
 
 from PyQt5.QtWidgets import (
@@ -330,7 +330,7 @@ class TransientTab(QWidget):
         self._hw_trig_lbl   = QLabel("—")   # HW trigger availability
         for l in [self._hw_cam_lbl, self._hw_fpga_lbl, self._hw_trig_lbl]:
             l.setStyleSheet(
-                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['caption']}pt; "
+                f"font-family:{MONO_FONT}; font-size:{FONT['caption']}pt; "
                 f"color:{PALETTE['textDim']};")
         hl.addWidget(self._sub("Camera"),        0, 0)
         hl.addWidget(self._hw_cam_lbl,           0, 1)
@@ -437,7 +437,7 @@ class TransientTab(QWidget):
         self._progress.setRange(0, 100)
         self._status_lbl = QLabel("Ready")
         self._status_lbl.setStyleSheet(
-            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['caption']}pt; "
+            f"font-family:{MONO_FONT}; font-size:{FONT['caption']}pt; "
             f"color:{PALETTE['textDim']};")
         self._status_lbl.setWordWrap(True)
 
@@ -490,7 +490,7 @@ class TransientTab(QWidget):
             val = QLabel("—")
             val.setAlignment(Qt.AlignCenter)
             val.setStyleSheet(
-                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readoutSm']}pt; "
+                f"font-family:{MONO_FONT}; font-size:{FONT['readoutSm']}pt; "
                 f"color:{PALETTE['accent']};")
             v.addWidget(sub)
             v.addWidget(val)
@@ -508,7 +508,7 @@ class TransientTab(QWidget):
         self._delay_slider.valueChanged.connect(self._on_slider_changed)
         self._delay_time_lbl = QLabel("—")
         self._delay_time_lbl.setStyleSheet(
-            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['caption']}pt; "
+            f"font-family:{MONO_FONT}; font-size:{FONT['caption']}pt; "
             f"color:{PALETTE['textDim']}; min-width:70px;")
         slider_row.addWidget(self._delay_slider, 1)
         slider_row.addWidget(self._delay_time_lbl)
@@ -712,7 +712,7 @@ class TransientTab(QWidget):
         self._stats["dur"].setText(f"{dur:.1f} s")
         self._stats["hw_trig"].setText("Yes" if result.hw_triggered else "No (SW)")
         self._stats["hw_trig"].setStyleSheet(
-            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readoutSm']}pt; "
+            f"font-family:{MONO_FONT}; font-size:{FONT['readoutSm']}pt; "
             f"color:{'#00d4aa' if result.hw_triggered else PALETTE['warning']};")
 
         # Delay slider
@@ -1028,7 +1028,7 @@ class TransientTab(QWidget):
             ok  = f"color:{PALETTE['success']};"
             wrn = f"color:{PALETTE['warning']};"
             dim = f"color:{PALETTE['textDim']};"
-            base = (f"font-family:'Menlo','Consolas','Courier New',monospace; "
+            base = (f"font-family:{MONO_FONT}; "
                     f"font-size:{FONT['caption']}pt; ")
 
             self._hw_cam_lbl.setText("Connected" if app_state.cam  else "—")

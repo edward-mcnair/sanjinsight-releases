@@ -20,7 +20,7 @@ import numpy as np
 from ui.button_utils import RunningButton, apply_hand_cursor
 from ui.font_utils   import mono_font, sans_font
 from ui.icons import set_btn_icon
-from ui.theme import FONT, PALETTE
+from ui.theme import FONT, PALETTE, MONO_FONT
 from ui.guidance import get_section_cards, GuidanceCard, WorkflowFooter
 from ui.guidance.steps import next_steps_after
 
@@ -711,7 +711,7 @@ class LiveTab(QWidget):
         # Status badges: re-apply with fresh palette so they switch correctly
         _badge_base = (
             f"padding:0 8px; border-radius:3px; "
-            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['label']}pt;")
+            f"font-family:{MONO_FONT}; font-size:{FONT['label']}pt;")
         if hasattr(self, "_fps_lbl"):
             # Colour depends on whether live is running — re-apply idle state
             self._fps_lbl.setStyleSheet(
@@ -795,7 +795,7 @@ class LiveTab(QWidget):
         l.setFixedHeight(24)
         l.setStyleSheet(
             f"background:{color}; color:{PALETTE.get('textSub','#6a6a6a')}; padding:0 8px; "
-            f"border-radius:3px; font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['label']}pt;")
+            f"border-radius:3px; font-family:{MONO_FONT}; font-size:{FONT['label']}pt;")
         return l
 
     # ---------------------------------------------------------------- #
@@ -875,7 +875,7 @@ class LiveTab(QWidget):
         self._accum.valueChanged.connect(self._accum_slider.setValue)
         self._accum_lbl = QLabel("16 frames")
         self._accum_lbl.setStyleSheet(
-            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['heading']}pt; color:{PALETTE.get('textSub','#6a6a6a')};")
+            f"font-family:{MONO_FONT}; font-size:{FONT['heading']}pt; color:{PALETTE.get('textSub','#6a6a6a')};")
         self._accum.valueChanged.connect(
             lambda v: self._accum_lbl.setText(f"{v} frames"))
         dl.addWidget(self._accum_slider)
@@ -959,7 +959,7 @@ class LiveTab(QWidget):
             sl.addWidget(self._sub(lbl), r, 0)
             v = QLabel("—")
             v.setStyleSheet(
-                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['sublabel']}pt; color:{PALETTE.get('textDim','#999999')};")
+                f"font-family:{MONO_FONT}; font-size:{FONT['sublabel']}pt; color:{PALETTE.get('textDim','#999999')};")
             v.setAlignment(Qt.AlignRight)
             sl.addWidget(v, r, 1)
             self._stat_vals[key] = v
@@ -974,7 +974,7 @@ class LiveTab(QWidget):
         self._probe_dt  = QLabel("—")
         for l in [self._probe_xy, self._probe_drr, self._probe_dt]:
             l.setStyleSheet(
-                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['sublabel']}pt; color:{PALETTE.get('textDim','#999999')};")
+                f"font-family:{MONO_FONT}; font-size:{FONT['sublabel']}pt; color:{PALETTE.get('textDim','#999999')};")
         pl.addWidget(self._sub("Position"), 0, 0)
         pl.addWidget(self._probe_xy,         0, 1)
         pl.addWidget(self._sub("ΔR/R"),     1, 0)
@@ -1172,10 +1172,10 @@ class LiveTab(QWidget):
             if not self._badges_active:
                 self._fps_lbl.setStyleSheet(
                     f"background:{PALETTE.get('surface2','#3d3d3d')}; color:{PALETTE.get('accent','#00d4aa')}; padding:0 8px; "
-                    f"border-radius:3px; font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['label']}pt;")
+                    f"border-radius:3px; font-family:{MONO_FONT}; font-size:{FONT['label']}pt;")
                 self._cycle_lbl.setStyleSheet(
                     f"background:{PALETTE.get('surface2','#3d3d3d')}; color:{PALETTE.get('textDim','#999999')}; padding:0 8px; "
-                    f"border-radius:3px; font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['label']}pt;")
+                    f"border-radius:3px; font-family:{MONO_FONT}; font-size:{FONT['label']}pt;")
                 self._badges_active = True
 
             # Only setText when the string actually changes (avoids redundant
@@ -1217,7 +1217,7 @@ class LiveTab(QWidget):
         self._state_lbl.setText(text)
         self._state_lbl.setStyleSheet(
             f"background:{PALETTE.get('surface2','#3d3d3d')}; color:{color}; padding:0 8px; "
-            f"border-radius:3px; font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['label']}pt; "
+            f"border-radius:3px; font-family:{MONO_FONT}; font-size:{FONT['label']}pt; "
             f"border:1px solid {color};")
 
     def _sub(self, text: str) -> QLabel:

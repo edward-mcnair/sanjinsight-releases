@@ -18,7 +18,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, pyqtSignal
 
 from hardware.app_state import app_state
-from ui.theme import PALETTE, FONT
+from ui.theme import PALETTE, FONT, MONO_FONT
 from ui.icons import IC, make_icon, make_icon_label
 from ui.guidance import get_section_cards, GuidanceCard, WorkflowFooter
 from ui.guidance.steps import next_steps_after
@@ -38,7 +38,7 @@ _UPDATE_HZ = 5      # throttle live readout updates
 
 
 def _mono_style() -> str:
-    return (f"font-family:'Menlo','Consolas','Courier New',monospace; "
+    return (f"font-family:{MONO_FONT}; "
             f"font-size:{FONT['readoutSm']}pt; color:{PALETTE['accent']};")
 
 
@@ -368,7 +368,7 @@ class SignalCheckSection(QWidget):
         else:
             color = _color_for_level(level)
         val_lbl.setStyleSheet(
-            f"font-family:'Menlo','Consolas','Courier New',monospace; "
+            f"font-family:{MONO_FONT}; "
             f"font-size:{FONT['readoutSm']}pt; color:{color};")
 
     def _readout_widget(self, label: str) -> QWidget:

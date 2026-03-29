@@ -18,7 +18,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QTimer
 
-from ui.theme import PALETTE, FONT
+from ui.theme import PALETTE, FONT, MONO_FONT
 
 log = logging.getLogger(__name__)
 
@@ -156,7 +156,7 @@ class PreflightDialog(QDialog):
 
         obs_lbl = QLabel(check.observed)
         obs_lbl.setStyleSheet(
-            f"font-family:'Menlo','Consolas','Courier New',monospace; "
+            f"font-family:{MONO_FONT}; "
             f"font-size:{FONT['caption']}pt; "
             f"color:{PALETTE.get('textDim', '#888')};")
         details.addWidget(obs_lbl)

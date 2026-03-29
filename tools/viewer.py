@@ -31,7 +31,7 @@ from PyQt5.QtGui  import QImage, QPixmap
 
 import config
 from hardware.cameras import create_camera
-from ui.theme import FONT, scaled_qss
+from ui.theme import FONT, scaled_qss, MONO_FONT
 
 
 # ------------------------------------------------------------------ #
@@ -128,7 +128,7 @@ class MainWindow(QMainWindow):
 
         # Status
         self.status_lbl = QLabel("Connecting...")
-        self.status_lbl.setStyleSheet(scaled_qss("font-family: 'Menlo','Consolas','Courier New',monospace; font-size: 9pt;"))
+        self.status_lbl.setStyleSheet(scaled_qss(f"font-family:{MONO_FONT}; font-size: 9pt;"))
         root.addWidget(self.status_lbl)
 
         root.addWidget(self._hline())
@@ -193,7 +193,7 @@ class MainWindow(QMainWindow):
         # Stats + save
         bottom = QHBoxLayout()
         self.stats_lbl = QLabel("Min: --   Max: --   Mean: --")
-        self.stats_lbl.setStyleSheet(scaled_qss("font-family: 'Menlo','Consolas','Courier New',monospace; font-size: 9pt;"))
+        self.stats_lbl.setStyleSheet(scaled_qss(f"font-family:{MONO_FONT}; font-size: 9pt;"))
         bottom.addWidget(self.stats_lbl)
         bottom.addStretch()
         save_btn = QPushButton("Save Frame (16-bit PNG)")

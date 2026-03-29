@@ -29,7 +29,7 @@ from version import (
     __version__, BUILD_DATE, APP_NAME, APP_VENDOR,
     full_version_string, RELEASES_PAGE_URL, SUPPORT_EMAIL, DOCS_URL,
 )
-from ui.theme import FONT, scaled_qss
+from ui.theme import FONT, scaled_qss, MONO_FONT
 
 log = logging.getLogger(__name__)
 
@@ -188,7 +188,7 @@ class UpdateDialog(QDialog):
                 background:{_BG2}; color:{_MUTED};
                 border:1px solid {_BORDER}; border-radius:4px;
                 font-size:{FONT["label"]}pt; padding:10px;
-                font-family:Menlo, Consolas, monospace;
+                font-family:{MONO_FONT};
             }}
         """)
         rn_text.setMinimumHeight(200)
@@ -310,7 +310,7 @@ class AboutDialog(QDialog):
                 background:{_BG2}; color:{_MUTED};
                 border:1px solid {_BORDER}; border-radius:4px;
                 font-size:{FONT["sublabel"]}pt; padding:10px;
-                font-family:Menlo, Consolas, monospace;
+                font-family:{MONO_FONT};
             }}
         """)
         info_box.setFixedHeight(170)

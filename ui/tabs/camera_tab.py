@@ -35,7 +35,7 @@ from hardware.app_state    import app_state
 from ui.widgets.image_pane import ImagePane
 from ui.widgets.collapsible_panel import CollapsiblePanel
 from ui.widgets.more_options import MoreOptionsPanel
-from ui.theme import FONT, PALETTE, scaled_qss
+from ui.theme import FONT, PALETTE, scaled_qss, MONO_FONT
 from ui.icons import IC, make_icon_label, set_btn_icon
 
 
@@ -108,7 +108,7 @@ class CameraTab(QWidget):
         self._exp_slider.setValue(5000)
         self._exp_lbl = QLabel(_fmt_exp(5000))
         self._exp_lbl.setStyleSheet(
-            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readoutSm']}pt; color:{PALETTE['accent']};")
+            f"font-family:{MONO_FONT}; font-size:{FONT['readoutSm']}pt; color:{PALETTE['accent']};")
         self._exp_slider.valueChanged.connect(
             lambda v: self._exp_lbl.setText(_fmt_exp(v)))
         self._exp_slider.sliderReleased.connect(self._on_exp)
@@ -146,7 +146,7 @@ class CameraTab(QWidget):
         self._gain_slider.setValue(0)
         self._gain_lbl = QLabel("0.0")
         self._gain_lbl.setStyleSheet(
-            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readoutSm']}pt; color:{PALETTE['accent']};")
+            f"font-family:{MONO_FONT}; font-size:{FONT['readoutSm']}pt; color:{PALETTE['accent']};")
         self._gain_slider.valueChanged.connect(
             lambda v: self._gain_lbl.setText(f"{v/10:.1f}"))
         self._gain_slider.sliderReleased.connect(self._on_gain)
@@ -262,11 +262,11 @@ class CameraTab(QWidget):
 
         self._qual_exp_lbl = QLabel("EXPOSURE  —")
         self._qual_exp_lbl.setStyleSheet(
-            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['label']}pt; "
+            f"font-family:{MONO_FONT}; font-size:{FONT['label']}pt; "
             f"color:{PALETTE['textDim']};")
         self._qual_sat_lbl = QLabel("SATURATION  —")
         self._qual_sat_lbl.setStyleSheet(
-            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['label']}pt; "
+            f"font-family:{MONO_FONT}; font-size:{FONT['label']}pt; "
             f"color:{PALETTE['textDim']};")
         ql.addWidget(self._qual_exp_lbl)
         ql.addWidget(self._qual_sat_lbl)
@@ -286,7 +286,7 @@ class CameraTab(QWidget):
         simcam_grid.addWidget(QLabel("Resolution"), 0, 0)
         self._simcam_res_lbl = QLabel("—")
         self._simcam_res_lbl.setStyleSheet(
-            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readoutSm']}pt;"
+            f"font-family:{MONO_FONT}; font-size:{FONT['readoutSm']}pt;"
             f" color:{PALETTE['accent']};")
         simcam_grid.addWidget(self._simcam_res_lbl, 0, 1)
 
@@ -320,7 +320,7 @@ class CameraTab(QWidget):
         self._simcam_fps_slider.setValue(30)
         self._simcam_fps_lbl = QLabel("30 fps")
         self._simcam_fps_lbl.setStyleSheet(
-            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readoutSm']}pt;"
+            f"font-family:{MONO_FONT}; font-size:{FONT['readoutSm']}pt;"
             f" color:{PALETTE['accent']};")
         self._simcam_fps_slider.valueChanged.connect(
             lambda v: self._simcam_fps_lbl.setText(f"{v} fps"))
@@ -458,7 +458,7 @@ class CameraTab(QWidget):
             self._sat_w._val.setText("OK")
             color = PALETTE["success"]
         self._sat_w._val.setStyleSheet(
-            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readoutSm']}pt;"
+            f"font-family:{MONO_FONT}; font-size:{FONT['readoutSm']}pt;"
             f" color:{color};")
 
         # Update always-visible quality strip
@@ -477,7 +477,7 @@ class CameraTab(QWidget):
             exp_text  = "EXPOSURE  OK ✓"
         self._qual_exp_lbl.setText(exp_text)
         self._qual_exp_lbl.setStyleSheet(
-            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['label']}pt; color:{exp_color};")
+            f"font-family:{MONO_FONT}; font-size:{FONT['label']}pt; color:{exp_color};")
 
         if mx >= CAMERA_SAT_LIMIT:
             sat_color = PALETTE["danger"]
@@ -490,7 +490,7 @@ class CameraTab(QWidget):
             sat_text  = "SATURATION  OK ✓"
         self._qual_sat_lbl.setText(sat_text)
         self._qual_sat_lbl.setStyleSheet(
-            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['label']}pt; color:{sat_color};")
+            f"font-family:{MONO_FONT}; font-size:{FONT['label']}pt; color:{sat_color};")
 
     def _set_exp(self, val):
         self._exp_slider.setValue(val)

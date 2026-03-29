@@ -38,7 +38,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QFont, QImage, QPixmap, QColor
 from ui.icons import set_btn_icon
-from ui.theme import FONT, scaled_qss
+from ui.theme import PALETTE, FONT, MONO_FONT, scaled_qss
 
 import matplotlib
 if matplotlib.get_backend().lower() in ("", "agg"):
@@ -64,7 +64,7 @@ def _array_to_pixmap(arr: np.ndarray,
     """Render a 2D float32 array as a colormapped QPixmap."""
     if arr is None or arr.ndim != 2:
         pm = QPixmap(width, height)
-        pm.fill(QColor("#1a1a1a"))
+        pm.fill(QColor(PALETTE["bg"]))
         return pm
 
     v_lo = float(vmin if vmin is not None else np.nanmin(arr))
@@ -91,7 +91,7 @@ class _MapPanel(QFrame):
     def __init__(self, title: str = "", parent=None):
         super().__init__(parent)
         self.setFrameStyle(QFrame.StyledPanel)
-        self.setStyleSheet("background:#111; border:1px solid #2a2a2a; border-radius:4px;")
+        self.setStyleSheet(f"background:{PALETTE['surface']}; border:1px solid {PALETTE['border']}; border-radius:4px;")
         self._title_str = title
         self._arr: Optional[np.ndarray] = None
         self._cmap = "inferno"
@@ -106,19 +106,19 @@ class _MapPanel(QFrame):
 
         self._title_lbl = QLabel(self._title_str)
         self._title_lbl.setStyleSheet(
-            f"color:#ddd; font-size:{FONT['heading']}pt; font-weight:600; font-family:'Menlo','Consolas','Courier New',monospace;")
+            f"color:{PALETTE['text']}; font-size:{FONT['heading']}pt; font-weight:600; font-family:{MONO_FONT};")
         self._title_lbl.setAlignment(Qt.AlignCenter)
         lay.addWidget(self._title_lbl)
 
         self._img_lbl = QLabel()
         self._img_lbl.setAlignment(Qt.AlignCenter)
         self._img_lbl.setMinimumSize(320, 240)
-        self._img_lbl.setStyleSheet("background:#1a1a1a;")
+        self._img_lbl.setStyleSheet(f"background:{PALETTE['bg']};")
         lay.addWidget(self._img_lbl, 1)
 
         self._range_lbl = QLabel("—")
         self._range_lbl.setAlignment(Qt.AlignCenter)
-        self._range_lbl.setStyleSheet(f"color:#888; font-size:{FONT['label']}pt; font-family:'Menlo','Consolas','Courier New',monospace;")
+        self._range_lbl.setStyleSheet(f"color:{PALETTE['textDim']}; font-size:{FONT['label']}pt; font-family:{MONO_FONT};")
         lay.addWidget(self._range_lbl)
 
     def set_data(self, arr: Optional[np.ndarray],
@@ -184,15 +184,15 @@ class _StatsTable(QTableWidget):
         self.setEditTriggers(QTableWidget.NoEditTriggers)
         self.setAlternatingRowColors(True)
         self.setStyleSheet(f"""
-            QTableWidget {{ background:#141414; color:#ccc; font-size:{FONT['label']}pt;
-                           font-family:'Menlo','Consolas','Courier New',monospace; gridline-color:#222; }}
-            QHeaderView::section {{ background:#1e1e1e; color:#aaa; font-size:{FONT['label']}pt;
+            QTableWidget {{ background:{PALETTE['surface']}; color:{PALETTE['text']}; font-size:{FONT['label']}pt;
+                           font-family:{MONO_FONT}; gridline-color:{PALETTE['border']}; }}
+            QHeaderView::section {{ background:{PALETTE['surface2']}; color:{PALETTE['textDim']}; font-size:{FONT['label']}pt;
                                    padding: 4px 16px 4px 8px; }}
-            QTableWidget::item:alternate {{ background:#191919; }}
+            QTableWidget::item:alternate {{ background:{PALETTE['bg']}; }}
         """)
         for r, (name, _) in enumerate(self._METRICS):
             item = QTableWidgetItem(name)
-            item.setForeground(QColor("#aaa"))
+            item.setForeground(QColor(PALETTE["textDim"]))
             self.setItem(r, 0, item)
         self._clear_col(1)
         self._clear_col(2)
@@ -282,7 +282,7 @@ class ComparisonTab(QWidget):
                   QLabel("Colormap:"), self._cmap_combo,
                   self._blink_btn, self._export_btn]:
             if isinstance(w, QLabel):
-                w.setStyleSheet(f"color:#aaa; font-size:{FONT['label']}pt;")
+                w.setStyleSheet(f"color:{PALETTE['textDim']}; font-size:{FONT['label']}pt;")
             toolbar.addWidget(w)
         toolbar.addStretch(1)
 
@@ -307,7 +307,7 @@ class ComparisonTab(QWidget):
 
         # ─ Status bar ─
         self._status_lbl = QLabel("Load two sessions to compare.")
-        self._status_lbl.setStyleSheet(f"color:#888; font-size:{FONT['label']}pt; padding:2px 4px;")
+        self._status_lbl.setStyleSheet(f"color:{PALETTE['textDim']}; font-size:{FONT['label']}pt; padding:2px 4px;")
         root.addWidget(self._status_lbl)
 
     def _build_empty_state(self, icon, title, desc, btn_text="", btn_callback=None):
@@ -318,16 +318,16 @@ class ComparisonTab(QWidget):
 
         icon_lbl = QLabel(icon)
         icon_lbl.setAlignment(Qt.AlignCenter)
-        icon_lbl.setStyleSheet(scaled_qss("font-size: 52pt; color: #2a2a2a;"))
+        icon_lbl.setStyleSheet(scaled_qss(f"font-size: 52pt; color: {PALETTE['border']};"))
 
         title_lbl = QLabel(title)
         title_lbl.setAlignment(Qt.AlignCenter)
-        title_lbl.setStyleSheet(f"font-size: {FONT['readoutSm']}pt; font-weight: bold; color: #555;")
+        title_lbl.setStyleSheet(f"font-size: {FONT['readoutSm']}pt; font-weight: bold; color: {PALETTE['textSub']};")
 
         desc_lbl = QLabel(desc)
         desc_lbl.setAlignment(Qt.AlignCenter)
         desc_lbl.setWordWrap(True)
-        desc_lbl.setStyleSheet(f"font-size: {FONT['label']}pt; color: #444;")
+        desc_lbl.setStyleSheet(f"font-size: {FONT['label']}pt; color: {PALETTE['textDim']};")
         desc_lbl.setMaximumWidth(450)
 
         lay.addStretch()
@@ -341,11 +341,11 @@ class ComparisonTab(QWidget):
             btn.setFixedHeight(36)
             btn.setStyleSheet(f"""
                 QPushButton {{
-                    background: #1a2a20; color: #00d4aa;
-                    border: 1px solid #00d4aa55; border-radius: 5px;
+                    background: {PALETTE['accentDim']}; color: {PALETTE['accent']};
+                    border: 1px solid {PALETTE['accent']}55; border-radius: 5px;
                     font-size: {FONT['label']}pt; font-weight: 600;
                 }}
-                QPushButton:hover {{ background: #1e3028; }}
+                QPushButton:hover {{ background: {PALETTE['accentDim']}; }}
             """)
             btn.clicked.connect(btn_callback)
             lay.addSpacing(4)
@@ -377,7 +377,7 @@ class ComparisonTab(QWidget):
         # ─ Stats table ─
         stats_box = QGroupBox("Comparison Statistics")
         stats_box.setStyleSheet(f"""
-            QGroupBox {{ color:#aaa; font-size:{FONT['label']}pt; border:1px solid #2a2a2a;
+            QGroupBox {{ color:{PALETTE['textDim']}; font-size:{FONT['label']}pt; border:1px solid {PALETTE['border']};
                         border-radius:4px; margin-top:6px; }}
             QGroupBox::title {{ subcontrol-position:top left; padding:0 4px; }}
         """)
@@ -565,15 +565,15 @@ class ComparisonTab(QWidget):
                              and arrA.shape == arrB.shape else 0)
 
         fig, axes = plt.subplots(1, n_panels, figsize=(6 * n_panels, 5),
-                                 facecolor="#0d0d0d")
-        fig.suptitle("Microsanj Session Comparison", color="white", fontsize=13)
+                                 facecolor=PALETTE["bg"])
+        fig.suptitle("Microsanj Session Comparison", color=PALETTE["text"], fontsize=13)
 
         for ax, arr, title in [
             (axes[0], arrA, f"Session A\n{Path(self._pathA).name if self._pathA else ''}"),
             (axes[1], arrB, f"Session B\n{Path(self._pathB).name if self._pathB else ''}"),
         ]:
-            ax.set_facecolor("#1a1a1a")
-            ax.set_title(title, color="#ccc", fontsize=9)
+            ax.set_facecolor(PALETTE["surface"])
+            ax.set_title(title, color=PALETTE["textDim"], fontsize=9)
             ax.axis("off")
             if arr is not None:
                 im = ax.imshow(arr, cmap=cmap, aspect="equal")
@@ -582,8 +582,8 @@ class ComparisonTab(QWidget):
         if n_panels == 3 and arrA is not None and arrB is not None:
             diff = arrB - arrA
             abs_max = float(max(abs(np.nanmin(diff)), abs(np.nanmax(diff)), 1e-9))
-            axes[2].set_facecolor("#1a1a1a")
-            axes[2].set_title("Difference (B − A)", color="#ccc", fontsize=9)
+            axes[2].set_facecolor(PALETTE["surface"])
+            axes[2].set_title("Difference (B − A)", color=PALETTE["textDim"], fontsize=9)
             axes[2].axis("off")
             im = axes[2].imshow(diff, cmap="RdBu_r",
                                 vmin=-abs_max, vmax=abs_max, aspect="equal")

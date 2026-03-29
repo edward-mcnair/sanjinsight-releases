@@ -24,7 +24,7 @@ from typing import Optional
 
 from ui.button_utils import RunningButton, apply_hand_cursor
 from ui.icons import set_btn_icon
-from ui.theme import FONT, PALETTE
+from ui.theme import FONT, PALETTE, MONO_FONT
 
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -180,7 +180,7 @@ class MovieTab(QWidget):
         self._hw_fpga_lbl = QLabel("—")
         for l in [self._hw_cam_lbl, self._hw_bias_lbl, self._hw_fpga_lbl]:
             l.setStyleSheet(
-                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['caption']}pt; "
+                f"font-family:{MONO_FONT}; font-size:{FONT['caption']}pt; "
                 f"color:{PALETTE['textDim']};")
         hl.addWidget(self._sub("Camera"),  0, 0)
         hl.addWidget(self._hw_cam_lbl,     0, 1)
@@ -215,7 +215,7 @@ class MovieTab(QWidget):
 
         self._status_lbl = QLabel("Ready")
         self._status_lbl.setStyleSheet(
-            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['caption']}pt; "
+            f"font-family:{MONO_FONT}; font-size:{FONT['caption']}pt; "
             f"color:{PALETTE['textDim']};")
         self._status_lbl.setWordWrap(True)
 
@@ -267,7 +267,7 @@ class MovieTab(QWidget):
             val = QLabel("—")
             val.setAlignment(Qt.AlignCenter)
             val.setStyleSheet(
-                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readoutSm']}pt; "
+                f"font-family:{MONO_FONT}; font-size:{FONT['readoutSm']}pt; "
                 f"color:{PALETTE['accent']};")
             v.addWidget(sub)
             v.addWidget(val)
@@ -508,15 +508,15 @@ class MovieTab(QWidget):
             dim = f"color:{PALETTE['textDim']};"
             self._hw_cam_lbl.setText("Connected" if app_state.cam  else "—")
             self._hw_cam_lbl.setStyleSheet(
-                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['caption']}pt; "
+                f"font-family:{MONO_FONT}; font-size:{FONT['caption']}pt; "
                 + (ok if app_state.cam else dim))
             self._hw_bias_lbl.setText("Connected" if app_state.bias else "—")
             self._hw_bias_lbl.setStyleSheet(
-                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['caption']}pt; "
+                f"font-family:{MONO_FONT}; font-size:{FONT['caption']}pt; "
                 + (ok if app_state.bias else dim))
             self._hw_fpga_lbl.setText("Connected" if app_state.fpga else "—")
             self._hw_fpga_lbl.setStyleSheet(
-                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['caption']}pt; "
+                f"font-family:{MONO_FONT}; font-size:{FONT['caption']}pt; "
                 + (ok if app_state.fpga else dim))
         except Exception:
             pass

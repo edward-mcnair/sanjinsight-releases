@@ -30,7 +30,7 @@ from PyQt5.QtCore    import Qt, QTimer, pyqtSignal
 from hardware.app_state    import app_state
 from ui.widgets.temp_plot  import TempPlot
 from ui.widgets.more_options import MoreOptionsPanel
-from ui.theme import FONT, PALETTE, scaled_qss
+from ui.theme import FONT, PALETTE, scaled_qss, MONO_FONT
 from ui.icons import make_icon_label, IC
 
 # Approximate TEC temperature ramp rate (°C per minute).
@@ -594,7 +594,7 @@ class TemperatureTab(QWidget):
                 lbl = getattr(panel, attr, None)
                 if lbl:
                     lbl.setStyleSheet(
-                        f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readoutLg']}pt; "
+                        f"font-family:{MONO_FONT}; font-size:{FONT['readoutLg']}pt; "
                         f"color:{P.get(pal_key,'#00d4aa')};")
 
         # ── Chuck box ─────────────────────────────────────────────────
@@ -618,7 +618,7 @@ class TemperatureTab(QWidget):
                 lbl = getattr(chuck, attr, None)
                 if lbl:
                     lbl.setStyleSheet(
-                        f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readoutLg']}pt; "
+                        f"font-family:{MONO_FONT}; font-size:{FONT['readoutLg']}pt; "
                         f"color:{P.get(pal_key,'#00d4aa')};")
             # Stability dot — colour preserved by update_chuck; just reset font
             dot = getattr(chuck, "_chuck_stab_dot", None)
@@ -639,7 +639,7 @@ class TemperatureTab(QWidget):
         val.setAlignment(Qt.AlignCenter)
         color = PALETTE.get(pal_key, "#00d4aa")
         val.setStyleSheet(
-            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readoutLg']}pt; color:{color};")
+            f"font-family:{MONO_FONT}; font-size:{FONT['readoutLg']}pt; color:{color};")
         v.addWidget(sub)
         v.addWidget(val)
         w._val     = val
@@ -654,10 +654,10 @@ class TemperatureTab(QWidget):
             p._actual_lbl.setText("ERR")
             p._state_lbl.setText(status.error[:20])
             p._state_lbl.setStyleSheet(
-                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readout']}pt; color:{PALETTE['danger']};")
+                f"font-family:{MONO_FONT}; font-size:{FONT['readout']}pt; color:{PALETTE['danger']};")
             p._ready_lbl.setText("ERROR ✗")
             p._ready_lbl.setStyleSheet(
-                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readout']}pt; color:{PALETTE['danger']};")
+                f"font-family:{MONO_FONT}; font-size:{FONT['readout']}pt; color:{PALETTE['danger']};")
             return
         p._actual_lbl.setText(f"{status.actual_temp:.2f} °C")
         p._target_lbl.setText(f"{status.target_temp:.1f} °C")
@@ -667,17 +667,17 @@ class TemperatureTab(QWidget):
             _dim = PALETTE.get("textDim", "#999999")
             p._state_lbl.setText("DISABLED")
             p._state_lbl.setStyleSheet(
-                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readout']}pt; color:{_sub};")
+                f"font-family:{MONO_FONT}; font-size:{FONT['readout']}pt; color:{_sub};")
             p._ready_lbl.setText("○  Disabled")
             p._ready_lbl.setStyleSheet(
-                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readout']}pt; color:{_dim};")
+                f"font-family:{MONO_FONT}; font-size:{FONT['readout']}pt; color:{_dim};")
         elif status.stable:
             p._state_lbl.setText("STABLE ✓")
             p._state_lbl.setStyleSheet(
-                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readout']}pt; color:{PALETTE['accent']};")
+                f"font-family:{MONO_FONT}; font-size:{FONT['readout']}pt; color:{PALETTE['accent']};")
             p._ready_lbl.setText("READY ✓")
             p._ready_lbl.setStyleSheet(
-                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readout']}pt; color:{PALETTE['accent']};")
+                f"font-family:{MONO_FONT}; font-size:{FONT['readout']}pt; color:{PALETTE['accent']};")
         else:
             diff  = status.actual_temp - status.target_temp
             arrow = "▼" if diff > 0 else "▲"
@@ -686,10 +686,10 @@ class TemperatureTab(QWidget):
             eta_str = f"~{eta_s // 60}:{eta_s % 60:02d}"
             p._state_lbl.setText(f"SETTLING {arrow}  {eta_str}")
             p._state_lbl.setStyleSheet(
-                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readout']}pt; color:{PALETTE['warning']};")
+                f"font-family:{MONO_FONT}; font-size:{FONT['readout']}pt; color:{PALETTE['warning']};")
             p._ready_lbl.setText(f"{eta_str} remaining")
             p._ready_lbl.setStyleSheet(
-                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readout']}pt; color:{PALETTE['warning']};")
+                f"font-family:{MONO_FONT}; font-size:{FONT['readout']}pt; color:{PALETTE['warning']};")
         p._plot.push(status.actual_temp, status.target_temp)
 
     def show_alarm(self, index: int, message: str):
@@ -701,7 +701,7 @@ class TemperatureTab(QWidget):
         p._alarm_banner.setVisible(True)
         p._warn_banner.setVisible(False)
         p._actual_lbl.setStyleSheet(
-            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readoutLg']}pt; color:{PALETTE['danger']};")
+            f"font-family:{MONO_FONT}; font-size:{FONT['readoutLg']}pt; color:{PALETTE['danger']};")
         p.setStyleSheet(f"QGroupBox {{ border-color: {PALETTE.get('danger','#ff453a')}; }}")
 
     def show_warning(self, index: int, message: str):
@@ -712,7 +712,7 @@ class TemperatureTab(QWidget):
         p._warn_msg_lbl.setText(message)
         p._warn_banner.setVisible(True)
         p._actual_lbl.setStyleSheet(
-            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readoutLg']}pt; color:{PALETTE['warning']};")
+            f"font-family:{MONO_FONT}; font-size:{FONT['readoutLg']}pt; color:{PALETTE['warning']};")
 
     def clear_alarm(self, index: int):
         """Clear alarm/warning state for the given TEC panel."""
@@ -722,7 +722,7 @@ class TemperatureTab(QWidget):
         p._alarm_banner.setVisible(False)
         p._warn_banner.setVisible(False)
         p._actual_lbl.setStyleSheet(
-            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readoutLg']}pt; color:{PALETTE['accent']};")
+            f"font-family:{MONO_FONT}; font-size:{FONT['readoutLg']}pt; color:{PALETTE['accent']};")
         p.setStyleSheet("")
 
     def _apply_limits(self, box):

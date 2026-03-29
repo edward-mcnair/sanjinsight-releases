@@ -29,7 +29,7 @@ from PyQt5.QtWidgets import (
 
 import version
 from logging_config import log_path
-from ui.theme import PALETTE, FONT
+from ui.theme import PALETTE, FONT, MONO_FONT
 from ui.icons import set_btn_icon
 
 log = logging.getLogger(__name__)
@@ -266,7 +266,7 @@ class SupportDialog(QDialog):
         self._body_edit.setStyleSheet(
             f"QTextEdit {{ background:{PALETTE['surface3']}; color:{PALETTE['text']}; "
             f"border:1px solid {PALETTE['border']}; border-radius:3px; "
-            f"font-size:{FONT['caption']}pt; font-family:Menlo,Consolas,monospace; "
+            f"font-size:{FONT['caption']}pt; font-family:{MONO_FONT}; "
             f"padding:6px; }}"
         )
         self._body_edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)

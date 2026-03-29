@@ -32,7 +32,7 @@ from PyQt5.QtGui  import (QPainter, QColor, QPen, QFont,
                            QBrush, QFontMetrics)
 
 from hardware.app_state import app_state
-from ui.theme      import FONT, PALETTE
+from ui.theme      import FONT, PALETTE, MONO_FONT
 from ui.font_utils import mono_font
 from ui.icons import set_btn_icon, make_icon_label, IC
 
@@ -458,7 +458,7 @@ class ProberTab(QWidget):
                   else PALETTE["textDim"])
         self._st_w._val.setText(status)
         self._st_w._val.setStyleSheet(
-            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readoutSm']}pt; "
+            f"font-family:{MONO_FONT}; font-size:{FONT['readoutSm']}pt; "
             f"color:{color};")
 
     # ---------------------------------------------------------------- #
@@ -586,7 +586,7 @@ class ProberTab(QWidget):
         val = QLabel(initial)
         val.setAlignment(Qt.AlignCenter)
         val.setStyleSheet(
-            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['readoutSm']}pt; "
+            f"font-family:{MONO_FONT}; font-size:{FONT['readoutSm']}pt; "
             f"color:{color};")
 
         lay.addWidget(lbl)

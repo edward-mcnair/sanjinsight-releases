@@ -71,7 +71,7 @@ from hardware.device_registry import (
 from hardware.device_manager  import DeviceManager, DeviceState, DeviceEntry
 from ui.font_utils import mono_font
 from ui.icons import IC, set_btn_icon
-from ui.theme import FONT, PALETTE, scaled_qss
+from ui.theme import FONT, PALETTE, scaled_qss, MONO_FONT
 from hardware.device_scanner  import DeviceScanner
 from hardware.driver_store    import DriverStore, RemoteDriverEntry
 
@@ -726,7 +726,7 @@ class _DeviceProfilePanel(QWidget):
             kl.setFixedWidth(110)
             vl = QLabel(str(v))
             vl.setStyleSheet(
-                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:8.5pt; "
+                f"font-family:{MONO_FONT}; font-size:8.5pt; "
                 f"color:{'#ff5555' if k == 'Last Error' else PALETTE.get('textSub','#6a6a6a')}; "
                 f"word-break:break-all;")
             vl.setWordWrap(True)
@@ -1604,7 +1604,7 @@ class _DriverCard(QFrame):
         ver_badge.setStyleSheet(
             f"background:{ver_bg}; color:{ver_color}; "
             f"border:1px solid {ver_color}44; border-radius:3px; "
-            f"font-size:8.5pt; font-family:'Menlo','Consolas','Courier New',monospace;"
+            f"font-size:8.5pt; font-family:{MONO_FONT};"
             f" padding:1px 6px;")
         top.addWidget(name, 1)
         top.addWidget(ver_badge)
@@ -2119,7 +2119,7 @@ class DeviceManagerDialog(QDialog):
         self._log_edit.setMinimumHeight(120)
         self._log_edit.setMaximumHeight(220)
         self._log_edit.setStyleSheet(scaled_qss(
-            f"background:{PALETTE.get('bg','#242424')}; color:#555; font-family:Menlo,Consolas,monospace; "
+            f"background:{PALETTE.get('bg','#242424')}; color:#555; font-family:{MONO_FONT}; "
             f"font-size:8pt; border:none;"))
         ll.addWidget(self._log_edit)
         root.addWidget(self._log_widget)

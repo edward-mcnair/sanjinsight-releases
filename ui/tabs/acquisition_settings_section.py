@@ -15,13 +15,13 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, pyqtSignal
 
 from hardware.app_state import app_state
-from ui.theme import PALETTE, FONT
+from ui.theme import PALETTE, FONT, MONO_FONT
 
 log = logging.getLogger(__name__)
 
 
 def _mono_style() -> str:
-    return (f"font-family:'Menlo','Consolas','Courier New',monospace; "
+    return (f"font-family:{MONO_FONT}; "
             f"font-size:{FONT['readoutSm']}pt; color:{PALETTE['accent']};")
 
 

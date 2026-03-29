@@ -22,7 +22,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore    import Qt, QTimer, pyqtSignal
 
 import config as cfg_mod
-from ui.theme import FONT, PALETTE, scaled_qss, active_theme
+from ui.theme import FONT, PALETTE, scaled_qss, active_theme, MONO_FONT
 from ui.icons import IC, set_btn_icon, make_icon, make_icon_label
 
 
@@ -1645,7 +1645,7 @@ class StatusHeader(QWidget):
         if self._svg_white is None and self._svg_black is None:
             fallback = QLabel("MICROSANJ")
             fallback.setStyleSheet(
-                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['body']}pt; "
+                f"font-family:{MONO_FONT}; font-size:{FONT['body']}pt; "
                 "letter-spacing:3px; background:transparent;")
             logo_col_lay.addWidget(fallback)
             self._logo_fallback = fallback
@@ -1809,7 +1809,7 @@ class StatusHeader(QWidget):
             self._svg_black.setVisible(not dark)
         if self._logo_fallback is not None:
             self._logo_fallback.setStyleSheet(
-                f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['body']}pt; "
+                f"font-family:{MONO_FONT}; font-size:{FONT['body']}pt; "
                 f"color:{text}; letter-spacing:3px; background:transparent;")
 
         # App name label

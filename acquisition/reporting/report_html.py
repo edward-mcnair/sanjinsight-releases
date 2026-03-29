@@ -92,7 +92,7 @@ table { border-collapse: collapse; width: 100%; margin-bottom: 16px; }
 th { background: #1a1a2e; color: #fff; padding: 6px 10px; font-size: 9pt; text-align: left; }
 td { padding: 5px 10px; font-size: 9pt; border: 1px solid #ddd; }
 tr:nth-child(even) { background: #f8f8fc; }
-.mono { font-family: 'Menlo', 'Consolas', 'Courier New', monospace; }
+.mono { font-family:'Menlo','Consolas','Courier New',monospace; }
 .img-container { text-align: center; margin: 12px 0; }
 .img-container img { max-width: 100%; border: 1px solid #ddd; border-radius: 4px; }
 .caption { text-align: center; font-size: 8pt; color: #4a4a6a; margin-top: 4px; }
