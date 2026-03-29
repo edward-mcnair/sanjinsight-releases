@@ -16,13 +16,15 @@ log = logging.getLogger(__name__)
 from PyQt5.QtWidgets import (
     QWidget, QLabel, QPushButton, QSpinBox, QDoubleSpinBox,
     QProgressBar, QVBoxLayout, QHBoxLayout, QGridLayout,
-    QGroupBox, QComboBox, QTextEdit, QSizePolicy, QToolButton)
+    QGroupBox, QComboBox, QTextEdit, QSizePolicy, QToolButton,
+    QScrollArea, QFrame)
 from PyQt5.QtCore    import Qt
 from PyQt5.QtGui     import QPainter, QColor, QPen, QFont, QBrush
 
 from hardware.app_state  import app_state
 from hardware.autofocus  import create_autofocus, AfState
 from ui.theme      import FONT, PALETTE, progress_bar_qss
+from ui.widgets.time_estimate_label import TimeEstimateLabel
 from ui.font_utils import mono_font
 from ui.icons import set_btn_icon
 
@@ -33,7 +35,15 @@ af_driver = None
 class AutofocusTab(QWidget):
     def __init__(self):
         super().__init__()
-        root = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        _scroll = QScrollArea()
+        _scroll.setWidgetResizable(True)
+        _scroll.setFrameShape(QFrame.NoFrame)
+        outer.addWidget(_scroll)
+        _inner = QWidget()
+        _scroll.setWidget(_inner)
+        root = QVBoxLayout(_inner)
         root.setContentsMargins(10, 10, 10, 10)
         root.setSpacing(10)
 
@@ -148,10 +158,8 @@ class AutofocusTab(QWidget):
 
         adv_toggle.toggled.connect(_on_af_adv_toggled)
 
-        # ── Time estimate label (row 7) ─────────────────────────────────
-        self._time_est_lbl = QLabel("")
-        self._time_est_lbl.setStyleSheet(
-            f"color:{PALETTE.get('textDim','#888')}; font-size:{FONT['caption']}pt;")
+        # ── Time estimate pill (row 7) ─────────────────────────────────
+        self._time_est_lbl = TimeEstimateLabel()
         cl.addWidget(self._time_est_lbl, 7, 0, 1, 2)
 
         # Connect signals that affect the time estimate
@@ -257,19 +265,6 @@ class AutofocusTab(QWidget):
 
     # ── Time estimation ─────────────────────────────────────────────────
 
-    @staticmethod
-    def _fmt_duration(seconds: float) -> str:
-        if seconds < 60:
-            return f"~{int(seconds)} sec"
-        elif seconds < 3600:
-            m = int(seconds / 60)
-            s = int(seconds % 60)
-            return f"~{m} min {s} sec" if s else f"~{m} min"
-        else:
-            h = int(seconds / 3600)
-            m = int((seconds % 3600) / 60)
-            return f"~{h} hr {m} min" if m else f"~{h} hr"
-
     def _update_time_est(self):
         """Recompute and display the estimated autofocus duration."""
         strategy   = self._strategy.currentText()
@@ -299,12 +294,9 @@ class AutofocusTab(QWidget):
         time_per_pos = (settle_ms / 1000.0) + (n_avg / fps)
         total = n_positions * time_per_pos
 
-        self._time_est_lbl.setText(
-            f"Estimated time: {self._fmt_duration(total)}")
-        # Keep style in sync with current palette
-        self._time_est_lbl.setStyleSheet(
-            f"color:{PALETTE.get('textDim','#888')}; "
-            f"font-size:{FONT['caption']}pt;")
+        detail = (f"{int(n_positions)} positions × "
+                  f"({settle_ms} ms settle + {n_avg} avg @ {fps} fps)")
+        self._time_est_lbl.set_estimate(total, detail)
 
     # ── Objective Z-range preset ──────────────────────────────────────
 

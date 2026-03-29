@@ -39,6 +39,7 @@ class PreflightCheck:
     observed:     str            # e.g. "Mean 62% of dynamic range"
     threshold:    str = ""       # e.g. "Ideal: 40-70%"
     hint:         str = ""       # e.g. "Reduce exposure in Camera tab"
+    observed_values: dict = field(default_factory=dict)  # raw numerics for remediation
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -187,6 +188,7 @@ class PreflightValidator:
 
         observed = (f"Mean {mean_f:.0%} of dynamic range, "
                     f"peak {max_f:.0%}")
+        obs_vals = {"mean_frac": mean_f, "max_frac": max_f}
 
         if max_f > self.MAX_CRITICAL:
             return PreflightCheck(
@@ -197,6 +199,7 @@ class PreflightValidator:
                 threshold=f"Peak must be < {self.MAX_CRITICAL:.0%} "
                           f"to avoid clipping during hot phase",
                 hint="Reduce exposure time or gain in the Camera tab.",
+                observed_values=obs_vals,
             )
         if mean_f < self.MEAN_CRITICAL_LO:
             return PreflightCheck(
@@ -207,6 +210,7 @@ class PreflightValidator:
                 threshold=f"Mean must be > {self.MEAN_CRITICAL_LO:.0%} "
                           f"for usable SNR",
                 hint="Increase exposure time or gain in the Camera tab.",
+                observed_values=obs_vals,
             )
         if mean_f < self.MEAN_IDEAL_LO:
             return PreflightCheck(
@@ -217,6 +221,7 @@ class PreflightValidator:
                 threshold=f"Ideal mean: {self.MEAN_IDEAL_LO:.0%}–"
                           f"{self.MEAN_IDEAL_HI:.0%}",
                 hint="Consider increasing exposure for better SNR.",
+                observed_values=obs_vals,
             )
         if mean_f > self.MEAN_IDEAL_HI:
             return PreflightCheck(
@@ -228,12 +233,14 @@ class PreflightValidator:
                           f"{self.MEAN_IDEAL_HI:.0%}",
                 hint="Consider reducing exposure — little headroom "
                      "for hot-phase intensity increase.",
+                observed_values=obs_vals,
             )
         return PreflightCheck(
             rule_id="PF_EXPOSURE",
             display_name="Exposure Quality",
             status="pass",
             observed=observed,
+            observed_values=obs_vals,
         )
 
     def _check_stability(self, frames: List[np.ndarray],
@@ -248,6 +255,7 @@ class PreflightValidator:
 
         cv = compute_frame_stability(means)
         observed = f"CV = {cv:.4f} across {len(frames)} frames"
+        obs_vals = {"cv": cv, "n_frames": len(frames)}
 
         if cv > self.CV_FAIL:
             return PreflightCheck(
@@ -258,6 +266,7 @@ class PreflightValidator:
                 threshold=f"CV must be < {self.CV_FAIL}",
                 hint="System may not have settled — wait for thermal "
                      "equilibrium or check for vibration.",
+                observed_values=obs_vals,
             )
         if cv > self.CV_WARN:
             return PreflightCheck(
@@ -268,12 +277,14 @@ class PreflightValidator:
                 threshold=f"Ideal CV < {self.CV_WARN}",
                 hint="Mild intensity drift detected — consider "
                      "waiting a few seconds.",
+                observed_values=obs_vals,
             )
         return PreflightCheck(
             rule_id="PF_STABILITY",
             display_name="Frame Stability",
             status="pass",
             observed=observed,
+            observed_values=obs_vals,
         )
 
     def _check_focus(self, data: np.ndarray) -> PreflightCheck:
@@ -281,6 +292,7 @@ class PreflightValidator:
         from acquisition.image_metrics import compute_focus
         score = compute_focus(data)
         observed = f"Focus score = {score:.1f}"
+        obs_vals = {"focus_score": score}
 
         if score < self.FOCUS_FAIL:
             return PreflightCheck(
@@ -291,6 +303,7 @@ class PreflightValidator:
                 threshold=f"Minimum: {self.FOCUS_FAIL:.0f}",
                 hint="Image appears severely out of focus. "
                      "Use the Autofocus tab or adjust manually.",
+                observed_values=obs_vals,
             )
         if score < self.FOCUS_WARN:
             return PreflightCheck(
@@ -301,12 +314,14 @@ class PreflightValidator:
                 threshold=f"Ideal: > {self.FOCUS_WARN:.0f}",
                 hint="Focus quality is marginal — consider running "
                      "autofocus for sharper results.",
+                observed_values=obs_vals,
             )
         return PreflightCheck(
             rule_id="PF_FOCUS",
             display_name="Focus Quality",
             status="pass",
             observed=observed,
+            observed_values=obs_vals,
         )
 
     def _check_hardware(self, operation: str) -> List[PreflightCheck]:

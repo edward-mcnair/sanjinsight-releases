@@ -44,6 +44,15 @@ class PhaseTracker(QObject):
                 "captured":   False,
                 "calibrated": False,
             },
+            4: {  # HARDWARE AUTOMATION
+                "hardware_ready":        False,
+                "optimization_applied":  False,
+            },
+            5: {  # DATA & REPORTING
+                "session_reviewed": False,
+                "data_exported":    False,
+                "report_generated": False,
+            },
         }
 
     # ── Public API ───────────────────────────────────────────────────

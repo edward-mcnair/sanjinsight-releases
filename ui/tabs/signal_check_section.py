@@ -13,12 +13,15 @@ import math
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
     QGridLayout, QGroupBox, QStackedWidget, QPushButton, QCheckBox,
+    QScrollArea, QFrame,
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 
 from hardware.app_state import app_state
 from ui.theme import PALETTE, FONT
 from ui.icons import IC, make_icon, make_icon_label
+from ui.guidance import get_section_cards, GuidanceCard, WorkflowFooter
+from ui.guidance.steps import next_steps_after
 
 log = logging.getLogger(__name__)
 
@@ -58,6 +61,8 @@ class SignalCheckSection(QWidget):
     open_device_manager = pyqtSignal()
     signal_check_passed = pyqtSignal()
 
+    navigate_requested = pyqtSignal(str)
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._last_update = 0.0
@@ -65,10 +70,59 @@ class SignalCheckSection(QWidget):
         self._snr_good = _SNR_GOOD
         self._snr_warn = _SNR_WARN
 
+        _cards = get_section_cards("signal_check")
+        def _body(cid):
+            for c in _cards:
+                if c["card_id"] == cid:
+                    return c["body"]
+            return ""
+
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
+
+        # ── Guidance cards — scrollable area ──────────────────────
+        self._cards_widget = QWidget()
+        cards_lay = QVBoxLayout(self._cards_widget)
+        cards_lay.setContentsMargins(0, 0, 0, 0)
+        cards_lay.setSpacing(4)
+
+        self._overview_card = GuidanceCard(
+            "signal_check.overview",
+            "Getting Started with Signal Check",
+            _body("signal_check.overview"))
+        self._overview_card.setVisible(False)
+        cards_lay.addWidget(self._overview_card)
+
+        self._guide_card1 = GuidanceCard(
+            "signal_check.run",
+            "Run the Signal Quality Check",
+            _body("signal_check.run"),
+            step_number=1)
+        self._guide_card1.setVisible(False)
+        cards_lay.addWidget(self._guide_card1)
+
+        self._cards_scroll = QScrollArea()
+        self._cards_scroll.setObjectName("LeftPanelScroll")
+        self._cards_scroll.setWidgetResizable(True)
+        self._cards_scroll.setFrameShape(QScrollArea.NoFrame)
+        self._cards_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self._cards_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._cards_scroll.setMaximumHeight(280)
+        self._cards_scroll.setWidget(self._cards_widget)
+        self._cards_scroll.setVisible(False)
+        outer.addWidget(self._cards_scroll)
+
+        for c in (self._overview_card, self._guide_card1):
+            c.dismissed.connect(self._update_cards_scroll_visibility)
+
+        _NEXT = [(s.nav_target, s.label, s.hint)
+                 for s in next_steps_after("Signal Check", count=3)]
+        self._workflow_footer = WorkflowFooter(_NEXT)
+        self._workflow_footer.navigate_requested.connect(self.navigate_requested)
+        self._workflow_footer.setVisible(False)
+
         self._stack = QStackedWidget()
-        outer.addWidget(self._stack)
+        outer.addWidget(self._stack, 1)
 
         # Page 0 — empty state
         self._stack.addWidget(self._build_empty_state())
@@ -78,7 +132,11 @@ class SignalCheckSection(QWidget):
         root = QVBoxLayout(controls)
         root.setContentsMargins(16, 16, 16, 16)
         root.setSpacing(8)
-        self._stack.addWidget(controls)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setWidget(controls)
+        self._stack.addWidget(scroll)
         self._stack.setCurrentIndex(0)
 
         # ── Title ─────────────────────────────────────────────────────
@@ -149,6 +207,8 @@ class SignalCheckSection(QWidget):
         opts.addWidget(opts_inner)
         root.addWidget(opts)
         root.addStretch()
+
+        outer.addWidget(self._workflow_footer)
 
         # ── Accumulated frames for manual "Run Check" ─────────────────
         self._check_frames: list = []
@@ -385,6 +445,22 @@ class SignalCheckSection(QWidget):
         if icon:
             self._es_icon.setPixmap(icon.pixmap(64, 64))
 
+    # ── Workspace mode ────────────────────────────────────────────────
+
+    def set_workspace_mode(self, mode: str) -> None:
+        is_guided = (mode == "guided")
+        self._guide_card1.setVisible(is_guided)
+        self._workflow_footer.setVisible(is_guided)
+        self._overview_card.setVisible(not is_guided)
+        any_visible = any(c.isVisible() for c in (
+            self._overview_card, self._guide_card1))
+        self._cards_scroll.setVisible(any_visible)
+
+    def _update_cards_scroll_visibility(self, _card_id: str = "") -> None:
+        any_visible = any(c.isVisible() for c in (
+            self._overview_card, self._guide_card1))
+        self._cards_scroll.setVisible(any_visible)
+
     # ── Theme ──────────────────────────────────────────────────────────
 
     def _apply_styles(self) -> None:
@@ -393,4 +469,7 @@ class SignalCheckSection(QWidget):
                 f"font-size:{FONT['sublabel']}pt; color:{PALETTE['textDim']};")
         if hasattr(self, "_es_btn"):
             self._apply_empty_state_styles()
+        for card in (self._overview_card, self._guide_card1):
+            card._apply_styles()
+        self._workflow_footer._apply_styles()
         self.update()

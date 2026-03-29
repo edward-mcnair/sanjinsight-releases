@@ -304,7 +304,7 @@ class AIPanelWidget(QWidget):
         self._ask_btn = QPushButton("Ask")
         set_btn_icon(self._ask_btn, "fa5s.paper-plane", "#00d4aa")
         self._ask_btn.setStyleSheet(_BTN_PRIMARY())
-        self._ask_btn.setFixedWidth(60)
+        self._ask_btn.setFixedWidth(74)
         self._ask_btn.setEnabled(False)
         self._ask_btn.clicked.connect(self._on_ask)
 
@@ -320,7 +320,7 @@ class AIPanelWidget(QWidget):
             QPushButton:hover   {{ border-color:{_RED}88; }}
             QPushButton:pressed {{ background:{_BG()}; }}
         """)
-        self._stop_btn.setFixedWidth(60)
+        self._stop_btn.setFixedWidth(74)
         self._stop_btn.setVisible(False)
         self._stop_btn.setToolTip("Cancel the current AI response")
         self._stop_btn.clicked.connect(self._on_stop)

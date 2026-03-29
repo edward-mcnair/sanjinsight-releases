@@ -105,6 +105,12 @@ class SessionMeta:
     # ── Pre-capture validation (v3) ──────────────────────────────────
     preflight:       Optional[dict] = None  # PreflightResult.to_dict()
 
+    # ── Post-acquisition quality scoring (v4) ──────────────────────
+    quality_scorecard: Optional[dict] = None  # QualityScorecard.to_dict()
+
+    # ── Analysis result persistence (v5) ─────────────────────────
+    analysis_result: Optional[dict] = None  # AnalysisResult.to_dict()
+
     def to_dict(self) -> dict:
         d = asdict(self)
         d.pop("path", None)
@@ -308,6 +314,43 @@ class Session:
         except Exception:
             log.debug("Could not load session meta from '%s'", folder, exc_info=True)
             return None
+
+    # ---------------------------------------------------------------- #
+    #  Analysis persistence                                              #
+    # ---------------------------------------------------------------- #
+
+    def save_analysis(self, result) -> None:
+        """Persist an AnalysisResult alongside the session on disk."""
+        folder = self.meta.path
+        if not folder or not os.path.isdir(folder):
+            log.warning("Cannot save analysis — session has no path on disk")
+            return
+
+        # Save overlay and mask as .npy
+        if result.overlay_rgb is not None:
+            np.save(os.path.join(folder, "analysis_overlay.npy"),
+                    result.overlay_rgb)
+        if result.binary_mask is not None:
+            np.save(os.path.join(folder, "analysis_mask.npy"),
+                    result.binary_mask)
+
+        # Attach serialised dict to meta and re-write session.json
+        self.meta.analysis_result = result.to_dict()
+        json_path = os.path.join(folder, "session.json")
+        with open(json_path, "w") as f:
+            json.dump(self.meta.to_dict(), f, indent=2)
+
+    def load_analysis(self):
+        """Reconstruct an AnalysisResult from disk, or return None."""
+        d = self.meta.analysis_result
+        if not d:
+            return None
+        folder = self.meta.path
+        overlay = self._load("analysis_overlay.npy")
+        mask = self._load("analysis_mask.npy")
+        from acquisition.analysis import AnalysisResult
+        return AnalysisResult.from_dict(d, overlay_rgb=overlay,
+                                        binary_mask=mask)
 
     def __repr__(self):
         return f"<Session {self.meta.uid!r} snr={self.meta.snr_db}>"

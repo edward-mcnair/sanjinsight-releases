@@ -28,7 +28,7 @@ log = logging.getLogger(__name__)
 from PyQt5.QtWidgets import (
     QWidget, QLabel, QPushButton, QSlider, QVBoxLayout, QHBoxLayout,
     QGridLayout, QGroupBox, QButtonGroup, QRadioButton, QFrame, QComboBox,
-    QFileDialog, QStackedWidget)
+    QFileDialog, QStackedWidget, QScrollArea)
 from PyQt5.QtCore    import Qt, QTimer, pyqtSignal
 
 from hardware.app_state    import app_state
@@ -77,7 +77,11 @@ class CameraTab(QWidget):
         root = QVBoxLayout(controls)
         root.setContentsMargins(10, 10, 10, 10)
         root.setSpacing(8)
-        self._stack.addWidget(controls)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setWidget(controls)
+        self._stack.addWidget(scroll)
         self._stack.setCurrentIndex(0)  # empty state until device connects
 
         top = QHBoxLayout()
@@ -148,6 +152,14 @@ class CameraTab(QWidget):
         self._gain_slider.sliderReleased.connect(self._on_gain)
         cl.addWidget(self._gain_slider, 3, 1)
         cl.addWidget(self._gain_lbl, 3, 2)
+
+        # Auto-Gain button (same row as gain slider)
+        self._auto_gain_btn = QPushButton("Auto-Gain")
+        self._auto_gain_btn.setMinimumWidth(80)
+        self._auto_gain_btn.setToolTip(
+            "Sweep gain levels and pick the setting with best SNR")
+        self._auto_gain_btn.clicked.connect(self._run_auto_gain)
+        cl.addWidget(self._auto_gain_btn, 3, 3)
 
         # Gain sub-label
         sub_gain = QLabel("amplification  ·  0 dB ideal for best SNR")
@@ -773,6 +785,7 @@ class CameraTab(QWidget):
 
     # ── Auto-Exposure ────────────────────────────────────────────────
 
+    auto_gain_complete   = pyqtSignal(float)  # final gain dB
     auto_expose_complete = pyqtSignal(float)  # final exposure µs
 
     def _run_auto_expose(self):
@@ -809,3 +822,36 @@ class CameraTab(QWidget):
         log.info("Auto-expose %s: %.0f µs (%.1f%% intensity, %d iters)",
                  status, exp, result.mean_intensity * 100, result.iterations)
         self.auto_expose_complete.emit(exp)
+
+    # ── Auto-Gain ──────────────────────────────────────────────────
+
+    def _run_auto_gain(self):
+        """Run auto-gain optimisation in a background thread."""
+        cam = app_state.cam
+        if cam is None:
+            return
+
+        self._auto_gain_btn.setEnabled(False)
+        self._auto_gain_btn.setText("Sweeping…")
+
+        import threading
+        from hardware.cameras.auto_gain import auto_gain
+
+        def _worker():
+            result = auto_gain(cam)
+            QTimer.singleShot(0, lambda: self._on_auto_gain_done(result))
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _on_auto_gain_done(self, result):
+        """Handle auto-gain completion on the GUI thread."""
+        self._auto_gain_btn.setEnabled(True)
+        self._auto_gain_btn.setText("Auto-Gain")
+
+        gain = result.gain_db
+        self.set_gain(gain)
+
+        status = "converged" if result.converged else "best effort"
+        log.info("Auto-gain %s: %.1f dB (SNR %.1f dB, %d steps)",
+                 status, gain, result.snr_db, result.iterations)
+        self.auto_gain_complete.emit(gain)

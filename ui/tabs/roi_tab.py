@@ -12,7 +12,7 @@ log = logging.getLogger(__name__)
 
 from PyQt5.QtWidgets import (
     QWidget, QLabel, QPushButton, QSpinBox, QVBoxLayout, QHBoxLayout,
-    QGridLayout, QGroupBox)
+    QGridLayout, QGroupBox, QScrollArea, QFrame)
 from PyQt5.QtCore    import Qt
 
 from hardware.app_state      import app_state
@@ -46,10 +46,16 @@ class RoiTab(QWidget):
         left.addWidget(sel_box)
         root.addLayout(left, 3)
 
-        # ---- Right: controls ----
-        right = QVBoxLayout()
+        # ---- Right: controls (scrollable) ----
+        right_widget = QWidget()
+        right = QVBoxLayout(right_widget)
         right.setSpacing(8)
-        root.addLayout(right, 1)
+        right.setContentsMargins(0, 0, 0, 0)
+        right_scroll = QScrollArea()
+        right_scroll.setWidgetResizable(True)
+        right_scroll.setFrameShape(QFrame.NoFrame)
+        right_scroll.setWidget(right_widget)
+        root.addWidget(right_scroll, 1)
 
         # Current ROI readout
         info_box = QGroupBox("Current ROI")

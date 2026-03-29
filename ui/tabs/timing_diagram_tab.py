@@ -81,9 +81,8 @@ class TimingDiagramTab(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # ── Left panel: controls ──────────────────────────────────────────────
+        # ── Left panel: controls (scrollable) ─────────────────────────────────
         left = QWidget()
-        left.setFixedWidth(264)
         left.setStyleSheet(
             f"background:{PALETTE.get('surface2','#181b28')};"
             f"border-right:1px solid {PALETTE.get('border','#2e3245')};"
@@ -100,7 +99,13 @@ class TimingDiagramTab(QWidget):
         llay.addStretch(1)
         llay.addWidget(self._build_export_btn())
 
-        root.addWidget(left)
+        left_scroll = QScrollArea()
+        left_scroll.setFixedWidth(264)
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setFrameShape(QFrame.NoFrame)
+        left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        left_scroll.setWidget(left)
+        root.addWidget(left_scroll)
 
         # ── Right panel: diagram ──────────────────────────────────────────────
         right = QWidget()

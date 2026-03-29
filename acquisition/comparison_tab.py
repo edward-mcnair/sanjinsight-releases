@@ -33,7 +33,7 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QSplitter, QFileDialog, QTableWidget, QTableWidgetItem,
     QHeaderView, QFrame, QGroupBox, QCheckBox, QSlider,
-    QMessageBox, QComboBox, QStackedWidget,
+    QMessageBox, QComboBox, QStackedWidget, QScrollArea,
 )
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QFont, QImage, QPixmap, QColor
@@ -297,7 +297,11 @@ class ComparisonTab(QWidget):
             btn_text="Load Session A",
             btn_callback=lambda: self._load_session("A"),
         ))
-        self._data_stack.addWidget(self._build_content_widget())
+        content_scroll = QScrollArea()
+        content_scroll.setWidgetResizable(True)
+        content_scroll.setFrameShape(QFrame.NoFrame)
+        content_scroll.setWidget(self._build_content_widget())
+        self._data_stack.addWidget(content_scroll)
         self._data_stack.setCurrentIndex(0)
         root.addWidget(self._data_stack, 1)
 

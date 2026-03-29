@@ -82,6 +82,24 @@ class Hotspot:
     bbox:       Tuple[int, int, int, int]  # (x, y, w, h)
     severity:   str          # "warning" | "fail"
 
+    def to_dict(self) -> dict:
+        return {
+            "index": self.index, "peak_k": self.peak_k,
+            "mean_k": self.mean_k, "area_px": self.area_px,
+            "area_um2": self.area_um2,
+            "centroid": list(self.centroid), "bbox": list(self.bbox),
+            "severity": self.severity,
+        }
+
+    @staticmethod
+    def from_dict(d: dict) -> "Hotspot":
+        return Hotspot(
+            index=d["index"], peak_k=d["peak_k"], mean_k=d["mean_k"],
+            area_px=d["area_px"], area_um2=d.get("area_um2", 0.0),
+            centroid=tuple(d["centroid"]), bbox=tuple(d["bbox"]),
+            severity=d["severity"],
+        )
+
 
 # ------------------------------------------------------------------ #
 #  Overall analysis result                                            #
@@ -110,6 +128,51 @@ class AnalysisResult:
     config:        Optional[AnalysisConfig] = None
     notes:         str                    = ""
     valid:         bool                   = False
+
+    def to_dict(self) -> dict:
+        """Serialize to JSON-safe dict (excludes overlay_rgb and binary_mask)."""
+        return {
+            "verdict": self.verdict,
+            "hotspots": [h.to_dict() for h in self.hotspots],
+            "n_hotspots": self.n_hotspots,
+            "max_peak_k": self.max_peak_k,
+            "total_area_px": self.total_area_px,
+            "area_fraction": self.area_fraction,
+            "map_mean_k": self.map_mean_k,
+            "map_std_k": self.map_std_k,
+            "threshold_k": self.threshold_k,
+            "timestamp": self.timestamp,
+            "timestamp_str": self.timestamp_str,
+            "config": self.config.to_dict() if self.config else None,
+            "notes": self.notes,
+            "valid": self.valid,
+        }
+
+    @staticmethod
+    def from_dict(d: dict,
+                  overlay_rgb: Optional[np.ndarray] = None,
+                  binary_mask: Optional[np.ndarray] = None) -> "AnalysisResult":
+        """Reconstruct from serialized dict + optional numpy arrays."""
+        cfg_d = d.get("config")
+        cfg = AnalysisConfig.from_dict(cfg_d) if cfg_d else None
+        return AnalysisResult(
+            verdict=d.get("verdict", VERDICT_PASS),
+            hotspots=[Hotspot.from_dict(h) for h in d.get("hotspots", [])],
+            n_hotspots=d.get("n_hotspots", 0),
+            max_peak_k=d.get("max_peak_k", 0.0),
+            total_area_px=d.get("total_area_px", 0),
+            area_fraction=d.get("area_fraction", 0.0),
+            map_mean_k=d.get("map_mean_k", 0.0),
+            map_std_k=d.get("map_std_k", 0.0),
+            threshold_k=d.get("threshold_k", 0.0),
+            overlay_rgb=overlay_rgb,
+            binary_mask=binary_mask,
+            timestamp=d.get("timestamp", 0.0),
+            timestamp_str=d.get("timestamp_str", ""),
+            config=cfg,
+            notes=d.get("notes", ""),
+            valid=d.get("valid", False),
+        )
 
 
 # ------------------------------------------------------------------ #

@@ -10,13 +10,17 @@ pass, acquisition starts immediately (no dialog).
 
 from __future__ import annotations
 
+import logging
+
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame, QSizePolicy,
 )
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QTimer
 
 from ui.theme import PALETTE, FONT
+
+log = logging.getLogger(__name__)
 
 
 # ── Status icons and colours ─────────────────────────────────────────────────
@@ -44,9 +48,10 @@ class PreflightDialog(QDialog):
     parent : QWidget, optional
     """
 
-    def __init__(self, preflight, parent=None):
+    def __init__(self, preflight, remediations=None, parent=None):
         super().__init__(parent)
         self._preflight = preflight
+        self._remediations = {r.rule_id: r for r in (remediations or [])}
         self.setWindowTitle("Pre-Capture Validation")
         self.setMinimumWidth(520)
         self.setModal(True)
@@ -165,4 +170,53 @@ class PreflightDialog(QDialog):
             details.addWidget(hint_lbl)
 
         lay.addLayout(details, 1)
+
+        # ── Auto-fix button (if remediation available) ────────────────
+        remediation = self._remediations.get(check.rule_id)
+        if remediation and check.status != "pass":
+            fix_btn = QPushButton(f"⚡ {remediation.label}")
+            fix_btn.setCursor(Qt.PointingHandCursor)
+            fix_btn.setToolTip(remediation.description)
+            fix_btn.setStyleSheet(
+                f"QPushButton {{ "
+                f"background: {PALETTE.get('accent', '#00bcd4')}; "
+                f"color: {PALETTE.get('bg', '#111')}; "
+                f"border: none; border-radius: 4px; "
+                f"font-size: {FONT['caption']}pt; font-weight: 700; "
+                f"padding: 4px 12px; }}"
+                f"QPushButton:hover {{ "
+                f"background: {PALETTE.get('accentHover', '#26c6da')}; }}"
+                f"QPushButton:disabled {{ "
+                f"background: {PALETTE.get('textDim', '#888')}; }}")
+            fix_btn.clicked.connect(
+                lambda _, r=remediation, b=fix_btn: self._run_fix(r, b))
+            lay.addWidget(fix_btn, 0, Qt.AlignTop)
+
         return row
+
+    def _run_fix(self, remediation, btn: QPushButton) -> None:
+        """Execute a remediation action and update the button state."""
+        btn.setEnabled(False)
+        btn.setText("Applying…")
+        # Use a timer to let the UI repaint before the (possibly blocking) action
+        QTimer.singleShot(50, lambda: self._do_fix(remediation, btn))
+
+    def _do_fix(self, remediation, btn: QPushButton) -> None:
+        try:
+            ok = remediation.action()
+        except Exception:
+            log.exception("Remediation %s failed", remediation.rule_id)
+            ok = False
+
+        if ok:
+            btn.setText("✓ Applied")
+            btn.setStyleSheet(
+                f"QPushButton {{ "
+                f"background: {PALETTE.get('success', '#00d479')}; "
+                f"color: {PALETTE.get('bg', '#111')}; "
+                f"border: none; border-radius: 4px; "
+                f"font-size: {FONT['caption']}pt; font-weight: 700; "
+                f"padding: 4px 12px; }}")
+        else:
+            btn.setText("✗ Failed")
+            btn.setEnabled(True)

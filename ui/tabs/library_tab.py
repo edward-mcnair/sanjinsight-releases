@@ -46,6 +46,28 @@ class LibraryTab(QWidget):
         if hasattr(recipe_tab, "recipe_run"):
             recipe_tab.recipe_run.connect(self.recipe_run)
 
+    # ── Attention dots ─────────────────────────────────────────────
+
+    _TAB_BASE = {0: "  Material Profiles", 1: "  Scan Profiles"}
+    _TAB_ICONS = {0: IC.PROFILES, 1: IC.RECIPES}
+    _DOT = "\u2009\u25cf"
+
+    def set_tab_attention(self, tab_index: int, needs_attention: bool) -> None:
+        """Show/hide a red attention dot on a sub-tab."""
+        if tab_index < 0 or tab_index >= self._tabs.count():
+            return
+        base = self._TAB_BASE.get(tab_index, "")
+        if needs_attention:
+            self._tabs.setTabText(tab_index, base + self._DOT)
+            icon_name = self._TAB_ICONS.get(tab_index)
+            if icon_name:
+                icon = make_icon(icon_name, color=PALETTE.get("error", "#ff453a"), size=14)
+                if icon:
+                    self._tabs.setTabIcon(tab_index, icon)
+        else:
+            self._tabs.setTabText(tab_index, base)
+            self._apply_tab_icons()
+
     # ── Theme ─────────────────────────────────────────────────────────
 
     def _apply_styles(self) -> None:

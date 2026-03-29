@@ -316,6 +316,8 @@ from ui.charts                     import dTSparklineWidget
 from ai.metrics_service          import MetricsService
 from ai.diagnostic_engine        import DiagnosticEngine
 from ui.widgets.readiness_widget import ReadinessWidget
+from ui.widgets.acquisition_summary_overlay import AcquisitionSummaryOverlay
+from ui.widgets.optimization_suggestions import OptimizationSuggestionsWidget
 from ai.ai_service               import AIService
 from ai.model_runner             import llama_available
 from ai.model_downloader         import ModelDownloader, RECOMMENDED_MODEL, DEFAULT_MODELS_DIR
@@ -514,7 +516,19 @@ class MainWindow(QMainWindow):
         self._readiness_widget = ReadinessWidget()
         self._metrics.metrics_updated.connect(
             self._readiness_widget.update_metrics)
+        self._metrics.metrics_updated.connect(self._update_tab_attention)
         self._acquire_tab.insert_readiness_widget(self._readiness_widget)
+
+        # ── Post-acquisition summary overlay ──────────────────────
+        self._acq_summary_overlay = AcquisitionSummaryOverlay()
+        self._acquire_tab.insert_readiness_widget(self._acq_summary_overlay)
+
+        # ── Live optimisation suggestions ─────────────────────────
+        self._suggestions = OptimizationSuggestionsWidget()
+        self._metrics.metrics_updated.connect(self._suggestions.update_metrics)
+        self._acquire_tab.insert_suggestions_widget(self._suggestions)
+        self._suggestions.action_requested.connect(
+            self._on_suggestion_action)
 
         # ── AI service + model downloader + dockable panel ────────
         self._last_grade: str = ""         # tracks grade for change notifications
@@ -527,7 +541,7 @@ class MainWindow(QMainWindow):
         self._ai_service.set_metrics(self._metrics)
         self._ai_service.set_diagnostics(self._diagnostic_engine)
         self._ai_service.set_workspace_mode(
-            cfg_mod.get_pref("ui.workspace", "standard"))
+            config.get_pref("ui.workspace", "standard"))
         self._model_downloader = ModelDownloader(parent=self)
 
         self._ai_panel = AIPanelWidget(llama_installed=llama_available())
@@ -575,6 +589,8 @@ class MainWindow(QMainWindow):
             self._on_modality_changed)
         self._modality_section.profile_selected.connect(
             self._on_profile_applied)
+        self._modality_section.navigate_requested.connect(
+            self._nav.select_by_label)
         self._acq_settings_section  = AcquisitionSettingsSection()
         self._signal_check_section  = SignalCheckSection()
         self._focus_stage_tab       = FocusStageTab(
@@ -687,6 +703,12 @@ class MainWindow(QMainWindow):
         # Apply initial workspace mode
         ws_mgr = _get_ws_manager()
         self._nav.set_workspace_mode(ws_mgr.mode.value)
+        self._modality_section.set_workspace_mode(ws_mgr.mode.value)
+        for w in (self._live_tab, self._focus_stage_tab,
+                  self._signal_check_section, self._capture_tab,
+                  self._cal_tab):
+            if hasattr(w, "set_workspace_mode"):
+                w.set_workspace_mode(ws_mgr.mode.value)
         ws_mgr.mode_changed.connect(self._nav.set_workspace_mode)
         # Mode indicator in sidebar header cycles through modes
         self._nav.mode_cycle_requested.connect(self._on_workspace_changed)
@@ -958,12 +980,31 @@ class MainWindow(QMainWindow):
         # Sidebar tab changes → AI context
         self._nav.panel_changed.connect(self._on_panel_changed)
 
-        # ReadinessWidget "Fix it →" buttons → sidebar navigation
+        # ReadinessWidget "Fix it →" buttons → auto-fix or sidebar navigation
         self._readiness_widget.navigate_requested.connect(
             self._nav.select_by_label)
+        self._readiness_widget.fix_requested.connect(
+            self._on_readiness_fix_requested)
+
+        # Section "navigate" signals → sidebar navigation
+        for w in (self._data_tab, self._focus_stage_tab,
+                  self._signal_check_section, self._capture_tab):
+            if hasattr(w, "navigate_requested"):
+                w.navigate_requested.connect(self._nav.select_by_label)
+
+        # Phase 5 tracking: data/export/reporting milestones
+        self._data_tab.status_changed.connect(
+            lambda uid, s: (self._phase_tracker.mark(5, "session_reviewed")
+                            if s == "reviewed" else None))
+        self._data_tab.export_completed.connect(
+            lambda uid: self._phase_tracker.mark(5, "data_exported"))
+        self._data_tab.report_completed.connect(
+            lambda uid: self._phase_tracker.mark(5, "report_generated"))
 
         # Acquisition readiness gate
         self._acquire_tab.acquire_requested.connect(self._on_acquire_requested)
+        self._acquire_tab.optimize_and_acquire_requested.connect(
+            self._on_optimize_and_acquire)
 
         # Evidence panel — refresh every 3 s while the app is running
         self._evidence_timer = QTimer(self)
@@ -1043,6 +1084,29 @@ class MainWindow(QMainWindow):
         # Phase 1: visiting Modality with a camera connected → camera_selected
         if panel is self._modality_section and app_state.cam is not None:
             self._phase_tracker.mark(1, "camera_selected")
+        # Sessions: auto-select latest session if nothing is selected
+        if panel is self._data_tab and self._data_tab._selected is None:
+            self._data_tab.select_latest()
+
+    def _update_tab_attention(self, snapshot: dict) -> None:
+        """Update sub-tab attention dots from MetricsService snapshot."""
+        issues = {i.get("code", "") for i in snapshot.get("issues", [])}
+
+        # Focus & Stage: stage_not_homed → Stage sub-tab (index 1)
+        if hasattr(self, "_focus_stage_tab"):
+            self._focus_stage_tab.set_tab_attention(
+                1, "stage_not_homed" in issues)
+
+        # Stimulus: fpga issues → Modulation sub-tab (0), bias → won't map yet
+        if hasattr(self, "_stimulus_tab"):
+            self._stimulus_tab.set_tab_attention(
+                0, bool(issues & {"fpga_not_running", "fpga_not_locked"}))
+
+        # Camera controls: camera issues → Camera sub-tab (0)
+        if hasattr(self, "_camera_ctrl_tab"):
+            self._camera_ctrl_tab.set_tab_attention(
+                0, bool(issues & {"camera_saturated", "camera_underexposed",
+                                  "camera_disconnected"}))
 
     def _on_workspace_changed(self, mode: str) -> None:
         """Handle workspace mode switch from Settings or sidebar indicator."""
@@ -1062,6 +1126,15 @@ class MainWindow(QMainWindow):
         # Refresh sidebar step indicators for the new mode
         if hasattr(self, "_phase_tracker"):
             self._nav.update_guided_states(self._phase_tracker, mode)
+        # Switch section layouts (Guided vs compact)
+        for w in (getattr(self, "_modality_section", None),
+                  getattr(self, "_live_tab", None),
+                  getattr(self, "_focus_stage_tab", None),
+                  getattr(self, "_signal_check_section", None),
+                  getattr(self, "_capture_tab", None),
+                  getattr(self, "_cal_tab", None)):
+            if w is not None and hasattr(w, "set_workspace_mode"):
+                w.set_workspace_mode(mode)
         # Sync settings tab buttons if change came from sidebar indicator
         if hasattr(self, "_settings_tab"):
             idx = {"guided": 0, "standard": 1, "expert": 2}.get(mode, 1)
@@ -1091,6 +1164,7 @@ class MainWindow(QMainWindow):
         self._camera_tab.update_frame(frame)
         self._acquire_tab.update_live(frame)
         self._roi_tab.update_frame(frame.data)
+        self._modality_section.update_preview(frame)
         # Use the typed camera key so the right row lights up in the device list
         cam = app_state.cam
         if cam is not None:
@@ -2666,6 +2740,9 @@ class MainWindow(QMainWindow):
         # Phase tracker: mark captured if result has data
         if getattr(r, 'delta_r_over_r', None) is not None:
             self._phase_tracker.mark(3, "captured")
+            self._toasts.show_success(
+                "Acquisition complete — data saved to Sessions",
+                auto_dismiss_ms=5000)
         # Attach current calibration if available — enables ΔT display
         cal = app_state.active_calibration
         if cal and cal.valid:
@@ -2675,6 +2752,45 @@ class MainWindow(QMainWindow):
                 log.debug("Calibration apply to acquisition result failed: %s", _e)
                 r.delta_t = None
         self._acquire_tab.update_result(r)
+
+        # ── Post-acquisition quality scoring ────────────────────────
+        scorecard = None
+        try:
+            from acquisition.quality_scorecard import QualityScoringEngine
+            from acquisition.image_metrics import compute_intensity_stats, compute_frame_stability
+
+            # Compute intensity stats from the cold average
+            cold = getattr(r, "cold_avg", None)
+            bit_depth = 12
+            if cold is not None:
+                cam = app_state.cam
+                if cam and cam.info:
+                    bit_depth = cam.info.bit_depth
+                stats = compute_intensity_stats(cold, bit_depth)
+                mean_f, max_f = stats["mean_frac"], stats["max_frac"]
+            else:
+                mean_f, max_f = 0.5, 0.7
+
+            drr = getattr(r, "delta_r_over_r", None)
+            peak_drr = float(abs(drr).max()) if drr is not None else None
+
+            scorecard = QualityScoringEngine.compute(
+                snr_db=r.snr_db,
+                mean_frac=mean_f,
+                max_frac=max_f,
+                peak_drr=peak_drr,
+                frame_cv=None,  # not readily available from result
+                n_frames=r.n_frames,
+                duration_s=r.duration_s,
+            )
+            # Store on the result for session save
+            r._quality_scorecard = scorecard.to_dict()
+
+            # Show summary overlay
+            self._acq_summary_overlay.show_summary(
+                scorecard, duration_s=r.duration_s, n_frames=r.n_frames)
+        except Exception:
+            log.debug("Quality scorecard computation failed", exc_info=True)
 
         # Push to analysis tab — auto-runs if auto-run checkbox is on
         dt_map  = getattr(r, "delta_t",       None)
@@ -2715,6 +2831,29 @@ class MainWindow(QMainWindow):
                         if fpga and hasattr(fpga, "get_status") else 0.0),
                     notes          = notes,
                 )
+                # Attach quality scorecard to session metadata
+                _sc_dict = getattr(r, '_quality_scorecard', None)
+                if _sc_dict and session.meta and session.meta.path:
+                    session.meta.quality_scorecard = _sc_dict
+                    try:
+                        import json as _json
+                        _meta_path = os.path.join(session.meta.path,
+                                                  "session.json")
+                        with open(_meta_path, "w") as _fp:
+                            _json.dump(session.meta.to_dict(), _fp, indent=2)
+                    except Exception:
+                        log.debug("Failed to save scorecard to session",
+                                  exc_info=True)
+
+                # Persist analysis result if auto-run produced one
+                try:
+                    ar = self._analysis_tab.get_result()
+                    if ar and ar.valid and session.meta.path:
+                        session.save_analysis(ar)
+                except Exception:
+                    log.debug("Failed to save analysis to session",
+                              exc_info=True)
+
                 signals.acq_saved.emit(session)
                 signals.log_message.emit(
                     f"Session saved: {session.meta.uid}  "
@@ -3225,6 +3364,33 @@ class MainWindow(QMainWindow):
         if warns >= 1:  return "B"
         return "A"
 
+    # Metrics issue code → diagnostic rule ID mapping for auto-fix
+    _METRICS_TO_RULE: dict[str, str] = {
+        "stage_not_homed":      "R3_stage_homed",
+        "camera_saturated":     "C1_saturation",
+        "camera_underexposed":  "C2_underexposure",
+        "fpga_not_running":     "L1_fpga_running",
+        "fpga_not_locked":      "L2_fpga_locked",
+    }
+
+    def _on_readiness_fix_requested(self, issue_code: str) -> None:
+        """Handle a 'Fix it' click from the ReadinessWidget.
+
+        Maps the metrics issue code to a diagnostic rule ID and delegates
+        to the auto-fix system.  Falls back to sidebar navigation if no
+        auto-fix is available.
+        """
+        from ui.widgets.readiness_widget import _nav_target_for
+
+        rule_id = self._METRICS_TO_RULE.get(issue_code)
+        if rule_id:
+            self._on_autofix_requested(rule_id)
+        else:
+            # No auto-fix mapping — fall back to navigation
+            nav = _nav_target_for(issue_code)
+            if nav:
+                self._nav.select_by_label(nav)
+
     def _on_autofix_requested(self, rule_id: str) -> None:
         """Handle a fix button click from the AI panel evidence section."""
         from ai.auto_fix import get_fix, can_auto_fix, apply_fix
@@ -3361,7 +3527,11 @@ class MainWindow(QMainWindow):
         if preflight is not None and not preflight.all_clear:
             try:
                 from ui.widgets.preflight_dialog import PreflightDialog
-                dlg = PreflightDialog(preflight, parent=self)
+                from acquisition.preflight_remediation import PreflightRemediator
+                remediator = PreflightRemediator(app_state)
+                remediations = remediator.get_remediations(preflight.checks)
+                dlg = PreflightDialog(preflight, remediations=remediations,
+                                      parent=self)
                 if dlg.exec_() != QDialog.Accepted:
                     return
                 # User chose to proceed — start acquisition
@@ -3412,6 +3582,48 @@ class MainWindow(QMainWindow):
             msg.setDefaultButton(QMessageBox.Cancel)
             if msg.exec_() == QMessageBox.Ok:
                 self._acquire_tab.start_acquisition(n_frames, delay)
+
+    # ── Optimize & Acquire ──────────────────────────────────────────
+
+    def _on_optimize_and_acquire(self, n_frames: int, delay: float) -> None:
+        """Launch the multi-step preparation orchestrator, then acquire."""
+        from hardware.readiness_orchestrator import ReadinessOrchestrator, Step
+        from ui.widgets.orchestrator_dialog import OrchestratorDialog
+
+        orch = ReadinessOrchestrator(
+            self._hw_service, self._metrics, parent=self)
+
+        # Choose steps based on connected hardware
+        steps = [Step.AUTO_EXPOSE, Step.AUTO_GAIN]
+        tecs = getattr(app_state, 'tecs', [])
+        if tecs:
+            steps.append(Step.TEC_PRECONDITION)
+        steps.append(Step.PREFLIGHT)
+        orch.configure(steps=steps, operation="acquire")
+
+        dlg = OrchestratorDialog(orch, parent=self)
+        orch.start()
+
+        if dlg.exec_() == QDialog.Accepted:
+            self._acquire_tab.start_acquisition(n_frames, delay)
+
+    def _on_suggestion_action(self, code: str) -> None:
+        """Handle an action request from the optimisation suggestions strip."""
+        if code == "auto_expose":
+            self._camera_tab._run_auto_expose()
+        elif code == "auto_gain":
+            self._camera_tab._run_auto_gain()
+        elif code == "autofocus":
+            # Navigate to autofocus tab
+            try:
+                self._nav.select_by_label("Camera")
+            except Exception:
+                pass
+        elif code == "tec_wait":
+            try:
+                self._nav.select_by_label("Temperature")
+            except Exception:
+                pass
 
     def _on_history_exported(self, path: str) -> None:
         """Show a transient status-bar message when a conversation is exported."""

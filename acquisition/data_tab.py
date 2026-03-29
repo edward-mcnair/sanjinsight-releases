@@ -15,8 +15,9 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QScrollArea, QFrame, QGridLayout, QGroupBox, QTextEdit,
     QLineEdit, QFileDialog, QSplitter, QComboBox, QTabWidget,
-    QMessageBox, QInputDialog, QToolButton,
-    QDialog, QDialogButtonBox, QCheckBox, QDoubleSpinBox)
+    QMessageBox, QInputDialog, QToolButton, QStackedWidget,
+    QDialog, QDialogButtonBox, QCheckBox, QDoubleSpinBox,
+    QSizePolicy)
 from PyQt5.QtCore    import Qt, pyqtSignal
 from PyQt5.QtGui     import QPixmap, QImage
 
@@ -227,6 +228,13 @@ class SessionCard(QFrame):
 
         lay.addLayout(info, 1)
 
+        # Status badge — pill showing review status
+        self._status_badge = QLabel()
+        self._status_badge.setFixedHeight(16)
+        self._status_badge.setAlignment(Qt.AlignCenter)
+        self._set_status_badge(getattr(meta, "status", "") or "")
+        lay.addWidget(self._status_badge)
+
         # Notes badge — visible only when the session has notes
         self._notes_badge = make_icon_label(IC.NOTE, color="#00d4aa66", size=14)
         self._notes_badge.setFixedSize(20, 20)
@@ -277,6 +285,30 @@ class SessionCard(QFrame):
             self._thumb.setStyleSheet(
                 scaled_qss("background:#0d0d0d; border:1px solid #2a2a2a; "
                            "color:#333; font-size:16.5pt;"))
+
+    _STATUS_COLORS = {
+        "pending":  "#f5a623",
+        "reviewed": "#00d4aa",
+        "flagged":  "#ff6666",
+        "archived": "#666666",
+    }
+
+    def _set_status_badge(self, status: str):
+        """Update the status pill label."""
+        color = self._STATUS_COLORS.get(status, "")
+        if not color or not status:
+            self._status_badge.setVisible(False)
+            return
+        self._status_badge.setText(status.capitalize())
+        self._status_badge.setToolTip(f"Status: {status}")
+        self._status_badge.setStyleSheet(
+            f"color:#fff; background:{color}; border-radius:7px; "
+            f"padding:0 6px; font-size:{FONT['sublabel']}pt;")
+        self._status_badge.setVisible(True)
+
+    def set_status(self, status: str):
+        """Public setter for status badge (called after status change)."""
+        self._set_status_badge(status)
 
     def set_has_notes(self, has_notes: bool):
         """Show or hide the notes badge."""
@@ -380,6 +412,11 @@ class DataImagePane(QWidget):
 class DataTab(QWidget):
     """Session browser and data management tab."""
 
+    navigate_requested = pyqtSignal(str)          # sidebar label
+    status_changed     = pyqtSignal(str, str)     # (uid, new_status)
+    export_completed   = pyqtSignal(str)          # uid
+    report_completed   = pyqtSignal(str)          # uid
+
     def __init__(self, manager: SessionManager):
         super().__init__()
         self._mgr      = manager
@@ -387,6 +424,12 @@ class DataTab(QWidget):
         self._selected = None         # uid of selected session
         self._compare_a = None
         self._compare_b = None
+        self._batch_worker = None     # keep reference to prevent GC
+
+        # Export history log
+        from acquisition.export_history import ExportHistory
+        hist_path = os.path.join(manager.root, ".export_history.json") if manager.root else ""
+        self._export_history = ExportHistory(hist_path)
 
         root = QHBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -396,7 +439,17 @@ class DataTab(QWidget):
         root.addWidget(splitter)
 
         splitter.addWidget(self._build_list_panel())
-        splitter.addWidget(self._build_detail_panel())
+
+        # Right side: stacked widget — empty state vs detail view
+        self._right_stack = QStackedWidget()
+        self._right_stack.addWidget(self._build_empty_state())   # idx 0
+        detail_scroll = QScrollArea()
+        detail_scroll.setWidgetResizable(True)
+        detail_scroll.setFrameShape(QFrame.NoFrame)
+        detail_scroll.setWidget(self._build_detail_panel())
+        self._right_stack.addWidget(detail_scroll)               # idx 1
+        self._right_stack.setCurrentIndex(0)
+        splitter.addWidget(self._right_stack)
         splitter.setSizes([320, 900])
 
     # ---------------------------------------------------------------- #
@@ -444,11 +497,22 @@ class DataTab(QWidget):
         hdr.addWidget(self._count_lbl)
         lay.addLayout(hdr)
 
-        # Search
+        # Search + status filter
         self._search = QLineEdit()
         self._search.setPlaceholderText("Filter by label…")
         self._search.textChanged.connect(self._filter_cards)
         lay.addWidget(self._search)
+
+        self._status_filter = QComboBox()
+        self._status_filter.addItems(["All", "Pending", "Reviewed", "Flagged", "Archived"])
+        self._status_filter.setFixedHeight(26)
+        self._status_filter.setStyleSheet(
+            f"QComboBox {{ background:{PALETTE.get('surface2','#3d3d3d')}; "
+            f"color:{PALETTE.get('text','#ebebeb')}; border:1px solid {PALETTE.get('border','#484848')}; "
+            f"padding:2px 8px; font-size:{FONT['body']}pt; }}")
+        self._status_filter.currentTextChanged.connect(
+            lambda _: self._filter_cards(self._search.text()))
+        lay.addWidget(self._status_filter)
 
         # Scrollable card list
         scroll = QScrollArea()
@@ -476,6 +540,74 @@ class DataTab(QWidget):
             b.setFixedHeight(28)
             btns.addWidget(b)
         lay.addLayout(btns)
+
+        # Batch actions
+        batch_row = QHBoxLayout()
+        self._batch_report_btn = QPushButton("Batch Report")
+        set_btn_icon(self._batch_report_btn, IC.EXPORT_PDF)
+        self._package_btn = QPushButton("Package…")
+        set_btn_icon(self._package_btn, IC.SAVE_AS)
+        self._batch_report_btn.clicked.connect(self._batch_report)
+        self._package_btn.clicked.connect(self._package_sessions)
+        for b in [self._batch_report_btn, self._package_btn]:
+            b.setFixedHeight(28)
+            batch_row.addWidget(b)
+        lay.addLayout(batch_row)
+
+        return w
+
+    # ---------------------------------------------------------------- #
+    #  Empty state (shown when no sessions exist)                       #
+    # ---------------------------------------------------------------- #
+
+    def _build_empty_state(self) -> QWidget:
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.setAlignment(Qt.AlignCenter)
+
+        # Icon
+        try:
+            import qtawesome as qta
+            icon_lbl = QLabel()
+            px = qta.icon(IC.FOLDER, color=PALETTE.get("textDim", "#555")).pixmap(64, 64)
+            icon_lbl.setPixmap(px)
+            icon_lbl.setAlignment(Qt.AlignCenter)
+            lay.addWidget(icon_lbl)
+        except Exception:
+            pass
+
+        lay.addSpacing(12)
+
+        title = QLabel("No sessions yet")
+        title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet(
+            f"font-size: {FONT.get('title', 16)}pt;"
+            f"font-weight: 600;"
+            f"color: {PALETTE.get('textSub', '#6a6a6a')};")
+        lay.addWidget(title)
+
+        lay.addSpacing(6)
+
+        desc = QLabel(
+            "Complete an acquisition to see your first measurement here.\n"
+            "Each session is saved with images, metadata, and notes.")
+        desc.setAlignment(Qt.AlignCenter)
+        desc.setWordWrap(True)
+        desc.setMaximumWidth(420)
+        desc.setStyleSheet(
+            f"font-size: {FONT.get('body', 12)}pt;"
+            f"color: {PALETTE.get('textDim', '#999')};")
+        lay.addWidget(desc, 0, Qt.AlignCenter)
+
+        lay.addSpacing(16)
+
+        go_btn = QPushButton("  Go to Capture  ")
+        go_btn.setObjectName("primary")
+        go_btn.setFixedHeight(34)
+        go_btn.setCursor(Qt.PointingHandCursor)
+        set_btn_icon(go_btn, IC.PLAY, "#00d4aa")
+        go_btn.clicked.connect(lambda: self.navigate_requested.emit("Capture"))
+        lay.addWidget(go_btn, 0, Qt.AlignCenter)
 
         return w
 
@@ -543,9 +675,26 @@ class DataTab(QWidget):
         set_btn_icon(self._notes_btn, "fa5s.sticky-note")
         self._export_btn   = QPushButton("Export Files")
         set_btn_icon(self._export_btn, "fa5s.file-export")
-        self._report_btn   = QPushButton("Generate PDF Report")
+        self._report_btn   = QPushButton("Generate Report")
         set_btn_icon(self._report_btn, "fa5s.file-pdf")
         self._report_btn.setObjectName("primary")
+
+        # Status transition
+        status_row = QHBoxLayout()
+        status_lbl = QLabel("Status:")
+        status_lbl.setStyleSheet(
+            f"font-size:{FONT['body']}pt; color:{PALETTE.get('textDim','#999999')};")
+        self._status_combo = QComboBox()
+        self._status_combo.addItems(["pending", "reviewed", "flagged", "archived"])
+        self._status_combo.setFixedHeight(26)
+        self._status_combo.setStyleSheet(
+            f"QComboBox {{ background:{PALETTE.get('surface2','#3d3d3d')}; "
+            f"color:{PALETTE.get('text','#ebebeb')}; border:1px solid {PALETTE.get('border','#484848')}; "
+            f"padding:2px 6px; font-size:{FONT['body']}pt; }}")
+        self._status_combo.currentTextChanged.connect(self._on_status_changed)
+        status_row.addWidget(status_lbl)
+        status_row.addWidget(self._status_combo, 1)
+
         self._delete_btn   = QPushButton("Delete")
         set_btn_icon(self._delete_btn, "fa5s.trash", "#ff6666")
         self._delete_btn.setObjectName("danger")
@@ -553,9 +702,14 @@ class DataTab(QWidget):
         self._cmp_b_btn    = QPushButton("Set as B")
 
         for b in [self._rename_btn, self._notes_btn, self._export_btn,
-                  self._report_btn, self._delete_btn]:
+                  self._report_btn]:
             b.setFixedHeight(30)
             cl.addWidget(b)
+
+        cl.addLayout(status_row)
+
+        self._delete_btn.setFixedHeight(30)
+        cl.addWidget(self._delete_btn)
 
         cl.addWidget(self._hline())
 
@@ -623,6 +777,10 @@ class DataTab(QWidget):
         img_tabs.addTab(self._pane_cmp,       " Compare ")
         img_tabs.addTab(self._trend_chart,    " Trends ✦ ")
 
+        # Export history tab
+        self._history_pane = self._build_history_tab()
+        img_tabs.addTab(self._history_pane,   " History ")
+
         lay.addWidget(img_tabs, 1)
 
         # Wire buttons
@@ -647,6 +805,12 @@ class DataTab(QWidget):
         self._count_lbl.setText(str(self._mgr.count()))
         self._trend_chart.update_sessions(list(self._mgr.all_metas()))
 
+    def select_latest(self) -> None:
+        """Auto-select the most recent session (newest first)."""
+        metas = self._mgr.all_metas()
+        if metas:
+            self._on_card_clicked(metas[0].uid)
+
     def refresh(self):
         self._refresh()
 
@@ -668,6 +832,8 @@ class DataTab(QWidget):
 
         self._count_lbl.setText(str(n))
         self._trend_chart.update_sessions(list(self._mgr.all_metas()))
+        # Toggle empty state vs detail view
+        self._right_stack.setCurrentIndex(1 if n > 0 else 0)
 
     def _add_card(self, meta: SessionMeta):
         if meta.uid in self._cards:
@@ -689,10 +855,16 @@ class DataTab(QWidget):
 
     def _filter_cards(self, text: str):
         text = text.lower()
+        status_sel = self._status_filter.currentText().lower()
         for uid, card in self._cards.items():
             meta = self._mgr.get_meta(uid)
-            match = (not text) or (meta and text in meta.label.lower())
-            card.setVisible(match)
+            text_match = (not text) or (meta and text in meta.label.lower())
+            if status_sel == "all":
+                status_match = True
+            else:
+                meta_status = (getattr(meta, "status", "") or "").lower()
+                status_match = meta_status == status_sel
+            card.setVisible(text_match and status_match)
 
     # ---------------------------------------------------------------- #
     #  Selection & display                                              #
@@ -705,6 +877,7 @@ class DataTab(QWidget):
         self._selected = uid
         if uid in self._cards:
             self._cards[uid].set_selected(True)
+        self._right_stack.setCurrentIndex(1)  # show detail view
         self._load_and_display(uid)
 
     def _load_and_display(self, uid: str):
@@ -734,6 +907,14 @@ class DataTab(QWidget):
         raw_tags = getattr(meta, "tags", []) or []
         self._meta_fields["tags"].setText(", ".join(raw_tags) if raw_tags else "—")
 
+        # Sync status combo (block signals to avoid premature save)
+        self._status_combo.blockSignals(True)
+        status_val = getattr(meta, "status", "") or "pending"
+        idx = self._status_combo.findText(status_val)
+        if idx >= 0:
+            self._status_combo.setCurrentIndex(idx)
+        self._status_combo.blockSignals(False)
+
         # Populate the inline notes editor (block signals to avoid premature save)
         self._notes_edit.blockSignals(True)
         self._notes_edit.setPlainText(meta.notes or "")
@@ -759,6 +940,16 @@ class DataTab(QWidget):
     # ---------------------------------------------------------------- #
     #  Actions                                                          #
     # ---------------------------------------------------------------- #
+
+    def _on_status_changed(self, new_status: str):
+        """Persist status change and update card badge."""
+        if not self._selected:
+            return
+        self._mgr.update_status(self._selected, new_status)
+        card = self._cards.get(self._selected)
+        if card:
+            card.set_status(new_status)
+        self.status_changed.emit(self._selected, new_status)
 
     def _notes_focus_out(self, event):
         """Auto-save notes when the inline editor loses focus."""
@@ -810,6 +1001,13 @@ class DataTab(QWidget):
         if session is None:
             return
 
+        from ui.widgets.report_dialog import ReportDialog
+        dlg = ReportDialog(session_label=session.meta.label, parent=self)
+        if dlg.exec_() != QDialog.Accepted:
+            return
+
+        report_config = dlg.get_config()
+
         out_dir = QFileDialog.getExistingDirectory(
             self, "Save Report To", session.meta.path)
         if not out_dir:
@@ -822,22 +1020,35 @@ class DataTab(QWidget):
         except Exception:
             cal, analysis = None, None
 
+        # Load persisted analysis if none active
+        if analysis is None:
+            analysis = session.load_analysis()
+
+        # Load quality scorecard from session meta
+        scorecard = session.meta.quality_scorecard
+
         try:
-            from .report import generate_report
+            from .report import generate_report_any_format
             import os
-            assets_dir = os.path.join(
-                os.path.dirname(os.path.abspath(__file__)),
-                "..", "assets", "microsanj-logo.svg")
-            pdf_path = generate_report(
+            report_path = generate_report_any_format(
                 session,
-                output_dir  = out_dir,
-                calibration = cal,
-                logo_svg    = assets_dir,
-                analysis    = analysis)
+                output_dir       = out_dir,
+                calibration      = cal,
+                analysis         = analysis,
+                report_config    = report_config,
+                quality_scorecard= scorecard)
+            fmt_label = "HTML" if report_config.format == "html" else "PDF"
+            self._record_history(session.meta.uid, session.meta.label,
+                                 "report", report_config.format,
+                                 report_path, True)
+            self.report_completed.emit(session.meta.uid)
             QMessageBox.information(
                 self, "Report Generated",
-                f"PDF report saved to:\n{pdf_path}")
+                f"{fmt_label} report saved to:\n{report_path}")
         except Exception as e:
+            self._record_history(session.meta.uid, session.meta.label,
+                                 "report", report_config.format,
+                                 out_dir, False, str(e))
             QMessageBox.critical(
                 self, "Report Failed",
                 f"Could not generate report:\n{e}")
@@ -846,9 +1057,13 @@ class DataTab(QWidget):
         if not self._selected:
             return
 
-        # ── Format selection dialog ────────────────────────────────
+        # ── Format selection dialog with preset support ──────────
         from PyQt5.QtWidgets import QDialog, QDialogButtonBox, QCheckBox
         from acquisition.export import ExportFormat, SessionExporter
+        from acquisition.export_presets import (
+            list_presets as _list_ep, load_preset as _load_ep,
+            save_preset as _save_ep, delete_preset as _del_ep,
+            ExportPreset)
 
         dlg = QDialog(self)
         dlg.setWindowTitle("Export Session")
@@ -856,6 +1071,9 @@ class DataTab(QWidget):
             f"QDialog {{ background:{PALETTE.get('bg','#242424')}; }} "
             f"QLabel  {{ color:{PALETTE.get('text','#ebebeb')}; font-size:15pt; }} "
             f"QCheckBox {{ color:{PALETTE.get('text','#ebebeb')}; font-size:15pt; }} "
+            f"QComboBox {{ background:{PALETTE.get('surface2','#3d3d3d')}; "
+            f"  color:{PALETTE.get('text','#ebebeb')}; border:1px solid {PALETTE.get('border','#484848')}; "
+            f"  padding:3px 8px; font-size:{FONT['heading']}pt; }} "
             f"QPushButton {{ background:{PALETTE.get('surface2','#3d3d3d')}; color:{PALETTE.get('textSub','#6a6a6a')}; "
             f"  border:1px solid {PALETTE.get('border','#484848')}; border-radius:2px; padding:5px 14px; }} "
             f"QPushButton:hover {{ background:{PALETTE.get('surface','#2d2d2d')}; color:{PALETTE.get('text','#ebebeb')}; }}"))
@@ -869,6 +1087,26 @@ class DataTab(QWidget):
         sub = QLabel("All selected formats will be written to a single output folder.")
         sub.setStyleSheet(f"font-size:{FONT['heading']}pt; color:{PALETTE.get('textDim','#999999')};")
         v.addWidget(sub)
+        v.addSpacing(4)
+
+        # Preset selector row
+        preset_row = QHBoxLayout()
+        preset_lbl = QLabel("Preset:")
+        preset_lbl.setStyleSheet(f"font-size:{FONT['heading']}pt; color:{PALETTE.get('textDim','#999999')};")
+        preset_combo = QComboBox()
+        preset_combo.addItem("Custom")
+        preset_combo.addItems(_list_ep())
+        preset_combo.setFixedHeight(28)
+        save_preset_btn = QPushButton("Save…")
+        save_preset_btn.setFixedHeight(28)
+        del_preset_btn = QPushButton("Delete")
+        del_preset_btn.setFixedHeight(28)
+        del_preset_btn.setEnabled(False)
+        preset_row.addWidget(preset_lbl)
+        preset_row.addWidget(preset_combo, 1)
+        preset_row.addWidget(save_preset_btn)
+        preset_row.addWidget(del_preset_btn)
+        v.addLayout(preset_row)
         v.addSpacing(4)
 
         fmt_options = [
@@ -903,6 +1141,48 @@ class DataTab(QWidget):
         v.addLayout(px_row)
         v.addSpacing(8)
 
+        # Preset load/save/delete wiring
+        fmt_by_value = {f.value: f for f in ExportFormat}
+
+        def _on_preset_selected(name):
+            del_preset_btn.setEnabled(name != "Custom")
+            if name == "Custom":
+                return
+            p = _load_ep(name)
+            if p is None:
+                return
+            for fmt, cb in checks.items():
+                cb.setChecked(fmt.value in p.formats)
+            px_spin.setValue(p.px_per_um)
+
+        def _on_save_preset():
+            name, ok = QInputDialog.getText(dlg, "Save Export Preset",
+                                            "Preset name:")
+            if not ok or not name.strip():
+                return
+            name = name.strip()
+            fmts = [f.value for f, cb in checks.items() if cb.isChecked()]
+            _save_ep(ExportPreset(name=name, formats=fmts,
+                                  px_per_um=px_spin.value()))
+            preset_combo.blockSignals(True)
+            if preset_combo.findText(name) < 0:
+                preset_combo.addItem(name)
+            preset_combo.setCurrentText(name)
+            preset_combo.blockSignals(False)
+            del_preset_btn.setEnabled(True)
+
+        def _on_del_preset():
+            name = preset_combo.currentText()
+            if name == "Custom":
+                return
+            _del_ep(name)
+            preset_combo.removeItem(preset_combo.currentIndex())
+            preset_combo.setCurrentIndex(0)
+
+        preset_combo.currentTextChanged.connect(_on_preset_selected)
+        save_preset_btn.clicked.connect(_on_save_preset)
+        del_preset_btn.clicked.connect(_on_del_preset)
+
         btns = QDialogButtonBox(
             QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         btns.accepted.connect(dlg.accept)
@@ -931,20 +1211,301 @@ class DataTab(QWidget):
         folder = os.path.join(d, session.meta.uid)
 
         # ── Run export in background thread ─────────────────────────
+        _uid = session.meta.uid
+        _label = session.meta.label
+        _fmt_str = "+".join(f.value for f in selected_fmts)
+
         def _run():
+            ar = session.load_analysis()
             exporter = SessionExporter(session, output_dir=folder,
-                                       px_per_um=px_per_um)
+                                       px_per_um=px_per_um,
+                                       analysis_result=ar)
             result = exporter.export(selected_fmts)
+            # Record in export history
+            self._record_history(_uid, _label, "export", _fmt_str,
+                                 folder, result.success,
+                                 "; ".join(result.errors.values()) if result.errors else "")
             msg = (f"Exported {result.n_files} file(s) to:\n{folder}"
                    if result.success
                    else f"Export failed:\n"
                         + "\n".join(result.errors.values()))
+            if result.success:
+                QTimer.singleShot(0, lambda: self.export_completed.emit(_uid))
             QTimer.singleShot(0, lambda: QMessageBox.information(
                 self, "Export complete" if result.success else "Export error",
                 msg))
 
         import threading
         from PyQt5.QtCore import QTimer
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _batch_report(self):
+        """Generate reports for multiple sessions at once."""
+        metas = self._mgr.all_metas()
+        if not metas:
+            QMessageBox.information(self, "No Sessions",
+                                    "No sessions available for batch report.")
+            return
+
+        # Session selection dialog
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Batch Report Generation")
+        dlg.setMinimumSize(560, 480)
+        dlg.setStyleSheet(scaled_qss(
+            f"QDialog {{ background:{PALETTE.get('bg','#242424')}; }} "
+            f"QLabel  {{ color:{PALETTE.get('text','#ebebeb')}; font-size:{FONT['heading']}pt; }} "
+            f"QCheckBox {{ color:{PALETTE.get('text','#ebebeb')}; font-size:{FONT['body']}pt; }} "
+            f"QPushButton {{ background:{PALETTE.get('surface2','#3d3d3d')}; color:{PALETTE.get('textSub','#6a6a6a')}; "
+            f"  border:1px solid {PALETTE.get('border','#484848')}; border-radius:2px; padding:5px 14px; }} "
+            f"QPushButton:hover {{ background:{PALETTE.get('surface','#2d2d2d')}; color:{PALETTE.get('text','#ebebeb')}; }}"))
+        v = QVBoxLayout(dlg)
+        v.setContentsMargins(16, 14, 16, 14)
+        v.setSpacing(8)
+
+        title = QLabel("Select sessions for batch report")
+        title.setStyleSheet(scaled_qss(
+            f"font-size:18pt; font-weight:bold; color:{PALETTE.get('text','#ebebeb')};"))
+        v.addWidget(title)
+
+        # Select all / none
+        sel_row = QHBoxLayout()
+        sel_all = QPushButton("Select All")
+        sel_none = QPushButton("Select None")
+        sel_all.setFixedHeight(26)
+        sel_none.setFixedHeight(26)
+        sel_row.addWidget(sel_all)
+        sel_row.addWidget(sel_none)
+        sel_row.addStretch()
+        v.addLayout(sel_row)
+
+        # Session checklist
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll_w = QWidget()
+        scroll_lay = QVBoxLayout(scroll_w)
+        scroll_lay.setSpacing(2)
+        session_checks: dict[str, QCheckBox] = {}
+
+        # Determine visible sessions (matching current filter)
+        visible_uids = {uid for uid, card in self._cards.items()
+                        if card.isVisible()}
+
+        for m in metas:
+            cb = QCheckBox(f"{m.label}  ({m.timestamp_str})")
+            cb.setChecked(m.uid in visible_uids)
+            scroll_lay.addWidget(cb)
+            session_checks[m.uid] = cb
+        scroll_lay.addStretch()
+        scroll.setWidget(scroll_w)
+        v.addWidget(scroll)
+
+        sel_all.clicked.connect(
+            lambda: [cb.setChecked(True) for cb in session_checks.values()])
+        sel_none.clicked.connect(
+            lambda: [cb.setChecked(False) for cb in session_checks.values()])
+
+        # Report config (reuse ReportDialog or build inline)
+        from ui.widgets.report_dialog import ReportDialog
+        v.addWidget(QLabel("Report settings:"))
+        from acquisition.report import ReportConfig
+        # Simple format selector
+        fmt_row = QHBoxLayout()
+        from PyQt5.QtWidgets import QRadioButton, QButtonGroup
+        fmt_grp = QButtonGroup(dlg)
+        r_pdf = QRadioButton("PDF")
+        r_html = QRadioButton("HTML")
+        r_pdf.setChecked(True)
+        r_pdf.setStyleSheet(f"color:{PALETTE.get('text','#ebebeb')};")
+        r_html.setStyleSheet(f"color:{PALETTE.get('text','#ebebeb')};")
+        fmt_grp.addButton(r_pdf, 0)
+        fmt_grp.addButton(r_html, 1)
+        fmt_row.addWidget(QLabel("Format:"))
+        fmt_row.addWidget(r_pdf)
+        fmt_row.addWidget(r_html)
+        fmt_row.addStretch()
+        v.addLayout(fmt_row)
+
+        from PyQt5.QtWidgets import QDialogButtonBox
+        btns = QDialogButtonBox(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btns.accepted.connect(dlg.accept)
+        btns.rejected.connect(dlg.reject)
+        btns.button(QDialogButtonBox.Ok).setText("Generate Reports")
+        v.addWidget(btns)
+
+        if dlg.exec_() != QDialog.Accepted:
+            return
+
+        selected_uids = [uid for uid, cb in session_checks.items()
+                         if cb.isChecked()]
+        if not selected_uids:
+            return
+
+        out_dir = QFileDialog.getExistingDirectory(
+            self, "Save Reports To", self._mgr.root)
+        if not out_dir:
+            return
+
+        rcfg = ReportConfig(
+            format="html" if r_html.isChecked() else "pdf")
+
+        # Run in background
+        from acquisition.batch_report import BatchReportWorker
+        try:
+            from hardware.app_state import app_state
+            cal = app_state.active_calibration
+        except Exception:
+            cal = None
+
+        self._batch_worker = BatchReportWorker(
+            self._mgr, selected_uids, rcfg, out_dir,
+            calibration=cal, parent=self)
+
+        # Progress dialog
+        progress_dlg = QDialog(self)
+        progress_dlg.setWindowTitle("Generating Reports…")
+        progress_dlg.setMinimumWidth(400)
+        progress_dlg.setStyleSheet(
+            f"QDialog {{ background:{PALETTE.get('bg','#242424')}; }} "
+            f"QLabel  {{ color:{PALETTE.get('text','#ebebeb')}; font-size:{FONT['body']}pt; }}")
+        pl = QVBoxLayout(progress_dlg)
+        progress_label = QLabel(f"0 / {len(selected_uids)}")
+        progress_label.setAlignment(Qt.AlignCenter)
+        progress_label.setStyleSheet(
+            f"font-size:{FONT['readoutSm']}pt; font-weight:bold;")
+        status_label = QLabel("Starting…")
+        pl.addWidget(progress_label)
+        pl.addWidget(status_label)
+        abort_btn = QPushButton("Abort")
+        abort_btn.setFixedHeight(30)
+        abort_btn.clicked.connect(self._batch_worker.abort)
+        pl.addWidget(abort_btn)
+
+        _count = [0]
+
+        def _on_progress(update):
+            _count[0] += 1
+            progress_label.setText(
+                f"{_count[0]} / {len(selected_uids)}")
+            icon = "✓" if update.success else "✗"
+            status_label.setText(f"{icon} {update.label}")
+
+        def _on_finished(result):
+            progress_dlg.accept()
+            QMessageBox.information(
+                self, "Batch Report Complete",
+                f"Generated {result.ok} report(s) in "
+                f"{result.duration_s:.1f}s.\n"
+                f"Failed: {result.failed}")
+
+        self._batch_worker.progress.connect(_on_progress)
+        self._batch_worker.finished.connect(_on_finished)
+        self._batch_worker.start()
+        progress_dlg.exec_()
+
+    def _package_sessions(self):
+        """Bundle selected sessions into a .zip archive for sharing."""
+        metas = self._mgr.all_metas()
+        if not metas:
+            QMessageBox.information(self, "No Sessions",
+                                    "No sessions available to package.")
+            return
+
+        # Session selection dialog
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Package Sessions")
+        dlg.setMinimumSize(480, 400)
+        dlg.setStyleSheet(scaled_qss(
+            f"QDialog {{ background:{PALETTE.get('bg','#242424')}; }} "
+            f"QLabel  {{ color:{PALETTE.get('text','#ebebeb')}; font-size:{FONT['heading']}pt; }} "
+            f"QCheckBox {{ color:{PALETTE.get('text','#ebebeb')}; font-size:{FONT['body']}pt; }} "
+            f"QPushButton {{ background:{PALETTE.get('surface2','#3d3d3d')}; color:{PALETTE.get('textSub','#6a6a6a')}; "
+            f"  border:1px solid {PALETTE.get('border','#484848')}; border-radius:2px; padding:5px 14px; }} "
+            f"QPushButton:hover {{ background:{PALETTE.get('surface','#2d2d2d')}; color:{PALETTE.get('text','#ebebeb')}; }}"))
+        v = QVBoxLayout(dlg)
+        v.setContentsMargins(16, 14, 16, 14)
+        v.setSpacing(8)
+
+        title = QLabel("Select sessions to package")
+        title.setStyleSheet(scaled_qss(
+            f"font-size:18pt; font-weight:bold; color:{PALETTE.get('text','#ebebeb')};"))
+        v.addWidget(title)
+
+        # Session checklist
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll_w = QWidget()
+        scroll_lay = QVBoxLayout(scroll_w)
+        scroll_lay.setSpacing(2)
+        session_checks: dict[str, QCheckBox] = {}
+        visible_uids = {uid for uid, card in self._cards.items()
+                        if card.isVisible()}
+        for m in metas:
+            cb = QCheckBox(f"{m.label}  ({m.timestamp_str})")
+            cb.setChecked(m.uid in visible_uids)
+            scroll_lay.addWidget(cb)
+            session_checks[m.uid] = cb
+        scroll_lay.addStretch()
+        scroll.setWidget(scroll_w)
+        v.addWidget(scroll)
+
+        # Description field
+        desc_lbl = QLabel("Description (optional):")
+        desc_lbl.setStyleSheet(f"font-size:{FONT['body']}pt; color:{PALETTE.get('textDim','#999')};")
+        v.addWidget(desc_lbl)
+        from PyQt5.QtWidgets import QTextEdit as _QTE
+        desc_edit = _QTE()
+        desc_edit.setMaximumHeight(60)
+        desc_edit.setStyleSheet(
+            f"background:{PALETTE.get('bg','#242424')}; color:{PALETTE.get('text','#ebebeb')}; "
+            f"border:1px solid {PALETTE.get('border','#484848')}; font-size:{FONT['body']}pt;")
+        v.addWidget(desc_edit)
+
+        from PyQt5.QtWidgets import QDialogButtonBox
+        btns = QDialogButtonBox(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btns.accepted.connect(dlg.accept)
+        btns.rejected.connect(dlg.reject)
+        btns.button(QDialogButtonBox.Ok).setText("Package…")
+        v.addWidget(btns)
+
+        if dlg.exec_() != QDialog.Accepted:
+            return
+
+        selected_uids = [uid for uid, cb in session_checks.items()
+                         if cb.isChecked()]
+        if not selected_uids:
+            return
+
+        # Choose output path
+        default_name = f"session_package_{len(selected_uids)}.zip"
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save Package", default_name,
+            "ZIP Archives (*.zip)")
+        if not path:
+            return
+
+        # Run in background
+        from acquisition.session_packager import SessionPackager
+        import config as _cfg
+
+        def _run():
+            from PyQt5.QtCore import QTimer
+            try:
+                packager = SessionPackager(self._mgr)
+                creator = _cfg.get_pref("lab.active_operator", "")
+                result_path = packager.package(
+                    selected_uids, path,
+                    description=desc_edit.toPlainText().strip(),
+                    creator=creator)
+                QTimer.singleShot(0, lambda: QMessageBox.information(
+                    self, "Package Created",
+                    f"Packaged {len(selected_uids)} session(s) to:\n{result_path}"))
+            except Exception as e:
+                QTimer.singleShot(0, lambda: QMessageBox.critical(
+                    self, "Package Failed", f"Error: {e}"))
+
+        import threading
         threading.Thread(target=_run, daemon=True).start()
 
     def _delete(self):
@@ -1033,6 +1594,74 @@ class DataTab(QWidget):
                 f"A: {ma.label[:20]}  −  B: {mb.label[:20]}")
 
     # ---------------------------------------------------------------- #
+    #  Export history                                                    #
+    # ---------------------------------------------------------------- #
+
+    def _build_history_tab(self) -> QWidget:
+        from PyQt5.QtWidgets import QTableWidget, QTableWidgetItem, QHeaderView
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.setContentsMargins(4, 4, 4, 4)
+        lay.setSpacing(4)
+
+        hdr = QHBoxLayout()
+        hdr.addWidget(QLabel("Recent export / report / package activity"))
+        refresh_btn = QPushButton("Refresh")
+        refresh_btn.setFixedHeight(24)
+        refresh_btn.clicked.connect(self._refresh_history)
+        clear_btn = QPushButton("Clear")
+        clear_btn.setFixedHeight(24)
+        clear_btn.clicked.connect(self._clear_history)
+        hdr.addStretch()
+        hdr.addWidget(refresh_btn)
+        hdr.addWidget(clear_btn)
+        lay.addLayout(hdr)
+
+        self._history_table = QTableWidget(0, 6)
+        self._history_table.setHorizontalHeaderLabels(
+            ["Date", "Session", "Action", "Format", "Path", "Status"])
+        self._history_table.horizontalHeader().setStretchLastSection(True)
+        self._history_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeToContents)
+        self._history_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self._history_table.setAlternatingRowColors(True)
+        self._history_table.setStyleSheet(
+            f"QTableWidget {{ background:{PALETTE.get('bg','#242424')}; "
+            f"color:{PALETTE.get('text','#ebebeb')}; gridline-color:{PALETTE.get('border','#484848')}; "
+            f"font-size:{FONT['body']}pt; }} "
+            f"QHeaderView::section {{ background:{PALETTE.get('surface','#2d2d2d')}; "
+            f"color:{PALETTE.get('textDim','#999')}; border:1px solid {PALETTE.get('border','#484848')}; "
+            f"padding:3px; font-size:{FONT['label']}pt; }}")
+        lay.addWidget(self._history_table)
+        return w
+
+    def _refresh_history(self):
+        from PyQt5.QtWidgets import QTableWidgetItem
+        records = self._export_history.recent(50)
+        self._history_table.setRowCount(len(records))
+        for i, rec in enumerate(records):
+            ts = rec.timestamp[:19].replace("T", " ") if rec.timestamp else ""
+            self._history_table.setItem(i, 0, QTableWidgetItem(ts))
+            self._history_table.setItem(i, 1, QTableWidgetItem(rec.session_label))
+            self._history_table.setItem(i, 2, QTableWidgetItem(rec.action))
+            self._history_table.setItem(i, 3, QTableWidgetItem(rec.format))
+            self._history_table.setItem(i, 4, QTableWidgetItem(rec.output_path))
+            status = "OK" if rec.success else f"FAIL: {rec.error}"
+            self._history_table.setItem(i, 5, QTableWidgetItem(status))
+
+    def _clear_history(self):
+        self._export_history.clear()
+        self._history_table.setRowCount(0)
+
+    def _record_history(self, session_uid: str, session_label: str,
+                        action: str, fmt: str, output_path: str,
+                        success: bool, error: str = ""):
+        """Helper to add an export history record."""
+        from acquisition.export_history import make_record
+        self._export_history.add(make_record(
+            session_uid, session_label, action, fmt, output_path, success, error))
+
+    # ---------------------------------------------------------------- #
     #  Folder management                                                #
     # ---------------------------------------------------------------- #
 
@@ -1042,6 +1671,7 @@ class DataTab(QWidget):
             self._mgr.root if self._mgr.root else ".")
         if d:
             self._mgr.root = d
+            self._export_history.path = os.path.join(d, ".export_history.json")
             self._refresh()
 
     # ---------------------------------------------------------------- #

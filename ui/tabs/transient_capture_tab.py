@@ -46,6 +46,28 @@ class TransientCaptureTab(QWidget):
         if hasattr(self._transient_tab, "_refresh_hw"):
             self._transient_tab._refresh_hw()
 
+    # ── Attention dots ─────────────────────────────────────────────
+
+    _TAB_BASE = {0: "  Time-Resolved", 1: "  Burst"}
+    _TAB_ICONS = {0: IC.TRANSIENT, 1: IC.CAPTURE}
+    _DOT = "\u2009\u25cf"
+
+    def set_tab_attention(self, tab_index: int, needs_attention: bool) -> None:
+        """Show/hide a red attention dot on a sub-tab."""
+        if tab_index < 0 or tab_index >= self._tabs.count():
+            return
+        base = self._TAB_BASE.get(tab_index, "")
+        if needs_attention:
+            self._tabs.setTabText(tab_index, base + self._DOT)
+            icon_name = self._TAB_ICONS.get(tab_index)
+            if icon_name:
+                icon = make_icon(icon_name, color=PALETTE.get("error", "#ff453a"), size=14)
+                if icon:
+                    self._tabs.setTabIcon(tab_index, icon)
+        else:
+            self._tabs.setTabText(tab_index, base)
+            self._apply_tab_icons()
+
     # ── Theme ─────────────────────────────────────────────────────────
 
     def _apply_styles(self) -> None:

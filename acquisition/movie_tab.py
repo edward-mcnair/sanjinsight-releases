@@ -29,7 +29,8 @@ from ui.theme import FONT, PALETTE
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QDoubleSpinBox, QSpinBox, QGroupBox, QGridLayout, QProgressBar,
-    QCheckBox, QComboBox, QSplitter, QSizePolicy, QFileDialog, QMessageBox)
+    QCheckBox, QComboBox, QSplitter, QSizePolicy, QFileDialog, QMessageBox,
+    QScrollArea)
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui  import QImage, QPixmap, QColor, QFont
 
@@ -98,8 +99,16 @@ class MovieTab(QWidget):
         root.setSpacing(0)
 
         splitter = QSplitter(Qt.Horizontal)
-        splitter.addWidget(self._build_left())
-        splitter.addWidget(self._build_right())
+        left_scroll = QScrollArea()
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setFrameShape(QScrollArea.NoFrame)
+        left_scroll.setWidget(self._build_left())
+        splitter.addWidget(left_scroll)
+        right_scroll = QScrollArea()
+        right_scroll.setWidgetResizable(True)
+        right_scroll.setFrameShape(QScrollArea.NoFrame)
+        right_scroll.setWidget(self._build_right())
+        splitter.addWidget(right_scroll)
         splitter.setSizes([260, 700])
         root.addWidget(splitter, 1)
 

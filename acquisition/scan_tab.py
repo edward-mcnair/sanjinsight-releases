@@ -32,6 +32,7 @@ from .scan       import ScanProgress, ScanResult
 from .processing import to_display, apply_colormap, COLORMAP_OPTIONS, COLORMAP_TOOLTIPS, setup_cmap_combo
 import config as cfg_mod
 from ui.widgets.more_options import MoreOptionsPanel
+from ui.widgets.time_estimate_label import TimeEstimateLabel
 
 
 # ------------------------------------------------------------------ #
@@ -276,8 +277,22 @@ class ScanTab(QWidget):
         self._body_splitter = QSplitter(Qt.Horizontal)
         root.addWidget(self._body_splitter)
 
-        self._body_splitter.addWidget(self._build_left())
-        self._body_splitter.addWidget(self._build_right())
+        left_scroll = QScrollArea()
+        left_scroll.setObjectName("LeftPanelScroll")
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setFrameShape(QScrollArea.NoFrame)
+        left_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        left_scroll.setMinimumWidth(290)
+        left_scroll.setMaximumWidth(360)
+        left_scroll.setWidget(self._build_left())
+
+        self._body_splitter.addWidget(left_scroll)
+        right_scroll = QScrollArea()
+        right_scroll.setWidgetResizable(True)
+        right_scroll.setFrameShape(QScrollArea.NoFrame)
+        right_scroll.setWidget(self._build_right())
+        self._body_splitter.addWidget(right_scroll)
         self._body_splitter.setSizes([320, 900])
 
     # ---------------------------------------------------------------- #
@@ -286,11 +301,9 @@ class ScanTab(QWidget):
 
     def _build_left(self) -> QWidget:
         w   = QWidget()
-        w.setMinimumWidth(290)
-        w.setMaximumWidth(360)
         lay = QVBoxLayout(w)
-        lay.setContentsMargins(8, 8, 4, 8)
-        lay.setSpacing(8)
+        lay.setContentsMargins(10, 10, 6, 10)
+        lay.setSpacing(10)
 
         # ---- Grid config ----
         grid_box = QGroupBox("Scan Grid")
@@ -342,10 +355,7 @@ class ScanTab(QWidget):
         self._summary_lbl.setWordWrap(True)
         lay.addWidget(self._summary_lbl)
 
-        self._time_est_lbl = QLabel("")
-        self._time_est_lbl.setStyleSheet(
-            f"font-family:'Menlo','Consolas','Courier New',monospace; font-size:{FONT['label']}pt; color:#666;")
-        self._time_est_lbl.setWordWrap(True)
+        self._time_est_lbl = TimeEstimateLabel()
         lay.addWidget(self._time_est_lbl)
 
         self._update_summary()
@@ -885,20 +895,9 @@ class ScanTab(QWidget):
 
         fps = max(fps, 1)
         est = n_tiles * (settle_s + n_frames / fps + _STAGE_OVERHEAD_S)
-        self._time_est_lbl.setText(
-            f"Est. time: {self._fmt_duration(est)}")
-
-    @staticmethod
-    def _fmt_duration(seconds: float) -> str:
-        if seconds < 60:
-            return f"~{int(seconds)} sec"
-        elif seconds < 3600:
-            m = int(seconds / 60)
-            return f"~{m} min"
-        else:
-            h = int(seconds / 3600)
-            m = int((seconds % 3600) / 60)
-            return f"~{h} hr {m} min" if m else f"~{h} hr"
+        detail = (f"{n_tiles} tiles × ({settle_s:.1f} s settle"
+                  f" + {n_frames} frames @ {fps} fps + 0.3 s move)")
+        self._time_est_lbl.set_estimate(est, detail)
 
     def _redisplay(self):
         if self._result and self._result.valid:

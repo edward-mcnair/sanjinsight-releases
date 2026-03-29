@@ -25,7 +25,7 @@ from PyQt5.QtWidgets import (
     QDoubleSpinBox, QLineEdit, QGroupBox, QGridLayout,
     QTableWidget, QTableWidgetItem, QAbstractItemView,
     QHeaderView, QFileDialog, QSizePolicy, QMessageBox,
-    QFrame,
+    QFrame, QScrollArea,
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui  import QColor, QFont
@@ -115,7 +115,15 @@ class EmissivityCalTab(QWidget):
     # ── UI construction ──────────────────────────────────────────────────── #
 
     def _build_ui(self) -> None:
-        root = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        _scroll = QScrollArea()
+        _scroll.setWidgetResizable(True)
+        _scroll.setFrameShape(QFrame.NoFrame)
+        outer.addWidget(_scroll)
+        _inner = QWidget()
+        _scroll.setWidget(_inner)
+        root = QVBoxLayout(_inner)
         root.setContentsMargins(12, 12, 12, 12)
         root.setSpacing(10)
 

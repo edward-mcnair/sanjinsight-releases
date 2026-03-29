@@ -45,6 +45,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections import deque
 from typing import Dict, Set
 
 import numpy as np
@@ -105,6 +106,8 @@ class MetricsService(QObject):
         self._prev_frame: np.ndarray | None   = None
         self._cam_metrics: dict               = {}
         self._last_frame_time: float          = 0.0
+        self._drift_history: deque[float]     = deque(maxlen=20)
+        self._focus_history: deque[float]     = deque(maxlen=20)
 
         # ── TEC state — list indexed by channel ───────────────────────
         # Each entry: {"in_band_since": float|None, "last_status": TecStatus|None}
@@ -191,6 +194,10 @@ class MetricsService(QObject):
 
         # ── Focus quality (Laplacian variance on 4× downsampled frame) ─
         focus = self._compute_focus(data)
+
+        # ── Trend history ────────────────────────────────────────────
+        self._drift_history.append(drift)
+        self._focus_history.append(focus)
 
         self._cam_metrics = {
             "connected":         True,
@@ -326,6 +333,8 @@ class MetricsService(QObject):
         self._cam_metrics.clear()
         self._prev_frame = None
         self._cam_connected = False
+        self._drift_history.clear()
+        self._focus_history.clear()
 
     # ================================================================ #
     #  Internal helpers                                                 #
@@ -378,6 +387,8 @@ class MetricsService(QObject):
         cam = dict(self._cam_metrics) if self._cam_metrics else {
             "connected": self._cam_connected
         }
+        cam["drift_trend"] = self._compute_trend(self._drift_history, lower_is_better=True)
+        cam["focus_trend"] = self._compute_trend(self._focus_history, lower_is_better=False)
 
         return {
             "camera": cam,
@@ -410,6 +421,32 @@ class MetricsService(QObject):
             self._issue_messages.pop(code, None)
             self.issue_cleared.emit(code)
             log.debug("MetricsService: issue cleared [%s]", code)
+
+    @staticmethod
+    def _compute_trend(history: deque, *, lower_is_better: bool = False) -> str:
+        """Compare first half vs second half of a metric history.
+
+        Returns ``"improving"``, ``"stable"``, or ``"degrading"``.
+        Needs at least 6 samples to produce a meaningful trend; otherwise
+        returns ``"stable"`` to avoid noisy initial readings.
+        """
+        if len(history) < 6:
+            return "stable"
+        mid = len(history) // 2
+        items = list(history)
+        first_mean = sum(items[:mid]) / mid
+        second_mean = sum(items[mid:]) / (len(items) - mid)
+        if first_mean == 0:
+            return "stable"
+        change = (second_mean - first_mean) / abs(first_mean)
+        # For drift, lower is better; for focus, higher is better
+        if lower_is_better:
+            change = -change   # invert so positive = improving
+        if change > 0.10:
+            return "improving"
+        elif change < -0.10:
+            return "degrading"
+        return "stable"
 
     @staticmethod
     def _compute_focus(data: np.ndarray) -> float:

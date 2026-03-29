@@ -27,38 +27,13 @@ log = logging.getLogger(__name__)
 
 
 # ── Step definitions ──────────────────────────────────────────────────
-# Each tuple: (phase, check_key, label_text, nav_target, icon, hint)
-# The first incomplete step is shown as the suggestion.
-# hint: shown when the user is already on this step's section.
+# Canonical step list is in ui.guidance.steps.  We import and convert
+# to the tuple format used internally by the banner.
+from ui.guidance.steps import WORKFLOW_STEPS as _WF_STEPS
 
 _STEPS = [
-    (1, "camera_selected",     "Select your camera",
-     "Modality", IC.CAMERA,
-     "Choose the camera for this measurement (TR or IR)."),
-    (1, "profile_selected",    "Select a material profile",
-     "Modality", IC.LIBRARY,
-     "Pick a profile to auto-fill stimulus, temperature, and analysis settings."),
-    (1, "stimulus_configured", "Verify stimulus settings",
-     "Stimulus", IC.SETTINGS,
-     "Settings were loaded from your profile — verify or adjust if needed."),
-    (1, "temperature_set",     "Set the TEC temperature",
-     "Temperature", IC.TEMPERATURE,
-     "Set a target temperature and wait for it to stabilise."),
-    (2, "live_viewed",         "Start the live view",
-     "Live View", IC.LIVE,
-     "The live feed starts automatically — verify you can see the sample."),
-    (2, "focused",             "Focus and auto-expose",
-     "Focus & Stage", IC.AUTOFOCUS,
-     "Run autofocus or manually adjust. Auto-exposure runs with your profile settings."),
-    (2, "signal_checked",      "Check the signal quality",
-     "Signal Check", IC.CHECK,
-     "Run the signal check. If it fails, adjust focus or exposure, then retry."),
-    (3, "captured",            "Run an acquisition",
-     "Capture", IC.PLAY,
-     "Start a single-point or grid acquisition."),
-    (3, "calibrated",          "Calibrate the measurement",
-     "Calibration", IC.CHART_LINE,
-     "Run a calibration sweep, or skip if using a saved .cal file."),
+    (s.phase, s.key, s.label, s.nav_target, s.icon, s.hint)
+    for s in _WF_STEPS
 ]
 
 
@@ -185,14 +160,14 @@ class GuidedBanner(QWidget):
             self.setVisible(True)
         else:
             # All steps complete
-            self._label.setText("All steps complete — ready for analysis!")
-            self._current_nav = "Sessions"
+            self._label.setText("All steps complete — run a capture to record your first measurement!")
+            self._current_nav = "Capture"
             self._current_step_idx = total
             self._current_phase = 0
             self._current_key = ""
             self._set_icon(IC.CHECK, color=PALETTE.get("success", "#30d158"))
             self._progress_lbl.setText(f"{total}/{total}")
-            self._action_btn.setText("View →")
+            self._action_btn.setText("Capture →")
             self._action_btn.setVisible(True)
             self._skip_btn.setVisible(False)
             self.setVisible(True)

@@ -24,7 +24,7 @@ log = logging.getLogger(__name__)
 
 from PyQt5.QtWidgets import (
     QWidget, QLabel, QPushButton, QDoubleSpinBox, QVBoxLayout,
-    QHBoxLayout, QGroupBox, QFrame, QStackedWidget)
+    QHBoxLayout, QGroupBox, QFrame, QStackedWidget, QScrollArea)
 from PyQt5.QtCore    import Qt, QTimer, pyqtSignal
 
 from hardware.app_state    import app_state
@@ -86,7 +86,12 @@ class TemperatureTab(QWidget):
         self._chuck_box.setVisible(True)   # always render; update_chuck hides content if N/A
 
         root.addStretch()
-        self._stack.addWidget(controls)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setWidget(controls)
+        self._stack.addWidget(scroll)
         self._stack.setCurrentIndex(0)  # empty state until device connects
 
     def _build_empty_state(self, title: str, device: str, tip: str) -> QWidget:
@@ -229,7 +234,7 @@ class TemperatureTab(QWidget):
         ctrl.addWidget(spin)
 
         set_btn = QPushButton("Set")
-        set_btn.setFixedWidth(50)
+        set_btn.setFixedWidth(60)
         ctrl.addWidget(set_btn)
 
         ctrl.addSpacing(12)
@@ -397,7 +402,7 @@ class TemperatureTab(QWidget):
         box._chuck_spin = chuck_spin
         tgt_ctrl_h.addWidget(chuck_spin)
         set_btn = QPushButton("Set")
-        set_btn.setFixedWidth(50)
+        set_btn.setFixedWidth(60)
         tgt_ctrl_h.addWidget(set_btn)
         set_btn.clicked.connect(lambda _: self._chuck_set_target(chuck_spin.value()))
         box._chuck_set_btn = set_btn

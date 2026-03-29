@@ -139,6 +139,21 @@ class SessionManager:
             with open(p, "w") as f:
                 json.dump(d, f, indent=2)
 
+    def update_status(self, uid: str, status: str):
+        """Update session status in-place (pending/reviewed/flagged/archived)."""
+        import json
+        meta = self._index.get(uid)
+        if meta is None:
+            return
+        meta.status = status
+        p = os.path.join(meta.path, "session.json")
+        if os.path.exists(p):
+            with open(p) as f:
+                d = json.load(f)
+            d["status"] = status
+            with open(p, "w") as f:
+                json.dump(d, f, indent=2)
+
     def delete(self, uid: str) -> bool:
         """Delete session folder from disk and remove from index."""
         meta = self._index.pop(uid, None)

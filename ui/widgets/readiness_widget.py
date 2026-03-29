@@ -87,6 +87,7 @@ class ReadinessWidget(QWidget):
     """
 
     navigate_requested = pyqtSignal(str)   # emitted with sidebar panel label
+    fix_requested      = pyqtSignal(str)   # emitted with issue code (e.g. "stage_not_homed")
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -127,6 +128,19 @@ class ReadinessWidget(QWidget):
         header_row.addWidget(self._dot)
         header_row.addWidget(self._title)
         header_row.addStretch()
+
+        # ── Trend indicators (drift + focus arrows) ──────────────────
+        self._trend_widget = QWidget()
+        trend_lay = QHBoxLayout(self._trend_widget)
+        trend_lay.setContentsMargins(0, 0, 0, 0)
+        trend_lay.setSpacing(6)
+        self._drift_trend = QLabel()
+        self._focus_trend = QLabel()
+        trend_lay.addWidget(self._drift_trend)
+        trend_lay.addWidget(self._focus_trend)
+        self._trend_widget.setVisible(False)
+        header_row.addWidget(self._trend_widget)
+
         inner.addLayout(header_row)
 
         # ── Issues area (hidden when ready) ───────────────────────────
@@ -162,6 +176,16 @@ class ReadinessWidget(QWidget):
             n = len(issues)
             label = f"NOT READY  —  {n} {'issue' if n == 1 else 'issues'}"
             self._apply_state("warn", label, issues)
+
+        # ── Update trend indicators ──────────────────────────────────
+        cam = snapshot.get("camera", {})
+        self._update_trend(self._drift_trend, "Drift",
+                           cam.get("drift_trend", "stable"))
+        self._update_trend(self._focus_trend, "Focus",
+                           cam.get("focus_trend", "stable"))
+        has_trend = cam.get("drift_trend", "stable") != "stable" or \
+                    cam.get("focus_trend", "stable") != "stable"
+        self._trend_widget.setVisible(has_trend)
 
     # ================================================================ #
     #  Internal rendering                                               #
@@ -207,12 +231,13 @@ class ReadinessWidget(QWidget):
                 msg  = issue.get("message", str(issue)) if isinstance(issue, dict) else str(issue)
                 code = issue.get("code", "")            if isinstance(issue, dict) else ""
                 nav  = _nav_target_for(code)
-                self._issues_layout.addLayout(self._issue_row(msg, nav))
+                self._issues_layout.addLayout(self._issue_row(msg, nav, code))
             self._issues_widget.show()
         else:
             self._issues_widget.hide()
 
-    def _issue_row(self, message: str, nav_target: str | None) -> QHBoxLayout:
+    def _issue_row(self, message: str, nav_target: str | None,
+                   code: str = "") -> QHBoxLayout:
         """Build one issue row: ✗ message text  [Fix it →]."""
         row = QHBoxLayout()
         row.setSpacing(8)
@@ -239,12 +264,36 @@ class ReadinessWidget(QWidget):
                 }}
                 QPushButton:hover {{ color: #fff; }}
             """)
-            fix_btn.setToolTip(f"Open {nav_target} tab")
+            fix_btn.setToolTip(
+                f"Auto-fix this issue" if code else f"Open {nav_target} tab")
+            # Emit fix_requested with the issue code so main_app can
+            # auto-fix (e.g. home stage) or fall back to navigation.
             fix_btn.clicked.connect(
-                lambda _, t=nav_target: self.navigate_requested.emit(t))
+                lambda _, c=code, t=nav_target: (
+                    self.fix_requested.emit(c) if c else
+                    self.navigate_requested.emit(t)))
             row.addWidget(fix_btn)
 
         return row
+
+    def _update_trend(self, label: QLabel, name: str, trend: str) -> None:
+        """Update a single trend indicator label."""
+        if trend == "improving":
+            arrow = "↑"
+            color = PALETTE.get("success", "#00d479")
+            tip = f"{name} is improving"
+        elif trend == "degrading":
+            arrow = "↓"
+            color = PALETTE.get("warning", "#ffb300")
+            tip = f"{name} is degrading"
+        else:
+            label.setText("")
+            return
+        label.setText(f"{name} {arrow}")
+        label.setStyleSheet(
+            f"color: {color}; font-size: {FONT['caption']}pt; "
+            f"font-weight: 600;")
+        label.setToolTip(tip)
 
     def _clear_issues(self) -> None:
         """Remove all existing issue rows from the issues layout."""

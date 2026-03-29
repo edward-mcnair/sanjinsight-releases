@@ -25,7 +25,8 @@ log = logging.getLogger(__name__)
 from PyQt5.QtWidgets import (
     QWidget, QLabel, QPushButton, QDoubleSpinBox, QSpinBox,
     QVBoxLayout, QHBoxLayout, QGridLayout, QGroupBox,
-    QProgressBar, QSizePolicy, QMessageBox, QStackedWidget)
+    QProgressBar, QSizePolicy, QMessageBox, QStackedWidget,
+    QScrollArea, QFrame)
 from PyQt5.QtCore import Qt, QTimer, QRect, QPoint, pyqtSignal
 from PyQt5.QtGui  import (QPainter, QColor, QPen, QFont,
                            QBrush, QFontMetrics)
@@ -344,7 +345,11 @@ class ProberTab(QWidget):
         self._poll_timer.setInterval(1000)   # 1 Hz position refresh
         self._poll_timer.timeout.connect(self._refresh_position)
 
-        self._stack.addWidget(controls)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setWidget(controls)
+        self._stack.addWidget(scroll)
         self._stack.setCurrentIndex(0)  # empty state until device connects
 
     # ---------------------------------------------------------------- #

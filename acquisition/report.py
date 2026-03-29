@@ -18,6 +18,7 @@ Usage:
 from __future__ import annotations
 import os, time, tempfile
 import numpy as np
+from dataclasses import dataclass, field
 from typing import Optional
 
 from reportlab.lib.pagesizes   import A4
@@ -48,6 +49,32 @@ BLACK  = colors.black
 
 PW, PH = A4                            # 595 × 842 pt
 MARGIN = 18 * mm
+
+
+# ------------------------------------------------------------------ #
+#  Report configuration                                              #
+# ------------------------------------------------------------------ #
+
+@dataclass
+class ReportConfig:
+    """User-configurable report content and metadata."""
+    # Content toggles
+    thermal_map: bool = True
+    hotspot_table: bool = True
+    measurement_params: bool = True
+    device_info: bool = True
+    raw_data_summary: bool = False
+    verdict_and_recommendations: bool = True
+    calibration_details: bool = False
+    quality_scorecard: bool = True
+
+    # Format
+    format: str = "pdf"  # "pdf" | "html"
+
+    # Metadata overrides (empty = use session values)
+    operator: str = ""
+    customer: str = ""
+    notes: str = ""
 
 
 # ------------------------------------------------------------------ #
@@ -299,18 +326,23 @@ def generate_report(session: Session,
                     output_dir: str = ".",
                     calibration: Optional[CalibrationResult] = None,
                     logo_svg: Optional[str] = None,
-                    analysis=None) -> str:
+                    analysis=None,
+                    report_config: Optional[ReportConfig] = None,
+                    quality_scorecard=None) -> str:
     """
     Generate a PDF report for the given session.
 
-    session:     Session object (arrays loaded on demand)
-    output_dir:  Directory to write the PDF into
-    calibration: Optional CalibrationResult for ΔT map
-    logo_svg:    Path to microsanj-logo.svg (white, for header bar — auto-detected)
-    analysis:    Optional AnalysisResult — adds a Pass/Fail page to the report
+    session:       Session object (arrays loaded on demand)
+    output_dir:    Directory to write the PDF into
+    calibration:   Optional CalibrationResult for ΔT map
+    logo_svg:      Path to microsanj-logo.svg (white, for header bar — auto-detected)
+    analysis:      Optional AnalysisResult — adds a Pass/Fail page to the report
+    report_config: Optional ReportConfig — controls which sections to include
+    quality_scorecard: Optional QualityScorecard — adds a quality scorecard page
 
     Returns the path to the generated PDF.
     """
+    cfg = report_config or ReportConfig()
     os.makedirs(output_dir, exist_ok=True)
 
     here = os.path.dirname(os.path.abspath(__file__))
@@ -379,8 +411,6 @@ def generate_report(session: Session,
                             color=TEAL, spaceAfter=4*mm))
 
     # ---- Metadata table ----
-    story.append(Paragraph("Acquisition Parameters", styles["h1"]))
-
     snr_str  = f"{meta.snr_db:.1f} dB" if meta.snr_db else "—"
     roi_str  = (f"x={meta.roi['x']}  y={meta.roi['y']}  "
                 f"w={meta.roi['w']}  h={meta.roi['h']}"
@@ -403,33 +433,6 @@ def generate_report(session: Session,
     prof_str = meta.profile_name or "—"
     ct_str   = f"{meta.ct_value:.4e} K⁻¹" if meta.ct_value else "— (uncalibrated)"
 
-    # ── Table: two sections ──────────────────────────────────────────
-    # Section 1: Camera / acquisition parameters
-    meta_rows = [
-        ["Date / Time",    meta.timestamp_str,
-         "Frame size",     f"{meta.frame_w} × {meta.frame_h} px"],
-        ["Frames (N)",     str(meta.n_frames),
-         "Exposure",       f"{meta.exposure_us:.0f} μs"],
-        ["Duration",       f"{meta.duration_s:.1f} s",
-         "Gain",           f"{meta.gain_db:.1f} dB"],
-        ["SNR",            snr_str,
-         "ROI",            roi_str],
-        ["Calibration",    cal_str,
-         "Session ID",     meta.uid[:28]],
-    ]
-
-    # Section 2: Instrument / DUT conditions
-    instrument_rows = [
-        ["Imaging mode",   mode_str,
-         "Wavelength",     wl_str],
-        ["TEC temp",       tec_str,
-         "Bias",           bias_str],
-        ["FPGA modulation",fpga_str,
-         "Material profile", prof_str],
-        ["C_T coefficient",ct_str,
-         "",               ""],
-    ]
-
     col_w = [28*mm, 52*mm, 28*mm, 52*mm]
 
     def _make_table(rows, alternate_from=0):
@@ -437,7 +440,6 @@ def generate_report(session: Session,
             [[Paragraph(str(c), styles["body"]) for c in row]
              for row in rows],
             colWidths=col_w)
-        light_rows = [(0, 0), (2, 0), (4, 0), (6, 0), (8, 0)]
         style_cmds = [
             ("TEXTCOLOR",   (0, 0), (0, -1), MID),
             ("TEXTCOLOR",   (2, 0), (2, -1), MID),
@@ -451,26 +453,57 @@ def generate_report(session: Session,
             ("ROWBACKGROUND", (0, 0), (-1, -1),
              [WHITE, colors.HexColor("#f8f8fc")]),
         ]
-        # Alternate row shading
         for i in range(0, len(rows), 2):
             style_cmds.append(("BACKGROUND", (0, i), (-1, i), LIGHT))
         tbl.setStyle(TableStyle(style_cmds))
         return tbl
 
-    meta_table = _make_table(meta_rows)
-    story.append(meta_table)
-    story.append(Spacer(1, 3*mm))
+    # Apply metadata overrides from report config
+    if cfg.operator:
+        meta.operator = cfg.operator
+    report_customer = cfg.customer
+    report_notes = cfg.notes or meta.notes
 
-    story.append(Paragraph("Instrument & DUT Conditions", styles["h1"]))
-    inst_table = _make_table(instrument_rows)
-    story.append(inst_table)
-    story.append(Spacer(1, 5*mm))
+    if cfg.measurement_params:
+        story.append(Paragraph("Acquisition Parameters", styles["h1"]))
+        meta_rows = [
+            ["Date / Time",    meta.timestamp_str,
+             "Frame size",     f"{meta.frame_w} × {meta.frame_h} px"],
+            ["Frames (N)",     str(meta.n_frames),
+             "Exposure",       f"{meta.exposure_us:.0f} μs"],
+            ["Duration",       f"{meta.duration_s:.1f} s",
+             "Gain",           f"{meta.gain_db:.1f} dB"],
+            ["SNR",            snr_str,
+             "ROI",            roi_str],
+            ["Calibration",    cal_str,
+             "Session ID",     meta.uid[:28]],
+        ]
+        story.append(_make_table(meta_rows))
+        story.append(Spacer(1, 3*mm))
+
+    if cfg.device_info:
+        story.append(Paragraph("Instrument & DUT Conditions", styles["h1"]))
+        instrument_rows = [
+            ["Imaging mode",   mode_str,
+             "Wavelength",     wl_str],
+            ["TEC temp",       tec_str,
+             "Bias",           bias_str],
+            ["FPGA modulation",fpga_str,
+             "Material profile", prof_str],
+            ["C_T coefficient",ct_str,
+             "",               ""],
+        ]
+        if meta.operator or report_customer:
+            instrument_rows.append(
+                ["Operator", meta.operator or "—",
+                 "Customer", report_customer or "—"])
+        story.append(_make_table(instrument_rows))
+        story.append(Spacer(1, 5*mm))
 
     # ---- ΔR/R main image ----
-    story.append(Paragraph("Thermoreflectance Map  (ΔR/R)", styles["h1"]))
-
     drr = session.delta_r_over_r
-    if drr is not None:
+    if cfg.thermal_map and drr is not None:
+        story.append(Paragraph("Thermoreflectance Map  (ΔR/R)", styles["h1"]))
         img_path = _array_to_tmpimg(drr, mode="percentile", cmap="Thermal Delta",
                                     size=(600, 440))
         if img_path:
@@ -496,62 +529,14 @@ def generate_report(session: Session,
                 "ΔR/R thermoreflectance map. Blue = negative (cooling), "
                 "Red = positive (heating). Colour scale clipped to 0.5–99.5 percentile.",
                 styles["caption"]))
-    else:
+    elif cfg.thermal_map:
         story.append(Paragraph("No ΔR/R data available.", styles["body"]))
 
     # ================================================================ #
-    #  PAGE 2                                                          #
+    #  PAGE 2 — Supporting images & stats                              #
     # ================================================================ #
 
-    story.append(PageBreak())
-
-    # Small print logo at top of page 2
-    if print_logo_png and os.path.exists(print_logo_png):
-        logo_w2 = 40 * mm
-        logo_h2 = logo_w2 * (223 / 1040)
-        story.append(RLImage(print_logo_png, width=logo_w2, height=logo_h2))
-        story.append(Spacer(1, 2*mm))
-
-    story.append(Paragraph("Supporting Images", styles["h1"]))
-
-    # ---- 3-panel row: Cold / Hot / Difference ----
-    panel_w = (usable_w - 6*mm) / 3
-    panel_h = panel_w * (220 / 300)
-
-    panels = []
-    for arr, label, mode, cmap in [
-        (session.cold_avg,   "Cold  (baseline)",   "auto",       "gray"),
-        (session.hot_avg,    "Hot  (stimulus)",    "auto",       "gray"),
-        (session.difference, "Difference  (H−C)",  "percentile", "signed"),
-    ]:
-        if arr is not None:
-            p = _array_to_tmpimg(arr, mode=mode, cmap=cmap,
-                                  size=(300, 220))
-            if p:
-                tmp_files.append(p)
-                cell = [RLImage(p, width=panel_w, height=panel_h),
-                        Paragraph(label, styles["caption"])]
-            else:
-                cell = [Paragraph(f"{label}\n(render failed)",
-                                  styles["caption"])]
-        else:
-            cell = [Paragraph(f"{label}\n(no data)", styles["caption"])]
-        panels.append(cell)
-
-    if panels:
-        panel_tbl = Table([
-            [panels[0][0], panels[1][0], panels[2][0]],
-            [panels[0][1], panels[1][1], panels[2][1]],
-        ], colWidths=[panel_w] * 3)
-        panel_tbl.setStyle(TableStyle([
-            ("ALIGN",   (0, 0), (-1, -1), "CENTER"),
-            ("VALIGN",  (0, 0), (-1, -1), "MIDDLE"),
-            ("PADDING", (0, 0), (-1, -1), 2),
-        ]))
-        story.append(panel_tbl)
-        story.append(Spacer(1, 4*mm))
-
-    # ---- ΔT calibrated map ----
+    # Compute ΔT early — needed by both raw_data_summary and calibration_details
     dt_arr = getattr(session, "_delta_t", None)
     if dt_arr is None and calibration and calibration.valid and drr is not None:
         try:
@@ -559,7 +544,54 @@ def generate_report(session: Session,
         except Exception:
             dt_arr = None
 
-    if dt_arr is not None:
+    if cfg.raw_data_summary:
+        story.append(PageBreak())
+
+        if print_logo_png and os.path.exists(print_logo_png):
+            logo_w2 = 40 * mm
+            logo_h2 = logo_w2 * (223 / 1040)
+            story.append(RLImage(print_logo_png, width=logo_w2, height=logo_h2))
+            story.append(Spacer(1, 2*mm))
+
+        story.append(Paragraph("Supporting Images", styles["h1"]))
+
+        panel_w = (usable_w - 6*mm) / 3
+        panel_h = panel_w * (220 / 300)
+
+        panels = []
+        for arr, label, mode, cmap in [
+            (session.cold_avg,   "Cold  (baseline)",   "auto",       "gray"),
+            (session.hot_avg,    "Hot  (stimulus)",    "auto",       "gray"),
+            (session.difference, "Difference  (H−C)",  "percentile", "signed"),
+        ]:
+            if arr is not None:
+                p = _array_to_tmpimg(arr, mode=mode, cmap=cmap,
+                                      size=(300, 220))
+                if p:
+                    tmp_files.append(p)
+                    cell = [RLImage(p, width=panel_w, height=panel_h),
+                            Paragraph(label, styles["caption"])]
+                else:
+                    cell = [Paragraph(f"{label}\n(render failed)",
+                                      styles["caption"])]
+            else:
+                cell = [Paragraph(f"{label}\n(no data)", styles["caption"])]
+            panels.append(cell)
+
+        if panels:
+            panel_tbl = Table([
+                [panels[0][0], panels[1][0], panels[2][0]],
+                [panels[0][1], panels[1][1], panels[2][1]],
+            ], colWidths=[panel_w] * 3)
+            panel_tbl.setStyle(TableStyle([
+                ("ALIGN",   (0, 0), (-1, -1), "CENTER"),
+                ("VALIGN",  (0, 0), (-1, -1), "MIDDLE"),
+                ("PADDING", (0, 0), (-1, -1), 2),
+            ]))
+            story.append(panel_tbl)
+            story.append(Spacer(1, 4*mm))
+
+    if cfg.calibration_details and dt_arr is not None:
         story.append(Paragraph(
             "Calibrated Temperature Map  (ΔT, °C)", styles["h1"]))
         dt_path = _array_to_tmpimg(dt_arr, mode="percentile", cmap="Thermal Delta",
@@ -581,59 +613,63 @@ def generate_report(session: Session,
         story.append(Spacer(1, 4*mm))
 
     # ---- Stats table ----
-    story.append(Paragraph("Signal Statistics", styles["h1"]))
-    stats_rows = [["Metric", "ΔR/R", "ΔT (°C)" if dt_arr is not None else ""]]
+    if cfg.raw_data_summary:
+        story.append(Paragraph("Signal Statistics", styles["h1"]))
+        stats_rows = [["Metric", "ΔR/R",
+                        "ΔT (°C)" if dt_arr is not None else ""]]
 
-    def _fmt(arr):
-        if arr is None:
-            return ["—"] * 4
-        flat = arr.ravel()
-        flat = flat[np.isfinite(flat)]
-        if len(flat) == 0:
-            return ["—"] * 4
-        return [f"{float(np.min(flat)):.4e}",
-                f"{float(np.max(flat)):.4e}",
-                f"{float(np.mean(flat)):.4e}",
-                f"{float(np.std(flat)):.4e}"]
+        def _fmt(arr):
+            if arr is None:
+                return ["—"] * 4
+            flat = arr.ravel()
+            flat = flat[np.isfinite(flat)]
+            if len(flat) == 0:
+                return ["—"] * 4
+            return [f"{float(np.min(flat)):.4e}",
+                    f"{float(np.max(flat)):.4e}",
+                    f"{float(np.mean(flat)):.4e}",
+                    f"{float(np.std(flat)):.4e}"]
 
-    drr_s = _fmt(drr)
-    dt_s  = _fmt(dt_arr)
+        drr_s = _fmt(drr)
+        dt_s  = _fmt(dt_arr)
 
-    for i, lbl in enumerate(["Min", "Max", "Mean", "Std Dev"]):
-        row = [lbl, drr_s[i] if i < len(drr_s) else "—"]
-        if dt_arr is not None:
-            row.append(dt_s[i] if i < len(dt_s) else "—")
-        stats_rows.append(row)
+        for i, lbl in enumerate(["Min", "Max", "Mean", "Std Dev"]):
+            row = [lbl, drr_s[i] if i < len(drr_s) else "—"]
+            if dt_arr is not None:
+                row.append(dt_s[i] if i < len(dt_s) else "—")
+            stats_rows.append(row)
 
-    stats_cw = [30*mm, 50*mm, 50*mm] if dt_arr is not None else [30*mm, 50*mm]
-    stats_tbl = Table(
-        [[Paragraph(str(c), styles["body"]) for c in row]
-         for row in stats_rows],
-        colWidths=stats_cw)
-    stats_tbl.setStyle(TableStyle([
-        ("BACKGROUND",  (0, 0), (-1, 0), DARK),
-        ("TEXTCOLOR",   (0, 0), (-1, 0), WHITE),
-        ("FONTNAME",    (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTNAME",    (1, 1), (-1, -1), "Courier"),
-        ("FONTSIZE",    (0, 0), (-1, -1), 8.5),
-        ("PADDING",     (0, 0), (-1, -1), 4),
-        ("ROWBACKGROUND", (0, 1), (-1, -1),
-         [WHITE, colors.HexColor("#f4f4f8")]),
-        ("GRID",        (0, 0), (-1, -1), 0.25, colors.HexColor("#dddddd")),
-    ]))
-    story.append(stats_tbl)
-    story.append(Spacer(1, 5*mm))
+        stats_cw = ([30*mm, 50*mm, 50*mm] if dt_arr is not None
+                     else [30*mm, 50*mm])
+        stats_tbl = Table(
+            [[Paragraph(str(c), styles["body"]) for c in row]
+             for row in stats_rows],
+            colWidths=stats_cw)
+        stats_tbl.setStyle(TableStyle([
+            ("BACKGROUND",  (0, 0), (-1, 0), DARK),
+            ("TEXTCOLOR",   (0, 0), (-1, 0), WHITE),
+            ("FONTNAME",    (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTNAME",    (1, 1), (-1, -1), "Courier"),
+            ("FONTSIZE",    (0, 0), (-1, -1), 8.5),
+            ("PADDING",     (0, 0), (-1, -1), 4),
+            ("ROWBACKGROUND", (0, 1), (-1, -1),
+             [WHITE, colors.HexColor("#f4f4f8")]),
+            ("GRID",        (0, 0), (-1, -1), 0.25,
+             colors.HexColor("#dddddd")),
+        ]))
+        story.append(stats_tbl)
+        story.append(Spacer(1, 5*mm))
 
     # ---- Notes ----
-    if meta.notes:
+    if report_notes:
         story.append(Paragraph("Notes", styles["h1"]))
-        story.append(Paragraph(meta.notes, styles["body"]))
+        story.append(Paragraph(report_notes, styles["body"]))
 
     # ================================================================ #
     #  Pass / Fail Analysis page (optional)                            #
     # ================================================================ #
 
-    if analysis is not None and analysis.valid:
+    if cfg.verdict_and_recommendations and analysis is not None and analysis.valid:
         story.append(PageBreak())
         story.append(Paragraph("Pass / Fail Thermal Analysis", styles["h1"]))
         story.append(Spacer(1, 3*mm))
@@ -723,7 +759,7 @@ def generate_report(session: Session,
             story.append(Spacer(1, 5*mm))
 
         # Per-hotspot table
-        if analysis.hotspots:
+        if cfg.hotspot_table and analysis.hotspots:
             story.append(Paragraph("Hotspot Detail", styles["h1"]))
             story.append(Spacer(1, 2*mm))
             hs_rows = [["#", "Peak ΔT (°C)", "Mean ΔT (°C)",
@@ -755,6 +791,96 @@ def generate_report(session: Session,
             story.append(hs_tbl)
 
     # ================================================================ #
+    #  Quality Scorecard page (optional)                               #
+    # ================================================================ #
+
+    if cfg.quality_scorecard and quality_scorecard is not None:
+        story.append(PageBreak())
+        story.append(Paragraph("Acquisition Quality Scorecard", styles["h1"]))
+        story.append(Spacer(1, 3*mm))
+
+        GRADE_COLORS_PDF = {
+            "A": colors.HexColor("#00c070"),
+            "B": colors.HexColor("#00a88a"),
+            "C": colors.HexColor("#ffb300"),
+            "D": colors.HexColor("#e03030"),
+            "F": colors.HexColor("#e03030"),
+        }
+
+        # Overall grade badge
+        overall = quality_scorecard.get("overall_grade", "—")
+        overall_color = GRADE_COLORS_PDF.get(overall, colors.HexColor("#888888"))
+        grade_tbl = Table(
+            [[Paragraph(f"<b>{overall}</b>",
+                        ParagraphStyle("grade", fontName="Helvetica-Bold",
+                                       fontSize=24, textColor=colors.white,
+                                       alignment=TA_CENTER))]],
+            colWidths=[usable_w * 0.15])
+        grade_tbl.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), overall_color),
+            ("ALIGN",      (0, 0), (-1, -1), "CENTER"),
+            ("VALIGN",     (0, 0), (-1, -1), "MIDDLE"),
+            ("TOPPADDING",    (0, 0), (-1, -1), 14),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 14),
+            ("ROUNDEDCORNERS", [6, 6, 6, 6]),
+        ]))
+
+        # Per-metric rows
+        metrics = quality_scorecard.get("metrics", [])
+        metric_rows = [["Metric", "Grade", "Value", "Threshold"]]
+        for m in metrics:
+            metric_rows.append([
+                m.get("metric", ""),
+                m.get("grade", "—"),
+                m.get("display", "—"),
+                m.get("threshold", "—"),
+            ])
+
+        if len(metric_rows) > 1:
+            m_cw = [40*mm, 20*mm, 40*mm, 50*mm]
+            m_tbl = Table(
+                [[Paragraph(str(c), styles["body"]) for c in row]
+                 for row in metric_rows],
+                colWidths=m_cw)
+            grade_style_cmds = [
+                ("BACKGROUND",  (0, 0), (-1, 0), DARK),
+                ("TEXTCOLOR",   (0, 0), (-1, 0), WHITE),
+                ("FONTNAME",    (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTNAME",    (2, 1), (2, -1), "Courier"),
+                ("FONTSIZE",    (0, 0), (-1, -1), 9),
+                ("PADDING",     (0, 0), (-1, -1), 5),
+                ("ROWBACKGROUND", (0, 1), (-1, -1),
+                 [WHITE, colors.HexColor("#f4f4f8")]),
+                ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#dddddd")),
+            ]
+            # Colour the grade cells
+            for row_idx, m in enumerate(metrics, start=1):
+                gc = GRADE_COLORS_PDF.get(m.get("grade", ""), None)
+                if gc:
+                    grade_style_cmds.append(
+                        ("TEXTCOLOR", (1, row_idx), (1, row_idx), gc))
+            m_tbl.setStyle(TableStyle(grade_style_cmds))
+
+            combined = Table(
+                [[grade_tbl, m_tbl]],
+                colWidths=[usable_w * 0.18, usable_w * 0.82])
+            combined.setStyle(TableStyle([
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (1, 0), (1, 0), 8),
+            ]))
+            story.append(combined)
+        else:
+            story.append(grade_tbl)
+
+        # Recommendations
+        recs = quality_scorecard.get("recommendations", [])
+        if recs:
+            story.append(Spacer(1, 5*mm))
+            story.append(Paragraph("Recommendations", styles["h1"]))
+            for rec in recs:
+                story.append(Paragraph(f"• {rec}", styles["body"]))
+
+    # ================================================================ #
     #  Build                                                           #
     # ================================================================ #
 
@@ -771,3 +897,27 @@ def generate_report(session: Session,
     session.unload()
 
     return pdf_path
+
+
+# ------------------------------------------------------------------ #
+#  Format dispatcher                                                  #
+# ------------------------------------------------------------------ #
+
+def generate_report_any_format(session: Session,
+                               output_dir: str = ".",
+                               calibration: Optional[CalibrationResult] = None,
+                               analysis=None,
+                               report_config: Optional[ReportConfig] = None,
+                               quality_scorecard=None) -> str:
+    """Route to PDF or HTML generator based on report_config.format."""
+    rcfg = report_config or ReportConfig()
+    if rcfg.format == "html":
+        from .report_html import generate_html_report
+        return generate_html_report(
+            session, output_dir, calibration=calibration,
+            analysis=analysis, config=rcfg,
+            quality_scorecard=quality_scorecard)
+    return generate_report(
+        session, output_dir, calibration=calibration,
+        analysis=analysis, report_config=rcfg,
+        quality_scorecard=quality_scorecard)

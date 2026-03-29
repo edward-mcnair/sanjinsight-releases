@@ -732,10 +732,24 @@ class ToastManager(QObject):
         Toasts are children of the main window, so we use window-local
         coordinates (not mapToGlobal) to keep them anchored correctly
         regardless of window position on screen.
+
+        The bottom offset accounts for the status bar and the bottom
+        drawer toggle bar so toasts never overlap fixed UI chrome.
         """
         win_rect = self._window.rect()
         right  = win_rect.right()  - self.MARGIN
-        bottom = win_rect.bottom() - self.MARGIN
+
+        # Compute bottom clearance: status bar + drawer toggle bar
+        bottom_clearance = self.MARGIN
+        sb = self._window.statusBar() if hasattr(self._window, 'statusBar') else None
+        if sb and sb.isVisible():
+            bottom_clearance += sb.height()
+        # Account for the drawer toggle bar (DrawerToggleBar, 34px)
+        bar = getattr(self._window, '_drawer_toggle_bar', None)
+        if bar and bar.isVisible():
+            bottom_clearance += bar.height()
+
+        bottom = win_rect.bottom() - bottom_clearance
 
         y = bottom
         for toast in reversed(self._toasts):

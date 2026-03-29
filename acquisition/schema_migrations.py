@@ -23,7 +23,7 @@ import logging
 
 log = logging.getLogger(__name__)
 
-CURRENT_SCHEMA: int = 3
+CURRENT_SCHEMA: int = 5
 
 
 def migrate(data: dict, from_version: int) -> dict:
@@ -51,6 +51,10 @@ def migrate(data: dict, from_version: int) -> dict:
         data = _v1_to_v2(data)
     if from_version < 3:
         data = _v2_to_v3(data)
+    if from_version < 4:
+        data = _v3_to_v4(data)
+    if from_version < 5:
+        data = _v4_to_v5(data)
     return data
 
 
@@ -104,4 +108,33 @@ def _v2_to_v3(data: dict) -> dict:
     data.setdefault("frame_bit_depth", 16)
     data.setdefault("pixel_format", "mono")
     data["schema_version"] = 3
+    return data
+
+
+def _v3_to_v4(data: dict) -> dict:
+    """v3 → v4: Add post-acquisition quality scorecard.
+
+    Stores the deterministic quality scorecard (SNR grade, exposure grade,
+    thermal contrast grade, stability grade, overall grade, and actionable
+    recommendations) computed by QualityScoringEngine after each acquisition.
+    Old sessions get None (no retroactive scoring).
+    """
+    log.info("Migrating session schema v3 → v4")
+    data = dict(data)
+    data.setdefault("quality_scorecard", None)
+    data["schema_version"] = 4
+    return data
+
+
+def _v4_to_v5(data: dict) -> dict:
+    """v4 → v5: Add analysis result persistence.
+
+    Stores the serialized AnalysisResult (verdict, hotspots, statistics,
+    config) alongside the session.  Overlay and mask arrays are stored as
+    separate .npy files.  Old sessions get None (no retroactive analysis).
+    """
+    log.info("Migrating session schema v4 → v5")
+    data = dict(data)
+    data.setdefault("analysis_result", None)
+    data["schema_version"] = 5
     return data

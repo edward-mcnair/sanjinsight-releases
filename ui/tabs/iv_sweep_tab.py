@@ -18,6 +18,7 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel,
     QPushButton, QDoubleSpinBox, QSpinBox, QComboBox, QCheckBox,
     QGroupBox, QProgressBar, QFileDialog, QFrame, QSizePolicy,
+    QScrollArea,
 )
 
 from ui.theme import FONT, PALETTE
@@ -96,7 +97,15 @@ class IVSweepTab(QWidget):
     # ── UI build ──────────────────────────────────────────────────────────────
 
     def _build_ui(self):
-        root = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        _scroll = QScrollArea()
+        _scroll.setWidgetResizable(True)
+        _scroll.setFrameShape(QFrame.NoFrame)
+        outer.addWidget(_scroll)
+        _inner = QWidget()
+        _scroll.setWidget(_inner)
+        root = QVBoxLayout(_inner)
         root.setContentsMargins(16, 16, 16, 16)
         root.setSpacing(12)
 

@@ -25,7 +25,8 @@ log = logging.getLogger(__name__)
 from PyQt5.QtWidgets import (
     QWidget, QLabel, QPushButton, QDoubleSpinBox, QVBoxLayout,
     QHBoxLayout, QGridLayout, QGroupBox, QFrame, QComboBox,
-    QInputDialog, QMessageBox, QStackedWidget, QButtonGroup, QRadioButton)
+    QInputDialog, QMessageBox, QStackedWidget, QButtonGroup, QRadioButton,
+    QScrollArea)
 from PyQt5.QtCore    import Qt, pyqtSignal
 
 from hardware.app_state import app_state
@@ -68,7 +69,11 @@ class FpgaTab(QWidget):
         root = QVBoxLayout(controls)
         root.setContentsMargins(10, 10, 10, 10)
         root.setSpacing(10)
-        self._stack.addWidget(controls)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setWidget(controls)
+        self._stack.addWidget(scroll)
         self._stack.setCurrentIndex(0)  # empty state until device connects
 
         # ── Status readouts ───────────────────────────────────────────

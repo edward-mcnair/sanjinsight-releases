@@ -103,6 +103,7 @@ class IC:
     INFO          = "mdi.information-outline"
     LINK_OFF      = "mdi.link-off"
     FIRE          = "mdi.fire"
+    TIMER         = "mdi.timer-outline"
     # UI elements
     NOTE          = "mdi.note-text-outline"
     CHART_LINE    = "mdi.chart-line"

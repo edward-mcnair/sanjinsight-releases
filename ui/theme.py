@@ -820,6 +820,26 @@ QScrollBar::handle:horizontal:hover {{ background: {_sub}; }}
 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width: 0; background: none; }}
 QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{ background: none; }}
 
+/* ── Left-panel scroll areas — wider, visible track ─────────────────────── */
+QScrollArea#LeftPanelScroll QScrollBar:vertical {{
+    background: {_dk('#1a1a1c', '#e8e8ea')};
+    width: 10px;
+    margin: 2px 0;
+    border-radius: 5px;
+}}
+QScrollArea#LeftPanelScroll QScrollBar::handle:vertical {{
+    background: {_dk('#555558', '#b0b0b4')};
+    border-radius: 5px;
+    min-height: 36px;
+}}
+QScrollArea#LeftPanelScroll QScrollBar::handle:vertical:hover {{
+    background: {_dk('#6e6e72', '#9a9a9e')};
+}}
+QScrollArea#LeftPanelScroll QScrollBar::add-line:vertical,
+QScrollArea#LeftPanelScroll QScrollBar::sub-line:vertical {{ height: 0; background: none; }}
+QScrollArea#LeftPanelScroll QScrollBar::add-page:vertical,
+QScrollArea#LeftPanelScroll QScrollBar::sub-page:vertical {{ background: none; }}
+
 /* ════════════════════════════════════════════════════════════════════════════
    SLIDER
 ════════════════════════════════════════════════════════════════════════════ */
@@ -1220,6 +1240,33 @@ def status_pill_qss(semantic: str) -> str:
         padding: 1px 8px;
         font-size: {f['caption']}pt;
         font-weight: 600;
+    }}
+    """
+
+
+def time_estimate_pill_qss() -> str:
+    """Solid indigo pill for pre-action time estimates.
+
+    Reverse-text design: solid ``systemIndigo`` background with page-
+    coloured (bg) lettering so the pill is impossible to miss.
+    Scoped to ``QWidget#TimeEstimatePill`` so it won't leak.
+    """
+    color = PALETTE.get("systemIndigo", "#5e5ce6")
+    bg    = PALETTE.get("bg", "#111113")
+    f = FONT
+    return f"""
+    QWidget#TimeEstimatePill {{
+        background: {color};
+        border: none;
+        border-radius: 14px;
+        padding: 4px 16px;
+    }}
+    QWidget#TimeEstimatePill QLabel {{
+        background: transparent;
+        border: none;
+        color: {bg};
+        font-size: {f['body']}pt;
+        font-weight: 700;
     }}
     """
 

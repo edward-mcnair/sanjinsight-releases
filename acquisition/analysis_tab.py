@@ -26,7 +26,7 @@ from PyQt5.QtWidgets import (
     QDoubleSpinBox, QSpinBox, QGroupBox, QGridLayout, QSplitter,
     QSizePolicy, QCheckBox, QTableWidget, QTableWidgetItem,
     QHeaderView, QAbstractItemView, QFileDialog, QMessageBox,
-    QFrame, QStackedWidget)
+    QFrame, QStackedWidget, QScrollArea)
 from PyQt5.QtCore  import Qt, pyqtSignal
 from PyQt5.QtGui   import QImage, QPixmap, QPainter, QColor
 
@@ -301,9 +301,17 @@ class AnalysisTab(QWidget):
         root.addWidget(self._build_toolbar())
 
         self._body_splitter = QSplitter(Qt.Horizontal)
-        self._body_splitter.addWidget(self._build_controls())
+        ctrl_scroll = QScrollArea()
+        ctrl_scroll.setWidgetResizable(True)
+        ctrl_scroll.setFrameShape(QFrame.NoFrame)
+        ctrl_scroll.setWidget(self._build_controls())
+        self._body_splitter.addWidget(ctrl_scroll)
         self._body_splitter.addWidget(self._build_canvas())
-        self._body_splitter.addWidget(self._build_results())
+        results_scroll = QScrollArea()
+        results_scroll.setWidgetResizable(True)
+        results_scroll.setFrameShape(QFrame.NoFrame)
+        results_scroll.setWidget(self._build_results())
+        self._body_splitter.addWidget(results_scroll)
         self._body_splitter.setSizes([230, 780, 290])
 
         self._data_stack = QStackedWidget()
@@ -941,10 +949,17 @@ class AnalysisTab(QWidget):
         try:
             from hardware.app_state import app_state
             app_state.active_analysis = self._result
+            # Also persist to the active session on disk
+            try:
+                sm = app_state.session_manager
+                if sm and sm.current_session:
+                    sm.current_session.save_analysis(self._result)
+            except Exception:
+                pass  # session manager may not be available
             QMessageBox.information(
                 self, "Added to Report",
-                "Analysis result will be included in the next PDF report.\n\n"
-                "Generate a report from the DATA tab.")
+                "Analysis result will be included in the next report.\n\n"
+                "Generate a report from the Sessions tab.")
         except Exception as e:
             QMessageBox.warning(self, "Error", str(e))
 

@@ -26,6 +26,9 @@ from PyQt5.QtGui  import (QImage, QPixmap, QPainter, QPen, QColor,
 from ui.font_utils import mono_font
 from ui.theme import FONT, PALETTE, scaled_qss
 from ui.widgets.more_options import MoreOptionsPanel
+from ui.widgets.time_estimate_label import TimeEstimateLabel
+from ui.guidance import get_section_cards, GuidanceCard, WorkflowFooter
+from ui.guidance.steps import next_steps_after
 from .calibration        import Calibration, CalibrationResult
 from .calibration_runner import CalibrationRunner, CalibrationProgress
 from .processing         import (to_display, apply_colormap,
@@ -193,8 +196,29 @@ class CalibrationTab(QWidget):
         splitter = QSplitter(Qt.Horizontal)
         root.addWidget(splitter)
 
-        splitter.addWidget(self._build_left())
-        splitter.addWidget(self._build_right())
+        # Wrap left panel in a scroll area so it doesn't clip on
+        # small windows or when guidance cards are visible.
+        left_scroll = QScrollArea()
+        left_scroll.setObjectName("LeftPanelScroll")
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setFrameShape(QScrollArea.NoFrame)
+        left_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        left_scroll.setMinimumWidth(300)
+        left_scroll.setMaximumWidth(380)
+        left_scroll.setWidget(self._build_left())
+
+        splitter.addWidget(left_scroll)
+
+        right_scroll = QScrollArea()
+        right_scroll.setObjectName("LeftPanelScroll")
+        right_scroll.setWidgetResizable(True)
+        right_scroll.setFrameShape(QScrollArea.NoFrame)
+        right_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        right_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        right_scroll.setWidget(self._build_right())
+
+        splitter.addWidget(right_scroll)
         splitter.setSizes([340, 860])
 
         # Ensure preset buttons match active camera type from the start
@@ -205,12 +229,39 @@ class CalibrationTab(QWidget):
     # ---------------------------------------------------------------- #
 
     def _build_left(self) -> QWidget:
+        _cards = get_section_cards("calibration")
+        def _body(cid):
+            for c in _cards:
+                if c["card_id"] == cid:
+                    return c["body"]
+            return ""
+
         w   = QWidget()
-        w.setMinimumWidth(300)
-        w.setMaximumWidth(380)
         lay = QVBoxLayout(w)
-        lay.setContentsMargins(8, 8, 4, 8)
-        lay.setSpacing(8)
+        lay.setContentsMargins(10, 10, 10, 10)
+        lay.setSpacing(12)
+
+        # ── Guidance cards ────────────────────────────────────────
+        self._overview_card = GuidanceCard(
+            "calibration.overview",
+            "Getting Started with Calibration",
+            _body("calibration.overview"))
+        self._overview_card.setVisible(False)
+        lay.addWidget(self._overview_card)
+
+        self._guide_card1 = GuidanceCard(
+            "calibration.sweep",
+            "Run a Calibration Sweep",
+            _body("calibration.sweep"),
+            step_number=1)
+        self._guide_card1.setVisible(False)
+        lay.addWidget(self._guide_card1)
+
+        _NEXT = [(s.nav_target, s.label, s.hint)
+                 for s in next_steps_after("Calibration", count=3)]
+        self._workflow_footer = WorkflowFooter(_NEXT)
+        self._workflow_footer.setVisible(False)
+        lay.addWidget(self._workflow_footer)
 
         # ---- Temperature sequence ----
         seq_box = QGroupBox("Temperature Sequence  (°C)")
@@ -284,17 +335,15 @@ class CalibrationTab(QWidget):
         self._add_temp_spin.setFixedWidth(100)
         add_btn = QPushButton("Add")
         set_btn_icon(add_btn, "fa5s.plus")
-        add_btn.setFixedWidth(60)
+        add_btn.setFixedWidth(80)
         add_btn.clicked.connect(self._add_temp)
         add_row.addWidget(self._add_temp_spin)
         add_row.addWidget(add_btn)
         add_row.addStretch()
         sl.addLayout(add_row)
 
-        # Estimated time label (updated whenever steps or settings change)
-        self._time_est_lbl = QLabel("Estimated time: —")
-        self._time_est_lbl.setStyleSheet(
-            f"color:#888888; font-size:{FONT['caption']}pt; padding-left:2px;")
+        # Estimated time pill (updated whenever steps or settings change)
+        self._time_est_lbl = TimeEstimateLabel()
         sl.addWidget(self._time_est_lbl)
         lay.addWidget(seq_box)
 
@@ -408,8 +457,8 @@ class CalibrationTab(QWidget):
     def _build_right(self) -> QWidget:
         w   = QWidget()
         lay = QVBoxLayout(w)
-        lay.setContentsMargins(4, 8, 8, 8)
-        lay.setSpacing(8)
+        lay.setContentsMargins(6, 10, 10, 10)
+        lay.setSpacing(10)
 
         # ---- Stats row ----
         stats_box = QGroupBox("Calibration Stats")
@@ -545,6 +594,12 @@ class CalibrationTab(QWidget):
     # ---------------------------------------------------------------- #
     #  Camera-mode adaptation                                          #
     # ---------------------------------------------------------------- #
+
+    def set_workspace_mode(self, mode: str) -> None:
+        is_guided = (mode == "guided")
+        self._guide_card1.setVisible(is_guided)
+        self._workflow_footer.setVisible(is_guided)
+        self._overview_card.setVisible(not is_guided)
 
     def refresh_camera_mode(self) -> None:
         """Show/hide TR/IR preset buttons based on active camera type.
@@ -814,20 +869,8 @@ class CalibrationTab(QWidget):
         capture = n_avg / 5.0             # s — at ~5 fps
         secs    = n * (ramp + settle + capture)
         if n == 0:
-            self._time_est_lbl.setText("Estimated time: — (add temperature steps)")
+            self._time_est_lbl.clear()
             return
-        # Human-readable time string
-        total_min = int(round(secs / 60))
-        if total_min < 1:
-            time_str = "<1 min"
-        elif total_min < 60:
-            time_str = f"{total_min} min"
-        else:
-            hrs, mins = divmod(total_min, 60)
-            if mins == 0:
-                time_str = f"{hrs} hr"
-            else:
-                time_str = f"{hrs} hr {mins} min"
-        self._time_est_lbl.setText(
-            f"Estimated time: ~{time_str}  "
-            f"({n} steps × [{ramp} s ramp + {settle:.0f} s settle + {n_avg} frames])")
+        detail = (f"{n} steps × ({ramp:.0f} s ramp + {settle:.0f} s settle"
+                  f" + {n_avg} frames @ 5 fps)")
+        self._time_est_lbl.set_estimate(secs, detail)

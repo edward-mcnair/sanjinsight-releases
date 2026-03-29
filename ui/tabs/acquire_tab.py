@@ -15,10 +15,11 @@ log = logging.getLogger(__name__)
 from PyQt5.QtWidgets import (
     QWidget, QLabel, QPushButton, QSpinBox, QDoubleSpinBox,
     QProgressBar, QVBoxLayout, QHBoxLayout, QGridLayout,
-    QGroupBox, QComboBox, QTextEdit, QFileDialog)
+    QGroupBox, QComboBox, QTextEdit, QFileDialog, QScrollArea)
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from ui.icons import set_btn_icon
 from ui.theme import progress_bar_qss, FONT, PALETTE, scaled_qss
+from ui.widgets.time_estimate_label import TimeEstimateLabel
 
 from hardware.app_state import app_state
 from acquisition        import AcquisitionProgress, AcqState
@@ -32,6 +33,7 @@ from ui.widgets.more_options import MoreOptionsPanel
 class AcquireTab(QWidget):
     # Emitted when the user clicks Run — MainWindow intercepts for readiness gate
     acquire_requested = pyqtSignal(int, float)   # (n_frames, inter_phase_delay)
+    optimize_and_acquire_requested = pyqtSignal(int, float)  # same args
 
     def __init__(self):
         super().__init__()
@@ -40,11 +42,21 @@ class AcquireTab(QWidget):
         root.setSpacing(10)
         root.setContentsMargins(10, 10, 10, 10)
 
-        # LEFT
-        left = QVBoxLayout()
+        # LEFT — scrollable panel
+        left_widget = QWidget()
+        left = QVBoxLayout(left_widget)
         left.setSpacing(8)
-        root.addLayout(left, 2)
+        left.setContentsMargins(0, 0, 0, 0)
         self._left_layout = left   # exposed for ReadinessWidget injection
+
+        left_scroll = QScrollArea()
+        left_scroll.setObjectName("LeftPanelScroll")
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setFrameShape(QScrollArea.NoFrame)
+        left_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        left_scroll.setWidget(left_widget)
+        root.addWidget(left_scroll, 2)
 
         # Live feed
         live_box = QGroupBox("Live Feed")
@@ -82,9 +94,7 @@ class AcquireTab(QWidget):
             "Set to 0 for rapid alternating measurements.")
         cl.addWidget(self._delay, 1, 1)
 
-        self._time_est_lbl = QLabel("")
-        self._time_est_lbl.setStyleSheet(
-            f"color:{PALETTE.get('textDim','#888')}; font-size:{FONT['caption']}pt;")
+        self._time_est_lbl = TimeEstimateLabel()
         cl.addWidget(self._time_est_lbl, 2, 0, 1, 2)
 
         cl.addWidget(self._sub("ΔR/R colormap"), 3, 0)
@@ -118,6 +128,13 @@ class AcquireTab(QWidget):
             "Captures cold baseline, applies stimulus, captures hot frames, "
             "then computes ΔR/R and ΔT.\n\n"
             "Keyboard shortcut: Ctrl+R")
+        self._opt_acq_btn = QPushButton("OPTIMIZE && ACQUIRE")
+        set_btn_icon(self._opt_acq_btn, "fa5s.magic", PALETTE.get("accent", "#00bcd4"))
+        self._opt_acq_btn.setToolTip(
+            "Run auto-expose, auto-gain, TEC preconditioning, and preflight\n"
+            "validation, then start acquisition automatically.\n\n"
+            "Equivalent to manually optimising each parameter before clicking\n"
+            "RUN SEQUENCE, but in one click.")
         self._abort_btn = QPushButton("ABORT")
         set_btn_icon(self._abort_btn, "fa5s.stop", "#ff6666")
         self._abort_btn.setObjectName("danger")
@@ -127,7 +144,7 @@ class AcquireTab(QWidget):
             "Keyboard shortcut: Escape")
         self._abort_btn.setEnabled(False)
         for b in [self._cold_btn, self._hot_btn,
-                  self._run_btn, self._abort_btn]:
+                  self._run_btn, self._opt_acq_btn, self._abort_btn]:
             btn_row.addWidget(b)
         cl.addLayout(btn_row, 4, 0, 1, 2)
 
@@ -258,6 +275,7 @@ class AcquireTab(QWidget):
         self._cold_btn.clicked.connect(self._cap_cold)
         self._hot_btn.clicked.connect(self._cap_hot)
         self._run_btn.clicked.connect(self._run)
+        self._opt_acq_btn.clicked.connect(self._optimize_and_acquire)
         self._abort_btn.clicked.connect(self._abort)
         self._export_btn.clicked.connect(self._export)
 
@@ -265,18 +283,6 @@ class AcquireTab(QWidget):
         self._frames.valueChanged.connect(self._update_time_est)
         self._delay.valueChanged.connect(self._update_time_est)
         self._update_time_est()
-
-    @staticmethod
-    def _fmt_duration(seconds: float) -> str:
-        if seconds < 60:
-            return f"~{int(seconds)} sec"
-        elif seconds < 3600:
-            m = int(seconds / 60)
-            return f"~{m} min"
-        else:
-            h = int(seconds / 3600)
-            m = int((seconds % 3600) / 60)
-            return f"~{h} hr {m} min" if m else f"~{h} hr"
 
     def _update_time_est(self) -> None:
         """Recalculate and display the estimated acquisition time."""
@@ -289,10 +295,9 @@ class AcquireTab(QWidget):
         frames = self._frames.value()
         delay = self._delay.value()
         total = 2 * (frames / fps) + delay
-        self._time_est_lbl.setText(
-            f"Est. time: {self._fmt_duration(total)}")
-        self._time_est_lbl.setStyleSheet(
-            f"color:{PALETTE.get('textDim','#888')}; font-size:{FONT['caption']}pt;")
+        detail = (f"2 × ({frames} frames / {fps} fps)"
+                  + (f" + {delay:.1f} s delay" if delay else ""))
+        self._time_est_lbl.set_estimate(total, detail)
 
     def _apply_styles(self) -> None:
         P = PALETTE
@@ -474,6 +479,18 @@ class AcquireTab(QWidget):
             self.log("No acquisition pipeline — is hardware connected?")
             return
         self.acquire_requested.emit(self._frames.value(), self._delay.value())
+
+    def _optimize_and_acquire(self):
+        """Called by Optimize & Acquire button."""
+        if app_state.pipeline is None:
+            self.log("No acquisition pipeline — is hardware connected?")
+            return
+        self.optimize_and_acquire_requested.emit(
+            self._frames.value(), self._delay.value())
+
+    def insert_suggestions_widget(self, widget):
+        """Insert an optimization suggestions widget below readiness."""
+        self._left_layout.insertWidget(1, widget)
 
     def start_acquisition(self, n_frames: int, inter_phase_delay: float = 0.0) -> None:
         """

@@ -13,7 +13,8 @@ log = logging.getLogger(__name__)
 from PyQt5.QtWidgets import (
     QWidget, QLabel, QPushButton, QDoubleSpinBox, QVBoxLayout,
     QHBoxLayout, QGridLayout, QGroupBox, QButtonGroup, QRadioButton,
-    QFrame, QComboBox, QCheckBox, QInputDialog, QMessageBox, QStackedWidget)
+    QFrame, QComboBox, QCheckBox, QInputDialog, QMessageBox, QStackedWidget,
+    QScrollArea)
 from PyQt5.QtCore    import Qt, pyqtSignal
 
 from hardware.app_state import app_state
@@ -63,7 +64,11 @@ class BiasTab(QWidget):
         root = QVBoxLayout(controls)
         root.setContentsMargins(10, 10, 10, 10)
         root.setSpacing(10)
-        self._stack.addWidget(controls)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setWidget(controls)
+        self._stack.addWidget(scroll)
         self._stack.setCurrentIndex(0)  # empty state until device connects
 
         # Status readouts — drain channel (always visible)

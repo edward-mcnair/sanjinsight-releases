@@ -567,7 +567,7 @@ class SettingsTab(QWidget):
         active_row.addWidget(self._lab_op_combo, 1)
 
         set_btn = QPushButton("Set")
-        set_btn.setFixedWidth(58)
+        set_btn.setFixedWidth(64)
         set_btn.setStyleSheet(_BTN_PRIMARY())
         set_btn.clicked.connect(self._on_lab_set_operator)
         active_row.addWidget(set_btn)
@@ -606,7 +606,7 @@ class SettingsTab(QWidget):
         self._lab_new_edit.returnPressed.connect(self._on_lab_add_operator)
         add_row.addWidget(self._lab_new_edit, 1)
         self._lab_add_btn = QPushButton("Add")
-        self._lab_add_btn.setFixedWidth(58)
+        self._lab_add_btn.setFixedWidth(64)
         self._lab_add_btn.setStyleSheet(_BTN_SECONDARY())
         self._lab_add_btn.clicked.connect(self._on_lab_add_operator)
         add_row.addWidget(self._lab_add_btn)

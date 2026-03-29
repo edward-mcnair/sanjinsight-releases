@@ -276,3 +276,151 @@ try:
 
 except ImportError:
     pass   # PyQt5 not available — BatchReprocessWorker not defined
+
+
+# ── Batch Analysis ────────────────────────────────────────────────────────────
+
+@dataclass
+class BatchAnalysisUpdate:
+    """Progress/result for one session in a batch analysis run."""
+    uid:         str
+    label:       str
+    success:     bool
+    verdict:     str   = ""
+    n_hotspots:  int   = 0
+    error:       str   = ""
+    duration_s:  float = 0.0
+
+
+@dataclass
+class BatchAnalysisResult:
+    """Summary of a completed batch analysis run."""
+    total:       int
+    ok:          int
+    failed:      int
+    duration_s:  float
+    pass_count:  int = 0
+    warn_count:  int = 0
+    fail_count:  int = 0
+
+
+class BatchAnalyzer:
+    """
+    Re-runs ThermalAnalysisEngine on a list of sessions.
+
+    For each session: loads it, applies calibration to get ΔT,
+    runs the analysis engine, and persists the result via
+    session.save_analysis().
+    """
+
+    def __init__(self, session_manager) -> None:
+        self._sm = session_manager
+
+    def analyze(
+        self,
+        uids: List[str],
+        calibration,
+        analysis_cfg=None,
+    ) -> Iterator[BatchAnalysisUpdate]:
+        """Run analysis on each session. Yields BatchAnalysisUpdate per session."""
+        from .analysis import ThermalAnalysisEngine, AnalysisConfig
+
+        engine = ThermalAnalysisEngine()
+        if analysis_cfg:
+            if isinstance(analysis_cfg, dict):
+                engine.update_config(AnalysisConfig.from_dict(analysis_cfg))
+            else:
+                engine.update_config(analysis_cfg)
+
+        for uid in uids:
+            t0 = time.time()
+            meta = self._sm.get_meta(uid)
+            label = meta.label if meta else uid
+            try:
+                update = self._analyze_one(uid, label, calibration, engine)
+                update.duration_s = time.time() - t0
+                yield update
+            except Exception as exc:
+                log.exception("BatchAnalyzer: uid=%s failed", uid)
+                yield BatchAnalysisUpdate(
+                    uid=uid, label=label, success=False,
+                    error=str(exc), duration_s=time.time() - t0)
+
+    def _analyze_one(self, uid, label, calibration, engine):
+        import numpy as np
+
+        session = self._sm.load(uid)
+        if session is None:
+            return BatchAnalysisUpdate(
+                uid=uid, label=label, success=False,
+                error="Session not found")
+
+        drr = session.delta_r_over_r
+        if drr is None:
+            return BatchAnalysisUpdate(
+                uid=uid, label=label, success=False,
+                error="No ΔR/R data")
+
+        # Compute ΔT if calibration provided
+        dt_map = None
+        if calibration and calibration.valid:
+            try:
+                dt_map = calibration.apply(drr)
+            except Exception:
+                pass
+
+        result = engine.run(dt_map=dt_map, drr_map=drr,
+                            base_image=session.cold_avg)
+        session.save_analysis(result)
+
+        return BatchAnalysisUpdate(
+            uid=uid, label=label, success=True,
+            verdict=result.verdict,
+            n_hotspots=result.n_hotspots)
+
+
+try:
+    from PyQt5.QtCore import QThread, pyqtSignal
+
+    class BatchAnalysisWorker(QThread):
+        """Run BatchAnalyzer in a QThread."""
+        progress = pyqtSignal(object)   # BatchAnalysisUpdate
+        finished = pyqtSignal(object)   # BatchAnalysisResult
+
+        def __init__(self, session_manager, uids, calibration,
+                     analysis_cfg=None, parent=None):
+            super().__init__(parent)
+            self._sm   = session_manager
+            self._uids = uids
+            self._cal  = calibration
+            self._cfg  = analysis_cfg
+            self._abort = False
+
+        def abort(self):
+            self._abort = True
+
+        def run(self):
+            t0 = time.time()
+            analyzer = BatchAnalyzer(self._sm)
+            ok = failed = pass_c = warn_c = fail_c = 0
+            for update in analyzer.analyze(self._uids, self._cal, self._cfg):
+                if self._abort:
+                    break
+                self.progress.emit(update)
+                if update.success:
+                    ok += 1
+                    if update.verdict == "PASS":
+                        pass_c += 1
+                    elif update.verdict == "WARNING":
+                        warn_c += 1
+                    elif update.verdict == "FAIL":
+                        fail_c += 1
+                else:
+                    failed += 1
+            self.finished.emit(BatchAnalysisResult(
+                total=len(self._uids), ok=ok, failed=failed,
+                duration_s=time.time() - t0,
+                pass_count=pass_c, warn_count=warn_c, fail_count=fail_c))
+
+except ImportError:
+    pass

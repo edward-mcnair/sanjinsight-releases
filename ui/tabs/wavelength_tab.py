@@ -34,7 +34,7 @@ import logging
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QSlider, QDoubleSpinBox, QSpinBox, QGroupBox, QProgressBar,
-    QSizePolicy, QFrame,
+    QSizePolicy, QFrame, QScrollArea,
 )
 from PyQt5.QtCore import Qt, QThread, QTimer, pyqtSignal, QObject, QRunnable, QThreadPool
 
@@ -168,7 +168,15 @@ class WavelengthTab(QWidget):
         self._sweep_thread: QThread | None = None
         self._sweep_worker: _SweepWorker | None = None
 
-        root = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        _scroll = QScrollArea()
+        _scroll.setWidgetResizable(True)
+        _scroll.setFrameShape(QFrame.NoFrame)
+        outer.addWidget(_scroll)
+        _inner = QWidget()
+        _scroll.setWidget(_inner)
+        root = QVBoxLayout(_inner)
         root.setContentsMargins(12, 12, 12, 12)
         root.setSpacing(10)
 
@@ -211,7 +219,7 @@ class WavelengthTab(QWidget):
         # Exact entry row
         entry_row = QHBoxLayout()
         self._set_btn = QPushButton("Set")
-        self._set_btn.setFixedWidth(54)
+        self._set_btn.setFixedWidth(60)
         entry_row.addWidget(self._set_btn)
         entry_lbl = QLabel("Input:")
         entry_lbl.setObjectName("sublabel")

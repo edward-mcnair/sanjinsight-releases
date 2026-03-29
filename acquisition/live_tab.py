@@ -21,11 +21,13 @@ from ui.button_utils import RunningButton, apply_hand_cursor
 from ui.font_utils   import mono_font, sans_font
 from ui.icons import set_btn_icon
 from ui.theme import FONT, PALETTE
+from ui.guidance import get_section_cards, GuidanceCard, WorkflowFooter
+from ui.guidance.steps import next_steps_after
 
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QDoubleSpinBox, QSpinBox, QGroupBox, QGridLayout,
-    QComboBox, QSplitter, QSizePolicy,
+    QComboBox, QSplitter, QSizePolicy, QScrollArea,
     QFileDialog, QMessageBox, QSlider, QRubberBand)
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QRect, QSize, QPoint
 from PyQt5.QtGui  import (QImage, QPixmap, QPainter, QPen, QColor,
@@ -608,16 +610,88 @@ class LiveTab(QWidget):
 
         root.addWidget(self._build_toolbar())
 
+        # ── Guidance cards — scrollable area ──────────────────────
+        _cards = get_section_cards("live_view")
+        def _body(cid):
+            for c in _cards:
+                if c["card_id"] == cid:
+                    return c["body"]
+            return ""
+
+        self._cards_widget = QWidget()
+        cards_lay = QVBoxLayout(self._cards_widget)
+        cards_lay.setContentsMargins(0, 0, 0, 0)
+        cards_lay.setSpacing(4)
+
+        self._overview_card = GuidanceCard(
+            "live_view.overview",
+            "Getting Started with Live View",
+            _body("live_view.overview"))
+        self._overview_card.setVisible(False)
+        cards_lay.addWidget(self._overview_card)
+
+        self._guide_card1 = GuidanceCard(
+            "live_view.verify",
+            "Verify Your Sample Is Visible",
+            _body("live_view.verify"),
+            step_number=1)
+        self._guide_card1.setVisible(False)
+        cards_lay.addWidget(self._guide_card1)
+
+        self._cards_scroll = QScrollArea()
+        self._cards_scroll.setObjectName("LeftPanelScroll")
+        self._cards_scroll.setWidgetResizable(True)
+        self._cards_scroll.setFrameShape(QScrollArea.NoFrame)
+        self._cards_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self._cards_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._cards_scroll.setMaximumHeight(280)
+        self._cards_scroll.setWidget(self._cards_widget)
+        self._cards_scroll.setVisible(False)
+        root.addWidget(self._cards_scroll)
+
+        for c in (self._overview_card, self._guide_card1):
+            c.dismissed.connect(self._update_cards_scroll_visibility)
+
+        _NEXT = [(s.nav_target, s.label, s.hint)
+                 for s in next_steps_after("Live View", count=3)]
+        self._workflow_footer = WorkflowFooter(_NEXT)
+        self._workflow_footer.setVisible(False)
+
         self._body_splitter = QSplitter(Qt.Horizontal)
-        self._body_splitter.addWidget(self._build_settings())
+        settings_scroll = QScrollArea()
+        settings_scroll.setWidgetResizable(True)
+        settings_scroll.setFrameShape(QScrollArea.NoFrame)
+        settings_scroll.setWidget(self._build_settings())
+        self._body_splitter.addWidget(settings_scroll)
         self._body_splitter.addWidget(self._build_canvas())
-        self._body_splitter.addWidget(self._build_readouts())
+        readouts_scroll = QScrollArea()
+        readouts_scroll.setWidgetResizable(True)
+        readouts_scroll.setFrameShape(QScrollArea.NoFrame)
+        readouts_scroll.setWidget(self._build_readouts())
+        self._body_splitter.addWidget(readouts_scroll)
         self._body_splitter.setSizes([220, 900, 200])
         root.addWidget(self._body_splitter, 1)
+        root.addWidget(self._workflow_footer)
 
         # Wire canvas colormap now that _canvas exists
         self._canvas.set_cmap(self._saved_cmap)
         self._cmap_combo.currentTextChanged.connect(self._canvas.set_cmap)
+
+    # ── Workspace mode ────────────────────────────────────────────────
+
+    def set_workspace_mode(self, mode: str) -> None:
+        is_guided = (mode == "guided")
+        self._guide_card1.setVisible(is_guided)
+        self._workflow_footer.setVisible(is_guided)
+        self._overview_card.setVisible(not is_guided)
+        any_visible = any(c.isVisible() for c in (
+            self._overview_card, self._guide_card1))
+        self._cards_scroll.setVisible(any_visible)
+
+    def _update_cards_scroll_visibility(self, _card_id: str = "") -> None:
+        any_visible = any(c.isVisible() for c in (
+            self._overview_card, self._guide_card1))
+        self._cards_scroll.setVisible(any_visible)
 
     # ---------------------------------------------------------------- #
     #  Toolbar                                                          #

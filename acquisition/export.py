@@ -188,11 +188,13 @@ class SessionExporter:
     """
 
     def __init__(self, session=None, output_dir: str = ".",
-                 px_per_um: float = 0.0, prefix: str = ""):
-        self._session    = session
-        self._output_dir = os.path.expanduser(output_dir)
-        self._px_per_um  = px_per_um
-        self._prefix     = prefix or (
+                 px_per_um: float = 0.0, prefix: str = "",
+                 analysis_result=None):
+        self._session         = session
+        self._output_dir      = os.path.expanduser(output_dir)
+        self._px_per_um       = px_per_um
+        self._analysis_result = analysis_result
+        self._prefix          = prefix or (
             session.meta.uid if session and hasattr(session, "meta")
             else time.strftime("%Y%m%d_%H%M%S"))
 
@@ -397,6 +399,35 @@ class SessionExporter:
                     except Exception:
                         pass
 
+            # Analysis group (if result attached)
+            ar = self._analysis_result
+            if ar is not None and ar.valid:
+                a_grp = f.create_group("analysis")
+                a_grp.attrs["verdict"] = ar.verdict
+                a_grp.attrs["n_hotspots"] = ar.n_hotspots
+                a_grp.attrs["max_peak_k"] = ar.max_peak_k
+                a_grp.attrs["area_fraction"] = ar.area_fraction
+                a_grp.attrs["threshold_k"] = ar.threshold_k
+                a_grp.attrs["timestamp"] = ar.timestamp_str
+                if ar.binary_mask is not None:
+                    a_grp.create_dataset("binary_mask",
+                                         data=ar.binary_mask.astype(np.uint8),
+                                         compression="gzip")
+                if ar.hotspots:
+                    hs_dt = np.dtype([
+                        ("index", "i4"), ("peak_k", "f8"),
+                        ("mean_k", "f8"), ("area_px", "i4"),
+                        ("centroid_x", "i4"), ("centroid_y", "i4"),
+                        ("severity", "S8"),
+                    ])
+                    hs_arr = np.array(
+                        [(h.index, h.peak_k, h.mean_k, h.area_px,
+                          h.centroid[0], h.centroid[1],
+                          h.severity.encode("utf-8"))
+                         for h in ar.hotspots],
+                        dtype=hs_dt)
+                    a_grp.create_dataset("hotspots", data=hs_arr)
+
             # Top-level attributes
             f.attrs["creator"]       = "Microsanj Thermal Analysis System"
             f.attrs["format_version"] = "1.0"
@@ -469,7 +500,36 @@ class SessionExporter:
         saved.append(path)
 
         # ── Hotspot summary CSV (if analysis result attached) ──────
-        # (future: pass analysis_result to export for hotspot table)
+        if self._analysis_result is not None and self._analysis_result.hotspots:
+            hs_path = self._p("_hotspot_summary.csv")
+            with open(hs_path, "w", newline="") as fh:
+                import csv as csv_mod
+                w = csv_mod.writer(fh, delimiter="\t")
+                w.writerow(["hotspot_id", "peak_dt_c", "mean_dt_c",
+                            "area_px", "area_um2", "centroid_x",
+                            "centroid_y", "severity"])
+                for h in self._analysis_result.hotspots:
+                    cx, cy = h.centroid
+                    w.writerow([h.index, f"{h.peak_k:.4f}",
+                                f"{h.mean_k:.4f}", h.area_px,
+                                f"{h.area_um2:.2f}", cx, cy,
+                                h.severity])
+            saved.append(hs_path)
+            # Also write analysis summary
+            ar = self._analysis_result
+            sum_path = self._p("_analysis_summary.csv")
+            with open(sum_path, "w", newline="") as fh:
+                w = csv_mod.writer(fh, delimiter="\t")
+                w.writerow(["verdict", "n_hotspots", "max_peak_c",
+                            "area_fraction_pct", "map_mean_c",
+                            "map_std_c", "threshold_c"])
+                w.writerow([ar.verdict, ar.n_hotspots,
+                            f"{ar.max_peak_k:.4f}",
+                            f"{ar.area_fraction * 100:.3f}",
+                            f"{ar.map_mean_k:.4f}",
+                            f"{ar.map_std_k:.4f}",
+                            f"{ar.threshold_k:.2f}"])
+            saved.append(sum_path)
 
         return saved
 

@@ -32,12 +32,13 @@ log = logging.getLogger(__name__)
 from ui.button_utils import RunningButton, apply_hand_cursor
 from ui.icons import set_btn_icon
 from ui.theme import FONT, PALETTE
+from ui.widgets.time_estimate_label import TimeEstimateLabel
 
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QDoubleSpinBox, QSpinBox, QGroupBox, QGridLayout, QProgressBar,
     QSlider, QComboBox, QSplitter, QSizePolicy, QFileDialog, QMessageBox,
-    QCheckBox, QRadioButton, QButtonGroup)
+    QCheckBox, QRadioButton, QButtonGroup, QScrollArea)
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui  import QImage, QPixmap, QPainter, QPen, QColor, QFont
 
@@ -191,9 +192,23 @@ class TransientTab(QWidget):
         root.setSpacing(0)
 
         splitter = QSplitter(Qt.Horizontal)
-        splitter.addWidget(self._build_left())
-        splitter.addWidget(self._build_right())
-        splitter.setSizes([270, 700])
+        left_scroll = QScrollArea()
+        left_scroll.setObjectName("LeftPanelScroll")
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setFrameShape(QScrollArea.NoFrame)
+        left_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        left_scroll.setMinimumWidth(240)
+        left_scroll.setMaximumWidth(320)
+        left_scroll.setWidget(self._build_left())
+
+        splitter.addWidget(left_scroll)
+        right_scroll = QScrollArea()
+        right_scroll.setWidgetResizable(True)
+        right_scroll.setFrameShape(QScrollArea.NoFrame)
+        right_scroll.setWidget(self._build_right())
+        splitter.addWidget(right_scroll)
+        splitter.setSizes([290, 700])
         root.addWidget(splitter, 1)
 
     # ---------------------------------------------------------------- #
@@ -202,11 +217,9 @@ class TransientTab(QWidget):
 
     def _build_left(self) -> QWidget:
         w   = QWidget()
-        w.setMinimumWidth(240)
-        w.setMaximumWidth(300)
         lay = QVBoxLayout(w)
-        lay.setContentsMargins(8, 8, 4, 8)
-        lay.setSpacing(8)
+        lay.setContentsMargins(10, 10, 6, 10)
+        lay.setSpacing(10)
 
         # ── Timing ───────────────────────────────────────────────────
         tim_box = QGroupBox("Timing")
@@ -393,10 +406,7 @@ class TransientTab(QWidget):
         run_box = QGroupBox("Run")
         rl = QVBoxLayout(run_box)
 
-        self._time_est_lbl = QLabel("")
-        self._time_est_lbl.setStyleSheet(
-            f"color:{PALETTE.get('textDim', '#888')}; font-size:{FONT['caption']}pt;")
-        self._time_est_lbl.setWordWrap(True)
+        self._time_est_lbl = TimeEstimateLabel()
         rl.addWidget(self._time_est_lbl)
         self._update_time_est()
 
@@ -888,18 +898,6 @@ class TransientTab(QWidget):
     #  Time estimation                                                   #
     # ---------------------------------------------------------------- #
 
-    @staticmethod
-    def _fmt_duration(seconds: float) -> str:
-        if seconds < 60:
-            return f"~{int(seconds)} sec"
-        elif seconds < 3600:
-            m = int(seconds / 60)
-            return f"~{m} min"
-        else:
-            h = int(seconds / 3600)
-            m = int((seconds % 3600) / 60)
-            return f"~{h} hr {m} min" if m else f"~{h} hr"
-
     def _update_time_est(self):
         """Recompute and display estimated acquisition time."""
         n_delays  = self._n_delays.value()
@@ -925,8 +923,12 @@ class TransientTab(QWidget):
         # 10% overhead for readout/processing
         total *= 1.10
 
-        self._time_est_lbl.setText(
-            f"Est. time: {self._fmt_duration(total)}")
+        parts = [f"{n_delays} delays × {n_avg} avg × {cycle*1000:.2f} ms/cycle"]
+        if self._vsweep_box.isChecked():
+            parts.append(f"× {n_vsteps} V-steps")
+        parts.append("+ 10% overhead")
+        detail = " ".join(parts)
+        self._time_est_lbl.set_estimate(total, detail)
 
     def _start_vsweep(self, voltages: List[float], cam, fpga, bias):
         """Launch the voltage-series sweep worker thread."""

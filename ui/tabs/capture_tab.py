@@ -8,11 +8,22 @@ under one sidebar entry with "Single" / "Grid" mode tabs.
 """
 from __future__ import annotations
 
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QTabWidget
-from PyQt5.QtCore    import pyqtSignal, QSize
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QTabWidget, QScrollArea
+from PyQt5.QtCore    import Qt, pyqtSignal, QSize
 
 from ui.theme import FONT, PALETTE
 from ui.icons import IC, make_icon
+from ui.guidance import get_section_cards, GuidanceCard, WorkflowFooter
+from ui.guidance.steps import next_steps_after
+
+
+_CARDS = get_section_cards("capture")
+
+def _card_body(card_id: str) -> str:
+    for c in _CARDS:
+        if c["card_id"] == card_id:
+            return c["body"]
+    return ""
 
 
 class CaptureTab(QWidget):
@@ -20,6 +31,7 @@ class CaptureTab(QWidget):
 
     # Pass-through from AcquireTab
     acquire_requested = pyqtSignal(int, float)   # n_frames, inter_phase_delay
+    navigate_requested = pyqtSignal(str)
 
     def __init__(self, acquire_tab: QWidget, scan_tab: QWidget, parent=None):
         super().__init__(parent)
@@ -30,6 +42,56 @@ class CaptureTab(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
+        # ── Guidance cards — scrollable area ──────────────────────
+        self._cards_widget = QWidget()
+        cards_lay = QVBoxLayout(self._cards_widget)
+        cards_lay.setContentsMargins(0, 0, 0, 0)
+        cards_lay.setSpacing(4)
+
+        self._overview_card = GuidanceCard(
+            "capture.overview",
+            "Getting Started with Capture",
+            _card_body("capture.overview"))
+        self._overview_card.setVisible(False)
+        cards_lay.addWidget(self._overview_card)
+
+        self._guide_card1 = GuidanceCard(
+            "capture.settings",
+            "Review Capture Settings",
+            _card_body("capture.settings"),
+            step_number=1)
+        self._guide_card1.setVisible(False)
+        cards_lay.addWidget(self._guide_card1)
+
+        self._guide_card2 = GuidanceCard(
+            "capture.acquire",
+            "Start the Acquisition",
+            _card_body("capture.acquire"),
+            step_number=2)
+        self._guide_card2.setVisible(False)
+        cards_lay.addWidget(self._guide_card2)
+
+        self._cards_scroll = QScrollArea()
+        self._cards_scroll.setObjectName("LeftPanelScroll")
+        self._cards_scroll.setWidgetResizable(True)
+        self._cards_scroll.setFrameShape(QScrollArea.NoFrame)
+        self._cards_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self._cards_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._cards_scroll.setMaximumHeight(280)
+        self._cards_scroll.setWidget(self._cards_widget)
+        self._cards_scroll.setVisible(False)
+        root.addWidget(self._cards_scroll)
+
+        for c in (self._overview_card, self._guide_card1, self._guide_card2):
+            c.dismissed.connect(self._update_cards_scroll_visibility)
+
+        _NEXT = [(s.nav_target, s.label, s.hint)
+                 for s in next_steps_after("Capture", count=3)]
+        self._workflow_footer = WorkflowFooter(_NEXT)
+        self._workflow_footer.navigate_requested.connect(self.navigate_requested)
+        self._workflow_footer.setVisible(False)
+
+        # ── Sub-tabs ──────────────────────────────────────────────
         self._tabs = QTabWidget()
         self._tabs.setDocumentMode(True)
         self._tabs.setStyleSheet(_inner_tab_qss())
@@ -38,6 +100,7 @@ class CaptureTab(QWidget):
         self._apply_tab_icons()
 
         root.addWidget(self._tabs, 1)
+        root.addWidget(self._workflow_footer)
 
         if hasattr(acquire_tab, "acquire_requested"):
             acquire_tab.acquire_requested.connect(self.acquire_requested)
@@ -77,6 +140,45 @@ class CaptureTab(QWidget):
         if hasattr(self._acquire_tab, "start_acquisition"):
             self._acquire_tab.start_acquisition(*args, **kwargs)
 
+    # ── Workspace mode ────────────────────────────────────────────────
+
+    def set_workspace_mode(self, mode: str) -> None:
+        is_guided = (mode == "guided")
+        self._guide_card1.setVisible(is_guided)
+        self._guide_card2.setVisible(is_guided)
+        self._workflow_footer.setVisible(is_guided)
+        self._overview_card.setVisible(not is_guided)
+        any_visible = any(c.isVisible() for c in (
+            self._overview_card, self._guide_card1, self._guide_card2))
+        self._cards_scroll.setVisible(any_visible)
+
+    def _update_cards_scroll_visibility(self, _card_id: str = "") -> None:
+        any_visible = any(c.isVisible() for c in (
+            self._overview_card, self._guide_card1, self._guide_card2))
+        self._cards_scroll.setVisible(any_visible)
+
+    # ── Attention dots ─────────────────────────────────────────────
+
+    _TAB_BASE = {0: "  Single", 1: "  Grid"}
+    _TAB_ICONS = {0: IC.CAPTURE, 1: IC.SCAN_GRID}
+    _DOT = "\u2009\u25cf"
+
+    def set_tab_attention(self, tab_index: int, needs_attention: bool) -> None:
+        """Show/hide a red attention dot on a sub-tab."""
+        if tab_index < 0 or tab_index >= self._tabs.count():
+            return
+        base = self._TAB_BASE.get(tab_index, "")
+        if needs_attention:
+            self._tabs.setTabText(tab_index, base + self._DOT)
+            icon_name = self._TAB_ICONS.get(tab_index)
+            if icon_name:
+                icon = make_icon(icon_name, color=PALETTE.get("error", "#ff453a"), size=14)
+                if icon:
+                    self._tabs.setTabIcon(tab_index, icon)
+        else:
+            self._tabs.setTabText(tab_index, base)
+            self._apply_tab_icons()
+
     # ── Theme ─────────────────────────────────────────────────────────
 
     def _apply_styles(self) -> None:
@@ -85,6 +187,9 @@ class CaptureTab(QWidget):
         for sub in (self._acquire_tab, self._scan_tab):
             if hasattr(sub, "_apply_styles"):
                 sub._apply_styles()
+        for card in (self._overview_card, self._guide_card1, self._guide_card2):
+            card._apply_styles()
+        self._workflow_footer._apply_styles()
 
     def _apply_tab_icons(self) -> None:
         icons = [
