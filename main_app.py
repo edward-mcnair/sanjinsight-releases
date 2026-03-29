@@ -544,13 +544,12 @@ class MainWindow(QMainWindow):
 
         # ── Measurement orchestrator (lifecycle state machine) ────
         self._measurement_orch = MeasurementOrchestrator(
-            hw_service=self._hw_service,
+            hw_service=hw_service,
             app_state=app_state,
             parent=self,
         )
-        # Give the orchestrator access to metrics + device manager
+        # Give the orchestrator access to metrics (device_mgr wired later)
         self._measurement_orch._metrics = self._metrics
-        self._measurement_orch._device_mgr = self._device_mgr
         self._measurement_orch.phase_changed.connect(
             self._on_measurement_phase)
         self._measurement_orch.user_decision_needed.connect(
@@ -813,6 +812,8 @@ class MainWindow(QMainWindow):
             demo_mode_getter=lambda: app_state.demo_mode,
         )
         self._header.add_device_manager_button(self._open_device_manager)
+        # Now that device_mgr exists, wire it into the orchestrator
+        self._measurement_orch._device_mgr = self._device_mgr
         self._device_mgr_dlg.hw_status_changed.connect(
             self._header.set_hw_btn_status)
         # Allow the Device Manager's "Demo Mode" button to activate demo mode.
