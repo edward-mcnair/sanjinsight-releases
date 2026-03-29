@@ -170,9 +170,10 @@ class ModalitySection(QWidget):
         cam_left.addWidget(cam_lbl)
 
         self._cam_combo = QComboBox()
+        self._cam_combo.setMinimumWidth(300)
         self._cam_combo.setMaximumWidth(500)
         self._cam_combo.currentIndexChanged.connect(self._on_camera_type_changed)
-        cam_left.addWidget(self._cam_combo)
+        cam_left.addWidget(self._cam_combo, 0, Qt.AlignLeft)
 
         self._modality_desc = QLabel("")
         self._modality_desc.setWordWrap(True)
