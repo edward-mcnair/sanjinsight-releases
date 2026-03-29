@@ -168,6 +168,10 @@ from acquisition.surface_plot_tab import SurfacePlotTab     # ← 3D surface plo
 from acquisition.recipe_tab      import RecipeTab           # ← measurement recipes
 from acquisition.movie_tab       import MovieTab            # ← movie-mode burst
 from acquisition.transient_tab   import TransientTab        # ← time-resolved transient
+from acquisition.measurement_orchestrator import (           # ← lifecycle state machine
+    MeasurementOrchestrator, MeasurementPhase, MeasurementResult)
+from acquisition.workflows import (                          # ← workflow profiles
+    WorkflowProfile, FAILURE_ANALYSIS, METROLOGY, WORKFLOWS, get_workflow)
 from ui.tabs.prober_tab          import ProberTab           # ← probe-station chuck
 from ui.tabs.autoscan_tab        import AutoScanTab
 from ui.scripting_console        import ScriptingConsoleTab # ← Python console
@@ -537,6 +541,28 @@ class MainWindow(QMainWindow):
         self._acq_start_ts:  float = 0.0  # wall-clock time at acquisition start
         self._scan_start_ts: float = 0.0  # wall-clock time at scan start
         self._diagnostic_engine = DiagnosticEngine(self._metrics)
+
+        # ── Measurement orchestrator (lifecycle state machine) ────
+        self._measurement_orch = MeasurementOrchestrator(
+            hw_service=self._hw_service,
+            app_state=app_state,
+            parent=self,
+        )
+        # Give the orchestrator access to metrics + device manager
+        self._measurement_orch._metrics = self._metrics
+        self._measurement_orch._device_mgr = self._device_mgr
+        self._measurement_orch.phase_changed.connect(
+            self._on_measurement_phase)
+        self._measurement_orch.user_decision_needed.connect(
+            self._on_measurement_decision)
+        self._measurement_orch.measurement_complete.connect(
+            self._on_measurement_complete)
+        # Default workflow — can be changed via the workflow selector
+        self._active_workflow = None  # WorkflowProfile | None
+        # Feature flag: set to True once orchestrator is validated
+        self._use_orchestrator = config.get_pref(
+            "acquisition.use_orchestrator", True)
+
         self._ai_service = AIService(parent=self)
         self._ai_service.set_metrics(self._metrics)
         self._ai_service.set_diagnostics(self._diagnostic_engine)
@@ -1005,6 +1031,7 @@ class MainWindow(QMainWindow):
         self._acquire_tab.acquire_requested.connect(self._on_acquire_requested)
         self._acquire_tab.optimize_and_acquire_requested.connect(
             self._on_optimize_and_acquire)
+        self._acquire_tab.workflow_changed.connect(self._on_workflow_selected)
 
         # Evidence panel — refresh every 3 s while the app is running
         self._evidence_timer = QTimer(self)
@@ -2759,7 +2786,6 @@ class MainWindow(QMainWindow):
             from acquisition.quality_scorecard import QualityScoringEngine
             from acquisition.image_metrics import compute_intensity_stats, compute_frame_stability
 
-            # Compute intensity stats from the cold average
             cold = getattr(r, "cold_avg", None)
             bit_depth = 12
             if cold is not None:
@@ -2779,14 +2805,12 @@ class MainWindow(QMainWindow):
                 mean_frac=mean_f,
                 max_frac=max_f,
                 peak_drr=peak_drr,
-                frame_cv=None,  # not readily available from result
+                frame_cv=None,
                 n_frames=r.n_frames,
                 duration_s=r.duration_s,
             )
-            # Store on the result for session save
             r._quality_scorecard = scorecard.to_dict()
 
-            # Show summary overlay
             self._acq_summary_overlay.show_summary(
                 scorecard, duration_s=r.duration_s, n_frames=r.n_frames)
         except Exception:
@@ -2807,12 +2831,50 @@ class MainWindow(QMainWindow):
             label = "ΔT surface  (°C)" if dt_map is not None else "ΔR/R surface"
             self._surface_tab.set_data(surface_arr, title=label)
 
-        # Auto-save to session manager in background — capture full context
+        # ── Backend pipeline: session save, manifest, autosave ─────
+        # When the orchestrator is active, it handles post-capture
+        # persistence (save, manifest, events) in its own background thread.
+        if (self._use_orchestrator
+                and self._measurement_orch.phase == MeasurementPhase.CAPTURING):
+            self._measurement_orch.on_acquisition_complete(r)
+        else:
+            # Legacy save path
+            self._acq_complete_save_legacy(r, drr_map, dt_map)
+
+        # AI session quality report — silently skips if model not loaded
+        if self._ai_service.status == "ready":
+            snr = getattr(r, "snr_db", None)
+            result_data = {
+                "grade":         self._acq_start_grade,
+                "issues":        [
+                    {"name": i.display_name, "sev": i.severity, "obs": i.observed}
+                    for i in self._acq_start_issues
+                ],
+                "n_frames":      r.n_frames,
+                "cold_captured": r.cold_captured,
+                "hot_captured":  r.hot_captured,
+                "duration_s":    r.duration_s,
+                "exposure_us":   r.exposure_us,
+                "gain_db":       r.gain_db,
+                "snr_db":        snr,
+                "dark_pixel_pct": round(r.dark_pixel_fraction * 100, 1),
+                "complete":      r.is_complete,
+            }
+            self._ai_service.session_report(result_data)
+            if not self._ai_dock.isVisible():
+                self._status.showMessage(
+                    "AI quality report ready — click ◉ to view", 6000)
+
+    def _on_acq_saved(self, session):
+        """New session was saved — refresh data tab immediately."""
+        self._data_tab.add_session(session)
+
+    def _acq_complete_save_legacy(self, r, drr_map, dt_map):
+        """Legacy session save + manifest + autosave (used when orchestrator is off)."""
         profile = app_state.active_profile
         fpga    = app_state.fpga
-        notes   = self._acquire_tab.get_notes()   # capture now, before UI changes
+        notes   = self._acquire_tab.get_notes()
 
-        # Capture manifest context now (Qt main thread) before the background save
         _acq_start_ts_snap   = self._acq_start_ts
         _device_mgr_snap     = self._device_mgr
         _rdns_snap           = check_readiness(OP_ACQUIRE, app_state)
@@ -2831,7 +2893,6 @@ class MainWindow(QMainWindow):
                         if fpga and hasattr(fpga, "get_status") else 0.0),
                     notes          = notes,
                 )
-                # Attach quality scorecard to session metadata
                 _sc_dict = getattr(r, '_quality_scorecard', None)
                 if _sc_dict and session.meta and session.meta.path:
                     session.meta.quality_scorecard = _sc_dict
@@ -2845,7 +2906,6 @@ class MainWindow(QMainWindow):
                         log.debug("Failed to save scorecard to session",
                                   exc_info=True)
 
-                # Persist analysis result if auto-run produced one
                 try:
                     ar = self._analysis_tab.get_result()
                     if ar and ar.valid and session.meta.path:
@@ -2859,7 +2919,6 @@ class MainWindow(QMainWindow):
                     f"Session saved: {session.meta.uid}  "
                     f"({session_mgr.root})")
 
-                # ── Run manifest ──────────────────────────────────────
                 try:
                     from session.manifest import (RunRecord, ManifestWriter,
                                                   build_device_inventory,
@@ -2898,7 +2957,6 @@ class MainWindow(QMainWindow):
                             _acq_start_ts_snap, _now),
                     )
                     ManifestWriter(session.meta.path).append_run(record)
-                    # Emit ACQ_COMPLETE with key outcome fields
                     try:
                         from events import emit_info, EVT_ACQ_COMPLETE
                         safe_call(emit_info,
@@ -2910,8 +2968,7 @@ class MainWindow(QMainWindow):
                                   snr_db=record.snr_db,
                                   label="EVT_ACQ_COMPLETE", level=logging.DEBUG)
                     except ImportError:
-                        log.debug("_save: events module not available — "
-                                  "EVT_ACQ_COMPLETE not emitted")
+                        pass
                 except Exception as _me:
                     log.debug("Manifest write (acquire) failed: %s", _me)
 
@@ -2919,7 +2976,7 @@ class MainWindow(QMainWindow):
                 signals.log_message.emit(f"Session save failed: {e}")
         threading.Thread(target=_save, daemon=True).start()
 
-        # ── Autosave checkpoint (acquire) ─────────────────────────
+        # Autosave checkpoint
         try:
             from acquisition.autosave import acquire_autosave
             _arrays = {}
@@ -2933,35 +2990,6 @@ class MainWindow(QMainWindow):
                  "snr_db": float(getattr(r, "snr_db", 0))})
         except Exception as _ae:
             log.debug("Autosave (acquire) failed: %s", _ae)
-
-        # AI session quality report — silently skips if model not loaded
-        if self._ai_service.status == "ready":
-            snr = getattr(r, "snr_db", None)
-            result_data = {
-                "grade":         self._acq_start_grade,
-                "issues":        [
-                    {"name": i.display_name, "sev": i.severity, "obs": i.observed}
-                    for i in self._acq_start_issues
-                ],
-                "n_frames":      r.n_frames,
-                "cold_captured": r.cold_captured,
-                "hot_captured":  r.hot_captured,
-                "duration_s":    r.duration_s,
-                "exposure_us":   r.exposure_us,
-                "gain_db":       r.gain_db,
-                "snr_db":        snr,
-                "dark_pixel_pct": round(r.dark_pixel_fraction * 100, 1),
-                "complete":      r.is_complete,
-            }
-            self._ai_service.session_report(result_data)
-            if not self._ai_dock.isVisible():
-                self._status.showMessage(
-                    "AI quality report ready — click ◉ to view", 6000)
-
-    def _on_acq_saved(self, session):
-        """New session was saved — refresh data tab immediately."""
-        self._data_tab.add_session(session)
-
 
     def _on_log(self, msg: str):
         self._log_tab.append(msg)
@@ -3447,16 +3475,142 @@ class MainWindow(QMainWindow):
         """
         Readiness gate: intercept acquisition start, warn or block on C/D grades.
 
-        Required-device check (safe mode) → hard block, no override.
-        Grade A/B → proceed immediately.
-        Grade C   → warning dialog, user can override.
-        Grade D   → critical dialog, user can still override but is strongly warned.
-
-        Always captures the pre-acquisition grade and issue snapshot so the
-        post-acquisition session report can reference conditions at start time.
+        When ``acquisition.use_orchestrator`` is enabled (default), delegates
+        to the ``MeasurementOrchestrator`` state machine.  Otherwise falls
+        back to the legacy inline implementation.
         """
+        if self._use_orchestrator:
+            return self._on_acquire_via_orchestrator(n_frames, delay)
+        return self._on_acquire_legacy(n_frames, delay)
+
+    # ── Orchestrator path ──────────────────────────────────────────
+
+    def _on_acquire_via_orchestrator(self, n_frames: int, delay: float) -> None:
+        """Pre-capture chain via MeasurementOrchestrator."""
+        # Snapshot for AI session report / legacy code that reads these
+        self._acq_start_ts = time.time()
+
+        # Emit ACQ_START to the event bus timeline
+        try:
+            from events import emit_info, EVT_ACQ_START
+            safe_call(emit_info,
+                      "acquisition", EVT_ACQ_START,
+                      f"Acquisition start — {n_frames} frames/phase",
+                      n_frames=n_frames,
+                      label="EVT_ACQ_START", level=logging.DEBUG)
+        except ImportError:
+            pass
+
+        self._measurement_orch.start_measurement(
+            n_frames, delay, workflow=self._active_workflow)
+
+        # If the orchestrator reached CAPTURING synchronously, start pipeline
+        if self._measurement_orch.phase == MeasurementPhase.CAPTURING:
+            # Sync snapshots for legacy consumers
+            ctx = self._measurement_orch.context
+            self._acq_start_grade = ctx.grade
+            self._acq_start_issues = ctx.issues
+            self._acquire_tab.start_acquisition(n_frames, delay)
+
+    def _on_measurement_phase(self, phase, label: str) -> None:
+        """React to orchestrator phase transitions."""
+        log.debug("Measurement phase: %s — %s", phase.value, label)
+
+    def _on_measurement_decision(self, decision_type: str, message: str,
+                                  context: object) -> None:
+        """Show a UI dialog for the orchestrator's user_decision_needed signal."""
+        ctx = context if isinstance(context, dict) else {}
+
+        if decision_type == "safe_mode_block":
+            # Safe-mode blocks are non-overridable — orchestrator already
+            # transitioned to ABORTED.  Show informational dialog.
+            box = QMessageBox(self)
+            box.setWindowTitle("Cannot Start Acquisition")
+            box.setIcon(QMessageBox.Critical)
+            box.setText(message)
+            open_btn = box.addButton("Open Device Manager",
+                                     QMessageBox.AcceptRole)
+            box.addButton("Close", QMessageBox.RejectRole)
+            box.exec_()
+            if box.clickedButton() is open_btn:
+                self._open_device_manager()
+            return
+
+        if decision_type == "preflight_issues":
+            # Show the preflight dialog with auto-fix buttons
+            preflight = ctx.get("preflight")
+            if preflight is not None:
+                try:
+                    from ui.widgets.preflight_dialog import PreflightDialog
+                    from acquisition.preflight_remediation import (
+                        PreflightRemediator)
+                    remediator = PreflightRemediator(app_state)
+                    remediations = remediator.get_remediations(
+                        preflight.checks)
+                    dlg = PreflightDialog(preflight,
+                                          remediations=remediations,
+                                          parent=self)
+                    if dlg.exec_() == QDialog.Accepted:
+                        self._measurement_orch.provide_decision("proceed")
+                        if self._measurement_orch.phase == MeasurementPhase.CAPTURING:
+                            n = self._measurement_orch.context.n_frames
+                            d = self._measurement_orch.context.delay
+                            self._acq_start_grade = self._measurement_orch.context.grade
+                            self._acq_start_issues = self._measurement_orch.context.issues
+                            self._acquire_tab.start_acquisition(n, d)
+                    else:
+                        self._measurement_orch.provide_decision("abort")
+                    return
+                except Exception:
+                    log.debug("PreflightDialog failed", exc_info=True)
+            # Fall through to generic grade dialog
+            decision_type = "grade_warning"
+
+        if decision_type in ("grade_warning", "grade_critical"):
+            grade = ctx.get("grade", "C")
+            is_critical = decision_type == "grade_critical"
+            msg = QMessageBox(self)
+            msg.setWindowTitle(
+                f"Readiness {'Failure' if is_critical else 'Warning'}"
+                f" — Grade {grade}")
+            msg.setIcon(
+                QMessageBox.Critical if is_critical else QMessageBox.Warning)
+            msg.setText(message)
+            msg.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+            msg.button(QMessageBox.Ok).setText(
+                "Start Despite Failures" if is_critical
+                else "Start Acquisition Anyway")
+            msg.setDefaultButton(QMessageBox.Cancel)
+            if msg.exec_() == QMessageBox.Ok:
+                self._measurement_orch.provide_decision("proceed")
+                if self._measurement_orch.phase == MeasurementPhase.CAPTURING:
+                    n = self._measurement_orch.context.n_frames
+                    d = self._measurement_orch.context.delay
+                    self._acq_start_grade = self._measurement_orch.context.grade
+                    self._acq_start_issues = self._measurement_orch.context.issues
+                    self._acquire_tab.start_acquisition(n, d)
+            else:
+                self._measurement_orch.provide_decision("abort")
+
+    def _on_measurement_complete(self, result) -> None:
+        """Handle orchestrator measurement_complete signal.
+
+        The orchestrator fires this after post-processing and saving
+        complete (in the background thread).  Update UI accordingly.
+        """
+        if result.phase == MeasurementPhase.ABORTED:
+            log.info("Measurement aborted")
+        elif result.phase == MeasurementPhase.ERROR:
+            log.warning("Measurement ended with error")
+        elif result.phase == MeasurementPhase.COMPLETE:
+            log.info("Measurement lifecycle complete (orchestrator) — "
+                     "duration=%.1fs", result.duration_s)
+
+    # ── Legacy path (fallback) ─────────────────────────────────────
+
+    def _on_acquire_legacy(self, n_frames: int, delay: float) -> None:
+        """Legacy inline readiness gate (used when orchestrator is disabled)."""
         # ── Required-device gate (safe mode) ─────────────────────────────
-        # Hard block — no override path — if a required device is absent.
         if self._device_mgr.safe_mode:
             rdns = check_readiness(OP_ACQUIRE, app_state)
             msg  = rdns.blocked_reason or self._device_mgr.safe_mode_reason
@@ -3480,16 +3634,12 @@ class MainWindow(QMainWindow):
             grade   = self._compute_grade(results)
         except Exception:
             results = []
-            grade   = "A"   # if engine fails, don't block acquisition
+            grade   = "A"
 
-        # Snapshot for session report and run manifest regardless of whether we proceed
         self._acq_start_ts     = time.time()
         self._acq_start_grade  = grade
         self._acq_start_issues = [r for r in results if r.severity in ("fail", "warn")]
 
-        # ── Pre-capture validation ─────────────────────────────────────
-        # Run one-shot read-only checks (exposure, stability, focus,
-        # hardware) if the user has not disabled the feature.
         preflight = None
         if config.get_pref("acquisition.preflight_enabled", True):
             try:
@@ -3504,7 +3654,6 @@ class MainWindow(QMainWindow):
                 log.debug("Preflight validation failed — proceeding",
                           exc_info=True)
 
-        # Emit ACQ_START to the event bus timeline
         try:
             from events import emit_info, EVT_ACQ_START
             safe_call(emit_info,
@@ -3513,17 +3662,13 @@ class MainWindow(QMainWindow):
                       n_frames=n_frames, grade=grade,
                       label="EVT_ACQ_START", level=logging.DEBUG)
         except ImportError:
-            log.debug("_on_acquire_requested: events module not available — "
-                      "EVT_ACQ_START not emitted")
+            pass
 
-        # ── Decision gate ──────────────────────────────────────────────
-        # Fast path: everything green (grade A/B and preflight all-clear)
         preflight_ok = (preflight is None or preflight.all_clear)
         if grade in ("A", "B") and preflight_ok:
             self._acquire_tab.start_acquisition(n_frames, delay)
             return
 
-        # Show preflight dialog if there are preflight issues
         if preflight is not None and not preflight.all_clear:
             try:
                 from ui.widgets.preflight_dialog import PreflightDialog
@@ -3534,15 +3679,12 @@ class MainWindow(QMainWindow):
                                       parent=self)
                 if dlg.exec_() != QDialog.Accepted:
                     return
-                # User chose to proceed — start acquisition
                 self._acquire_tab.start_acquisition(n_frames, delay)
                 return
             except Exception:
                 log.debug("PreflightDialog failed — falling back to "
                           "grade-based gate", exc_info=True)
 
-        # Fall back to grade-based gate (legacy path, also used when
-        # preflight is disabled)
         if grade in ("A", "B"):
             self._acquire_tab.start_acquisition(n_frames, delay)
             return
@@ -3584,6 +3726,14 @@ class MainWindow(QMainWindow):
                 self._acquire_tab.start_acquisition(n_frames, delay)
 
     # ── Optimize & Acquire ──────────────────────────────────────────
+
+    def _on_workflow_selected(self, workflow) -> None:
+        """Handle workflow selection from the acquire tab."""
+        self._active_workflow = workflow
+        if workflow:
+            log.info("Workflow selected: %s", workflow.display_name)
+        else:
+            log.info("Workflow selection cleared (default)")
 
     def _on_optimize_and_acquire(self, n_frames: int, delay: float) -> None:
         """Launch the multi-step preparation orchestrator, then acquire."""

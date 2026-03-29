@@ -34,6 +34,7 @@ class AcquireTab(QWidget):
     # Emitted when the user clicks Run — MainWindow intercepts for readiness gate
     acquire_requested = pyqtSignal(int, float)   # (n_frames, inter_phase_delay)
     optimize_and_acquire_requested = pyqtSignal(int, float)  # same args
+    workflow_changed = pyqtSignal(object)  # WorkflowProfile | None
 
     def __init__(self):
         super().__init__()
@@ -71,17 +72,37 @@ class AcquireTab(QWidget):
         cl.setSpacing(8)
         cl.setColumnStretch(1, 1)
 
+        # Workflow selector — Failure Analysis vs Metrology
         from ui.help import help_label
-        cl.addWidget(help_label("Frames / phase", "n_frames"), 0, 0)
+        cl.addWidget(help_label("Workflow", "workflow"), 0, 0)
+        self._workflow_combo = QComboBox()
+        self._workflow_combo.addItem("Default", "")
+        try:
+            from acquisition.workflows import WORKFLOWS
+            for wf in WORKFLOWS.values():
+                self._workflow_combo.addItem(wf.display_name, wf.name)
+        except ImportError:
+            pass
+        self._workflow_combo.setToolTip(
+            "Select a measurement workflow.\n\n"
+            "Failure Analysis: Rapid imaging for defect localization "
+            "(fewer frames, relaxed preflight).\n"
+            "Metrology: Precision calibrated measurements "
+            "(more frames, strict preflight, calibration required).")
+        self._workflow_combo.currentIndexChanged.connect(
+            self._on_workflow_changed)
+        cl.addWidget(self._workflow_combo, 0, 1)
+
+        cl.addWidget(help_label("Frames / phase", "n_frames"), 1, 0)
         self._frames = QSpinBox()
         self._frames.setRange(1, 10000)
         self._frames.setValue(100)
         self._frames.setSuffix(" frames")
         self._frames.setMinimumWidth(110)
-        cl.addWidget(self._frames, 0, 1)
+        cl.addWidget(self._frames, 1, 1)
 
         self._delay_label = self._sub("Phase delay (s)")
-        cl.addWidget(self._delay_label, 1, 0)
+        cl.addWidget(self._delay_label, 2, 0)
         self._delay = QDoubleSpinBox()
         self._delay.setRange(0, 60)
         self._delay.setValue(0)
@@ -92,18 +113,18 @@ class AcquireTab(QWidget):
             "Wait time between switching from cold to hot (or vice versa).\n"
             "Allows the device to reach thermal equilibrium after the stimulus changes.\n"
             "Set to 0 for rapid alternating measurements.")
-        cl.addWidget(self._delay, 1, 1)
+        cl.addWidget(self._delay, 2, 1)
 
         self._time_est_lbl = TimeEstimateLabel()
-        cl.addWidget(self._time_est_lbl, 2, 0, 1, 2)
+        cl.addWidget(self._time_est_lbl, 3, 0, 1, 2)
 
-        cl.addWidget(self._sub("ΔR/R colormap"), 3, 0)
+        cl.addWidget(self._sub("ΔR/R colormap"), 4, 0)
         self._cmap = QComboBox()
         self._cmap.setMinimumWidth(160)
         saved_cmap = cfg_mod.get_pref("display.colormap", "Thermal Delta")
         setup_cmap_combo(self._cmap, saved_cmap)
         self._cmap.currentTextChanged.connect(self._on_cmap_changed)
-        cl.addWidget(self._cmap, 3, 1)
+        cl.addWidget(self._cmap, 4, 1)
 
         # Buttons
         btn_row = QHBoxLayout()
@@ -372,6 +393,23 @@ class AcquireTab(QWidget):
             self._set_busy(False)
             if p.state == AcqState.COMPLETE:
                 self._progress.setValue(100)
+
+    def _on_workflow_changed(self, index: int):
+        """Handle workflow combo selection change."""
+        name = self._workflow_combo.currentData()
+        if not name:
+            # "Default" selected — no workflow profile
+            self.workflow_changed.emit(None)
+            return
+        try:
+            from acquisition.workflows import get_workflow
+            wf = get_workflow(name)
+            if wf:
+                self._frames.setValue(wf.default_n_frames)
+                self._frames.setMinimum(wf.min_n_frames)
+                self.workflow_changed.emit(wf)
+        except ImportError:
+            pass
 
     def _on_cmap_changed(self, cmap: str):
         cfg_mod.set_pref("display.colormap", cmap)
