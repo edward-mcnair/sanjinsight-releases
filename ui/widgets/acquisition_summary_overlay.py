@@ -147,13 +147,13 @@ class AcquisitionSummaryOverlay(QFrame):
 
     # ── Theme support ──────────────────────────────────────────────────
 
-    def _apply_styles(self, sc: QualityScorecard) -> None:
+    def _apply_styles(self, sc: QualityScorecard = None) -> None:
         """Reapply theme-dependent styles."""
         bg = PALETTE.get("bg2", "#1a1a1c")
         border = PALETTE.get("border", "#333")
         text = PALETTE.get("text", "#eee")
         dim = PALETTE.get("textDim", "#888")
-        gc = PALETTE.get(sc.overall_color, dim)
+        gc = PALETTE.get(sc.overall_color, dim) if sc is not None else border
 
         self.setStyleSheet(
             f"QFrame#AcqSummaryOverlay {{ "
