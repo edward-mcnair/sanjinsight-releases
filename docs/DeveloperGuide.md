@@ -1602,15 +1602,24 @@ pytest tests/ --cov=. --cov-report=term-missing
 
 **Test files:**
 
-| File | Covers |
-|---|---|
-| `test_core.py` | Config loading, version parsing, utilities |
-| `test_ai.py` | AI service, diagnostic rules, metrics |
-| `test_pipelines.py` | Acquisition pipeline, session save/load |
-| `test_widgets.py` | Qt widget initialization & signal connections |
-| `test_integration.py` | End-to-end workflows with simulated hardware |
+| File | Tests | Covers |
+|---|---|---|
+| `test_core.py` | ~80 | Config, calibration, session save/load, profiles, modality |
+| `test_ai.py` | ~40 | AI service, diagnostic rules, metrics engine |
+| `test_pipelines.py` | ~60 | Acquisition pipeline, abort, result structure |
+| `test_widgets.py` | ~30 | Qt widget initialization, signals, saturation guard |
+| `test_integration.py` | ~50 | End-to-end workflows with simulated hardware |
+| `test_hardware.py` | ~30 | Camera drivers, preflight interface, hardware service |
+| `test_measurement_orchestrator.py` | 36 | Orchestrator state machine, grade gate, post-capture |
+| `test_device_services.py` | 30 | BaseDeviceService, retry, reconnect, HardwareService |
+| `test_workflows.py` | 38 | Workflow profiles, registry, backward-compat shims |
+| `test_improvements.py` | 31 | UX improvements: undo, checkpoint, batch widget, config backup |
+
+**Total: ~490 tests** (16 skipped for optional dependencies like `reportlab`).
 
 All hardware tests use simulated drivers — no real hardware required to run the suite.
+
+**CI:** GitHub Actions runs syntax checks and the full test suite on every push to `main`, `develop`, and `feature/**` branches. See `.github/workflows/ci.yml`.
 
 ---
 

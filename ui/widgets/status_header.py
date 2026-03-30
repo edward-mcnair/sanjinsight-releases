@@ -1698,6 +1698,7 @@ class StatusHeader(QWidget):
         self._login_btn = QPushButton("Log in")
         set_btn_icon(self._login_btn, IC.LOGIN)
         self._login_btn.setFixedHeight(28)
+        self._login_btn.setAccessibleName("Log in as administrator")
         self._login_btn.setToolTip(
             "Log in to access administrator features\n"
             "(User Management, Security settings, Scan Profile approval)")
@@ -1709,6 +1710,7 @@ class StatusHeader(QWidget):
         self._logout_btn = QPushButton("Log out")
         set_btn_icon(self._logout_btn, IC.LOGOUT)
         self._logout_btn.setFixedHeight(28)
+        self._logout_btn.setAccessibleName("Log out of administrator session")
         self._logout_btn.setToolTip("Log out and return to unauthenticated mode")
         self._logout_btn.setVisible(False)
         self._logout_btn.clicked.connect(self.admin_logout_requested)
@@ -1733,6 +1735,9 @@ class StatusHeader(QWidget):
         self._estop_btn = QPushButton("■  STOP")
         self._estop_btn.setFixedHeight(30)
         self._estop_btn.setMinimumWidth(90)
+        self._estop_btn.setAccessibleName("Emergency stop")
+        self._estop_btn.setAccessibleDescription(
+            "Emergency stop: immediately halts all hardware. Shortcut: Ctrl+Period")
         self._estop_btn.setToolTip(
             "Emergency Stop — immediately disables bias output, "
             "all TECs, stage motion, and aborts any active acquisition.\n"

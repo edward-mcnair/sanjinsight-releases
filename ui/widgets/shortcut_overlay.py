@@ -40,8 +40,8 @@ _SHORTCUT_GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
         ("Ctrl+0", "Settings"),
     ]),
     ("Acquisition", [
-        ("Ctrl+R",       "Run / Stop Acquisition"),
-        ("F5",           "Start Live Stream"),
+        ("F5",           "Run Acquisition Sequence"),
+        ("Ctrl+F5",     "Start Live Stream"),
         ("F6",           "Stop Live Stream"),
         ("F7",           "Freeze / Resume"),
         ("F8",           "Run Analysis"),

@@ -8,6 +8,36 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **10 performance/UX improvements**:
+  - Camera preview sleep reduced (50ms to 10ms) for snappier live feed
+  - Colormap cache in comparison tab avoids repeated lookups
+  - Memory-mapped array loading (`mmap_mode='r'`) for faster session opens
+  - Undo/restore button for acquisition settings before each run
+  - F5 global hotkey for Run Sequence (live stream moved to Ctrl+F5)
+  - Post-capture sub-step labels ("Scoring...", "Saving...", "Writing manifest...")
+  - Comparison tab auto-populates with 2 most recent sessions
+  - Non-modal batch progress widget for background batch operations
+  - Periodic mid-capture checkpoint (every 25% of frames) for crash recovery
+  - Config `.json.bak` backup before every preferences write
+- **Accessibility improvements**:
+  - Sidebar navigation now keyboard-accessible (Tab, Enter/Space, focus indicator)
+  - Accessible names and descriptions on all critical controls (E-stop, Run, Abort, spinboxes, combos)
+  - WCAG AA contrast ratios verified and documented for dark mode palette
+  - Shortcut overlay updated with current keybindings
+- **CI/CD hardening**:
+  - Expanded CI dependency list (qtawesome, Pillow, pyqtgraph, bcrypt, cryptography, etc.)
+  - Feature branch CI triggers (`feature/**`)
+  - Concurrency control to cancel stale CI runs
+  - Test summary step for quick pass/fail visibility
+- **Test coverage**: 31 new tests covering all 10 improvement features
+
+### Fixed
+
+- Theme switch crash: `_apply_styles()` on `AcquisitionSummaryOverlay` now accepts optional scorecard parameter
+- HTTP connection leak in Ollama client (`ai/remote_runner.py`)
+
 ---
 
 ## [1.5.0-beta.1] — 2026-03-25

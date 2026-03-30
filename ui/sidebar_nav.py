@@ -144,6 +144,10 @@ class _MenuItem(QWidget):
         self.setCursor(QCursor(Qt.PointingHandCursor))
         self.setMouseTracking(True)
         self.setToolTip(item.label)
+        # ── Accessibility ────────────────────────────────────────────
+        self.setFocusPolicy(Qt.StrongFocus)
+        self.setAccessibleName(item.label)
+        self.setAccessibleDescription(f"Navigate to {item.label} panel")
 
     @property
     def panel(self): return self._item.panel
@@ -173,6 +177,22 @@ class _MenuItem(QWidget):
         self._hover = False
         _SidebarTooltip.get().hide_tip()
         self.update()
+
+    def keyPressEvent(self, e):
+        if e.key() in (Qt.Key_Return, Qt.Key_Enter, Qt.Key_Space):
+            self.clicked.emit(self._item.panel)
+        else:
+            super().keyPressEvent(e)
+
+    def focusInEvent(self, e):
+        self._hover = True
+        self.update()
+        super().focusInEvent(e)
+
+    def focusOutEvent(self, e):
+        self._hover = False
+        self.update()
+        super().focusOutEvent(e)
 
     def mousePressEvent(self, e):
         if e.button() == Qt.LeftButton:
@@ -275,6 +295,14 @@ class _MenuItem(QWidget):
                 p.setBrush(Qt.NoBrush)
                 p.setPen(QPen(dim, 1.2))
                 p.drawEllipse(cx - 4, cy - 4, 8, 8)
+
+        # ── Focus rectangle (keyboard navigation) ────────────────────
+        if self.hasFocus():
+            focus_col = QColor(_ACCENT())
+            focus_col.setAlpha(160)
+            p.setBrush(Qt.NoBrush)
+            p.setPen(QPen(focus_col, 1.5, Qt.DotLine))
+            p.drawRoundedRect(2, 2, w - 4, h - 4, 3, 3)
 
         p.end()
 

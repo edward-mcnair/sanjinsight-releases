@@ -77,6 +77,7 @@ class AcquireTab(QWidget):
         from ui.help import help_label
         cl.addWidget(help_label("Workflow", "workflow"), 0, 0)
         self._workflow_combo = QComboBox()
+        self._workflow_combo.setAccessibleName("Measurement workflow")
         self._workflow_combo.addItem("Default", "")
         try:
             from acquisition.workflows import WORKFLOWS
@@ -100,6 +101,9 @@ class AcquireTab(QWidget):
         self._frames.setValue(100)
         self._frames.setSuffix(" frames")
         self._frames.setMinimumWidth(110)
+        self._frames.setAccessibleName("Frames per phase")
+        self._frames.setAccessibleDescription(
+            "Number of frames to capture in each cold and hot phase")
         cl.addWidget(self._frames, 1, 1)
 
         self._delay_label = self._sub("Phase delay (s)")
@@ -110,6 +114,9 @@ class AcquireTab(QWidget):
         self._delay.setSingleStep(0.5)
         self._delay.setSuffix(" s")
         self._delay.setMinimumWidth(90)
+        self._delay.setAccessibleName("Phase delay")
+        self._delay.setAccessibleDescription(
+            "Wait time in seconds between cold and hot phases")
         self._delay.setToolTip(
             "Wait time between switching from cold to hot (or vice versa).\n"
             "Allows the device to reach thermal equilibrium after the stimulus changes.\n"
@@ -122,6 +129,7 @@ class AcquireTab(QWidget):
         cl.addWidget(self._sub("ΔR/R colormap"), 4, 0)
         self._cmap = QComboBox()
         self._cmap.setMinimumWidth(160)
+        self._cmap.setAccessibleName("Delta R over R colormap")
         saved_cmap = cfg_mod.get_pref("display.colormap", "Thermal Delta")
         setup_cmap_combo(self._cmap, saved_cmap)
         self._cmap.currentTextChanged.connect(self._on_cmap_changed)
@@ -132,6 +140,7 @@ class AcquireTab(QWidget):
         self._cold_btn = QPushButton("COLD")
         set_btn_icon(self._cold_btn, "fa5s.snowflake", "#66aaff")
         self._cold_btn.setObjectName("cold_btn")
+        self._cold_btn.setAccessibleName("Capture cold frames")
         self._cold_btn.setToolTip(
             "Capture cold (baseline) frames only.\n"
             "Use this when you want to set up the cold reference manually "
@@ -139,12 +148,16 @@ class AcquireTab(QWidget):
         self._hot_btn  = QPushButton("HOT")
         set_btn_icon(self._hot_btn, "fa5s.fire", "#ff8866")
         self._hot_btn.setObjectName("hot_btn")
+        self._hot_btn.setAccessibleName("Capture hot frames")
         self._hot_btn.setToolTip(
             "Capture hot (stimulus) frames and compute ΔR/R immediately.\n"
             "Requires a cold reference to already be captured.")
         self._run_btn  = QPushButton("RUN SEQUENCE")
         set_btn_icon(self._run_btn, "fa5s.play", "#00d4aa")
         self._run_btn.setObjectName("primary")
+        self._run_btn.setAccessibleName("Run acquisition sequence")
+        self._run_btn.setAccessibleDescription(
+            "Run full cold-hot acquisition sequence. Shortcut: F5")
         self._run_btn.setToolTip(
             "Run the full cold → hot acquisition sequence automatically.\n"
             "Captures cold baseline, applies stimulus, captures hot frames, "
@@ -160,6 +173,9 @@ class AcquireTab(QWidget):
         self._abort_btn = QPushButton("ABORT")
         set_btn_icon(self._abort_btn, "fa5s.stop", "#ff6666")
         self._abort_btn.setObjectName("danger")
+        self._abort_btn.setAccessibleName("Abort acquisition")
+        self._abort_btn.setAccessibleDescription(
+            "Abort current acquisition and discard frames. Shortcut: Escape")
         self._abort_btn.setToolTip(
             "Abort the current acquisition immediately.\n"
             "Any frames already captured will be discarded.\n\n"
@@ -167,6 +183,7 @@ class AcquireTab(QWidget):
         self._abort_btn.setEnabled(False)
         self._restore_btn = QPushButton("Restore")
         set_btn_icon(self._restore_btn, "fa5s.undo")
+        self._restore_btn.setAccessibleName("Restore previous settings")
         self._restore_btn.setToolTip(
             "Restore acquisition settings from before the last run.")
         self._restore_btn.setEnabled(False)

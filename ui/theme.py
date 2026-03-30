@@ -97,15 +97,23 @@ _DARK_RAW: dict = {
     # label (#ebebf5 @85%): primary readable text
     # secondaryLabel (#ebebf5 @55%): supporting text
     # tertiaryLabel (#ebebf5 @30%): hints, placeholders
+    #
+    # WCAG AA contrast ratios (verified 2026-03-30):
+    #   text    on bg:      15.93:1  PASS (normal+large)
+    #   textDim on bg:       6.49:1  PASS (normal+large)
+    #   textDim on surface:  5.85:1  PASS (normal+large)
+    #   textSub on bg:       2.53:1  (decorative/tertiary only — not body text)
     "text":         "#ebebf5",   # primary label — Apple dark label
     "textDim":      "#9696a8",   # secondary label ~55% — cool tinted
     "textSub":      "#545462",   # tertiary label  ~30%
     # ── Brand accent — mint-teal (instrument health / status) ─────────────────
     # Closer to Apple's systemMint (#00d9d4) — reads as "all systems healthy"
+    # WCAG AA: accent on bg = 8.90:1 PASS, accent on surface = 8.03:1 PASS
     "accent":       "#00c7be",   # Apple systemMint dark
     "accentDim":    "#00c7be26", # mint @ 15 % opacity
     "accentHover":  "#00d9d4",   # brighter mint for hover
     # ── CTA — Apple systemBlue dark (#0a84ff) ────────────────────────────────
+    # WCAG AA: cta on bg = 5.17:1 PASS
     "cta":          "#0a84ff",   # Apple systemBlue dark
     "ctaHover":     "#409cff",   # lighter blue for hover
     "ctaDim":       "#0a84ff26", # blue @ 15 % opacity

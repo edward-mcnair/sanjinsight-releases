@@ -7,9 +7,13 @@ name: CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, "feature/**" ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, develop ]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   syntax-check:
@@ -31,7 +35,9 @@ jobs:
         run: |
           pip install --upgrade pip
           # Install only what's needed for syntax checks — not hardware packages
-          pip install PyQt5 numpy PyYAML matplotlib h5py scipy
+          pip install PyQt5 numpy PyYAML matplotlib h5py scipy \
+            qtawesome Pillow pyqtgraph bcrypt cryptography \
+            opencv-python-headless pyserial pyvisa pyvisa-py
 
       - name: Compile check all Python files
         run: |
@@ -108,10 +114,21 @@ jobs:
           # Only packages needed for the pure-Python / AI test suite.
           # Hardware-dependent packages (nifpga, ni_imaqdx) are unavailable on
           # CI runners; tests that require them skip themselves automatically.
-          pip install PyQt5 numpy pytest PyYAML matplotlib h5py scipy
+          pip install PyQt5 numpy pytest PyYAML matplotlib h5py scipy \
+            qtawesome Pillow pyqtgraph bcrypt cryptography \
+            opencv-python-headless pyserial pyvisa pyvisa-py
 
       - name: Run tests
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
-          python -m pytest tests/ -q --tb=short
+          python -m pytest tests/ -x -q --tb=short 2>&1 | tee test-output.txt
+
+      - name: Test summary
+        if: always()
+        run: |
+          if grep -q "passed" test-output.txt 2>/dev/null; then
+            tail -3 test-output.txt
+          else
+            echo "Tests did not produce a summary line — check output above."
+          fi
