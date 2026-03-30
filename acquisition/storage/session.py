@@ -175,8 +175,11 @@ class Session:
         return np.load(p, mmap_mode="r") if os.path.exists(p) else None
 
     def unload(self):
-        self._cold_avg = self._hot_avg = None
-        self._delta_r_over_r = self._difference = None
+        for attr in ("_cold_avg", "_hot_avg", "_delta_r_over_r", "_difference"):
+            arr = getattr(self, attr, None)
+            if isinstance(arr, np.memmap):
+                del arr
+            setattr(self, attr, None)
 
     @staticmethod
     def from_result(result, label: str = "",

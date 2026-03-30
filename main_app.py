@@ -2978,7 +2978,8 @@ class MainWindow(QMainWindow):
 
             except Exception as e:
                 signals.log_message.emit(f"Session save failed: {e}")
-        threading.Thread(target=_save, daemon=True).start()
+        t = threading.Thread(target=_save, daemon=False, name="session-save")
+        t.start()
 
         # Autosave checkpoint
         try:

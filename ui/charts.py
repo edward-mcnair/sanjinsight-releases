@@ -26,6 +26,7 @@ dTSparklineWidget        — rolling ~2-minute dT history strip
 from __future__ import annotations
 
 import logging
+import sys
 from collections import deque
 from typing import List, Optional, Sequence
 
@@ -90,7 +91,8 @@ def _configure_plot(pw: "pg.PlotWidget",
 
     axis_pen   = pg.mkPen(color=bdr,      width=1)
     text_pen   = pg.mkPen(color=text_dim)
-    tick_font  = QFont("Menlo")
+    tick_font  = QFont("Menlo") if sys.platform == "darwin" else QFont("Consolas")
+    tick_font.setStyleHint(QFont.Monospace)
     tick_font.setPointSize(FONT.get("caption", 9))
 
     for ax_name in ("left", "bottom"):
@@ -762,7 +764,8 @@ def _add_text(pw: "pg.PlotWidget", text: str, color: str) -> None:
         color=color,
         anchor=(0, 0),
     )
-    font = QFont("Menlo")
+    font = QFont("Menlo") if sys.platform == "darwin" else QFont("Consolas")
+    font.setStyleHint(QFont.Monospace)
     font.setPointSize(FONT.get("caption", 9))
     item.setFont(font)
     pw.addItem(item)
