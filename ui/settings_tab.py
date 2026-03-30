@@ -380,6 +380,10 @@ class SettingsTab(QWidget):
         # ── License ───────────────────────────────────────────────────
         lay.addWidget(self._build_license_group())
 
+        # ── Plugins ──────────────────────────────────────────────────
+        self._plugins_group = self._build_plugins_group()
+        lay.addWidget(self._plugins_group)
+
         # ── Support ───────────────────────────────────────────────────
         lay.addWidget(self._build_support_group())
 
@@ -2393,6 +2397,127 @@ class SettingsTab(QWidget):
         dlg = LicenseDialog(parent=parent)
         dlg.license_changed.connect(self.refresh_license_status)
         dlg.exec_()
+
+    def _build_plugins_group(self) -> QGroupBox:
+        g = _group("Plugins")
+        lay = QVBoxLayout(g)
+        lay.setSpacing(12)
+
+        desc = _body(
+            "Plugins extend SanjINSIGHT with custom hardware drivers, analysis "
+            "algorithms, and tool panels. Plugins are loaded from "
+            "~/.microsanj/plugins/ on startup.")
+        lay.addWidget(desc)
+
+        # Plugin directory and status
+        self._plugin_status = QLabel("No plugins loaded.")
+        self._plugin_status.setStyleSheet(
+            f"font-size:{FONT['label']}pt; color:{_MUTED()};")
+        lay.addWidget(self._plugin_status)
+
+        # Plugin list container
+        self._plugin_list_widget = QWidget()
+        self._plugin_list_layout = QVBoxLayout(self._plugin_list_widget)
+        self._plugin_list_layout.setContentsMargins(0, 0, 0, 0)
+        self._plugin_list_layout.setSpacing(6)
+        lay.addWidget(self._plugin_list_widget)
+
+        # Open plugins folder button
+        open_btn = QPushButton("Open Plugins Folder")
+        open_btn.setStyleSheet(_BTN_SECONDARY())
+        open_btn.clicked.connect(self._open_plugins_folder)
+        lay.addWidget(open_btn)
+
+        return g
+
+    def refresh_plugins_list(self, registry=None) -> None:
+        """Populate the plugins list from the registry (called after load)."""
+        # Clear existing rows
+        while self._plugin_list_layout.count():
+            item = self._plugin_list_layout.takeAt(0)
+            w = item.widget()
+            if w:
+                w.deleteLater()
+
+        if registry is None or len(registry) == 0:
+            self._plugin_status.setText("No plugins loaded.")
+            return
+
+        manifests = registry.get_all_manifests()
+        self._plugin_status.setText(
+            f"{len(manifests)} plugin(s) loaded")
+
+        for m in manifests:
+            row = QWidget()
+            row.setStyleSheet(f"""
+                QWidget {{
+                    background: {_BG2()};
+                    border: 1px solid {_BORDER()};
+                    border-radius: 4px;
+                }}
+            """)
+            rl = QHBoxLayout(row)
+            rl.setContentsMargins(12, 8, 12, 8)
+            rl.setSpacing(8)
+
+            # Icon
+            icon_lbl = QLabel("\U0001F9E9")  # puzzle piece emoji
+            icon_lbl.setStyleSheet("border:none;")
+            rl.addWidget(icon_lbl)
+
+            # Name + version
+            name_lbl = QLabel(f"<b>{m.name}</b>  "
+                              f"<span style='color:{_MUTED()}'>"
+                              f"v{m.version}</span>")
+            name_lbl.setStyleSheet(
+                f"color:{_TEXT()}; font-size:{FONT['label']}pt; border:none;")
+            rl.addWidget(name_lbl, 1)
+
+            # Type badge
+            _type_colors = {
+                "hardware_panel": _ACCENT(),
+                "analysis_view": "#5b7ff5",
+                "tool_panel": _AMBER,
+                "drawer_tab": _MUTED(),
+                "hardware_driver": _ACCENT(),
+                "analysis_pipeline": "#5b7ff5",
+            }
+            badge_color = _type_colors.get(m.plugin_type, _MUTED())
+            type_label = m.plugin_type.replace("_", " ").title()
+            badge = QLabel(type_label)
+            badge.setStyleSheet(f"""
+                QLabel {{
+                    color: {badge_color};
+                    font-size: {FONT['caption']}pt;
+                    border: 1px solid {badge_color};
+                    border-radius: 3px;
+                    padding: 1px 6px;
+                }}
+            """)
+            rl.addWidget(badge)
+
+            # Enable/disable toggle
+            toggle = QCheckBox()
+            toggle.setChecked(
+                cfg_mod.get_pref(f"plugins.{m.id}.enabled", True))
+            toggle.setToolTip("Enable or disable this plugin (restart required)")
+            toggle.setStyleSheet("border:none;")
+            toggle.toggled.connect(
+                lambda checked, pid=m.id: self._on_plugin_toggled(pid, checked))
+            rl.addWidget(toggle)
+
+            self._plugin_list_layout.addWidget(row)
+
+    def _on_plugin_toggled(self, plugin_id: str, enabled: bool) -> None:
+        cfg_mod.set_pref(f"plugins.{plugin_id}.enabled", enabled)
+        log.info("Plugin '%s' %s (restart required)",
+                 plugin_id, "enabled" if enabled else "disabled")
+
+    def _open_plugins_folder(self) -> None:
+        from pathlib import Path
+        plugins_dir = Path.home() / ".microsanj" / "plugins"
+        plugins_dir.mkdir(parents=True, exist_ok=True)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(plugins_dir)))
 
     def _build_support_group(self) -> QGroupBox:
         g = _group("Support & About")

@@ -1,0 +1,28 @@
+{
+    "id": "com.example.sample-viewer",
+    "name": "Sample Viewer",
+    "version": "1.0.0",
+    "api_version": 1,
+    "author": "Example University",
+    "description": "A minimal example tool plugin that displays sample metadata.",
+
+    "plugin_type": "tool_panel",
+
+    "entry_point": "plugin:SampleViewerPlugin",
+
+    "min_license_tier": "developer",
+
+    "sidebar": {
+        "section": "TOOLS",
+        "label": "Sample Viewer",
+        "icon": "mdi.microscope"
+    },
+
+    "dependencies": {
+        "python": [],
+        "plugins": []
+    },
+
+    "min_app_version": "1.5.0",
+    "platforms": ["win32", "darwin", "linux"]
+}

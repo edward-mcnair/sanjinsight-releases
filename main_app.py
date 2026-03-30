@@ -726,6 +726,10 @@ class MainWindow(QMainWindow):
         self._nav.add_section("SYSTEM", [
             NI("Settings",    _I["Settings"],    self._settings_tab),
         ])
+
+        # ─── Plugin system ────────────────────────────────────────────
+        self._wire_plugins(NI, _I)
+
         self._nav.finish()
 
         # Apply initial workspace mode
@@ -1138,6 +1142,96 @@ class MainWindow(QMainWindow):
             self._camera_ctrl_tab.set_tab_attention(
                 0, bool(issues & {"camera_saturated", "camera_underexposed",
                                   "camera_disconnected"}))
+
+    # ── Plugin system ────────────────────────────────────────────────────
+
+    def _wire_plugins(self, NI, _I) -> None:
+        """Discover, load, and wire plugins into the UI.
+
+        Called from _build_ui() after all built-in nav sections are
+        registered but *before* ``self._nav.finish()``.
+        """
+        try:
+            from plugins.loader import PluginLoader
+            from plugins.registry import PluginRegistry
+            from plugins.base import (
+                HardwarePanelPlugin, AnalysisViewPlugin,
+                ToolPanelPlugin, DrawerTabPlugin,
+                HardwareDriverPlugin,
+            )
+            from ui.theme import register_theme_listener
+
+            self._plugin_registry = PluginRegistry()
+            self._plugin_loader = PluginLoader(
+                self._plugin_registry,
+                hw_service=getattr(self, "_hw_service", None),
+                app_state=None,
+                signals=None,
+                event_bus=None,
+            )
+
+            loaded = self._plugin_loader.discover_and_load()
+            if not loaded:
+                log.debug("No plugins loaded.")
+                return
+
+            # Wire hardware panels into a PLUGINS collapsible section
+            hw_plugins = self._plugin_registry.get_by_type("hardware_panel")
+            if hw_plugins:
+                hw_items = []
+                for p in hw_plugins:
+                    panel = p.create_panel()
+                    hw_items.append(NI(p.get_nav_label(), p.get_nav_icon(), panel))
+                self._nav.add_collapsible("PLUGINS · HARDWARE", "mdi.puzzle", hw_items)
+
+            # Wire tool panels into a TOOLS section
+            tool_plugins = self._plugin_registry.get_by_type("tool_panel")
+            if tool_plugins:
+                tool_items = []
+                for p in tool_plugins:
+                    panel = p.create_panel()
+                    tool_items.append(NI(p.get_nav_label(), p.get_nav_icon(), panel))
+                self._nav.add_section("TOOLS", tool_items)
+
+            # Wire analysis views
+            analysis_plugins = self._plugin_registry.get_by_type("analysis_view")
+            if analysis_plugins:
+                analysis_items = []
+                for p in analysis_plugins:
+                    panel = p.create_panel()
+                    analysis_items.append(NI(p.get_nav_label(), p.get_nav_icon(), panel))
+                self._nav.add_section("ANALYSIS · PLUGINS", analysis_items)
+
+            # Wire drawer tabs
+            drawer_plugins = self._plugin_registry.get_by_type("drawer_tab")
+            for p in drawer_plugins:
+                tab_widget = p.create_tab()
+                self._bottom_drawer.add_tab(
+                    tab_widget, p.get_tab_label(), p.get_tab_icon())
+
+            # Wire hardware drivers into device registry
+            driver_plugins = self._plugin_registry.get_by_type("hardware_driver")
+            for p in driver_plugins:
+                try:
+                    from hardware.device_registry import register_external
+                    register_external(p.get_device_descriptor())
+                except Exception:
+                    log.warning("Failed to register driver plugin '%s'",
+                                type(p).__name__, exc_info=True)
+
+            # Register theme listener so plugins get notified on switch
+            register_theme_listener(self._plugin_registry.notify_theme_changed)
+
+            log.info("Loaded %d plugin(s): %s", len(loaded),
+                     ", ".join(m.name for m in loaded))
+
+            # Update settings tab plugin list
+            if hasattr(self, "_settings_tab"):
+                self._settings_tab.refresh_plugins_list(self._plugin_registry)
+
+        except Exception:
+            log.debug("Plugin system unavailable or failed to load.",
+                      exc_info=True)
 
     def _on_workspace_changed(self, mode: str) -> None:
         """Handle workspace mode switch from Settings or sidebar indicator."""
@@ -3950,6 +4044,13 @@ class MainWindow(QMainWindow):
             scan_autosave.clear()
         except Exception:
             log.debug("closeEvent: autosave clear failed (non-fatal)", exc_info=True)
+        # ── Deactivate plugins ────────────────────────────────────
+        if hasattr(self, "_plugin_registry") and self._plugin_registry:
+            try:
+                self._plugin_registry.deactivate_all()
+            except Exception:
+                log.debug("Plugin deactivation failed (non-fatal)", exc_info=True)
+
         global running
         log.info("Shutdown requested")
         running = False   # legacy flag for any code that still checks it

@@ -734,3 +734,15 @@ def find_by_ni_pattern(resource_name: str) -> Optional[DeviceDescriptor]:
 def all_by_type(device_type: str) -> List[DeviceDescriptor]:
     return [d for d in DEVICE_REGISTRY.values()
             if d.device_type == device_type]
+
+
+def register_external(descriptor: DeviceDescriptor) -> None:
+    """Register a plugin-provided device descriptor into the global registry.
+
+    Raises :class:`ValueError` if the UID is already in use.
+    """
+    if descriptor.uid in DEVICE_REGISTRY:
+        raise ValueError(
+            f"Device UID '{descriptor.uid}' already registered "
+            f"(existing: {DEVICE_REGISTRY[descriptor.uid].display_name})")
+    DEVICE_REGISTRY[descriptor.uid] = descriptor

@@ -17,7 +17,8 @@ class LicenseTier(str, Enum):
     """Commercial tier encoded inside the signed license payload."""
     UNLICENSED = "unlicensed"   # no key present / invalid key
     STANDARD   = "standard"    # single-seat, full hardware
-    SITE       = "site"        # multi-seat, full hardware
+    DEVELOPER  = "developer"   # standard + plugin SDK access
+    SITE       = "site"        # multi-seat, full hardware + plugins
 
 
 @dataclass
@@ -66,6 +67,7 @@ class LicenseInfo:
         return {
             LicenseTier.UNLICENSED: "Unlicensed",
             LicenseTier.STANDARD:   "Standard",
+            LicenseTier.DEVELOPER:  "Developer",
             LicenseTier.SITE:       "Site License",
         }.get(self.tier, self.tier.value.title())
 
