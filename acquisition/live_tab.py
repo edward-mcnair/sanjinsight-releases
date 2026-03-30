@@ -1197,13 +1197,15 @@ class LiveTab(QWidget):
         dy = max(0, min(dy, drr.shape[0] - 1))
         dx = max(0, min(dx, drr.shape[1] - 1))
         self._probe_xy.setText(f"({dx}, {dy})")
-        val = float(drr[dy, dx])
+        pixel = drr[dy, dx]
+        val = float(pixel) if np.ndim(pixel) == 0 else float(pixel.flat[0])
         self._probe_drr.setText(f"{val:.5e}")
         self._probe_plot.push(val)
 
         dt = self._last_frame.dt_map
         if dt is not None and 0 <= dy < dt.shape[0] and 0 <= dx < dt.shape[1]:
             v = dt[dy, dx]
+            v = float(v) if np.ndim(v) == 0 else float(v.flat[0])
             self._probe_dt.setText(
                 "masked" if not np.isfinite(v) else f"{v:.3f} °C")
         else:
