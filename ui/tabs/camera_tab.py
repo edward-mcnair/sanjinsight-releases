@@ -399,13 +399,19 @@ class CameraTab(QWidget):
         lay.addStretch()
         return w
 
+    @staticmethod
+    def _ffc_camera():
+        """Return whichever connected camera supports FFC (IR first)."""
+        for cam in (app_state.ir_cam, app_state.cam):
+            if cam is not None and cam.supports_ffc():
+                return cam
+        return None
+
     def set_hardware_available(self, available: bool) -> None:
         """Switch between empty state (page 0) and full controls (page 1)."""
         self._stack.setCurrentIndex(1 if available else 0)
-        cam = app_state.cam
         # Show FFC button only for cameras that support it
-        self._ffc_btn.setVisible(
-            available and cam is not None and cam.supports_ffc())
+        self._ffc_btn.setVisible(available and self._ffc_camera() is not None)
         # AF button: always visible when camera connected, but disabled
         # without a stage. Tooltip explains the requirement.
         self._af_btn.setVisible(available)
@@ -609,8 +615,8 @@ class CameraTab(QWidget):
 
     def _on_ffc(self):
         """Trigger Flat-Field Correction on the active camera."""
-        cam = app_state.cam
-        if cam and cam.supports_ffc():
+        cam = self._ffc_camera()
+        if cam:
             self._ffc_btn.setEnabled(False)
             self._ffc_btn.setText("Running FFC…")
             ok = cam.do_ffc()

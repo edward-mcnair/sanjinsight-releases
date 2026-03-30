@@ -1698,11 +1698,12 @@ class MainWindow(QMainWindow):
         every tab is re-evaluated; otherwise only the tab matching *key*.
         """
         _cam_test = lambda: app_state.cam is not None
+        _any_cam  = lambda: app_state.cam is not None or app_state.ir_cam is not None
         _map = [
             ("stage",     self._stage_tab,              lambda: app_state.stage is not None),
             ("prober",    self._prober_tab,             lambda: app_state.prober is not None),
-            ("camera",    self._camera_tab,             _cam_test),
-            ("ir_camera", self._camera_tab,             _cam_test),
+            ("camera",    self._camera_tab,             _any_cam),
+            ("ir_camera", self._camera_tab,             _any_cam),
             ("fpga",      self._fpga_tab,               lambda: app_state.fpga is not None),
             ("bias",      self._bias_tab,               lambda: app_state.bias is not None),
             ("tec",       self._temp_tab,               lambda: len(app_state.tecs) > 0),
