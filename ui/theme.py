@@ -281,17 +281,35 @@ _active_mode: str = "dark"
 PALETTE: dict = dict(_DARK_RAW)
 
 
+_theme_listeners: list = []
+
+
+def register_theme_listener(callback) -> None:
+    """Register a callable to be invoked after every theme switch.
+
+    Used by the plugin system to notify plugins of theme changes.
+    """
+    if callback not in _theme_listeners:
+        _theme_listeners.append(callback)
+
+
 def set_theme(mode: str) -> None:
     """Switch the active theme to ``'dark'`` or ``'light'``.
 
     Updates PALETTE in-place — all existing ``PALETTE[key]`` references
-    in widget code pick up the new values automatically.
+    in widget code pick up the new values automatically.  Registered
+    theme listeners are notified after the update.
     """
     global _active_mode
     _active_mode = mode
     raw = _DARK_RAW if mode == "dark" else _LIGHT_RAW
     PALETTE.clear()
     PALETTE.update(raw)
+    for cb in _theme_listeners:
+        try:
+            cb()
+        except Exception:
+            pass
 
 
 def active_theme() -> str:

@@ -83,6 +83,18 @@ class BottomDrawer(QWidget):
     def current_tab_index(self) -> int:
         return self._tabs.currentIndex()
 
+    def add_tab(self, widget: QWidget, label: str, icon_name: str = "") -> int:
+        """Add a plugin-contributed tab to the drawer.
+
+        Returns the new tab index.
+        """
+        idx = self._tabs.addTab(widget, f"  {label}")
+        if icon_name:
+            icon = make_icon(icon_name, color=PALETTE.get("textDim", "#8892aa"), size=14)
+            if icon:
+                self._tabs.setTabIcon(idx, icon)
+        return idx
+
     # ── Theme ──────────────────────────────────────────────────────────
 
     def _apply_styles(self) -> None:
