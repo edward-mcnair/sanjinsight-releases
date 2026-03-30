@@ -403,13 +403,20 @@ class AcquisitionPipeline:
             except Exception:
                 pass
 
+    # Checkpoint every 25% of frames (at least every 50 frames)
+    _CHECKPOINT_FRAC = 0.25
+    _CHECKPOINT_MIN  = 50
+
     def _capture_phase(self, phase: str, n_frames: int) -> Optional[np.ndarray]:
         """
         Capture n_frames and return their float64 average.
         If a ROI is set, only the cropped region is accumulated.
+        Periodically checkpoints the accumulator for crash recovery.
         """
         accumulator = None
         count       = 0
+        ckpt_interval = max(self._CHECKPOINT_MIN,
+                            int(n_frames * self._CHECKPOINT_FRAC))
 
         while count < n_frames:
             if self._abort_flag:
@@ -443,6 +450,11 @@ class AcquisitionPipeline:
                         + (f"  [ROI {self._roi.w}×{self._roi.h}]"
                            if self._roi else ""))
 
+            # Periodic checkpoint for crash recovery
+            if count % ckpt_interval == 0 and accumulator is not None:
+                self._save_capture_checkpoint(
+                    phase, accumulator, count, n_frames)
+
         avg = (accumulator / n_frames).astype(np.float64)
         for hook in self.post_average_hooks:
             try:
@@ -451,6 +463,23 @@ class AcquisitionPipeline:
                 log.warning("post_average hook %s failed: %s",
                             getattr(hook, '__name__', hook), exc)
         return avg
+
+    def _save_capture_checkpoint(self, phase: str, accumulator: np.ndarray,
+                                 count: int, n_frames: int) -> None:
+        """Write a mid-capture checkpoint so frames aren't lost on crash."""
+        try:
+            from acquisition.storage.autosave import acquire_autosave
+            acquire_autosave.save(
+                arrays={f"{phase}_accumulator": accumulator},
+                metadata={
+                    "phase": phase,
+                    "frames_done": count,
+                    "frames_total": n_frames,
+                    "checkpoint": True,
+                },
+            )
+        except Exception as exc:
+            log.debug("Capture checkpoint failed (non-fatal): %s", exc)
 
     # Pixels with cold intensity below this threshold are treated as dark/noise.
     # Values below it are masked to NaN in ΔR/R to prevent garbage data.

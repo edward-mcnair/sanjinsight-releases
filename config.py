@@ -295,6 +295,10 @@ def _load_prefs() -> dict:
 def _save_prefs():
     try:
         _PREFS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        # Keep a backup so a crash mid-write doesn't lose preferences
+        if _PREFS_PATH.exists():
+            import shutil
+            shutil.copy2(_PREFS_PATH, _PREFS_PATH.with_suffix(".json.bak"))
         with open(_PREFS_PATH, "w") as f:
             json.dump(_prefs, f, indent=2)
     except Exception:

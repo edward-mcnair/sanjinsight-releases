@@ -55,6 +55,9 @@ log = logging.getLogger(__name__)
 #  Tiny helper — numpy array → QPixmap via matplotlib colormap        #
 # ------------------------------------------------------------------ #
 
+_cmap_cache: dict = {}   # name → matplotlib colormap (avoid repeated lookups)
+
+
 def _array_to_pixmap(arr: np.ndarray,
                      cmap: str = "inferno",
                      vmin: float = None,
@@ -72,7 +75,9 @@ def _array_to_pixmap(arr: np.ndarray,
     if v_lo == v_hi:
         v_hi = v_lo + 1e-9
 
-    colormap = cm.get_cmap(cmap)
+    if cmap not in _cmap_cache:
+        _cmap_cache[cmap] = cm.get_cmap(cmap)
+    colormap = _cmap_cache[cmap]
     normed   = np.clip((arr - v_lo) / (v_hi - v_lo), 0.0, 1.0)
     rgba     = (colormap(normed) * 255).astype(np.uint8)   # H×W×4
     h, w     = rgba.shape[:2]
@@ -236,6 +241,7 @@ class ComparisonTab(QWidget):
         self._blink_state = False
         self._blink_timer = QTimer(self)
         self._blink_timer.timeout.connect(self._do_blink)
+        self._auto_populated = False
         self._build()
 
     # ── UI construction ─────────────────────────────────────────────
@@ -395,6 +401,43 @@ class ComparisonTab(QWidget):
             self._data_stack.setCurrentIndex(1)
         else:
             self._data_stack.setCurrentIndex(0)
+
+    # ── Auto-populate with recent sessions ─────────────────────────
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if not self._auto_populated:
+            self._auto_populated = True
+            self._auto_populate()
+
+    def _auto_populate(self):
+        """Load the two most recent sessions when first shown."""
+        if self._sm is None:
+            return
+        try:
+            metas = self._sm.all_metas()[:2]
+        except Exception:
+            return
+        if len(metas) < 2:
+            return
+        for slot, meta in zip(("A", "B"), metas):
+            if not meta.path:
+                continue
+            arr = self._load_array_from_folder(meta.path)
+            if arr is None:
+                continue
+            if slot == "A":
+                self._arrA, self._pathA = arr, meta.path
+            else:
+                self._arrB, self._pathB = arr, meta.path
+
+        self._check_empty_state()
+        if self._arrA is not None or self._arrB is not None:
+            self._refresh_maps()
+            self._status_lbl.setText(
+                f"A: {Path(self._pathA).name if self._pathA else '—'}   "
+                f"B: {Path(self._pathB).name if self._pathB else '—'}"
+            )
 
     # ── Session loading ─────────────────────────────────────────────
 

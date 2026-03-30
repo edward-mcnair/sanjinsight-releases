@@ -519,20 +519,29 @@ class MeasurementOrchestrator(QObject):
         """
         try:
             # ── Post-processing: quality scoring ──────────────────────
+            self.phase_changed.emit(
+                MeasurementPhase.POST_PROCESSING, "Scoring quality…")
             scorecard = self._compute_quality_scorecard(acq_result)
             if self._aborted:
                 return
 
             # ── Post-processing: calibration apply ────────────────────
+            self.phase_changed.emit(
+                MeasurementPhase.POST_PROCESSING, "Applying calibration…")
             self._apply_calibration(acq_result)
             if self._aborted:
                 return
 
             # ── Saving ────────────────────────────────────────────────
             self._set_phase(MeasurementPhase.SAVING)
+            self.phase_changed.emit(
+                MeasurementPhase.SAVING, "Saving session…")
             session_path = self._save_session(acq_result, scorecard)
             if self._aborted:
                 return
+
+            self.phase_changed.emit(
+                MeasurementPhase.SAVING, "Writing manifest…")
 
             # ── Complete ──────────────────────────────────────────────
             duration = time.time() - self._context.start_ts

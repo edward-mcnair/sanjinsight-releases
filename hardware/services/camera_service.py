@@ -135,7 +135,7 @@ class CameraService(BaseDeviceService):
                 pipeline = app_state.pipeline
                 if pipeline and _HAS_PIPELINE and pipeline.state == AcqState.CAPTURING:
                     last_frame_t = time.monotonic()   # acquisition is producing frames
-                    self._stop_event.wait(0.05)
+                    self._stop_event.wait(0.01)
                     continue
                 cam = app_state.cam
                 if cam is None:

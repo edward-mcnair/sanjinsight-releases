@@ -322,6 +322,7 @@ from ai.diagnostic_engine        import DiagnosticEngine
 from ui.widgets.readiness_widget import ReadinessWidget
 from ui.widgets.acquisition_summary_overlay import AcquisitionSummaryOverlay
 from ui.widgets.optimization_suggestions import OptimizationSuggestionsWidget
+from ui.widgets.batch_progress_widget import BatchProgressWidget
 from ai.ai_service               import AIService
 from ai.model_runner             import llama_available
 from ai.model_downloader         import ModelDownloader, RECOMMENDED_MODEL, DEFAULT_MODELS_DIR
@@ -474,6 +475,8 @@ class MainWindow(QMainWindow):
 
         # Always-visible toggle bar below the splitter.
         # Provides Console / Log buttons + open/close chevron even when drawer == 0 px.
+        self._batch_progress = BatchProgressWidget()
+        root.addWidget(self._batch_progress)
         self._drawer_toggle_bar = DrawerToggleBar()
         root.addWidget(self._drawer_toggle_bar)
 
@@ -1825,9 +1828,9 @@ class MainWindow(QMainWindow):
         acq_menu = mb.addMenu("Acquisition")
 
         act_run = acq_menu.addAction("▶  Run Sequence")
-        act_run.setShortcut(QKeySequence("Ctrl+R"))
+        act_run.setShortcut(QKeySequence("F5"))
         act_run.setToolTip(
-            "Capture cold and hot frames then compute ΔR/R (Ctrl+R)")
+            "Capture cold and hot frames then compute ΔR/R (F5)")
         act_run.triggered.connect(self._acquire_tab._run)
 
         act_abort = acq_menu.addAction("■  Abort")
@@ -1849,8 +1852,8 @@ class MainWindow(QMainWindow):
         acq_menu.addSeparator()
 
         act_start_live = acq_menu.addAction("▶  Start Live Stream")
-        act_start_live.setShortcut(QKeySequence("F5"))
-        act_start_live.setToolTip("Start the live ΔR/R preview (F5)")
+        act_start_live.setShortcut(QKeySequence("Ctrl+F5"))
+        act_start_live.setToolTip("Start the live ΔR/R preview (Ctrl+F5)")
         act_start_live.triggered.connect(
             lambda: self._live_tab._start_btn.click()
             if self._live_tab._start_btn.isEnabled() else None)

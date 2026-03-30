@@ -172,7 +172,7 @@ class Session:
 
     def _load(self, filename: str) -> Optional[np.ndarray]:
         p = os.path.join(self.meta.path, filename)
-        return np.load(p) if os.path.exists(p) else None
+        return np.load(p, mmap_mode="r") if os.path.exists(p) else None
 
     def unload(self):
         self._cold_avg = self._hot_avg = None

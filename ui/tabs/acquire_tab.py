@@ -39,6 +39,7 @@ class AcquireTab(QWidget):
     def __init__(self):
         super().__init__()
         self._result = None
+        self._prev_settings: dict | None = None   # for undo
         root = QHBoxLayout(self)
         root.setSpacing(10)
         root.setContentsMargins(10, 10, 10, 10)
@@ -148,7 +149,7 @@ class AcquireTab(QWidget):
             "Run the full cold → hot acquisition sequence automatically.\n"
             "Captures cold baseline, applies stimulus, captures hot frames, "
             "then computes ΔR/R and ΔT.\n\n"
-            "Keyboard shortcut: Ctrl+R")
+            "Keyboard shortcut: F5")
         self._opt_acq_btn = QPushButton("OPTIMIZE && ACQUIRE")
         set_btn_icon(self._opt_acq_btn, "fa5s.magic", PALETTE.get("accent", "#00bcd4"))
         self._opt_acq_btn.setToolTip(
@@ -164,8 +165,15 @@ class AcquireTab(QWidget):
             "Any frames already captured will be discarded.\n\n"
             "Keyboard shortcut: Escape")
         self._abort_btn.setEnabled(False)
+        self._restore_btn = QPushButton("Restore")
+        set_btn_icon(self._restore_btn, "fa5s.undo")
+        self._restore_btn.setToolTip(
+            "Restore acquisition settings from before the last run.")
+        self._restore_btn.setEnabled(False)
+        self._restore_btn.clicked.connect(self._restore_settings)
         for b in [self._cold_btn, self._hot_btn,
-                  self._run_btn, self._opt_acq_btn, self._abort_btn]:
+                  self._run_btn, self._opt_acq_btn, self._abort_btn,
+                  self._restore_btn]:
             btn_row.addWidget(b)
         cl.addLayout(btn_row, 4, 0, 1, 2)
 
@@ -511,11 +519,28 @@ class AcquireTab(QWidget):
 
         threading.Thread(target=_run, daemon=True).start()
 
+    def _snapshot_settings(self):
+        """Save current settings before acquisition for undo."""
+        self._prev_settings = {
+            "frames": self._frames.value(),
+            "delay": self._delay.value(),
+        }
+        self._restore_btn.setEnabled(True)
+
+    def _restore_settings(self):
+        """Restore settings from before the last acquisition."""
+        if self._prev_settings is None:
+            return
+        self._frames.setValue(self._prev_settings["frames"])
+        self._delay.setValue(self._prev_settings["delay"])
+        self.log("Settings restored from previous run.")
+
     def _run(self):
         """Called by the Run button. Emits acquire_requested for readiness gate."""
         if app_state.pipeline is None:
             self.log("No acquisition pipeline — is hardware connected?")
             return
+        self._snapshot_settings()
         self.acquire_requested.emit(self._frames.value(), self._delay.value())
 
     def _optimize_and_acquire(self):
@@ -523,6 +548,7 @@ class AcquireTab(QWidget):
         if app_state.pipeline is None:
             self.log("No acquisition pipeline — is hardware connected?")
             return
+        self._snapshot_settings()
         self.optimize_and_acquire_requested.emit(
             self._frames.value(), self._delay.value())
 
