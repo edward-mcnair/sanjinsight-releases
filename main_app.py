@@ -1225,6 +1225,10 @@ class MainWindow(QMainWindow):
             log.info("Loaded %d plugin(s): %s", len(loaded),
                      ", ".join(m.name for m in loaded))
 
+            # Update settings tab plugin list
+            if hasattr(self, "_settings_tab"):
+                self._settings_tab.refresh_plugins_list(self._plugin_registry)
+
         except Exception:
             log.debug("Plugin system unavailable or failed to load.",
                       exc_info=True)
