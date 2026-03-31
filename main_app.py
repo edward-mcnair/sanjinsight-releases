@@ -1523,6 +1523,18 @@ class MainWindow(QMainWindow):
         except Exception:
             log.debug("Profile picker modality filter failed", exc_info=True)
 
+        # If the active profile doesn't match the new modality, clear it
+        # from the header and app_state so the user isn't misled.
+        active = getattr(app_state, "active_profile", None)
+        if active is not None:
+            profile_modality = getattr(active, "modality", "tr")
+            if profile_modality not in (cam_type, "any"):
+                app_state.active_profile = None
+                try:
+                    self._header.set_profile(None)
+                except Exception:
+                    log.debug("Header profile clear failed", exc_info=True)
+
         log.info("Camera mode refresh (%s): active camera → %s", source, cam_type)
 
     # ── Individual camera-switch entry points ─────────────────────────
