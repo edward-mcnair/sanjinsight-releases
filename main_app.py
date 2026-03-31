@@ -731,6 +731,7 @@ class MainWindow(QMainWindow):
 
         # SYSTEM
         self._nav.add_section("SYSTEM", [
+            NI("Library",     _I["Library"],    self._library_tab),
             NI("Settings",    _I["Settings"],    self._settings_tab),
         ])
 
