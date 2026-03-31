@@ -84,8 +84,9 @@ class AcquisitionSettingsSection(QWidget):
         sub_frames.setStyleSheet(_dim_style())
         grid.addWidget(sub_frames, 2, 1, 1, 2)
 
-        # Row 3: Exposure
-        grid.addWidget(QLabel("Exposure (μs)"), 3, 0)
+        # Row 3: Exposure — TR only (IR cameras have fixed exposure)
+        self._exp_label = QLabel("Exposure (μs)")
+        grid.addWidget(self._exp_label, 3, 0)
         self._exp_slider = QSlider(Qt.Horizontal)
         self._exp_slider.setRange(50, 200000)
         self._exp_slider.setValue(5000)
@@ -97,12 +98,14 @@ class AcquisitionSettingsSection(QWidget):
         grid.addWidget(self._exp_slider, 3, 1)
         grid.addWidget(self._exp_lbl, 3, 2)
 
-        sub_exp = QLabel("image brightness  ·  longer = brighter, risk of saturation")
-        sub_exp.setStyleSheet(_dim_style())
-        grid.addWidget(sub_exp, 4, 1, 1, 2)
+        self._exp_sub = QLabel("image brightness  ·  longer = brighter, risk of saturation")
+        self._exp_sub.setStyleSheet(_dim_style())
+        grid.addWidget(self._exp_sub, 4, 1, 1, 2)
 
         # Exposure presets
-        exp_pr = QHBoxLayout()
+        self._exp_presets_w = QWidget()
+        exp_pr = QHBoxLayout(self._exp_presets_w)
+        exp_pr.setContentsMargins(0, 0, 0, 0)
         for label, v in [("50μs", 50), ("1ms", 1000), ("5ms", 5000),
                          ("20ms", 20000), ("100ms", 100000)]:
             b = QPushButton(label)
@@ -110,10 +113,16 @@ class AcquisitionSettingsSection(QWidget):
             b.clicked.connect(lambda _, val=v: self._set_exp(val))
             exp_pr.addWidget(b)
         exp_pr.addStretch()
-        grid.addLayout(exp_pr, 5, 1)
+        grid.addWidget(self._exp_presets_w, 5, 1)
 
-        # Row 6: Gain
-        grid.addWidget(QLabel("Gain (dB)"), 6, 0)
+        self._tr_exposure_widgets = [
+            self._exp_label, self._exp_slider, self._exp_lbl,
+            self._exp_sub, self._exp_presets_w,
+        ]
+
+        # Row 6: Gain — TR: continuous dB slider; IR: High/Low combo
+        self._gain_label_tr = QLabel("Gain (dB)")
+        grid.addWidget(self._gain_label_tr, 6, 0)
         self._gain_slider = QSlider(Qt.Horizontal)
         self._gain_slider.setRange(0, 239)
         self._gain_slider.setValue(0)
@@ -125,9 +134,35 @@ class AcquisitionSettingsSection(QWidget):
         grid.addWidget(self._gain_slider, 6, 1)
         grid.addWidget(self._gain_lbl, 6, 2)
 
-        sub_gain = QLabel("amplification  ·  0 dB ideal for best SNR")
-        sub_gain.setStyleSheet(_dim_style())
-        grid.addWidget(sub_gain, 7, 1, 1, 2)
+        self._gain_sub_tr = QLabel("amplification  ·  0 dB ideal for best SNR")
+        self._gain_sub_tr.setStyleSheet(_dim_style())
+        grid.addWidget(self._gain_sub_tr, 7, 1, 1, 2)
+
+        # IR gain mode (overlaid in same grid row, initially hidden)
+        self._gain_label_ir = QLabel("Gain Mode")
+        self._gain_combo_ir = QComboBox()
+        self._gain_combo_ir.addItems(["High", "Low"])
+        self._gain_combo_ir.setFixedWidth(120)
+        self._gain_combo_ir.setToolTip(
+            "Boson gain mode — High gain for small signals,\n"
+            "Low gain for wider dynamic range")
+        self._gain_combo_ir.currentTextChanged.connect(self._on_ir_gain_mode)
+        self._gain_sub_ir = QLabel("High = more sensitive  ·  Low = wider dynamic range")
+        self._gain_sub_ir.setStyleSheet(_dim_style())
+        grid.addWidget(self._gain_label_ir, 6, 0)
+        grid.addWidget(self._gain_combo_ir, 6, 1)
+        grid.addWidget(self._gain_sub_ir, 7, 1, 1, 2)
+        self._gain_label_ir.setVisible(False)
+        self._gain_combo_ir.setVisible(False)
+        self._gain_sub_ir.setVisible(False)
+
+        self._tr_gain_widgets = [
+            self._gain_label_tr, self._gain_slider, self._gain_lbl,
+            self._gain_sub_tr,
+        ]
+        self._ir_gain_widgets = [
+            self._gain_label_ir, self._gain_combo_ir, self._gain_sub_ir,
+        ]
 
         # Row 8: Averaging
         grid.addWidget(QLabel("Averaging"), 8, 0)
@@ -181,6 +216,18 @@ class AcquisitionSettingsSection(QWidget):
     def set_hardware_available(self, available: bool) -> None:
         for w in self._hw_controls:
             w.setEnabled(available)
+        if available:
+            self.refresh_camera_mode()
+
+    def refresh_camera_mode(self) -> None:
+        """Update controls for TR vs IR camera mode."""
+        is_ir = getattr(app_state, "active_camera_type", "tr") == "ir"
+        for w in self._tr_exposure_widgets:
+            w.setVisible(not is_ir)
+        for w in self._tr_gain_widgets:
+            w.setVisible(not is_ir)
+        for w in self._ir_gain_widgets:
+            w.setVisible(is_ir)
 
     def get_settings(self) -> dict:
         return {
@@ -225,6 +272,18 @@ class AcquisitionSettingsSection(QWidget):
                 cam.set_gain(db)
             except Exception as e:
                 log.debug("set_gain failed: %s", e)
+        self.settings_changed.emit()
+
+    def _on_ir_gain_mode(self, mode_text: str) -> None:
+        """Set Boson High/Low gain mode from the IR combo."""
+        cam = app_state.cam
+        if cam is None:
+            return
+        db = 1.0 if mode_text == "High" else 0.0
+        try:
+            cam.set_gain(db)
+        except Exception as e:
+            log.debug("IR gain mode change failed: %s", e)
         self.settings_changed.emit()
 
     # ── Theme ──────────────────────────────────────────────────────────

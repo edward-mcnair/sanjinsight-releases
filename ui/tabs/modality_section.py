@@ -269,7 +269,8 @@ class ModalitySection(QWidget):
         self._sensor_lbl.setStyleSheet(_mono_style())
         opts_grid.addWidget(self._sensor_lbl, 1, 1)
 
-        opts_grid.addWidget(QLabel("Wavelength Filter"), 2, 0)
+        self._filter_label = QLabel("Wavelength Filter")
+        opts_grid.addWidget(self._filter_label, 2, 0)
         self._filter_combo = QComboBox()
         self._filter_combo.addItems(["None", "470 nm", "530 nm", "550 nm",
                                       "590 nm", "625 nm", "650 nm", "850 nm"])
@@ -432,6 +433,7 @@ class ModalitySection(QWidget):
         self._refresh_camera_combo()
         self._refresh_turret()
         self._refresh_sensor_info()
+        self._refresh_modality_controls()
         self._refresh_ffc_row()
         self._profile_picker.filter_by_modality(app_state.active_camera_type)
 
@@ -478,6 +480,7 @@ class ModalitySection(QWidget):
         app_state.active_camera_type = cam_type
         self._update_modality_desc(cam_type)
         self._refresh_sensor_info()
+        self._refresh_modality_controls()
         self._refresh_ffc_row()
         self._profile_picker.filter_by_modality(cam_type)
         self.modality_changed.emit(cam_type)
@@ -592,6 +595,13 @@ class ModalitySection(QWidget):
             if c is not None and getattr(c, "supports_ffc", lambda: False)():
                 return c
         return None
+
+    def _refresh_modality_controls(self) -> None:
+        """Show/hide controls based on active camera type (TR vs IR)."""
+        is_ir = getattr(app_state, "active_camera_type", "tr") == "ir"
+        # Wavelength filter — TR only (IR cameras use fixed thermal band)
+        self._filter_label.setVisible(not is_ir)
+        self._filter_combo.setVisible(not is_ir)
 
     def _refresh_ffc_row(self) -> None:
         """Show/hide FFC row and update status text."""

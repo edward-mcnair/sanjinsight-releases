@@ -1500,11 +1500,12 @@ class MainWindow(QMainWindow):
 
         # Refresh every tab/section that has mode-dependent controls
         _refresh_targets = [
-            ("modality_section", lambda: self._modality_section.refresh()),
-            ("cal_tab",          lambda: self._cal_tab.refresh_camera_mode()),
-            ("acquire_tab",      lambda: self._acquire_tab.refresh_camera_mode()),
-            ("live_tab",         lambda: self._live_tab.refresh_camera_mode()),
-            ("camera_tab",       lambda: self._camera_tab.refresh_camera_mode()),
+            ("modality_section",    lambda: self._modality_section.refresh()),
+            ("acq_settings",        lambda: self._acq_settings_section.refresh_camera_mode()),
+            ("cal_tab",             lambda: self._cal_tab.refresh_camera_mode()),
+            ("acquire_tab",         lambda: self._acquire_tab.refresh_camera_mode()),
+            ("live_tab",            lambda: self._live_tab.refresh_camera_mode()),
+            ("camera_tab",          lambda: self._camera_tab.refresh_camera_mode()),
         ]
         for name, fn in _refresh_targets:
             try:
@@ -1634,6 +1635,7 @@ class MainWindow(QMainWindow):
                 log.debug("AutoScan camera refresh failed", exc_info=True)
             # Refresh all camera-mode-dependent controls (FFC, etc.)
             _cam_refresh_targets = [
+                ("acq_settings", lambda: self._acq_settings_section.refresh_camera_mode()),
                 ("acquire_tab",  lambda: self._acquire_tab.refresh_camera_mode()),
                 ("cal_tab",      lambda: self._cal_tab.refresh_camera_mode()),
                 ("live_tab",     lambda: self._live_tab.refresh_camera_mode()),

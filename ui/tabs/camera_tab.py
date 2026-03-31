@@ -101,8 +101,9 @@ class CameraTab(QWidget):
 
         from ui.help import help_label
 
-        # Exposure (basic)
-        cl.addWidget(help_label("Exposure (μs)", "exposure_us"), 0, 0)
+        # Exposure (basic) — TR only; IR cameras have fixed exposure
+        self._exp_label = help_label("Exposure (μs)", "exposure_us")
+        cl.addWidget(self._exp_label, 0, 0)
         self._exp_slider = QSlider(Qt.Horizontal)
         self._exp_slider.setRange(50, 200000)
         self._exp_slider.setValue(5000)
@@ -116,13 +117,15 @@ class CameraTab(QWidget):
         cl.addWidget(self._exp_lbl, 0, 2)
 
         # Exposure sub-label
-        sub_exp = QLabel("image brightness  ·  longer = brighter, risk of saturation")
-        sub_exp.setStyleSheet(
+        self._exp_sub = QLabel("image brightness  ·  longer = brighter, risk of saturation")
+        self._exp_sub.setStyleSheet(
             f"font-size:{FONT['caption']}pt; color:{PALETTE['textDim']}; padding-left:2px;")
-        cl.addWidget(sub_exp, 1, 1, 1, 2)
+        cl.addWidget(self._exp_sub, 1, 1, 1, 2)
 
         # Exposure presets
-        pr = QHBoxLayout()
+        self._exp_presets_w = QWidget()
+        pr = QHBoxLayout(self._exp_presets_w)
+        pr.setContentsMargins(0, 0, 0, 0)
         for lbl, v in [("50μs", 50), ("1ms", 1000), ("5ms", 5000),
                        ("20ms", 20000), ("100ms", 100000)]:
             b = QPushButton(lbl)
@@ -137,10 +140,17 @@ class CameraTab(QWidget):
         self._auto_exp_btn.clicked.connect(self._run_auto_expose)
         pr.addWidget(self._auto_exp_btn)
         pr.addStretch()
-        cl.addLayout(pr, 2, 1)
+        cl.addWidget(self._exp_presets_w, 2, 1)
 
-        # Gain (basic)
-        cl.addWidget(help_label("Gain (dB)", "gain_db"), 3, 0)
+        # Collect all TR-only exposure widgets for visibility toggling
+        self._tr_exposure_widgets = [
+            self._exp_label, self._exp_slider, self._exp_lbl,
+            self._exp_sub, self._exp_presets_w,
+        ]
+
+        # Gain — TR: continuous dB slider; IR: High/Low combo
+        self._gain_label_tr = help_label("Gain (dB)", "gain_db")
+        cl.addWidget(self._gain_label_tr, 3, 0)
         self._gain_slider = QSlider(Qt.Horizontal)
         self._gain_slider.setRange(0, 239)
         self._gain_slider.setValue(0)
@@ -153,7 +163,7 @@ class CameraTab(QWidget):
         cl.addWidget(self._gain_slider, 3, 1)
         cl.addWidget(self._gain_lbl, 3, 2)
 
-        # Auto-Gain button (same row as gain slider)
+        # Auto-Gain button (TR only)
         self._auto_gain_btn = QPushButton("Auto-Gain")
         self._auto_gain_btn.setMinimumWidth(80)
         self._auto_gain_btn.setToolTip(
@@ -161,11 +171,44 @@ class CameraTab(QWidget):
         self._auto_gain_btn.clicked.connect(self._run_auto_gain)
         cl.addWidget(self._auto_gain_btn, 3, 3)
 
-        # Gain sub-label
-        sub_gain = QLabel("amplification  ·  0 dB ideal for best SNR")
-        sub_gain.setStyleSheet(
+        # Gain sub-label (TR)
+        self._gain_sub_tr = QLabel("amplification  ·  0 dB ideal for best SNR")
+        self._gain_sub_tr.setStyleSheet(
             f"font-size:{FONT['caption']}pt; color:{PALETTE['textDim']}; padding-left:2px;")
-        cl.addWidget(sub_gain, 4, 1, 1, 2)
+        cl.addWidget(self._gain_sub_tr, 4, 1, 1, 2)
+
+        # IR gain mode — High/Low combo (overlaid in same grid row)
+        self._gain_label_ir = QLabel("Gain Mode")
+        self._gain_label_ir.setStyleSheet(
+            f"font-size:{FONT['label']}pt; font-weight:600; "
+            f"color:{PALETTE['text']};")
+        self._gain_combo_ir = QComboBox()
+        self._gain_combo_ir.addItems(["High", "Low"])
+        self._gain_combo_ir.setFixedWidth(120)
+        self._gain_combo_ir.setToolTip(
+            "Boson gain mode — High gain for small signals,\n"
+            "Low gain for wider dynamic range")
+        self._gain_combo_ir.currentTextChanged.connect(self._on_ir_gain_mode)
+        self._gain_sub_ir = QLabel("High = more sensitive  ·  Low = wider dynamic range")
+        self._gain_sub_ir.setStyleSheet(
+            f"font-size:{FONT['caption']}pt; color:{PALETTE['textDim']}; padding-left:2px;")
+        cl.addWidget(self._gain_label_ir, 3, 0)
+        cl.addWidget(self._gain_combo_ir, 3, 1)
+        cl.addWidget(self._gain_sub_ir, 4, 1, 1, 2)
+
+        # Initially hide IR gain widgets (TR is default)
+        self._gain_label_ir.setVisible(False)
+        self._gain_combo_ir.setVisible(False)
+        self._gain_sub_ir.setVisible(False)
+
+        # Collect TR-only and IR-only gain widgets
+        self._tr_gain_widgets = [
+            self._gain_label_tr, self._gain_slider, self._gain_lbl,
+            self._auto_gain_btn, self._gain_sub_tr,
+        ]
+        self._ir_gain_widgets = [
+            self._gain_label_ir, self._gain_combo_ir, self._gain_sub_ir,
+        ]
 
         # ── Objective Turret selector (row 5 — only shown when turret connected) ──
         self._obj_label = help_label("Objective", "objective_turret")
@@ -424,8 +467,24 @@ class CameraTab(QWidget):
                 "Connect a motorized stage to enable autofocus.")
 
     def refresh_camera_mode(self) -> None:
-        """Update FFC button visibility when modality changes."""
+        """Update all mode-dependent controls when modality changes."""
+        is_ir = getattr(app_state, "active_camera_type", "tr") == "ir"
+
+        # FFC button — IR only
         self._ffc_btn.setVisible(self._ffc_camera() is not None)
+
+        # Exposure controls — TR only (IR cameras have fixed exposure)
+        for w in self._tr_exposure_widgets:
+            w.setVisible(not is_ir)
+
+        # Gain: TR = continuous dB slider, IR = High/Low combo
+        for w in self._tr_gain_widgets:
+            w.setVisible(not is_ir)
+        for w in self._ir_gain_widgets:
+            w.setVisible(is_ir)
+
+        # Optimize throughput — TR only (adjusts exposure/duty cycle)
+        self._optimize_btn.setVisible(not is_ir)
 
     # ── Stat readout widget ────────────────────────────────────────────
 
@@ -527,6 +586,17 @@ class CameraTab(QWidget):
             cam = app_state.cam
             if cam:
                 cam.set_gain(val)
+
+    def _on_ir_gain_mode(self, mode_text: str) -> None:
+        """Set Boson High/Low gain mode from the IR combo."""
+        cam = app_state.cam
+        if cam is None:
+            return
+        db = 1.0 if mode_text == "High" else 0.0
+        try:
+            cam.set_gain(db)
+        except Exception as e:
+            log.debug("IR gain mode change failed: %s", e)
 
     def _on_quick_af(self):
         """Run autofocus with last-used settings from a background thread."""

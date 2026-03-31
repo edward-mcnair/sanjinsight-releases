@@ -141,10 +141,13 @@ class PreflightValidator:
 
         # Grab frames for exposure + stability checks
         bit_depth = getattr(cam.info, 'bit_depth', 12) if cam.info else 12
+        is_ir = getattr(self._as, "active_camera_type", "tr") == "ir"
         frames = self._grab_frames(cam)
 
         if frames:
-            checks.append(self._check_exposure(frames[0], bit_depth))
+            # Exposure check: skip for IR cameras (no settable exposure)
+            if not is_ir:
+                checks.append(self._check_exposure(frames[0], bit_depth))
             checks.append(self._check_stability(frames, bit_depth))
             checks.append(self._check_focus(frames[-1]))
 
