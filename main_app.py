@@ -1479,12 +1479,56 @@ class MainWindow(QMainWindow):
         except Exception as _me:
             log.debug("Manifest event (scan) failed: %s", _me)
 
+    # ── Centralized camera-mode refresh ──────────────────────────────
+
+    def _refresh_camera_dependent_ui(self, cam_type: str, source: str = "") -> None:
+        """Refresh ALL camera-mode-dependent UI after any camera switch.
+
+        Called from every code path that changes the active camera:
+        header dropdown, camera bar combo, and modality section combo.
+        Ensures no panel is left showing stale controls (e.g. FFC on TR).
+        """
+        key = "tr_camera" if cam_type == "tr" else "ir_camera"
+        self._header.set_active_device(key)
+        self._refresh_all_camera_selectors()
+
+        # Restart Live feed so it picks up the new camera immediately
+        try:
+            self._live_tab.restart_if_running()
+        except Exception:
+            log.debug("Live tab restart failed on camera switch", exc_info=True)
+
+        # Refresh every tab/section that has mode-dependent controls
+        _refresh_targets = [
+            ("modality_section", lambda: self._modality_section.refresh()),
+            ("cal_tab",          lambda: self._cal_tab.refresh_camera_mode()),
+            ("acquire_tab",      lambda: self._acquire_tab.refresh_camera_mode()),
+            ("live_tab",         lambda: self._live_tab.refresh_camera_mode()),
+            ("camera_tab",       lambda: self._camera_tab.refresh_camera_mode()),
+        ]
+        for name, fn in _refresh_targets:
+            try:
+                fn()
+            except Exception:
+                log.debug("%s camera refresh failed", name, exc_info=True)
+
+        # Update profile filters to match camera modality
+        try:
+            self._profile_tab.set_modality_filter(cam_type)
+        except Exception:
+            log.debug("Profile modality filter update failed", exc_info=True)
+        try:
+            self._modality_section._profile_picker.filter_by_modality(cam_type)
+        except Exception:
+            log.debug("Profile picker modality filter failed", exc_info=True)
+
+        log.info("Camera mode refresh (%s): active camera → %s", source, cam_type)
+
+    # ── Individual camera-switch entry points ─────────────────────────
+
     def _on_camera_selected(self, key: str) -> None:
         """
         Called when the user clicks a camera row in the Connected Devices dropdown.
-
-        Sets the active camera in app_state, updates the Active indicator in the
-        header, and notifies AutoScan so it can refresh its modality display.
         """
         if key in ("tr_camera", "camera"):
             cam_type = "tr"
@@ -1499,90 +1543,24 @@ class MainWindow(QMainWindow):
             log.warning("Camera selection: %s not connected", key)
             return
 
-        app_state.active_camera_type = cam_type   # also syncs active_modality
-        self._header.set_active_device(key)
-
-        # Refresh the global camera bar and all per-tab selectors.
-        self._refresh_all_camera_selectors()
-
-        log.info("Active camera switched to: %s (%s)", key, cam_type)
+        app_state.active_camera_type = cam_type
+        self._refresh_camera_dependent_ui(cam_type, source="header_dropdown")
 
     def _on_camera_bar_changed(self, cam_type: str) -> None:
         """
         Called when the user picks a camera from the global CameraContextBar.
-
-        The bar has already updated app_state.active_camera_type; we just
-        need to sync the header active-device indicator, per-tab selectors
-        (including AutoScan's modality-specific layout), and restart the
-        Live feed if it's running so it picks up the new camera.
+        The bar has already updated app_state.active_camera_type.
         """
-        key = "tr_camera" if cam_type == "tr" else "ir_camera"
-        self._header.set_active_device(key)
-        self._refresh_all_camera_selectors()
-
-        # Restart Live feed so it picks up the new camera immediately
-        try:
-            self._live_tab.restart_if_running()
-        except Exception:
-            log.debug("Live tab restart failed on camera switch", exc_info=True)
-
-        # Update mode-dependent UI in other tabs
-        try:
-            self._modality_section.refresh()
-        except Exception:
-            log.debug("ModalitySection refresh failed on camera switch", exc_info=True)
-        try:
-            self._cal_tab.refresh_camera_mode()
-        except Exception:
-            log.debug("CalibrationTab camera refresh failed", exc_info=True)
-        try:
-            self._acquire_tab.refresh_camera_mode()
-        except Exception:
-            log.debug("AcquireTab camera refresh failed", exc_info=True)
-
-        # Update profile filters to match camera modality
-        try:
-            self._profile_tab.set_modality_filter(cam_type)
-        except Exception:
-            log.debug("Profile modality filter update failed", exc_info=True)
-        try:
-            self._modality_section._profile_picker.filter_by_modality(cam_type)
-        except Exception:
-            log.debug("Profile picker modality filter failed", exc_info=True)
-
-        log.info("Global camera bar: active camera → %s", cam_type)
+        self._refresh_camera_dependent_ui(cam_type, source="camera_bar")
 
     def _on_modality_changed(self, cam_type: str) -> None:
-        """Handle camera type change from ModalitySection's combo.
-
-        Syncs the global camera bar and all other camera-mode-dependent UI.
-        """
+        """Handle camera type change from ModalitySection's combo."""
         # Sync the camera context bar (it checks for redundant updates internally)
         try:
             self._cam_bar.set_camera_type(cam_type)
         except Exception:
-            # Older CameraContextBar without set_camera_type — update manually
             app_state.active_camera_type = cam_type
-        key = "tr_camera" if cam_type == "tr" else "ir_camera"
-        self._header.set_active_device(key)
-        self._refresh_all_camera_selectors()
-        try:
-            self._cal_tab.refresh_camera_mode()
-        except Exception:
-            pass
-        try:
-            self._acquire_tab.refresh_camera_mode()
-        except Exception:
-            pass
-        try:
-            self._live_tab.refresh_camera_mode()
-        except Exception:
-            log.debug("live_tab.refresh_camera_mode failed", exc_info=True)
-        try:
-            self._camera_tab.refresh_camera_mode()
-        except Exception:
-            log.debug("camera_tab.refresh_camera_mode failed", exc_info=True)
-        log.info("Modality section: active camera → %s", cam_type)
+        self._refresh_camera_dependent_ui(cam_type, source="modality_section")
 
     def _refresh_all_camera_selectors(self) -> None:
         """
@@ -1654,16 +1632,18 @@ class MainWindow(QMainWindow):
                 self._autoscan_tab.refresh_active_camera()
             except Exception:
                 log.debug("AutoScan camera refresh failed", exc_info=True)
-            # Refresh Capture tab for TR/IR mode
-            try:
-                self._acquire_tab.refresh_camera_mode()
-            except Exception:
-                log.debug("AcquireTab camera refresh failed", exc_info=True)
-            # Refresh Calibration tab TR/IR preset visibility
-            try:
-                self._cal_tab.refresh_camera_mode()
-            except Exception:
-                log.debug("CalibrationTab camera refresh failed", exc_info=True)
+            # Refresh all camera-mode-dependent controls (FFC, etc.)
+            _cam_refresh_targets = [
+                ("acquire_tab",  lambda: self._acquire_tab.refresh_camera_mode()),
+                ("cal_tab",      lambda: self._cal_tab.refresh_camera_mode()),
+                ("live_tab",     lambda: self._live_tab.refresh_camera_mode()),
+                ("camera_tab",   lambda: self._camera_tab.refresh_camera_mode()),
+            ]
+            for name, fn in _cam_refresh_targets:
+                try:
+                    fn()
+                except Exception:
+                    log.debug("%s camera refresh failed on hotplug", name, exc_info=True)
 
         # Wire the emissivity tab's "Capture from camera" button to the
         # live IR camera when an IR camera connects (or disconnect it).
@@ -1689,10 +1669,6 @@ class MainWindow(QMainWindow):
                 self._modality_section.set_hardware_available(ok)
             except Exception:
                 log.debug("Modality hotplug refresh failed", exc_info=True)
-            try:
-                self._live_tab.refresh_camera_mode()
-            except Exception:
-                pass
 
         # Toggle Tier-1 tab empty-state placeholders.
         # In demo mode all tabs stay fully visible.
