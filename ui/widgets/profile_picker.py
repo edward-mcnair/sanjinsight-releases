@@ -127,12 +127,18 @@ class ProfilePicker(QWidget):
 
         self._combo.blockSignals(False)
 
-        # Restore selection if the active profile is still visible
+        # Restore selection if the active profile is still visible;
+        # otherwise clear it so we don't keep a stale profile from the
+        # wrong modality (e.g. an IR profile when switching to TR).
         if self._active_profile:
             for i in range(self._combo.count()):
                 if self._combo.itemData(i) == self._active_profile.uid:
                     self._combo.setCurrentIndex(i)
                     return
+            # Active profile was filtered out — clear it
+            self._active_profile = None
+            self._detail_lbl.setVisible(False)
+            self.custom_selected.emit()  # notify that no profile is active
         self._combo.setCurrentIndex(0)
 
     def _on_combo_changed(self, index: int) -> None:
