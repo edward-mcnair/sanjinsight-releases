@@ -82,6 +82,7 @@ class FlirDriver(CameraDriver):
         self._streaming  : bool             = False
         # Serialise Boson serial-command calls from multiple threads
         self._cmd_lock   : threading.Lock   = threading.Lock()
+        self._last_ffc_time: float = None   # time.time() of last successful FFC
 
     # ------------------------------------------------------------------ #
     #  Lifecycle                                                           #
@@ -310,6 +311,7 @@ class FlirDriver(CameraDriver):
         with self._cmd_lock:
             try:
                 self._boson.do_ffc()
+                self._last_ffc_time = time.time()
                 log.debug("FlirDriver: FFC executed")
                 return True
             except Exception as exc:

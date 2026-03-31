@@ -180,6 +180,11 @@ class CameraDriver(ABC):
         """Trigger a Flat-Field Correction. Returns True on success."""
         return False
 
+    @property
+    def last_ffc_time(self):
+        """Return ``time.time()`` of last successful FFC, or ``None``."""
+        return getattr(self, "_last_ffc_time", None)
+
     # ---------------------------------------------------------------- #
     #  Introspection                                                    #
     # ---------------------------------------------------------------- #

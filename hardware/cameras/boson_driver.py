@@ -131,6 +131,7 @@ class BosonDriver(CameraDriver):
         self._cap_lock    = threading.Lock()   # guards _cap reference only
         self._state_lock  = threading.Lock()   # guards _open flag
         self._frame_idx   = 0                  # monotonic; only written in grab()
+        self._last_ffc_time = None             # time.time() of last successful FFC
 
         self._info = CameraInfo(
             driver      = "boson",
@@ -627,6 +628,8 @@ class BosonDriver(CameraDriver):
             result = self._client.bosonRunFFC()
             ok = (result is FLR_RESULT.R_SUCCESS)
             if ok:
+                import time as _t
+                self._last_ffc_time = _t.time()
                 log.info("Boson: FFC triggered successfully")
             else:
                 log.warning("Boson: FFC returned %s", result)

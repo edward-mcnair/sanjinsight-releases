@@ -1574,6 +1574,10 @@ class MainWindow(QMainWindow):
             self._acquire_tab.refresh_camera_mode()
         except Exception:
             pass
+        try:
+            self._live_tab.refresh_camera_mode()
+        except Exception:
+            pass
         log.info("Modality section: active camera → %s", cam_type)
 
     def _refresh_all_camera_selectors(self) -> None:
@@ -1681,6 +1685,10 @@ class MainWindow(QMainWindow):
                 self._modality_section.set_hardware_available(ok)
             except Exception:
                 log.debug("Modality hotplug refresh failed", exc_info=True)
+            try:
+                self._live_tab.refresh_camera_mode()
+            except Exception:
+                pass
 
         # Toggle Tier-1 tab empty-state placeholders.
         # In demo mode all tabs stay fully visible.

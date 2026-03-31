@@ -152,6 +152,11 @@ class PreflightValidator:
         tec_checks = self._check_tec()
         checks.extend(tec_checks)
 
+        # FFC freshness (IR cameras only)
+        ffc_check = self._check_ffc_freshness()
+        if ffc_check is not None:
+            checks.append(ffc_check)
+
         return PreflightResult(
             checks=checks,
             duration_ms=(time.time() - t0) * 1000,
@@ -371,6 +376,57 @@ class PreflightValidator:
                 ))
 
         return checks
+
+    # FFC freshness threshold (seconds)
+    _FFC_WARN_AGE = 3600   # 1 hour
+
+    def _check_ffc_freshness(self) -> Optional[PreflightCheck]:
+        """Check FFC freshness for IR cameras.  Returns None if N/A."""
+        # Check both cam slots for an FFC-capable camera
+        cam = None
+        for c in (getattr(self._as, "ir_cam", None),
+                  getattr(self._as, "cam", None)):
+            if c is not None and getattr(c, "supports_ffc", lambda: False)():
+                cam = c
+                break
+        if cam is None:
+            return None
+
+        last_ffc = getattr(cam, "last_ffc_time", None)
+        if last_ffc is None:
+            return PreflightCheck(
+                rule_id="PF_FFC",
+                display_name="Flat-Field Correction",
+                status="warn",
+                observed="FFC has not been run this session",
+                threshold="Recommended before first acquisition",
+                hint="Run FFC to calibrate pixel offsets. This removes "
+                     "fixed-pattern noise from the thermal sensor.",
+                observed_values={"last_ffc_age_sec": None},
+            )
+
+        age_sec = time.time() - last_ffc
+        age_min = age_sec / 60.0
+
+        if age_sec > self._FFC_WARN_AGE:
+            return PreflightCheck(
+                rule_id="PF_FFC",
+                display_name="Flat-Field Correction",
+                status="warn",
+                observed=f"FFC last run {age_min:.0f} minutes ago",
+                threshold="Recommended: re-run every 60 minutes",
+                hint="Run FFC to recalibrate pixel offsets. Temperature "
+                     "drift degrades measurement accuracy over time.",
+                observed_values={"last_ffc_age_sec": age_sec},
+            )
+
+        return PreflightCheck(
+            rule_id="PF_FFC",
+            display_name="Flat-Field Correction",
+            status="pass",
+            observed=f"FFC current ({age_min:.1f} min ago)",
+            observed_values={"last_ffc_age_sec": age_sec},
+        )
 
     def _check_tec(self) -> List[PreflightCheck]:
         """Check TEC stability from the metrics snapshot."""

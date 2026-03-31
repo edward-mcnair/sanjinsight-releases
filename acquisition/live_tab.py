@@ -744,16 +744,23 @@ class LiveTab(QWidget):
         self._reset_btn  = QPushButton("Reset EMA")
         set_btn_icon(self._reset_btn, "fa5s.undo")
 
+        self._ffc_btn = QPushButton("FFC")
+        set_btn_icon(self._ffc_btn, "mdi.grid-off", "#ffb300")
+        self._ffc_btn.setToolTip(
+            "Run Flat-Field Correction — recalibrate pixel offsets\n"
+            "for the IR thermal camera (closes internal shutter briefly)")
+        self._ffc_btn.setVisible(False)   # shown only for FFC-capable cameras
+
         self._start_btn.setObjectName("primary")
         self._stop_btn.setObjectName("danger")
         self._stop_btn.setEnabled(False)
 
         self._btn_runner = RunningButton(self._start_btn, idle_text="Start")
         apply_hand_cursor(self._stop_btn, self._freeze_btn,
-                          self._capture_btn, self._reset_btn)
+                          self._capture_btn, self._reset_btn, self._ffc_btn)
 
         for b in [self._start_btn, self._stop_btn, self._freeze_btn,
-                  self._capture_btn, self._reset_btn]:
+                  self._capture_btn, self._reset_btn, self._ffc_btn]:
             b.setFixedHeight(30)
             lay.addWidget(b)
 
@@ -787,6 +794,7 @@ class LiveTab(QWidget):
         self._freeze_btn.clicked.connect(self._toggle_freeze)
         self._capture_btn.clicked.connect(self._capture)
         self._reset_btn.clicked.connect(self._reset_ema)
+        self._ffc_btn.clicked.connect(self._do_ffc)
 
         return bar
 
@@ -1099,6 +1107,53 @@ class LiveTab(QWidget):
     def _reset_ema(self):
         if self._proc:
             self._proc.reset_ema()
+
+    def _do_ffc(self):
+        """Run Flat-Field Correction on the active IR camera."""
+        from hardware.app_state import app_state
+        cam = None
+        for c in (getattr(app_state, "ir_cam", None),
+                  getattr(app_state, "cam", None)):
+            if c is not None and getattr(c, "supports_ffc", lambda: False)():
+                cam = c
+                break
+        if cam is None:
+            return
+
+        self._ffc_btn.setEnabled(False)
+        self._ffc_btn.setText("Running…")
+
+        import threading
+        def _run():
+            try:
+                ok = cam.do_ffc()
+            except Exception:
+                ok = False
+            from PyQt5.QtCore import QTimer
+            QTimer.singleShot(0, lambda: self._ffc_done(ok))
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _ffc_done(self, success: bool):
+        self._ffc_btn.setEnabled(True)
+        self._ffc_btn.setText("FFC")
+        if success:
+            self._ffc_btn.setToolTip(
+                "FFC complete — pixel offsets recalibrated")
+        else:
+            self._ffc_btn.setToolTip(
+                "FFC failed — check camera connection")
+
+    def refresh_camera_mode(self):
+        """Show/hide FFC button based on whether active camera supports FFC."""
+        from hardware.app_state import app_state
+        cam = None
+        for c in (getattr(app_state, "ir_cam", None),
+                  getattr(app_state, "cam", None)):
+            if c is not None and getattr(c, "supports_ffc", lambda: False)():
+                cam = c
+                break
+        self._ffc_btn.setVisible(cam is not None)
 
     def _apply_config(self):
         if self._proc:

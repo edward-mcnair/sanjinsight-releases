@@ -275,6 +275,33 @@ class ModalitySection(QWidget):
                                       "590 nm", "625 nm", "650 nm", "850 nm"])
         self._filter_combo.setFixedWidth(120)
         opts_grid.addWidget(self._filter_combo, 2, 1)
+
+        # FFC row — visible only when IR camera supports FFC
+        self._ffc_label = QLabel("Flat-Field Correction")
+        self._ffc_status = QLabel("—")
+        self._ffc_status.setStyleSheet(_mono_style())
+        self._ffc_run_btn = QPushButton("Run FFC")
+        set_btn_icon(self._ffc_run_btn, "mdi.grid-off", "#ffb300")
+        self._ffc_run_btn.setFixedWidth(100)
+        self._ffc_run_btn.setFixedHeight(28)
+        self._ffc_run_btn.setToolTip(
+            "Run Flat-Field Correction to recalibrate pixel offsets.\n"
+            "Recommended before acquisition and after ambient temperature changes.")
+        self._ffc_run_btn.clicked.connect(self._on_ffc)
+
+        ffc_right = QHBoxLayout()
+        ffc_right.setSpacing(8)
+        ffc_right.addWidget(self._ffc_status)
+        ffc_right.addWidget(self._ffc_run_btn)
+        ffc_right.addStretch()
+        opts_grid.addWidget(self._ffc_label, 3, 0)
+        opts_grid.addLayout(ffc_right, 3, 1)
+
+        # Initially hidden — shown by _refresh_ffc_row()
+        self._ffc_label.setVisible(False)
+        self._ffc_status.setVisible(False)
+        self._ffc_run_btn.setVisible(False)
+
         self._opts_panel.addWidget(opts_inner)
         root.addWidget(self._opts_panel)
         root.addSpacing(16)
@@ -405,6 +432,7 @@ class ModalitySection(QWidget):
         self._refresh_camera_combo()
         self._refresh_turret()
         self._refresh_sensor_info()
+        self._refresh_ffc_row()
         self._profile_picker.filter_by_modality(app_state.active_camera_type)
 
     # ── Camera combo ───────────────────────────────────────────────────
@@ -450,6 +478,7 @@ class ModalitySection(QWidget):
         app_state.active_camera_type = cam_type
         self._update_modality_desc(cam_type)
         self._refresh_sensor_info()
+        self._refresh_ffc_row()
         self._profile_picker.filter_by_modality(cam_type)
         self.modality_changed.emit(cam_type)
 
@@ -552,6 +581,67 @@ class ModalitySection(QWidget):
             except Exception:
                 pass
         self._px_spin.setValue(0.0)
+
+    # ── FFC controls (IR cameras only) ───────────────────────────────
+
+    def _ffc_camera(self):
+        """Return the FFC-capable camera, or None."""
+        for c in (getattr(app_state, "ir_cam", None),
+                  getattr(app_state, "cam", None)):
+            if c is not None and getattr(c, "supports_ffc", lambda: False)():
+                return c
+        return None
+
+    def _refresh_ffc_row(self) -> None:
+        """Show/hide FFC row and update status text."""
+        import time as _t
+        cam = self._ffc_camera()
+        visible = cam is not None
+        self._ffc_label.setVisible(visible)
+        self._ffc_status.setVisible(visible)
+        self._ffc_run_btn.setVisible(visible)
+        if not visible:
+            return
+
+        last = getattr(cam, "last_ffc_time", None)
+        if last is None:
+            self._ffc_status.setText("Not run this session")
+            self._ffc_status.setStyleSheet(
+                f"font-family:{MONO_FONT}; font-size:{FONT['readoutSm']}pt; "
+                f"color:{PALETTE.get('warning', '#ffb300')};")
+        else:
+            age_min = (_t.time() - last) / 60.0
+            if age_min < 60:
+                self._ffc_status.setText(f"Current ({age_min:.0f} min ago)")
+                self._ffc_status.setStyleSheet(_mono_style())
+            else:
+                self._ffc_status.setText(f"Stale ({age_min:.0f} min ago)")
+                self._ffc_status.setStyleSheet(
+                    f"font-family:{MONO_FONT}; font-size:{FONT['readoutSm']}pt; "
+                    f"color:{PALETTE.get('warning', '#ffb300')};")
+
+    def _on_ffc(self) -> None:
+        """Run FFC on a background thread."""
+        cam = self._ffc_camera()
+        if cam is None:
+            return
+
+        self._ffc_run_btn.setEnabled(False)
+        self._ffc_run_btn.setText("Running…")
+
+        def _run():
+            try:
+                ok = cam.do_ffc()
+            except Exception:
+                ok = False
+            QTimer.singleShot(0, lambda: self._on_ffc_done(ok))
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _on_ffc_done(self, success: bool) -> None:
+        self._ffc_run_btn.setEnabled(True)
+        self._ffc_run_btn.setText("Run FFC")
+        self._refresh_ffc_row()
 
     # ── Empty state ────────────────────────────────────────────────────
 

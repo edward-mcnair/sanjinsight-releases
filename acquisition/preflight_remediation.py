@@ -147,6 +147,44 @@ class PreflightRemediator:
             action=_apply,
         )
 
+    def _fix_pf_ffc(self, check) -> Optional[Remediation]:
+        """Run Flat-Field Correction on the IR camera."""
+        # Find the FFC-capable camera (same logic as preflight.py)
+        cam = None
+        for c in (getattr(self._as, "ir_cam", None),
+                  getattr(self._as, "cam", None)):
+            if c is not None and getattr(c, "supports_ffc", lambda: False)():
+                cam = c
+                break
+        if cam is None:
+            return None
+
+        age = check.observed_values.get("last_ffc_age_sec")
+        if age is None:
+            desc = "Run FFC to calibrate pixel offsets before acquisition."
+        else:
+            desc = (f"FFC is {age / 60:.0f} min old — re-run to recalibrate "
+                    f"pixel offsets for accurate measurements.")
+
+        def _apply() -> bool:
+            try:
+                ok = cam.do_ffc()
+                if ok:
+                    log.info("Remediation: FFC executed successfully")
+                else:
+                    log.warning("Remediation: FFC returned False")
+                return ok
+            except Exception:
+                log.exception("Remediation: FFC failed")
+                return False
+
+        return Remediation(
+            rule_id="PF_FFC",
+            label="Run FFC",
+            description=desc,
+            action=_apply,
+        )
+
     def _fix_pf_focus(self, check) -> Optional[Remediation]:
         """Trigger autofocus if a stage is available."""
         cam = self._as.cam
