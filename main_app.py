@@ -1560,7 +1560,7 @@ class MainWindow(QMainWindow):
         # Sync the camera context bar (it checks for redundant updates internally)
         try:
             self._cam_bar.set_camera_type(cam_type)
-        except AttributeError:
+        except Exception:
             # Older CameraContextBar without set_camera_type — update manually
             app_state.active_camera_type = cam_type
         key = "tr_camera" if cam_type == "tr" else "ir_camera"
@@ -1577,7 +1577,11 @@ class MainWindow(QMainWindow):
         try:
             self._live_tab.refresh_camera_mode()
         except Exception:
-            pass
+            log.debug("live_tab.refresh_camera_mode failed", exc_info=True)
+        try:
+            self._camera_tab.refresh_camera_mode()
+        except Exception:
+            log.debug("camera_tab.refresh_camera_mode failed", exc_info=True)
         log.info("Modality section: active camera → %s", cam_type)
 
     def _refresh_all_camera_selectors(self) -> None:

@@ -423,6 +423,10 @@ class CameraTab(QWidget):
             self._af_btn.setToolTip(
                 "Connect a motorized stage to enable autofocus.")
 
+    def refresh_camera_mode(self) -> None:
+        """Update FFC button visibility when modality changes."""
+        self._ffc_btn.setVisible(self._ffc_camera() is not None)
+
     # ── Stat readout widget ────────────────────────────────────────────
 
     def _stat_widget(self, label):
