@@ -17,20 +17,21 @@
 6. [User Interface](#6-user-interface)
 7. [AI Assistant & Diagnostics](#7-ai-assistant--diagnostics)
 8. [License System](#8-license-system)
-9. [Auth & RBAC System *(Planned)*](#9-auth--rbac-system-planned-for-v150)
-10. [Operator Shell *(Planned)*](#10-operator-shell-planned-for-v150)
-11. [Configuration & Preferences](#11-configuration--preferences)
-12. [Session Management](#12-session-management)
-13. [Update System](#13-update-system)
-14. [Event Bus & Logging](#14-event-bus--logging)
-15. [Thread Safety Model](#15-thread-safety-model)
-16. [Data Flow Diagrams](#16-data-flow-diagrams)
-17. [Build & Release Pipeline](#17-build--release-pipeline)
-18. [Testing](#18-testing)
-19. [Adding a New Hardware Driver](#19-adding-a-new-hardware-driver)
-20. [Adding a New UI Tab](#20-adding-a-new-ui-tab)
-21. [Key Design Decisions](#21-key-design-decisions)
-22. [Dependency Reference](#22-dependency-reference)
+9. [Plugin Architecture](#9-plugin-architecture)
+10. [Auth & RBAC System *(Planned)*](#10-auth--rbac-system-planned-for-v150)
+11. [Operator Shell *(Planned)*](#11-operator-shell-planned-for-v150)
+12. [Configuration & Preferences](#12-configuration--preferences)
+13. [Session Management](#13-session-management)
+14. [Update System](#14-update-system)
+15. [Event Bus & Logging](#15-event-bus--logging)
+16. [Thread Safety Model](#16-thread-safety-model)
+17. [Data Flow Diagrams](#17-data-flow-diagrams)
+18. [Build & Release Pipeline](#18-build--release-pipeline)
+19. [Testing](#19-testing)
+20. [Adding a New Hardware Driver](#20-adding-a-new-hardware-driver)
+21. [Adding a New UI Tab](#21-adding-a-new-ui-tab)
+22. [Key Design Decisions](#22-key-design-decisions)
+23. [Dependency Reference](#23-dependency-reference)
 
 ---
 
@@ -82,6 +83,15 @@ sanjinsight/
 │   ├── autofocus/             ← AutofocusDriver implementations
 │   ├── turret/                ← ObjectiveTurretDriver implementations
 │   └── ldd/                   ← LddDriver (laser diode) implementations
+│
+├── plugins/                   ← Plugin system (API v1)
+│   ├── __init__.py            ← Public API exports
+│   ├── base.py                ← Abstract base classes for 6 plugin types + PluginContext
+│   ├── manifest.py            ← PluginManifest dataclass, validation
+│   ├── loader.py              ← Discovery, license check, sandboxed import, activation
+│   ├── registry.py            ← In-memory plugin store
+│   ├── sandbox.py             ← Isolated module import
+│   └── errors.py              ← PluginError exception hierarchy
 │
 ├── acquisition/               ← Measurement pipeline and data model
 │   ├── pipeline.py            ← Hot/cold capture + ΔR/R computation
@@ -1173,8 +1183,11 @@ See `docs/LicenseKeySystem.md` for the full operations manual.
 class LicenseTier(str, Enum):
     UNLICENSED = "unlicensed"
     STANDARD   = "standard"
+    DEVELOPER  = "developer"    # Plugin SDK access
     SITE       = "site"
 ```
+
+Tier hierarchy: `UNLICENSED < STANDARD < DEVELOPER < SITE`. The Developer tier gates plugin loading and was added for internal Microsanj add-on products and third-party plugin developers.
 
 `LicenseInfo` computed properties: `is_active`, `is_expired`, `days_until_expiry`, `expiry_display`, `tier_display`.
 
@@ -1191,7 +1204,162 @@ if app_state.is_licensed:
 
 ---
 
-## 9. Auth & RBAC System *(Planned for v1.5.0)*
+## 9. Plugin Architecture
+
+### 9.1 Overview
+
+SanjINSIGHT supports a plugin system that allows extending the application with custom hardware panels, analysis views, tool panels, bottom-drawer tabs, hardware drivers, and analysis pipelines. Plugins are discovered at startup from the user-writable directory `~/.microsanj/plugins/`.
+
+The plugin system is designed primarily for internal Microsanj development of add-on products (e.g. POSH-TDTR, NOSH-TDTR) that share SanjINSIGHT's infrastructure but have fundamentally different measurement modalities. Third-party plugins are also supported for customers with a **Developer** or **Site** license tier.
+
+### 9.2 Package Structure
+
+```
+plugins/
+    __init__.py           Public API exports
+    base.py               Abstract base classes for all 6 plugin types + PluginContext
+    manifest.py           PluginManifest dataclass, validation, API version
+    loader.py             Discovery, license check, sandboxed import, activation
+    registry.py           In-memory store: register / unregister / get / get_by_type
+    sandbox.py            Isolated module import under _sanjinsight_plugins namespace
+    errors.py             PluginError hierarchy (manifest, load, license, dependency, API)
+```
+
+### 9.3 Plugin Types
+
+| Type | Base Class | UI Slot | Use Case |
+|------|-----------|---------|----------|
+| `hardware_panel` | `HardwarePanelPlugin` | Sidebar HARDWARE section | Custom device control panel |
+| `analysis_view` | `AnalysisViewPlugin` | Sidebar ANALYZE section | Custom analysis / results view |
+| `tool_panel` | `ToolPanelPlugin` | Sidebar TOOLS section | General-purpose utility |
+| `drawer_tab` | `DrawerTabPlugin` | Bottom drawer (Console/Log area) | Diagnostics, live data feeds |
+| `hardware_driver` | `HardwareDriverPlugin` | None (device registry) | Device driver without UI |
+| `analysis_pipeline` | `AnalysisPipelinePlugin` | None (pipeline registry) | Data processing pipeline |
+
+### 9.4 Plugin Lifecycle
+
+```
+Startup
+  1. PluginLoader.discover_and_load() scans ~/.microsanj/plugins/*/manifest.json
+  2. Each manifest is parsed and validated (PluginManifest.validate())
+  3. License tier check: manifest.min_license_tier vs app_state.license_info.tier
+  4. Platform filter: manifest.platforms checked against sys.platform
+  5. Disabled check: config preference plugins.<id>.enabled
+  6. Module imported under sandboxed namespace: _sanjinsight_plugins.<safe_id>.<module>
+  7. Plugin class instantiated and validated against expected base class
+  8. PluginContext built (hw_service, app_state, signals, event_bus, config, data_dir, logger)
+  9. plugin.activate(context) called
+ 10. Plugin registered in PluginRegistry
+
+Shutdown
+  1. PluginRegistry.deactivate_all() iterates all registered plugins
+  2. plugin.deactivate() called on each
+  3. Sandboxed sys.modules entries cleaned up
+```
+
+### 9.5 Integration with MainWindow
+
+Plugin wiring happens in `MainWindow._wire_plugins()`:
+
+```python
+def _wire_plugins(self):
+    loader = PluginLoader(app_state, hw_service, signals, event_bus, config)
+    self._plugin_registry = loader.discover_and_load()
+
+    for plugin in self._plugin_registry.get_by_type("hardware_panel"):
+        panel = plugin.create_panel()
+        self._nav.add_item("HARDWARE", plugin.nav_label, plugin.nav_icon, panel)
+
+    for plugin in self._plugin_registry.get_by_type("tool_panel"):
+        panel = plugin.create_panel()
+        self._nav.add_item("TOOLS", plugin.nav_label, plugin.nav_icon, panel)
+
+    for plugin in self._plugin_registry.get_by_type("drawer_tab"):
+        tab = plugin.create_tab()
+        self._drawer.add_tab(tab, plugin.tab_label, plugin.tab_icon)
+
+    for plugin in self._plugin_registry.get_by_type("hardware_driver"):
+        descriptor = plugin.get_device_descriptor()
+        register_external(descriptor)
+```
+
+### 9.6 PluginContext
+
+Every plugin receives a `PluginContext` dataclass on activation, providing sandboxed access to application services:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `hw_service` | `HardwareService` | Device control (set_exposure, start_fpga, etc.) |
+| `app_state` | `ApplicationState` | Thread-safe global state (cam, tecs, stage, etc.) |
+| `signals` | `AppSignals` | Application-wide Qt signals |
+| `event_bus` | `EventBus` | Publish/subscribe event bus |
+| `config` | module | Configuration and preferences |
+| `data_dir` | `Path` | Plugin-specific data directory (`~/.microsanj/plugins/<id>/data/`) |
+| `logger` | `Logger` | Pre-configured logger (`sanjinsight.plugin.<id>`) |
+
+### 9.7 Theme Integration
+
+Plugins receive theme change notifications through the `register_theme_listener()` API in `ui/theme.py`. When the user switches between Dark/Light/Auto themes:
+
+1. `set_theme(mode)` updates the global `PALETTE` dict
+2. All registered theme listeners are called with the new mode
+3. Plugin base class provides `on_theme_changed(mode)` for override
+
+### 9.8 Manifest Schema
+
+Each plugin directory must contain a `manifest.json`:
+
+```json
+{
+  "id": "com.microsanj.posh-tdtr",
+  "name": "POSH-TDTR Module",
+  "version": "1.0.0",
+  "api_version": 1,
+  "plugin_type": "hardware_panel",
+  "entry_point": "plugin.py",
+  "class_name": "PoshTdtrPlugin",
+  "min_license_tier": "developer",
+  "author": "Microsanj",
+  "description": "Picosecond optical sampling heating for thermal property extraction",
+  "platforms": ["win32", "darwin", "linux"],
+  "min_app_version": "1.5.0"
+}
+```
+
+### 9.9 License Gating
+
+Plugin loading is gated by the `min_license_tier` field in the manifest. The tier hierarchy is:
+
+```
+UNLICENSED < STANDARD < DEVELOPER < SITE
+```
+
+- **Standard** tier: can use plugins with `min_license_tier: "standard"` (none currently)
+- **Developer** tier: can use internal Microsanj plugins and custom extensions
+- **Site** tier: full access to all plugins
+
+The `DEVELOPER` tier was added specifically for plugin SDK access and sits between Standard and Site.
+
+### 9.10 External Driver Registration
+
+Hardware driver plugins register with the device registry via `register_external(descriptor)`. This allows plugin-provided cameras, stages, or other devices to appear in Device Manager alongside built-in drivers.
+
+### 9.11 Settings UI
+
+The Settings panel includes a **Plugins** group (visible when plugins are installed) showing:
+- Plugin name, version, type badge, and enable/disable toggle
+- "Open Plugins Folder" button to open `~/.microsanj/plugins/` in the file manager
+- Enable/disable state persisted to user preferences
+
+### 9.12 Testing
+
+Plugin system tests are in `tests/test_plugin_system.py` (29 tests covering manifest validation, sandboxed import, registry operations, loader lifecycle, theme listeners, and external driver registration).
+
+For the complete plugin developer API, see `docs/PluginDevelopmentGuide.md`.
+
+---
+
+## 10. Auth & RBAC System *(Planned for v1.5.0)*
 
 > **Note:** This section describes the planned authentication and role-based access control system. It is not yet implemented — the `auth/` package does not exist in the current codebase. The design is documented here for forward reference.
 
@@ -1208,7 +1376,7 @@ When `auth.require_login` is `false` (the default), the auth system is bypassed 
 
 ---
 
-## 10. Operator Shell *(Planned for v1.5.0)*
+## 11. Operator Shell *(Planned for v1.5.0)*
 
 > **Note:** This section describes the planned Operator Shell UI for Technician users. It is not yet implemented — `ui/operator/` does not exist in the current codebase.
 
@@ -1222,7 +1390,7 @@ Key planned features:
 
 ---
 
-## 11. Configuration & Preferences
+## 12. Configuration & Preferences
 
 ### 11.1 System Configuration (`config.yaml`)
 
@@ -1279,7 +1447,7 @@ config.get_pref("license.key", "")
 
 ---
 
-## 12. Session Management
+## 13. Session Management
 
 ### 12.1 Session Structure on Disk
 
@@ -1358,7 +1526,7 @@ When loading a session written by a *newer* version of the software (schema > CU
 
 ---
 
-## 13. Update System
+## 14. Update System
 
 ### 13.1 UpdateChecker (`updater.py`)
 
@@ -1390,7 +1558,7 @@ result = checker.check_sync()   # Blocking (used for "Check Now" button)
 
 ---
 
-## 14. Event Bus & Logging
+## 15. Event Bus & Logging
 
 ### 14.1 EventBus (`events/event_bus.py`)
 
@@ -1424,7 +1592,7 @@ log.error("Camera grab failed: %s", exc)
 
 ---
 
-## 15. Thread Safety Model
+## 16. Thread Safety Model
 
 | Mechanism | Used for |
 |---|---|
@@ -1442,7 +1610,7 @@ log.error("Camera grab failed: %s", exc)
 
 ---
 
-## 16. Data Flow Diagrams
+## 17. Data Flow Diagrams
 
 ### Hardware Discovery & Startup
 
@@ -1506,7 +1674,7 @@ main_app.MainWindow.__init__()
 
 ---
 
-## 17. Build & Release Pipeline
+## 18. Build & Release Pipeline
 
 ### 17.1 GitHub Actions (`.github/workflows/build-installer.yml`)
 
@@ -1587,7 +1755,7 @@ CI requires `CHANGELOG.md` to have an entry for the current version in `version.
 
 ---
 
-## 18. Testing
+## 19. Testing
 
 ```bash
 # Run all tests
@@ -1623,7 +1791,7 @@ All hardware tests use simulated drivers — no real hardware required to run th
 
 ---
 
-## 19. Adding a New Hardware Driver
+## 20. Adding a New Hardware Driver
 
 Example: adding a new camera driver `acme_cam.py`.
 
@@ -1742,7 +1910,7 @@ No other changes are needed. The `HardwareService` reads the factory and the res
 
 ---
 
-## 20. Adding a New UI Tab
+## 21. Adding a New UI Tab
 
 Example: adding a new "Polarization" tab in Manual mode.
 
@@ -1805,7 +1973,7 @@ Tabs should **never block** the user from viewing data — they should hide or d
 
 ---
 
-## 21. Key Design Decisions
+## 22. Key Design Decisions
 
 | Decision | Rationale |
 |---|---|
@@ -1835,7 +2003,7 @@ Tabs should **never block** the user from viewing data — they should hide or d
 
 ---
 
-## 22. Dependency Reference
+## 23. Dependency Reference
 
 ```
 PyQt5>=5.15.9          Qt5 GUI framework

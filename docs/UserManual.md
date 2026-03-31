@@ -1534,7 +1534,29 @@ Embeds the full user management table. See Section 21.4 for details.
 | **Model list** | Select from models already installed in Ollama |
 | **Connect** | Test the Ollama connection and activate the selected model |
 
-### 18.7 License
+### 18.7 Plugins *(v1.5.0)*
+
+SanjINSIGHT supports plugins that add new hardware panels, analysis tools, and utility tabs. Plugins are loaded from the `~/.microsanj/plugins/` directory at startup.
+
+> **Note:** Plugin loading requires a **Developer** or **Site** license tier. Standard-tier licenses do not load plugins.
+
+| Element | Description |
+|---|---|
+| **Plugin list** | Shows each installed plugin with its name, version, and type badge (e.g. "tool", "hardware", "analysis"). |
+| **Enable / Disable** | Toggle switch next to each plugin. Disabled plugins are not loaded on next startup. |
+| **Open Plugins Folder** | Opens `~/.microsanj/plugins/` in your file manager. Each plugin is a subfolder containing a `manifest.json` and Python source files. |
+
+**Installing a plugin:**
+1. Download the plugin folder from the plugin author (a directory containing `manifest.json` and one or more `.py` files).
+2. Copy the folder into `~/.microsanj/plugins/`.
+3. Restart SanjINSIGHT. The plugin appears in the Settings list and its UI contributions (panels, tabs) appear in the sidebar or bottom drawer.
+
+**Removing a plugin:**
+1. Disable the plugin in Settings (optional — prevents it from loading).
+2. Delete the plugin folder from `~/.microsanj/plugins/`.
+3. Restart SanjINSIGHT.
+
+### 18.8 License
 
 #### First-run License Activation prompt
 
@@ -1554,7 +1576,7 @@ On a fresh installation (or whenever no valid license key is stored), SanjINSIGH
 | **Status** | Shows the current license tier, licensed name, and expiry date if applicable. Amber if expiring within 30 days. |
 | **Manage license** | Open the full License dialog to enter a new key or remove the current one. Removing a key reverts the application to demo mode. |
 
-### 18.8 Support
+### 18.9 Support
 
 | Button | Action |
 |---|---|

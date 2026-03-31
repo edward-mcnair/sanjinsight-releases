@@ -93,6 +93,19 @@ python tools/gen_license.py \
     --days     730
 ```
 
+### Developer license (plugin SDK access)
+
+```bash
+python tools/gen_license.py \
+    --key-file microsanj_license_private.key \
+    --customer "Microsanj R&D" \
+    --email dev@microsanj.com \
+    --tier     developer \
+    --seats    1 \
+    --days     365 \
+    --serial   SJ-DEV-001
+```
+
 ### Perpetual license (no expiry date)
 
 ```bash
@@ -157,7 +170,10 @@ Send an email like this:
 |------|----------------|-------------|
 | **Unlicensed** | Demo mode only (simulated hardware), exports may be watermarked | Trial / evaluation |
 | **Standard** | Full hardware access, all features, 1 seat | Individual researcher |
-| **Site** | Full hardware access, N seats | Lab / institution |
+| **Developer** | Standard features + plugin SDK access (load custom plugins) | Microsanj add-on products, third-party plugin developers |
+| **Site** | Full hardware access, N seats, plugin SDK access | Lab / institution |
+
+> **Note:** The Developer tier was added in v1.5.0 for the plugin architecture. Plugins specify a `min_license_tier` in their manifest; most internal Microsanj plugins require Developer or higher. Site-tier licenses automatically have full plugin access.
 
 ---
 
@@ -267,7 +283,7 @@ python tools/gen_license.py --help
   --key-file FILE              Path to your private key file
   --customer NAME              Customer / company name  (required)
   --email ADDRESS              Contact email
-  --tier {standard,site}       License tier  (default: standard)
+  --tier {standard,developer,site}  License tier  (default: standard)
   --seats N                    Number of seats  (default: 1)
   --days N                     Validity in days  (default: 365)
   --perpetual                  No expiry date
