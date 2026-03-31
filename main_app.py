@@ -722,6 +722,13 @@ class MainWindow(QMainWindow):
         # ─── separator ───
         self._nav.add_separator()
 
+        # HARDWARE (collapsible — Camera, Stage, Prober controls)
+        self._nav.add_collapsible("HARDWARE", "mdi.chip", [
+            NI("Camera",  _I["Camera"],  self._camera_ctrl_tab),
+            NI("Stage",   _I["Stage"],   self._stage_tab),
+            NI("Prober",  _I["Prober"],  self._prober_tab),
+        ])
+
         # SYSTEM
         self._nav.add_section("SYSTEM", [
             NI("Settings",    _I["Settings"],    self._settings_tab),
