@@ -1108,15 +1108,24 @@ class LiveTab(QWidget):
         if self._proc:
             self._proc.reset_ema()
 
+    @staticmethod
+    def _active_ffc_camera():
+        """Return the FFC-capable camera only if IR modality is active."""
+        from hardware.app_state import app_state
+        if getattr(app_state, "active_camera_type", "tr") != "ir":
+            return None
+        cam = app_state.cam  # cam points to whichever camera is active
+        if cam is not None and getattr(cam, "supports_ffc", lambda: False)():
+            return cam
+        # Also check ir_cam slot directly
+        cam = getattr(app_state, "ir_cam", None)
+        if cam is not None and getattr(cam, "supports_ffc", lambda: False)():
+            return cam
+        return None
+
     def _do_ffc(self):
         """Run Flat-Field Correction on the active IR camera."""
-        from hardware.app_state import app_state
-        cam = None
-        for c in (getattr(app_state, "ir_cam", None),
-                  getattr(app_state, "cam", None)):
-            if c is not None and getattr(c, "supports_ffc", lambda: False)():
-                cam = c
-                break
+        cam = self._active_ffc_camera()
         if cam is None:
             return
 
@@ -1145,15 +1154,8 @@ class LiveTab(QWidget):
                 "FFC failed — check camera connection")
 
     def refresh_camera_mode(self):
-        """Show/hide FFC button based on whether active camera supports FFC."""
-        from hardware.app_state import app_state
-        cam = None
-        for c in (getattr(app_state, "ir_cam", None),
-                  getattr(app_state, "cam", None)):
-            if c is not None and getattr(c, "supports_ffc", lambda: False)():
-                cam = c
-                break
-        self._ffc_btn.setVisible(cam is not None)
+        """Show/hide FFC button — only visible when IR modality is active."""
+        self._ffc_btn.setVisible(self._active_ffc_camera() is not None)
 
     def _apply_config(self):
         if self._proc:

@@ -382,7 +382,9 @@ class PreflightValidator:
 
     def _check_ffc_freshness(self) -> Optional[PreflightCheck]:
         """Check FFC freshness for IR cameras.  Returns None if N/A."""
-        # Check both cam slots for an FFC-capable camera
+        # Only relevant when IR modality is active
+        if getattr(self._as, "active_camera_type", "tr") != "ir":
+            return None
         cam = None
         for c in (getattr(self._as, "ir_cam", None),
                   getattr(self._as, "cam", None)):

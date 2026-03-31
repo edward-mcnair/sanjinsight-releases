@@ -149,7 +149,9 @@ class PreflightRemediator:
 
     def _fix_pf_ffc(self, check) -> Optional[Remediation]:
         """Run Flat-Field Correction on the IR camera."""
-        # Find the FFC-capable camera (same logic as preflight.py)
+        # Only relevant when IR modality is active
+        if getattr(self._as, "active_camera_type", "tr") != "ir":
+            return None
         cam = None
         for c in (getattr(self._as, "ir_cam", None),
                   getattr(self._as, "cam", None)):

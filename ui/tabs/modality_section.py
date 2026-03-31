@@ -585,9 +585,10 @@ class ModalitySection(QWidget):
     # ── FFC controls (IR cameras only) ───────────────────────────────
 
     def _ffc_camera(self):
-        """Return the FFC-capable camera, or None."""
-        for c in (getattr(app_state, "ir_cam", None),
-                  getattr(app_state, "cam", None)):
+        """Return the FFC-capable camera, only when IR modality is active."""
+        if getattr(app_state, "active_camera_type", "tr") != "ir":
+            return None
+        for c in (app_state.cam, getattr(app_state, "ir_cam", None)):
             if c is not None and getattr(c, "supports_ffc", lambda: False)():
                 return c
         return None

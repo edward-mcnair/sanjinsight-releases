@@ -401,7 +401,9 @@ class CameraTab(QWidget):
 
     @staticmethod
     def _ffc_camera():
-        """Return whichever connected camera supports FFC (IR first)."""
+        """Return the FFC-capable camera, only when IR modality is active."""
+        if getattr(app_state, "active_camera_type", "tr") != "ir":
+            return None
         for cam in (app_state.ir_cam, app_state.cam):
             if cam is not None and cam.supports_ffc():
                 return cam
