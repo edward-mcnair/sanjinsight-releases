@@ -1751,6 +1751,11 @@ class MainWindow(QMainWindow):
                     self._signal_check_section):
             if hasattr(tab, 'set_hardware_available'):
                 tab.set_hardware_available(True)
+        # Refresh camera-mode-dependent controls (FFC button visibility)
+        try:
+            self._live_tab.refresh_camera_mode()
+        except Exception:
+            pass
 
     def _update_safe_mode(self) -> None:
         """

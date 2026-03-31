@@ -440,6 +440,22 @@ class SimulatedDriver(CameraDriver):
         self._cfg["gain"]    = db
         log.debug("[SIM] Gain = %.1f dB", db)
 
+    # ------------------------------------------------------------------ #
+    #  Flat-Field Correction (simulated for IR mode)                       #
+    # ------------------------------------------------------------------ #
+
+    def supports_ffc(self) -> bool:
+        """Simulated IR cameras support FFC for demo/testing."""
+        return self._camera_type == "ir"
+
+    def do_ffc(self) -> bool:
+        """Simulate a Flat-Field Correction (instant success)."""
+        if not self.supports_ffc():
+            return False
+        self._last_ffc_time = time.time()
+        log.debug("SimulatedDriver: FFC executed (simulated)")
+        return True
+
     def exposure_range(self) -> tuple:
         return (50.0, 200_000.0)
 
