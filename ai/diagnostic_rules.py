@@ -325,9 +325,9 @@ def rule_duty_cycle_thermal(snap: dict) -> Optional[RuleResult]:
     if not fpga.get("connected") or not fpga.get("running"):
         return None
     dc_pct = fpga.get("duty_cycle", 0.0) * 100.0   # convert fraction → %
-    if dc_pct >= _DC_FAIL_PCT:
+    if dc_pct > _DC_FAIL_PCT:
         sev = "fail"
-    elif dc_pct >= _DC_WARN_PCT:
+    elif dc_pct > _DC_WARN_PCT:
         sev = "warn"
     else:
         sev = "ok"
@@ -336,7 +336,7 @@ def rule_duty_cycle_thermal(snap: dict) -> Optional[RuleResult]:
         display_name = "Duty cycle thermal risk",
         severity     = sev,
         observed     = f"{dc_pct:.0f}%",
-        threshold    = f"Warn ≥{_DC_WARN_PCT:.0f}%   Fail ≥{_DC_FAIL_PCT:.0f}%",
+        threshold    = f"Warn >{_DC_WARN_PCT:.0f}%   Fail >{_DC_FAIL_PCT:.0f}%",
         hint         = "Reduce the duty cycle in the FPGA panel (Hardware group) to lower average power delivered to the DUT.",
     )
 

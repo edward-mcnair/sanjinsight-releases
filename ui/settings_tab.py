@@ -2773,18 +2773,30 @@ class SettingsTab(QWidget):
         self._ai_dl_status_lbl.setVisible(True)
         self._ai_dl_status_lbl.setText(f"Starting download of {m['name']}…")
         self._ai_dl_status_lbl.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_MUTED()};")
+        # Store expected file size so progress display can fall back to it
+        # when CDN returns an incorrect Content-Length after redirect.
+        self._ai_dl_expected_bytes = int(m.get("size_gb", 0) * 1024 * 1024 * 1024)
         self.download_model_requested.emit(m["url"], dest)
 
     def set_download_progress(self, done: int, total: int, speed_mbps: float) -> None:
         """Called by MainWindow during model download."""
         if not hasattr(self, "_ai_progress_bar"):
             return
+
+        # CDN redirects can return an incorrect Content-Length (e.g. the
+        # compressed size instead of the actual file).  Fall back to the
+        # catalog's expected size when the header looks wrong.
+        expected = getattr(self, "_ai_dl_expected_bytes", 0)
+        if expected > 0 and (total <= 0 or total < expected * 0.5):
+            total = expected
+
         done_mb   = done  / 1024 / 1024
         speed_str = f"  {speed_mbps:.1f} MB/s" if speed_mbps > 0 else ""
         if total > 0:
             # Content-Length known — determinate progress
+            pct = min(int(done / total * 100), 100)
             self._ai_progress_bar.setRange(0, 100)
-            self._ai_progress_bar.setValue(int(done / total * 100))
+            self._ai_progress_bar.setValue(pct)
             total_mb = total / 1024 / 1024
             self._ai_dl_status_lbl.setText(
                 f"Downloading… {done_mb:.0f} / {total_mb:.0f} MB{speed_str}")

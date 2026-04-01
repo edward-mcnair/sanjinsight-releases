@@ -110,12 +110,12 @@ def _fix_fpga_start(hw, app_state):
 
 
 def _fix_duty_cycle(hw, app_state):
-    """T1: Reduce duty cycle to safe level (50%)."""
+    """T1: Reduce duty cycle to safe level (45%, below the 50% warn threshold)."""
     if app_state.fpga is None:
         return False, "No FPGA connected"
     try:
-        hw.fpga_set_duty_cycle(0.5)
-        return True, "Duty cycle set to 50%"
+        hw.fpga_set_duty_cycle(0.45)
+        return True, "Duty cycle set to 45%"
     except Exception as e:
         return False, str(e)
 
