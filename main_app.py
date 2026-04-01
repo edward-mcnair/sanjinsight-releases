@@ -985,9 +985,9 @@ class MainWindow(QMainWindow):
         self._ai_service.status_changed.connect(self._on_ai_status)
         self._ai_service.tier_changed.connect(self._ai_panel.on_tier_changed)
         self._ai_service.tier_changed.connect(self._settings_tab.set_ai_tier)
-        self._ai_service.response_token.connect(self._ai_panel.on_token)
-        self._ai_service.response_complete.connect(self._ai_panel.on_response_complete)
-        self._ai_service.ai_error.connect(self._ai_panel.on_error)
+        self._ai_service.response_token.connect(self._on_ai_token)
+        self._ai_service.response_complete.connect(self._on_ai_response_complete)
+        self._ai_service.ai_error.connect(self._on_ai_error)
 
         # AI panel → service
         # start_user_turn must be connected FIRST so the user bubble appears
@@ -2870,7 +2870,10 @@ class MainWindow(QMainWindow):
             f"C_T = {profile.ct_value:.3e} K⁻¹",
             8000)
 
-        # 19. Auto-exposure (runs on background thread, updates UI on complete)
+        # 19. Proactive AI Advisor (FULL tier only)
+        self._maybe_launch_advisor(profile)
+
+        # 20. Auto-exposure (runs on background thread, updates UI on complete)
         if getattr(profile, "auto_exposure", False) and app_state.cam is not None:
             target = getattr(profile, "exposure_target_pct", 70.0)
             roi = getattr(profile, "roi_strategy", "center50")
@@ -3965,6 +3968,171 @@ class MainWindow(QMainWindow):
             self._status.showMessage("AI Assistant ready", 3000)
         elif status == "error":
             self._status.showMessage("AI Assistant error — see AI panel", 5000)
+
+    def _on_ai_token(self, token: str) -> None:
+        """Guard: suppress chat panel tokens while advisor is active."""
+        if not getattr(self, "_advisor_active", False):
+            self._ai_panel.on_token(token)
+
+    def _on_ai_response_complete(self, text: str, elapsed: float) -> None:
+        """Guard: suppress chat panel response while advisor is active."""
+        if not getattr(self, "_advisor_active", False):
+            self._ai_panel.on_response_complete(text, elapsed)
+
+    def _on_ai_error(self, msg: str) -> None:
+        """Guard: suppress chat panel error while advisor is active."""
+        if not getattr(self, "_advisor_active", False):
+            self._ai_panel.on_error(msg)
+
+    # ── Proactive AI Advisor ─────────────────────────────────────────────
+
+    def _maybe_launch_advisor(self, profile) -> None:
+        """Launch the AI advisor if FULL tier and model is ready."""
+        if self._ai_service.status != "ready":
+            return
+        if not self._ai_service.can("proactive_advisor"):
+            return
+
+        from ai.advisor import build_advisor_prompt, profile_to_summary
+        from ui.widgets.advisor_dialog import AdvisorDialog
+
+        # Build the analysis prompt
+        ctx_json    = self._ai_service._ctx.build()
+        profile_sum = profile_to_summary(profile)
+
+        # Gather diagnostic issues (if engine is available)
+        diag_text = ""
+        try:
+            engine = self._ai_service._ctx._diagnostics
+            if engine is not None:
+                results = engine.evaluate()
+                issues  = [r for r in results if r.severity in ("fail", "warn")]
+                if issues:
+                    diag_text = "\n".join(
+                        f"  {r.severity.upper()}: {r.display_name} — {r.observed}"
+                        for r in issues)
+        except Exception:
+            pass
+
+        sp = self._ai_service._active_system_prompt()
+        messages = build_advisor_prompt(profile_sum, ctx_json, diag_text, sp)
+
+        # Create and show the dialog
+        dlg = AdvisorDialog(parent=self)
+        dlg.proceed_clicked.connect(self._on_advisor_proceed)
+        dlg.show_thinking()
+        dlg.show()
+
+        # Store ref so streaming callbacks can reach the dialog
+        self._advisor_dlg = dlg
+        self._advisor_text = []
+        self._advisor_active = True  # suppress normal chat panel tokens
+
+        # Connect to streaming signals temporarily
+        self._ai_service.response_token.connect(self._on_advisor_token)
+        self._ai_service.response_complete.connect(self._on_advisor_complete)
+        self._ai_service.ai_error.connect(self._on_advisor_error)
+
+        # Fire the inference (bypasses the normal _run to avoid history injection)
+        if (self._ai_service._active_backend == "remote"
+                and self._ai_service._remote_runner is not None):
+            self._ai_service._remote_runner.infer(messages, max_tokens=1024)
+        else:
+            self._ai_service._runner.infer(messages, max_tokens=1024)
+
+        self._ai_service._set_status("thinking")
+
+    def _on_advisor_token(self, token: str) -> None:
+        """Accumulate tokens during advisor analysis."""
+        if hasattr(self, "_advisor_text"):
+            self._advisor_text.append(token)
+
+    def _on_advisor_complete(self, text: str, elapsed: float) -> None:
+        """Parse advisor response and show results in the dialog."""
+        self._advisor_active = False
+        # Disconnect temporary signal connections
+        try:
+            self._ai_service.response_token.disconnect(self._on_advisor_token)
+            self._ai_service.response_complete.disconnect(self._on_advisor_complete)
+            self._ai_service.ai_error.disconnect(self._on_advisor_error)
+        except TypeError:
+            pass
+
+        self._ai_service._set_status("ready")
+
+        dlg = getattr(self, "_advisor_dlg", None)
+        if dlg is None:
+            return
+
+        from ai.advisor import parse_advice
+        result = parse_advice(text)
+        dlg.show_result(result)
+        log.info("AI Advisor: %d conflicts, %d suggestions (%.1fs)",
+                 len(result.conflicts), len(result.suggestions), elapsed)
+
+    def _on_advisor_error(self, msg: str) -> None:
+        """Handle advisor inference error."""
+        self._advisor_active = False
+        try:
+            self._ai_service.response_token.disconnect(self._on_advisor_token)
+            self._ai_service.response_complete.disconnect(self._on_advisor_complete)
+            self._ai_service.ai_error.disconnect(self._on_advisor_error)
+        except TypeError:
+            pass
+
+        self._ai_service._set_status("ready")
+
+        dlg = getattr(self, "_advisor_dlg", None)
+        if dlg is not None:
+            dlg.show_error(msg)
+
+    def _on_advisor_proceed(self, fixes: list) -> None:
+        """Apply the AI advisor's suggested fixes."""
+        if not fixes:
+            return
+
+        applied = []
+        for fix in fixes:
+            param = fix.get("param", "")
+            value = fix.get("value")
+            if value is None:
+                continue
+            try:
+                if param == "exposure" or param == "exposure_us":
+                    hw_service.cam_set_exposure(float(value))
+                    self._camera_tab.set_exposure(float(value))
+                    applied.append(f"Exposure → {value} µs")
+                elif param == "gain" or param == "gain_db":
+                    hw_service.cam_set_gain(float(value))
+                    self._camera_tab.set_gain(float(value))
+                    applied.append(f"Gain → {value} dB")
+                elif param == "stimulus_freq" or param == "stimulus_freq_hz":
+                    hw_service.fpga_set_frequency(float(value))
+                    applied.append(f"Stimulus freq → {value} Hz")
+                elif param == "stimulus_duty":
+                    hw_service.fpga_set_duty_cycle(float(value))
+                    applied.append(f"Stimulus duty → {value}%")
+                elif param == "tec_setpoint" or param == "tec_setpoint_c":
+                    hw_service.tec_set_target(0, float(value))
+                    applied.append(f"TEC setpoint → {value} °C")
+                elif param == "n_frames":
+                    self._acquire_tab.set_n_frames(int(value))
+                    applied.append(f"Frames → {value}")
+                else:
+                    log.info("AI Advisor: unknown param %r — skipped", param)
+            except Exception as exc:
+                log.warning("AI Advisor: failed to apply %s=%s: %s",
+                            param, value, exc)
+
+        if applied:
+            summary = ", ".join(applied)
+            self._toasts.show_success(
+                f"AI Advisor applied: {summary}", auto_dismiss_ms=6000)
+            self._log_tab.append(f"AI Advisor applied: {summary}")
+        else:
+            self._toasts.show_info("AI Advisor: no changes applied")
+
+    # ── AI enable/disable ─────────────────────────────────────────────
 
     def _on_ai_enable(self, model_path: str, n_gpu_layers: int):
         """Called when Settings tab emits ai_enable_requested."""
