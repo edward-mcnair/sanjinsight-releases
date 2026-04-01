@@ -984,6 +984,7 @@ class MainWindow(QMainWindow):
         # ── AI service signals ────────────────────────────────────
         self._ai_service.status_changed.connect(self._on_ai_status)
         self._ai_service.tier_changed.connect(self._ai_panel.on_tier_changed)
+        self._ai_service.tier_changed.connect(self._settings_tab.set_ai_tier)
         self._ai_service.response_token.connect(self._ai_panel.on_token)
         self._ai_service.response_complete.connect(self._ai_panel.on_response_complete)
         self._ai_service.ai_error.connect(self._ai_panel.on_error)

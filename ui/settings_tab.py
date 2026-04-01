@@ -1490,6 +1490,31 @@ class SettingsTab(QWidget):
         apply_row.addWidget(self._ai_status_lbl, 1)
         lay.addLayout(apply_row)
 
+        # ── Tier info strip (hidden until a model loads) ──────────────────
+        self._ai_tier_frame = QFrame()
+        self._ai_tier_frame.setStyleSheet(
+            f"QFrame {{ background:{_BG2()}; border:1px solid {_BORDER()}; "
+            f"border-radius:4px; }}")
+        tier_lay = QHBoxLayout(self._ai_tier_frame)
+        tier_lay.setContentsMargins(10, 6, 10, 6)
+        tier_lay.setSpacing(8)
+
+        self._ai_tier_badge = QLabel("")
+        self._ai_tier_badge.setStyleSheet(
+            f"font-size:{FONT['caption']}pt; font-weight:700; color:{_MUTED()}; "
+            f"background:{_BG()}; border:1px solid {_BORDER()}; "
+            f"border-radius:3px; padding:2px 8px;")
+        tier_lay.addWidget(self._ai_tier_badge)
+
+        self._ai_tier_desc = QLabel("")
+        self._ai_tier_desc.setStyleSheet(
+            f"font-size:{FONT['caption']}pt; color:{_MUTED()};")
+        self._ai_tier_desc.setWordWrap(True)
+        tier_lay.addWidget(self._ai_tier_desc, 1)
+
+        self._ai_tier_frame.setVisible(False)
+        lay.addWidget(self._ai_tier_frame)
+
         # ── AI Mode (persona) ─────────────────────────────────────────────
         from ai.personas import PERSONAS, PERSONA_ORDER, DEFAULT_PERSONA_ID
 
@@ -2625,6 +2650,55 @@ class SettingsTab(QWidget):
         self._ai_status_lbl.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{color};")
         if hasattr(self, "_ai_apply_btn"):
             self._ai_apply_btn.setEnabled(status not in ("loading", "thinking"))
+
+    def set_ai_tier(self, tier_value: int) -> None:
+        """Called by MainWindow when AIService.tier_changed fires."""
+        if not hasattr(self, "_ai_tier_frame"):
+            return
+        from ai.capability_tier import (
+            AITier, tier_display_name, tier_description, available_features)
+
+        tier = AITier(tier_value)
+        if tier == AITier.NONE:
+            self._ai_tier_frame.setVisible(False)
+            return
+
+        name = tier_display_name(tier)
+        desc = tier_description(tier)
+        features = available_features(tier)
+
+        _tier_colors = {
+            AITier.BASIC:    _MUTED(),
+            AITier.STANDARD: PALETTE['accent'],
+            AITier.FULL:     _GREEN(),
+        }
+        color = _tier_colors.get(tier, _MUTED())
+
+        self._ai_tier_badge.setText(name)
+        self._ai_tier_badge.setStyleSheet(
+            f"font-size:{FONT['caption']}pt; font-weight:700; color:{color}; "
+            f"background:{PALETTE['bg']}; border:1px solid {color}44; "
+            f"border-radius:3px; padding:2px 8px;")
+
+        # Build feature summary
+        feature_names = {
+            "chat": "Chat", "explain_tab": "Explain Tab",
+            "diagnose": "Diagnose", "session_report": "Session Reports",
+            "manual_rag": "Manual Search", "quickstart_guide": "Quickstart Guide",
+            "proactive_advisor": "AI Advisor", "structured_response": "Smart Suggestions",
+            "voice_commands": "Voice Commands", "ai_acquisition": "AI Acquisition",
+            "batch_insights": "Batch Insights", "explain_diagnostics": "Diagnostic Insights",
+        }
+        enabled = [feature_names.get(f, f) for f in features if f in feature_names]
+        self._ai_tier_desc.setText(
+            f"{desc}  Enabled: {', '.join(enabled)}.")
+        self._ai_tier_desc.setStyleSheet(
+            f"font-size:{FONT['caption']}pt; color:{PALETTE['textSub']};")
+
+        self._ai_tier_frame.setStyleSheet(
+            f"QFrame {{ background:{PALETTE['surface']}; "
+            f"border:1px solid {color}22; border-radius:4px; }}")
+        self._ai_tier_frame.setVisible(True)
 
     def _on_persona_clicked(self, pid: str) -> None:
         """Persist persona selection and update button states."""
