@@ -32,9 +32,9 @@ class LogTab(QWidget):
         self._apply_styles()
 
     def _apply_styles(self):
-        bg  = PALETTE.get("bg",      "#242424")
-        dim = PALETTE.get("textDim", "#999999")
-        sub = PALETTE.get("textSub", "#6a6a6a")
+        bg  = PALETTE['bg']
+        dim = PALETTE['textDim']
+        sub = PALETTE['textSub']
         self._log.setStyleSheet(
             f"background:{bg}; color:{dim}; "
             f"font-family:{MONO_FONT}; font-size:{FONT['heading']}pt; "
@@ -62,7 +62,7 @@ class LogTab(QWidget):
         if verbosity == "standard" and level == "debug":
             return
         ts    = time.strftime("%H:%M:%S")
-        tscol = getattr(self, "_ts_color", PALETTE.get("textSub", "#6a6a6a"))
+        tscol = getattr(self, "_ts_color", PALETTE['textSub'])
         self._log.append(f"<span style='color:{tscol}'>[{ts}]</span>  {msg}")
         self._log.verticalScrollBar().setValue(
             self._log.verticalScrollBar().maximum())

@@ -109,10 +109,10 @@ class QualityScorecardWidget(QWidget):
         self._apply_styles()
 
         # Overall badge
-        color = PALETTE.get(sc.overall_color, PALETTE.get("textDim", "#888"))
+        color = PALETTE.get(sc.overall_color, PALETTE['textDim'])
         self._badge.setText(sc.overall_grade)
         self._badge.setStyleSheet(
-            f"background: {color}; color: {PALETTE.get('bg', '#111')}; "
+            f"background: {color}; color: {PALETTE['bg']}; "
             f"border-radius: 18px; font-size: {FONT['heading']}pt; "
             f"font-weight: 800;")
         self._title.setText(
@@ -126,10 +126,10 @@ class QualityScorecardWidget(QWidget):
                 continue
             name_lbl, grade_lbl = self._pill_labels[mg.metric]
             gc = PALETTE.get(GRADE_COLORS.get(mg.grade, "textDim"),
-                             PALETTE.get("textDim", "#888"))
+                             PALETTE['textDim'])
             grade_lbl.setText(mg.grade)
             grade_lbl.setStyleSheet(
-                f"background: {gc}; color: {PALETTE.get('bg', '#111')}; "
+                f"background: {gc}; color: {PALETTE['bg']}; "
                 f"border-radius: 14px; font-size: {FONT['label']}pt; "
                 f"font-weight: 800;")
             grade_lbl.setToolTip(f"{mg.display}\n{mg.threshold}")
@@ -147,9 +147,9 @@ class QualityScorecardWidget(QWidget):
 
     def _apply_styles(self) -> None:
         """Reapply theme-dependent styles."""
-        dim = PALETTE.get("textDim", "#888")
-        text = PALETTE.get("text", "#eee")
-        bg2 = PALETTE.get("bg2", "#1a1a1c")
+        dim = PALETTE['textDim']
+        text = PALETTE['text']
+        bg2 = PALETTE['surface']
 
         self._title.setStyleSheet(
             f"color: {text}; font-size: {FONT['label']}pt; font-weight: 600;")

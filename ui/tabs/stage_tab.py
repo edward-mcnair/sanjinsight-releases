@@ -54,10 +54,10 @@ class StageTab(QWidget):
         # Position readouts
         pos_box = QGroupBox("Current Position")
         pl = QHBoxLayout(pos_box)
-        self._x_w = self._readout("X",      "--", "#00d4aa")
-        self._y_w = self._readout("Y",      "--", "#ffaa44")
-        self._z_w = self._readout("Z",      "--", "#6699ff")
-        self._st_w = self._readout("STATUS","UNKNOWN","#555")
+        self._x_w = self._readout("X",      "--", PALETTE['accent'])
+        self._y_w = self._readout("Y",      "--", PALETTE['warning'])
+        self._z_w = self._readout("Z",      "--", PALETTE['info'])
+        self._st_w = self._readout("STATUS","UNKNOWN",PALETTE['textSub'])
         for w in [self._x_w, self._y_w, self._z_w, self._st_w]:
             pl.addWidget(w)
         root.addWidget(pos_box)
@@ -127,26 +127,26 @@ class StageTab(QWidget):
         home_btn.setFixedHeight(32)
         home_btn.setFixedWidth(120)
         home_btn.setStyleSheet(
-            f"QToolButton {{ background:{PALETTE.get('surface','#2d2d2d')}; "
-            f"color:{PALETTE.get('text','#ebebeb')}; border:1px solid {PALETTE.get('border','#484848')}; "
+            f"QToolButton {{ background:{PALETTE['surface']}; "
+            f"color:{PALETTE['text']}; border:1px solid {PALETTE['border']}; "
             f"border-radius:5px; padding:0 8px; font-size:{FONT['label']}pt; }}"
-            f"QToolButton:hover {{ background:{PALETTE.get('surface2','#3d3d3d')}; }}"
-            f"QToolButton::menu-button {{ border-left:1px solid {PALETTE.get('border','#484848')}; "
+            f"QToolButton:hover {{ background:{PALETTE['surface2']}; }}"
+            f"QToolButton::menu-button {{ border-left:1px solid {PALETTE['border']}; "
             f"width:18px; border-radius:0 5px 5px 0; }}"
         )
         try:
             import qtawesome as qta
-            home_btn.setIcon(qta.icon("fa5s.home", color=PALETTE.get("text", "#ebebeb")))
+            home_btn.setIcon(qta.icon("fa5s.home", color=PALETTE['text']))
         except Exception:
             pass
 
         self._home_menu = QMenu(home_btn)
         home_menu = self._home_menu
         home_menu.setStyleSheet(
-            f"QMenu {{ background:{PALETTE.get('surface2','#3d3d3d')}; "
-            f"color:{PALETTE.get('text','#ebebeb')}; border:1px solid {PALETTE.get('border','#484848')}; "
+            f"QMenu {{ background:{PALETTE['surface2']}; "
+            f"color:{PALETTE['text']}; border:1px solid {PALETTE['border']}; "
             f"border-radius:4px; }} "
-            f"QMenu::item:selected {{ background:{PALETTE.get('accent','#00d4aa')}22; }}"
+            f"QMenu::item:selected {{ background:{PALETTE['accent']}22; }}"
         )
         act_xy = QAction("Home XY  (X + Y axes)", home_btn)
         act_z  = QAction("Home Z   (Z axis only)", home_btn)
@@ -159,7 +159,7 @@ class StageTab(QWidget):
         act_z.triggered.connect( lambda: self._home("z"))
 
         stop_btn = QPushButton("STOP")
-        set_btn_icon(stop_btn, "fa5s.stop", "#ff6666")
+        set_btn_icon(stop_btn, "fa5s.stop", PALETTE['danger'])
         stop_btn.setObjectName("danger")
         stop_btn.clicked.connect(self._stop)
 
@@ -174,11 +174,11 @@ class StageTab(QWidget):
 
     def _apply_styles(self) -> None:
         P    = PALETTE
-        sur  = P.get("surface",      "#1a1d28")
-        su2  = P.get("surface2",     "#20232e")
-        bdr  = P.get("border",       "#2e3245")
-        txt  = P.get("text",         "#dde3f2")
-        acc  = P.get("accent",       "#00d4aa")
+        sur  = P['surface']
+        su2  = P['surface2']
+        bdr  = P['border']
+        txt  = P['text']
+        acc  = P['accent']
         if hasattr(self, "_home_btn"):
             self._home_btn.setStyleSheet(
                 f"QToolButton {{ background:{sur}; color:{txt}; "
@@ -206,17 +206,17 @@ class StageTab(QWidget):
         lay.setAlignment(Qt.AlignCenter)
         lay.setSpacing(16)
 
-        icon_lbl = make_icon_label(IC.LINK_OFF, color="#555555", size=64)
+        icon_lbl = make_icon_label(IC.LINK_OFF, color=PALETTE['textSub'], size=64)
         icon_lbl.setAlignment(Qt.AlignCenter)
 
         title_lbl = QLabel(f"{title} Not Connected")
         title_lbl.setAlignment(Qt.AlignCenter)
-        title_lbl.setStyleSheet(f"font-size: {FONT['readoutSm']}pt; font-weight: bold; color: #888;")
+        title_lbl.setStyleSheet(f"font-size: {FONT['readoutSm']}pt; font-weight: bold; color: {PALETTE['textDim']};")
 
         tip_lbl = QLabel(tip)
         tip_lbl.setAlignment(Qt.AlignCenter)
         tip_lbl.setWordWrap(True)
-        tip_lbl.setStyleSheet(f"font-size: {FONT['label']}pt; color: #555;")
+        tip_lbl.setStyleSheet(f"font-size: {FONT['label']}pt; color: {PALETTE['textSub']};")
         tip_lbl.setMaximumWidth(400)
 
         btn = QPushButton("Open Device Manager")
@@ -224,11 +224,11 @@ class StageTab(QWidget):
         btn.setFixedHeight(36)
         btn.setStyleSheet(f"""
             QPushButton {{
-                background: {PALETTE.get('surface','#2d2d2d')}; color: #00d4aa;
-                border: 1px solid #00d4aa66; border-radius: 5px;
+                background: {PALETTE['surface']}; color: {PALETTE['accent']};
+                border: 1px solid {PALETTE['accent']}66; border-radius: 5px;
                 font-size: {FONT['label']}pt; font-weight: 600;
             }}
-            QPushButton:hover {{ background: {PALETTE.get('surface2','#3d3d3d')}; }}
+            QPushButton:hover {{ background: {PALETTE['surface2']}; }}
         """)
         btn.clicked.connect(self.open_device_manager)
 

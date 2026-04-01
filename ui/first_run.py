@@ -271,7 +271,7 @@ _BTN_PRIMARY   = btn_wizard_primary_qss()
 _BTN_SECONDARY = btn_wizard_secondary_qss()
 _INPUT_SS      = wizard_input_qss()
 
-_LABEL_H1   = scaled_qss("font-size:20pt; font-weight:700; color:#fff;")
+_LABEL_H1   = scaled_qss(f"font-size:20pt; font-weight:700; color:{PALETTE['textOnAccent']};")
 _LABEL_BODY = f"font-size:{FONT['body']}pt; color:{PALETTE['textSub']};"
 _LABEL_HINT = f"font-size:{FONT['caption']}pt; color:{PALETTE['textSub']}; font-style:italic;"
 
@@ -282,7 +282,7 @@ _SS_BADGE_WARN = f"font-size:{FONT['caption']}pt; color:{PALETTE['warning']};"
 def _sep() -> QFrame:
     f = QFrame()
     f.setFrameShape(QFrame.HLine)
-    f.setStyleSheet(f"color:{PALETTE.get('border','#484848')};")
+    f.setStyleSheet(f"color:{PALETTE['border']};")
     return f
 
 
@@ -315,13 +315,13 @@ class _PageBase(QWidget):
 
     # ── PALETTE-driven colour properties (shared by all wizard pages) ──
     @property
-    def _ACCENT(self): return PALETTE.get("cta",     "#0a84ff")
+    def _ACCENT(self): return PALETTE['cta']
     @property
-    def _GREEN(self):  return PALETTE.get("accent",  "#00d4aa")
+    def _GREEN(self):  return PALETTE['accent']
     @property
-    def _AMBER(self):  return PALETTE.get("warning", "#ff9f0a")
+    def _AMBER(self):  return PALETTE['warning']
     @property
-    def _DANGER(self): return PALETTE.get("danger",  "#ff453a")
+    def _DANGER(self): return PALETTE['danger']
 
     def values(self) -> dict:
         """Return a flat dict of key→value to be merged into config."""
@@ -343,7 +343,7 @@ class _PageWelcome(_PageBase):
             "  ③  FPGA              — NI 9637 via NI-RIO\n\n"
             "Your answers are saved to  config.yaml  and can be changed at any "
             "time from  Settings → Hardware Setup.")
-        body.setStyleSheet(f"font-size:{FONT['body']}pt; color:{PALETTE.get('text','#ebebeb')}; line-height:1.6;")
+        body.setStyleSheet(f"font-size:{FONT['body']}pt; color:{PALETTE['text']}; line-height:1.6;")
         body.setWordWrap(True)
         self._content.addWidget(body)
 
@@ -362,9 +362,9 @@ class _PageWelcome(_PageBase):
             "If neither camera is connected, leave the Camera driver set to  simulated.")
         prereq.setOpenExternalLinks(True)
         prereq.setWordWrap(True)
-        _cta = PALETTE.get("cta", "#0a84ff")
+        _cta = PALETTE['cta']
         prereq.setStyleSheet(
-            f"font-size:{FONT['sublabel']}pt; color:{PALETTE.get('text','#ebebeb')}; "
+            f"font-size:{FONT['sublabel']}pt; color:{PALETTE['text']}; "
             f"background:{_cta}18; border:1px solid {_cta}55; border-left:3px solid {_cta}; "
             "border-radius:4px; padding:10px;")
         self._content.addWidget(prereq)
@@ -375,8 +375,8 @@ class _PageWelcome(_PageBase):
             "leave all drivers set to  simulated  — the app will still open and operate "
             "with synthetic data.")
         tip.setStyleSheet(
-            f"font-size:{FONT['sublabel']}pt; color:{PALETTE.get('textDim','#999999')}; font-style:italic; "
-            f"background:{PALETTE.get('bg','#242424')}; border:1px solid {PALETTE.get('border','#484848')}; border-radius:5px; "
+            f"font-size:{FONT['sublabel']}pt; color:{PALETTE['textDim']}; font-style:italic; "
+            f"background:{PALETTE['bg']}; border:1px solid {PALETTE['border']}; border-radius:5px; "
             "padding:10px;")
         tip.setWordWrap(True)
         self._content.addWidget(tip)
@@ -384,7 +384,7 @@ class _PageWelcome(_PageBase):
         # Live scan-status line — updated by _ScanWorker signals
         self._scan_label = QLabel("Scanning for connected hardware…")
         self._scan_label.setStyleSheet(
-            f"font-size:{FONT['sublabel']}pt; color:{PALETTE.get('textSub','#6a6a6a')}; font-style:italic; padding:4px 0;")
+            f"font-size:{FONT['sublabel']}pt; color:{PALETTE['textSub']}; font-style:italic; padding:4px 0;")
         self._content.addWidget(self._scan_label)
 
     def set_scan_status(self, msg: str):
@@ -398,13 +398,13 @@ class _PageWelcome(_PageBase):
                 f"✓  Scan complete — {known_count} known device(s) detected. "
                 "Settings have been pre-filled on the following pages.")
             self._scan_label.setStyleSheet(
-                f"font-size:{FONT['sublabel']}pt; color:{PALETTE.get('accent','#00d4aa')}; padding:4px 0;")
+                f"font-size:{FONT['sublabel']}pt; color:{PALETTE['accent']}; padding:4px 0;")
         else:
             self._scan_label.setText(
                 "⚠  Scan complete — no known devices found. "
                 "Select drivers and ports manually, or check USB connections.")
             self._scan_label.setStyleSheet(
-                f"font-size:{FONT['sublabel']}pt; color:{PALETTE.get('warning','#ff9f0a')}; padding:4px 0;")
+                f"font-size:{FONT['sublabel']}pt; color:{PALETTE['warning']}; padding:4px 0;")
 
 
 class _PortRow(QWidget):
@@ -426,7 +426,7 @@ class _PortRow(QWidget):
         row.setSpacing(8)
 
         lbl = QLabel(label)
-        lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{PALETTE.get('textSub','#6a6a6a')};")
+        lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{PALETTE['textSub']};")
         lbl.setFixedWidth(220)
         row.addWidget(lbl)
 
@@ -536,7 +536,7 @@ class _PageTEC(_PageBase):
         atec_cfg        = cfg.get("tec_atec",        {})
 
         _grp_ss = (
-            f"QGroupBox {{ color:{PALETTE.get('textSub','#6a6a6a')}; font-size:{FONT['label']}pt; border:1px solid {PALETTE.get('border','#484848')}; "
+            f"QGroupBox {{ color:{PALETTE['textSub']}; font-size:{FONT['label']}pt; border:1px solid {PALETTE['border']}; "
             "border-radius:5px; margin-top:8px; padding:12px; }"
             "QGroupBox::title { subcontrol-origin:margin; left:10px; padding:0 4px; }")
 
@@ -576,7 +576,7 @@ class _PageTEC(_PageBase):
         self._mecom_notice.setWordWrap(True)
         self._mecom_notice.setStyleSheet(
             f"font-size:{FONT['caption']}pt; color:{PALETTE['warning']}; "
-            f"background:{PALETTE.get('warning','#ff9f0a')}18; border:1px solid {PALETTE.get('warning','#ff9f0a')}44; border-radius:4px; "
+            f"background:{PALETTE['warning']}18; border:1px solid {PALETTE['warning']}44; border-radius:4px; "
             "padding:8px;")
         self._mecom_notice.setVisible(False)
         fl1.addRow(self._mecom_notice)
@@ -746,7 +746,7 @@ class _PageCamera(_PageBase):
 
         g = QGroupBox("Camera")
         g.setStyleSheet(
-            f"QGroupBox {{ color:{PALETTE.get('textSub','#6a6a6a')}; font-size:{FONT['label']}pt; border:1px solid {PALETTE.get('border','#484848')}; "
+            f"QGroupBox {{ color:{PALETTE['textSub']}; font-size:{FONT['label']}pt; border:1px solid {PALETTE['border']}; "
             "border-radius:5px; margin-top:8px; padding:12px; }"
             "QGroupBox::title { subcontrol-origin:margin; left:10px; padding:0 4px; }")
         fl = QFormLayout(g)
@@ -801,7 +801,7 @@ class _PageCamera(_PageBase):
         self._pylon_notice.setWordWrap(True)
         self._pylon_notice.setStyleSheet(
             f"font-size:{FONT['caption']}pt; color:{PALETTE['warning']}; "
-            f"background:{PALETTE.get('warning','#ff9f0a')}18; border:1px solid {PALETTE.get('warning','#ff9f0a')}44; border-radius:4px; "
+            f"background:{PALETTE['warning']}18; border:1px solid {PALETTE['warning']}44; border-radius:4px; "
             "padding:8px;")
         self._pylon_notice.setVisible(False)
         fl.addRow(self._pylon_notice)
@@ -822,7 +822,7 @@ class _PageCamera(_PageBase):
         self._flir_notice.setWordWrap(True)
         self._flir_notice.setStyleSheet(
             f"font-size:{FONT['caption']}pt; color:{PALETTE['warning']}; "
-            f"background:{PALETTE.get('warning','#ff9f0a')}18; border:1px solid {PALETTE.get('warning','#ff9f0a')}44; border-radius:4px; "
+            f"background:{PALETTE['warning']}18; border:1px solid {PALETTE['warning']}44; border-radius:4px; "
             "padding:8px;")
         self._flir_notice.setVisible(False)
         fl.addRow(self._flir_notice)
@@ -1097,7 +1097,7 @@ class _PageFPGA(_PageBase):
 
         g = QGroupBox("NI 9637 FPGA Module")
         g.setStyleSheet(
-            f"QGroupBox {{ color:{PALETTE.get('textSub','#6a6a6a')}; font-size:{FONT['label']}pt; border:1px solid {PALETTE.get('border','#484848')}; "
+            f"QGroupBox {{ color:{PALETTE['textSub']}; font-size:{FONT['label']}pt; border:1px solid {PALETTE['border']}; "
             "border-radius:5px; margin-top:8px; padding:12px; }"
             "QGroupBox::title { subcontrol-origin:margin; left:10px; padding:0 4px; }")
         fl = QFormLayout(g)
@@ -1202,7 +1202,7 @@ class _PageBias(_PageBase):
     install links when the selected driver's dependency is missing.
     """
 
-    _MUTED  = PALETTE.get('textSub','#6a6a6a')
+    _MUTED  = PALETTE['textSub']
 
     def __init__(self, cfg: dict, parent=None):
         bias_cfg = cfg.get("bias", {})
@@ -1215,7 +1215,7 @@ class _PageBias(_PageBase):
         # ── GroupBox ──────────────────────────────────────────────────────────
         g = QGroupBox("Bias Source Configuration")
         g.setStyleSheet(
-            f"QGroupBox {{ color:{PALETTE.get('textSub','#6a6a6a')}; font-size:{FONT['label']}pt; border:1px solid {PALETTE.get('border','#484848')}; "
+            f"QGroupBox {{ color:{PALETTE['textSub']}; font-size:{FONT['label']}pt; border:1px solid {PALETTE['border']}; "
             "border-radius:5px; margin-top:8px; padding:12px; }"
             "QGroupBox::title { subcontrol-origin:margin; left:10px; padding:0 4px; }")
         fl = QFormLayout(g)
@@ -1295,7 +1295,7 @@ class _PageBias(_PageBase):
         self._visa_notice.setOpenExternalLinks(True)
         self._visa_notice.setWordWrap(True)
         self._visa_notice.setStyleSheet(
-            f"font-size:{FONT['sublabel']}pt; color:{self._AMBER}; background:{PALETTE.get('bg','#242424')}; "
+            f"font-size:{FONT['sublabel']}pt; color:{self._AMBER}; background:{PALETTE['bg']}; "
             f"border:1px solid {self._AMBER}44; border-radius:4px; padding:8px;")
         self._visa_notice.setVisible(False)
         self._content.addWidget(self._visa_notice)
@@ -1312,7 +1312,7 @@ class _PageBias(_PageBase):
         self._dp832_notice.setOpenExternalLinks(True)
         self._dp832_notice.setWordWrap(True)
         self._dp832_notice.setStyleSheet(
-            f"font-size:{FONT['sublabel']}pt; color:{self._AMBER}; background:{PALETTE.get('bg','#242424')}; "
+            f"font-size:{FONT['sublabel']}pt; color:{self._AMBER}; background:{PALETTE['bg']}; "
             f"border:1px solid {self._AMBER}44; border-radius:4px; padding:8px;")
         self._dp832_notice.setVisible(False)
         self._content.addWidget(self._dp832_notice)
@@ -1463,7 +1463,7 @@ class _PageStage(_PageBase):
       • simulated   — software-only for testing without hardware
     """
 
-    _MUTED  = PALETTE.get('textSub','#6a6a6a')
+    _MUTED  = PALETTE['textSub']
 
     def __init__(self, cfg: dict, parent=None):
         stage_cfg = cfg.get("stage", {})
@@ -1476,7 +1476,7 @@ class _PageStage(_PageBase):
         # ── GroupBox ──────────────────────────────────────────────────────────
         g = QGroupBox("Stage Configuration")
         g.setStyleSheet(
-            f"QGroupBox {{ color:{PALETTE.get('textSub','#6a6a6a')}; font-size:{FONT['label']}pt; border:1px solid {PALETTE.get('border','#484848')}; "
+            f"QGroupBox {{ color:{PALETTE['textSub']}; font-size:{FONT['label']}pt; border:1px solid {PALETTE['border']}; "
             "border-radius:5px; margin-top:8px; padding:12px; }"
             "QGroupBox::title { subcontrol-origin:margin; left:10px; padding:0 4px; }")
         fl = QFormLayout(g)
@@ -1561,7 +1561,7 @@ class _PageStage(_PageBase):
         self._apt_notice.setOpenExternalLinks(True)
         self._apt_notice.setWordWrap(True)
         self._apt_notice.setStyleSheet(
-            f"font-size:{FONT['sublabel']}pt; color:{self._AMBER}; background:{PALETTE.get('bg','#242424')}; "
+            f"font-size:{FONT['sublabel']}pt; color:{self._AMBER}; background:{PALETTE['bg']}; "
             f"border:1px solid {self._AMBER}44; border-radius:4px; padding:8px;")
         self._apt_notice.setVisible(False)
         self._content.addWidget(self._apt_notice)
@@ -1693,7 +1693,7 @@ class _PageAI(_PageBase):
     steps without breaking anything.
     """
 
-    _MUTED  = PALETTE.get('textSub','#6a6a6a')
+    _MUTED  = PALETTE['textSub']
 
     def __init__(self, parent=None):
         super().__init__(
@@ -1712,14 +1712,14 @@ class _PageAI(_PageBase):
         # ── Install section ───────────────────────────────────────────────
         self._install_frame = QFrame()
         self._install_frame.setStyleSheet(
-            f"background:{PALETTE.get('bg','#242424')}; border:1px solid {self._AMBER}44; border-radius:6px;")
+            f"background:{PALETTE['bg']}; border:1px solid {self._AMBER}44; border-radius:6px;")
         if_lay = QVBoxLayout(self._install_frame)
         if_lay.setContentsMargins(14, 12, 14, 12)
         if_lay.setSpacing(8)
 
         _step1_lbl = QLabel("Step 1 — Install Ollama (free, takes about 1 minute):")
         _step1_lbl.setStyleSheet(
-            f"font-size:{FONT['label']}pt; font-weight:600; color:#fff;")
+            f"font-size:{FONT['label']}pt; font-weight:600; color:{PALETTE['textOnAccent']};")
         if_lay.addWidget(_step1_lbl)
 
         btn_row = QHBoxLayout()
@@ -1763,13 +1763,13 @@ class _PageAI(_PageBase):
         # ── Pull section ──────────────────────────────────────────────────
         self._pull_frame = QFrame()
         self._pull_frame.setStyleSheet(
-            f"background:{PALETTE.get('bg','#242424')}; border:1px solid {PALETTE.get('accent','#00d4aa')}44; border-radius:6px;")
+            f"background:{PALETTE['bg']}; border:1px solid {PALETTE['accent']}44; border-radius:6px;")
         pf_lay = QVBoxLayout(self._pull_frame)
         pf_lay.setContentsMargins(14, 12, 14, 12)
         pf_lay.setSpacing(8)
 
         step2_hdr = QLabel("Step 2 — Download a model (2 – 4 GB):")
-        step2_hdr.setStyleSheet(f"font-size:{FONT['label']}pt; font-weight:600; color:#fff;")
+        step2_hdr.setStyleSheet(f"font-size:{FONT['label']}pt; font-weight:600; color:{PALETTE['textOnAccent']};")
         pf_lay.addWidget(step2_hdr)
 
         pull_hint = QLabel(
@@ -2052,18 +2052,18 @@ class _PageWorkspace(_PageBase):
     def _card_qss(self) -> str:
         return (
             f"QPushButton {{"
-            f"  background:{PALETTE.get('surface', '#2d2d2d')};"
-            f"  color:{PALETTE.get('text', '#ebebeb')};"
-            f"  border:1px solid {PALETTE.get('border', '#484848')};"
+            f"  background:{PALETTE['surface']};"
+            f"  color:{PALETTE['text']};"
+            f"  border:1px solid {PALETTE['border']};"
             f"  border-radius:8px; padding:16px;"
             f"  font-size:{FONT['label']}pt; text-align:left;"
             f"}}"
             f"QPushButton:checked {{"
-            f"  border:2px solid {PALETTE.get('accent', '#00d4aa')};"
-            f"  background:{PALETTE.get('accentDim', '#00d4aa2e')};"
+            f"  border:2px solid {PALETTE['accent']};"
+            f"  background:{PALETTE['accentDim']};"
             f"}}"
             f"QPushButton:hover:!checked {{"
-            f"  background:{PALETTE.get('surfaceHover', '#3a3a3a')};"
+            f"  background:{PALETTE['surfaceHover']};"
             f"}}"
         )
 
@@ -2077,8 +2077,8 @@ class _PageDone(_PageBase):
 
         self._summary = QLabel("(summary will appear here)")
         self._summary.setStyleSheet(
-            f"font-size:{FONT['label']}pt; color:{PALETTE.get('textSub','#6a6a6a')}; background:{PALETTE.get('bg','#242424')}; "
-            f"border:1px solid {PALETTE.get('border','#484848')}; border-radius:5px; padding:12px;")
+            f"font-size:{FONT['label']}pt; color:{PALETTE['textSub']}; background:{PALETTE['bg']}; "
+            f"border:1px solid {PALETTE['border']}; border-radius:5px; padding:12px;")
         self._summary.setWordWrap(True)
         self._content.addWidget(self._summary)
         self._content.addStretch(1)
@@ -2101,7 +2101,7 @@ class _PageDone(_PageBase):
 
 def _lbl(text: str) -> QLabel:
     l = QLabel(text)
-    l.setStyleSheet(f"font-size:{FONT['label']}pt; color:{PALETTE.get('textSub','#6a6a6a')};")
+    l.setStyleSheet(f"font-size:{FONT['label']}pt; color:{PALETTE['textSub']};")
     return l
 
 
@@ -2128,8 +2128,8 @@ class FirstRunWizard(QDialog):
         self.setModal(True)
         self.resize(700, 600)
         self.setStyleSheet(f"""
-            QDialog   {{ background:{PALETTE.get('bg','#242424')}; }}
-            QGroupBox {{ background:{PALETTE.get('surface','#2d2d2d')}; }}
+            QDialog   {{ background:{PALETTE['bg']}; }}
+            QGroupBox {{ background:{PALETTE['surface']}; }}
             QLabel    {{ background:transparent; }}
         """)
 
@@ -2149,7 +2149,7 @@ class FirstRunWizard(QDialog):
         # ── Progress bar (step dots) ──────────────────────────────────
         prog_bar = QWidget()
         prog_bar.setFixedHeight(44)
-        prog_bar.setStyleSheet(f"background:{PALETTE.get('bg','#242424')}; border-bottom:1px solid {PALETTE.get('border','#484848')};")
+        prog_bar.setStyleSheet(f"background:{PALETTE['bg']}; border-bottom:1px solid {PALETTE['border']};")
         pb_lay = QHBoxLayout(prog_bar)
         pb_lay.setContentsMargins(30, 0, 30, 0)
         self._dots: list[QLabel] = []
@@ -2157,12 +2157,12 @@ class FirstRunWizard(QDialog):
         for i, lbl in enumerate(step_labels):
             dot = QLabel(f"● {lbl}")
             dot.setAlignment(Qt.AlignCenter)
-            dot.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{PALETTE.get('border','#484848')};")
+            dot.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{PALETTE['border']};")
             pb_lay.addWidget(dot, 1)
             self._dots.append(dot)
             if i < len(step_labels) - 1:
                 line = QLabel("──")
-                line.setStyleSheet(f"color:{PALETTE.get('border','#484848')};")
+                line.setStyleSheet(f"color:{PALETTE['border']};")
                 pb_lay.addWidget(line)
         root.addWidget(prog_bar)
 
@@ -2188,7 +2188,7 @@ class FirstRunWizard(QDialog):
         # ── Navigation bar ────────────────────────────────────────────
         nav = QWidget()
         nav.setFixedHeight(60)
-        nav.setStyleSheet(f"background:{PALETTE.get('bg','#242424')}; border-top:1px solid {PALETTE.get('border','#484848')};")
+        nav.setStyleSheet(f"background:{PALETTE['bg']}; border-top:1px solid {PALETTE['border']};")
         nav_lay = QHBoxLayout(nav)
         nav_lay.setContentsMargins(30, 0, 30, 0)
         nav_lay.setSpacing(10)
@@ -2248,11 +2248,11 @@ class FirstRunWizard(QDialog):
 
         for i, dot in enumerate(self._dots):
             if i == idx:
-                dot.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{PALETTE.get('cta','#0a84ff')}; font-weight:700;")
+                dot.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{PALETTE['cta']}; font-weight:700;")
             elif i < idx:
-                dot.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{PALETTE.get('accent','#00d4aa')};")
+                dot.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{PALETTE['accent']};")
             else:
-                dot.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{PALETTE.get('border','#484848')};")
+                dot.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{PALETTE['border']};")
 
     def _on_next(self):
         idx = self._stack.currentIndex()

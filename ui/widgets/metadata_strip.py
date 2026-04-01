@@ -82,8 +82,8 @@ class _NoteRow(QWidget):
         lay.addWidget(self._text_lbl, 1)
 
     def apply_styles(self) -> None:
-        dim = PALETTE.get("textDim", "#888888")
-        txt = PALETTE.get("text",    "#ebebeb")
+        dim = PALETTE['textDim']
+        txt = PALETTE['text']
         sz  = FONT.get("sublabel", 9)
         self._meta_lbl.setStyleSheet(
             f"QLabel#note_meta {{ color:{dim}; font-size:{sz}pt; }}")
@@ -280,11 +280,11 @@ class MetadataStrip(QWidget):
     # ── Theme ──────────────────────────────────────────────────────────
 
     def _apply_styles(self) -> None:
-        bg  = PALETTE.get("bg",      "#242424")
-        bdr = PALETTE.get("border",  "#484848")
-        dim = PALETTE.get("textDim", "#888888")
-        txt = PALETTE.get("text",    "#ebebeb")
-        acc = PALETTE.get("accent",  "#00d4aa")
+        bg  = PALETTE['bg']
+        bdr = PALETTE['border']
+        dim = PALETTE['textDim']
+        txt = PALETTE['text']
+        acc = PALETTE['accent']
         sz  = FONT.get("sublabel", 9)
         body = FONT.get("body", 11)
 
@@ -308,7 +308,7 @@ class MetadataStrip(QWidget):
 
         self._note_input.setStyleSheet(
             f"QLineEdit#note_input_field {{"
-            f"  background:{PALETTE.get('surface', '#2d2d2d')};"
+            f"  background:{PALETTE['surface']};"
             f"  color:{txt}; border:1px solid {bdr}; border-radius:4px;"
             f"  font-size:{body}pt; padding:3px 6px;"
             f"}}"
@@ -317,7 +317,7 @@ class MetadataStrip(QWidget):
 
         self._add_btn.setStyleSheet(
             f"QPushButton#note_add_btn {{"
-            f"  background:{acc}; color:#000; border:none; border-radius:4px;"
+            f"  background:{acc}; color:{PALETTE['textOnAccent']}; border:none; border-radius:4px;"
             f"  font-size:{sz}pt; font-weight:600; padding:4px 0;"
             f"}}"
             f"QPushButton#note_add_btn:hover {{ background:{acc}cc; }}"

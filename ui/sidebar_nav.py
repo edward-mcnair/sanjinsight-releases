@@ -35,15 +35,15 @@ from ui.theme      import PALETTE, FONT as _FONT
 from ui.font_utils import sans_font as _sans_font
 
 # These are read at PAINT TIME so they always reflect the current theme.
-def _BG():         return PALETTE.get("surface",     "#1a1d28")
-def _BG_HOVER():   return PALETTE.get("surfaceHover","#262a38")
-def _BG_ACTIVE():  return PALETTE.get("accentDim",   "#00d4aa2e")
-def _ACCENT():     return PALETTE.get("accent",      "#00d4aa")
-def _TEXT_DIM():   return PALETTE.get("textDim",     "#8892aa")
-def _TEXT_NORM():  return PALETTE.get("text",        "#dde3f2")
-def _TEXT_WHITE(): return PALETTE.get("text",        "#dde3f2")
-def _DIVIDER():    return PALETTE.get("border",      "#2e3245")
-def _HDR_BG():     return PALETTE.get("surface4",    "#3a3a3c")
+def _BG():         return PALETTE['surface']
+def _BG_HOVER():   return PALETTE['surfaceHover']
+def _BG_ACTIVE():  return PALETTE['accentDim']
+def _ACCENT():     return PALETTE['accent']
+def _TEXT_DIM():   return PALETTE['textDim']
+def _TEXT_NORM():  return PALETTE['text']
+def _TEXT_WHITE(): return PALETTE['text']
+def _DIVIDER():    return PALETTE['border']
+def _HDR_BG():     return PALETTE['surface4']
 
 # ── Sizes ──────────────────────────────────────────────────────────
 _ITEM_H    = 30    # menu row height
@@ -108,10 +108,10 @@ class _SidebarTooltip(QLabel):
 
     def _restyle(self):
         self.setStyleSheet(
-            f"QLabel {{ background:{PALETTE.get('surface','#1a1d28')}; "
-            f"color:{PALETTE.get('text','#dde3f2')}; "
-            f"border:1px solid {PALETTE.get('border','#2e3245')}; "
-            "border-radius:5px; padding:5px 10px; }}")
+            f"QLabel {{ background:{PALETTE['surface']}; "
+            f"color:{PALETTE['text']}; "
+            f"border:1px solid {PALETTE['border']}; "
+            f"border-radius:5px; padding:5px 10px; }}")
         self.setFont(_sans_font(_FONT["body"]))
 
     def show_tip(self, global_pos: QPoint, text: str):
@@ -265,7 +265,7 @@ class _MenuItem(QWidget):
             path = QPainterPath()
             path.addRoundedRect(bx, by, bw, bh, 8, 8)
             p.fillPath(path, QColor(_ACCENT()))
-            p.setPen(QColor("#fff"))
+            p.setPen(QColor(PALETTE['textOnAccent']))
             p.drawText(bx, by, bw, bh, Qt.AlignCenter, self._item.badge)
 
         # ── Guided walkthrough step indicator ────────────────────────
@@ -274,12 +274,12 @@ class _MenuItem(QWidget):
             cy = h // 2
             if self._guided_state == "complete":
                 # Filled green circle with white checkmark
-                success = PALETTE.get("success", "#30d158")
+                success = PALETTE['success']
                 p.setBrush(QColor(success))
                 p.setPen(Qt.NoPen)
                 p.drawEllipse(cx - 5, cy - 5, 10, 10)
                 # Draw a small checkmark
-                p.setPen(QPen(QColor("#fff"), 1.4))
+                p.setPen(QPen(QColor(PALETTE['textOnAccent']), 1.4))
                 p.drawLine(cx - 2, cy, cx - 1, cy + 2)
                 p.drawLine(cx - 1, cy + 2, cx + 3, cy - 2)
             elif self._guided_state == "current":
@@ -558,7 +558,7 @@ class _ModePill(QWidget):
             sx = i * seg_w
             if i == self._mode_idx:
                 # Active: dark text on accent background
-                p.setPen(QColor("#000000"))
+                p.setPen(QColor(PALETTE['textOnAccent']))
                 f = _sans_font(_FONT.get("caption", 8), bold=True)
                 p.setFont(f)
             elif i == self._hover_idx:
@@ -609,7 +609,7 @@ class _CollapseBar(QWidget):
 
         # Centred ▶ arrow, vertically centred
         p.setFont(_sans_font(_FONT["caption"], bold=True))
-        p.setPen(QColor("#ffffff"))
+        p.setPen(QColor(PALETTE['text']))
         p.drawText(0, h // 2 - 40, w, 80, Qt.AlignCenter, "▶")
 
         p.end()
@@ -687,7 +687,7 @@ class _PhaseHeader(QWidget):
             # Completed: filled accent circle with checkmark
             p.fillPath(circle_path, QColor(_ACCENT()))
             p.setFont(_sans_font(_FONT["caption"], bold=True))
-            p.setPen(QColor("#ffffff"))
+            p.setPen(QColor(PALETTE['text']))
             p.drawText(cx, cy, cr * 2, cr * 2, Qt.AlignCenter, "✓")
         else:
             # Numbered: outlined circle
@@ -718,7 +718,7 @@ class _PhaseHeader(QWidget):
             by = (h - bh) // 2
             badge_path = QPainterPath()
             badge_path.addRoundedRect(bx, by, bw, bh, 8, 8)
-            p.fillPath(badge_path, QColor(PALETTE.get("surface2", "#2a2d3a")))
+            p.fillPath(badge_path, QColor(PALETTE['surface2']))
             p.setPen(QColor(_TEXT_DIM()))
             p.drawText(bx, by, bw, bh, Qt.AlignCenter, self._badge)
 
@@ -835,8 +835,8 @@ class _Sidebar(QWidget):
         self._scroll.setStyleSheet(
             f"QScrollArea {{ background:{_BG()}; border:none; }}"
             f"QScrollBar:vertical {{ background:{_BG()}; width:5px; margin:0; }}"
-            f"QScrollBar::handle:vertical {{ background:{PALETTE.get('border2','#3d3d3d')};"
-            " border-radius:2px; min-height:20px; }}"
+            f"QScrollBar::handle:vertical {{ background:{PALETTE['border2']};"
+            " border-radius:2px; min-height:20px; }"
             "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height:0; }"
         )
 

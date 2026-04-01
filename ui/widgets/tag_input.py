@@ -94,10 +94,10 @@ class _SuggestionPopup(QListWidget):
         self.setCurrentRow(-1)
 
     def _apply_styles(self) -> None:
-        bg   = PALETTE.get("surface",  "#2d2d2d")
-        txt  = PALETTE.get("text",     "#ebebeb")
-        sel  = PALETTE.get("accent",   "#00d4aa")
-        bdr  = PALETTE.get("border",   "#484848")
+        bg   = PALETTE['surface']
+        txt  = PALETTE['text']
+        sel  = PALETTE['accent']
+        bdr  = PALETTE['border']
         self.setStyleSheet(
             f"QListWidget {{"
             f"  background:{bg}; color:{txt};"
@@ -351,11 +351,11 @@ class TagInputWidget(QWidget):
     # ── Theme ──────────────────────────────────────────────────────────
 
     def _apply_styles(self) -> None:
-        bg   = PALETTE.get("surface",  "#2d2d2d")
-        txt  = PALETTE.get("text",     "#ebebeb")
-        dim  = PALETTE.get("textDim",  "#888888")
-        bdr  = PALETTE.get("border",   "#484848")
-        acc  = PALETTE.get("accent",   "#00d4aa")
+        bg   = PALETTE['surface']
+        txt  = PALETTE['text']
+        dim  = PALETTE['textDim']
+        bdr  = PALETTE['border']
+        acc  = PALETTE['accent']
 
         self._frame.setStyleSheet(
             f"QFrame#tag_input_frame {{"

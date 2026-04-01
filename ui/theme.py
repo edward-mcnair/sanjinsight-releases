@@ -140,6 +140,48 @@ _DARK_RAW: dict = {
     "errorBorder":   "#ff453a",
     "unknownBg":     "#1c1c1e",
     "unknownBorder": "#38383a",
+    # ── Semantic tint backgrounds (verdict banners, safe-mode, etc.) ─────
+    "successBg":     "#0a2918",  # deep green tint (same as readyBg)
+    "warningBg":     "#2e1a00",  # deep amber/orange tint
+    "dangerBg":      "#2e0c08",  # deep red tint (same as errorBg)
+    "infoBg":        "#0a1c2e",  # deep blue tint
+    # ── Canvas — scientific plot / image viewer / map backgrounds ─────────
+    "canvas":        "#0d0d0d",  # near-black canvas for plots & previews
+    "canvasGrid":    "#2a2a2a",  # gridlines on canvas
+    "canvasText":    "#888888",  # axis labels, tick text on canvas
+    # ── Text on filled backgrounds ───────────────────────────────────────
+    "textOnAccent":  "#ffffff",  # white text on accent/CTA filled buttons/badges
+    "textOnWarn":    "#ffcc66",  # legible text on warning-tint backgrounds
+    # ── Editor / code ────────────────────────────────────────────────────
+    "selectionBg":   "#264f78",  # text selection highlight in editors
+    "syntaxKeyword": "#569cd6",  # blue — Python keywords
+    "syntaxString":  "#ce9178",  # orange — string literals
+    "syntaxComment": "#6a9955",  # green — comments
+    "syntaxNumber":  "#b5cea8",  # light green — numeric literals
+    # ── Profile category accents ─────────────────────────────────────────
+    "catSemiconductor":   "#00d4aa",
+    "catPcb":             "#4488ff",
+    "catAutomotive":      "#ffaa00",
+    "catMetal":           "#cc88ff",
+    "catUser":            "#ff6688",
+    "catSemiconductorBg": "#0d2a22",
+    "catPcbBg":           "#0d1a2a",
+    "catAutomotiveBg":    "#2a1e0d",
+    "catMetalBg":         "#1a0d2a",
+    "catUserBg":          "#2a0d18",
+    # ── Device state indicators ──────────────────────────────────────────
+    "stateAbsent":       "#555555",
+    "stateDiscovered":   "#4488ff",
+    "stateConnecting":   "#ffaa00",
+    "stateConnected":    "#00d4aa",
+    "stateError":        "#ff3b3b",
+    # ── Modality brand colours ───────────────────────────────────────────
+    "modalityTr":        "#00d4aa",
+    "modalityIr":        "#ff8844",
+    "modalityHybrid":    "#aa55ff",
+    "modalityOpp":       "#4488ff",
+    "modalityMovie":     "#ffcc22",
+    "modalityTransient": "#22aaff",
 }
 
 _LIGHT_RAW: dict = {
@@ -191,6 +233,48 @@ _LIGHT_RAW: dict = {
     "errorBorder":   "#ff3b30",
     "unknownBg":     "#f2f2f7",
     "unknownBorder": "#c6c6c8",
+    # ── Semantic tint backgrounds (verdict banners, safe-mode, etc.) ─────
+    "successBg":     "#d4f5e2",  # light green tint
+    "warningBg":     "#fff3d0",  # light amber tint
+    "dangerBg":      "#fde8e6",  # light red tint
+    "infoBg":        "#dce8ff",  # light blue tint
+    # ── Canvas — scientific plot / image viewer / map backgrounds ─────────
+    "canvas":        "#f0f0f4",  # light grey canvas for plots & previews
+    "canvasGrid":    "#d8d8dc",  # gridlines on canvas
+    "canvasText":    "#6e6e80",  # axis labels, tick text on canvas
+    # ── Text on filled backgrounds ───────────────────────────────────────
+    "textOnAccent":  "#ffffff",  # white text on accent/CTA filled buttons/badges
+    "textOnWarn":    "#663c00",  # legible dark text on warning-tint backgrounds
+    # ── Editor / code ────────────────────────────────────────────────────
+    "selectionBg":   "#add6ff",  # text selection highlight in editors
+    "syntaxKeyword": "#0550ae",  # blue — Python keywords
+    "syntaxString":  "#a31515",  # red — string literals
+    "syntaxComment": "#008000",  # green — comments
+    "syntaxNumber":  "#098658",  # teal — numeric literals
+    # ── Profile category accents ─────────────────────────────────────────
+    "catSemiconductor":   "#008868",
+    "catPcb":             "#2266cc",
+    "catAutomotive":      "#cc8800",
+    "catMetal":           "#8844cc",
+    "catUser":            "#cc3355",
+    "catSemiconductorBg": "#d8f5ec",
+    "catPcbBg":           "#dce8ff",
+    "catAutomotiveBg":    "#fff0d4",
+    "catMetalBg":         "#f0e0ff",
+    "catUserBg":          "#ffe0ea",
+    # ── Device state indicators ──────────────────────────────────────────
+    "stateAbsent":       "#aaaaaa",
+    "stateDiscovered":   "#2266cc",
+    "stateConnecting":   "#cc8800",
+    "stateConnected":    "#008868",
+    "stateError":        "#cc2222",
+    # ── Modality brand colours ───────────────────────────────────────────
+    "modalityTr":        "#008868",
+    "modalityIr":        "#cc5500",
+    "modalityHybrid":    "#7722cc",
+    "modalityOpp":       "#2266cc",
+    "modalityMovie":     "#aa8800",
+    "modalityTransient": "#0077cc",
 }
 
 
@@ -274,7 +358,7 @@ MONO_FONT = "'Menlo','Consolas','Courier New',monospace"
 # ══════════════════════════════════════════════════════════════════════════════
 #
 # PALETTE is the single live dict all widget code imports.  set_theme() clears
-# and repopulates it so every PALETTE["key"] reference automatically reflects
+# and repopulates it so every PALETTE['key'] reference automatically reflects
 # the current mode — no import changes needed anywhere.
 
 _active_mode: str = "dark"
@@ -514,90 +598,91 @@ QPushButton:checked {{
     border-color: {_acc};
 }}
 
-/* Primary action — solid blue CTA */
+/* Primary action — solid blue CTA.
+   !important guards against parent widget setStyleSheet() cascade. */
 QPushButton#primary {{
-    background: {_cta};
-    color: #ffffff;
-    border: none;
+    background: {_cta} !important;
+    color: #ffffff !important;
+    border: none !important;
     border-radius: 6px;
     padding: 6px 16px;
     font-weight: 600;
 }}
 QPushButton#primary:hover {{
-    background: {_ctah};
+    background: {_ctah} !important;
 }}
 QPushButton#primary:pressed {{
-    background: {_dk('#0060d0', '#0060c0')};
+    background: {_dk('#0060d0', '#0060c0')} !important;
     padding-top: 7px;
     padding-bottom: 5px;
 }}
 QPushButton#primary:focus   {{ outline: none; }}
 QPushButton#primary:disabled {{
-    background: {_dk('#1c2a3a', '#c0d8f8')};
-    color: {_dk('#3a5878', '#6090c8')};
-    border: none;
+    background: {_dk('#1c2a3a', '#c0d8f8')} !important;
+    color: {_dk('#3a5878', '#6090c8')} !important;
+    border: none !important;
 }}
 
 /* Danger action (red) */
 QPushButton#danger {{
-    background: {_dk('#2a0810', '#fde8ee')};
-    color: {_dng};
-    border: 1px solid {_dng};
+    background: {_dk('#2a0810', '#fde8ee')} !important;
+    color: {_dng} !important;
+    border: 1px solid {_dng} !important;
     border-radius: 6px;
     padding: 6px 14px;
     font-weight: 600;
 }}
-QPushButton#danger:hover    {{ background: {_dk('#3a0c18', '#f8d0db')}; }}
+QPushButton#danger:hover    {{ background: {_dk('#3a0c18', '#f8d0db')} !important; }}
 QPushButton#danger:pressed  {{
-    background: {_dk('#1a040c', '#f0bec8')};
+    background: {_dk('#1a040c', '#f0bec8')} !important;
     padding-top: 7px; padding-bottom: 5px;
 }}
 QPushButton#danger:focus    {{ border-color: {_dng}; outline: none; }}
 QPushButton#danger:disabled {{
-    color: {_sub}; background: {_s2}; border-color: {_bdr};
+    color: {_sub} !important; background: {_s2} !important; border-color: {_bdr} !important;
 }}
 
 /* Domain: cold frame capture */
 QPushButton#cold_btn {{
-    background: {_dk('#001830', '#e0eeff')};
-    color: {_dk('#409cff', '#0060c0')};
-    border: 1px solid {_dk('#0a84ff55', '#007aff66')};
+    background: {_dk('#001830', '#e0eeff')} !important;
+    color: {_dk('#409cff', '#0060c0')} !important;
+    border: 1px solid {_dk('#0a84ff55', '#007aff66')} !important;
     border-radius: 6px;
     font-weight: 600;
     padding: 6px 14px;
 }}
 QPushButton#cold_btn:hover {{
-    background: {_dk('#002040', '#cce0ff')};
+    background: {_dk('#002040', '#cce0ff')} !important;
     border-color: {_dk('#409cff', '#0060c0')};
 }}
 
 /* Domain: hot frame capture */
 QPushButton#hot_btn {{
-    background: {_dk('#2e1800', '#fff0d8')};
-    color: {_warn};
-    border: 1px solid {_dk('#ff9f0a55', '#ff950066')};
+    background: {_dk('#2e1800', '#fff0d8')} !important;
+    color: {_warn} !important;
+    border: 1px solid {_dk('#ff9f0a55', '#ff950066')} !important;
     border-radius: 6px;
     font-weight: 600;
     padding: 6px 14px;
 }}
 QPushButton#hot_btn:hover {{
-    background: {_dk('#3e2000', '#ffe4b8')};
+    background: {_dk('#3e2000', '#ffe4b8')} !important;
     border-color: {_warn};
 }}
 
 /* Running / in-progress dynamic state */
 QPushButton[running="true"] {{
-    background: {_dk('#2a1e00', '#fff4d0')};
-    color: {_dk('#ff9f0a', '#8b5200')};
-    border: 2px solid {_warn}55;
+    background: {_dk('#2a1e00', '#fff4d0')} !important;
+    color: {_dk('#ff9f0a', '#8b5200')} !important;
+    border: 2px solid {_warn}55 !important;
     border-radius: 6px;
     font-weight: 600;
     padding: 5px 13px;
 }}
 QPushButton[running="true"]#primary {{
-    background: {_dk('#001830', '#d0e8ff')};
-    color: {_cta};
-    border: 2px solid {_cta}66;
+    background: {_dk('#001830', '#d0e8ff')} !important;
+    color: {_cta} !important;
+    border: 2px solid {_cta}66 !important;
     padding: 5px 15px;
 }}
 
@@ -1073,6 +1158,9 @@ def btn_primary_qss() -> str:
 
     Uses the CTA blue role — Apple systemBlue — visually distinct from the
     mint-teal accent so user-action buttons read immediately as interactive.
+
+    Includes ``[running="true"]`` rules so RunningButton dynamic property
+    styling works even with widget-level QSS overriding the app-level sheet.
     """
     p, f = PALETTE, FONT
     cta  = p["cta"]
@@ -1090,6 +1178,13 @@ def btn_primary_qss() -> str:
     QPushButton:disabled {{ background: {'#1c2a3a' if dark else '#c0d8f8'};
                             color: {'#3a5878' if dark else '#6090c8'};
                             border: none; }}
+    QPushButton[running="true"] {{
+        background: {'#001830' if dark else '#d0e8ff'};
+        color: {cta};
+        border: 2px solid {cta}66;
+        border-radius: 6px; font-weight: 600;
+        padding: 5px 15px;
+    }}
     """
 
 
@@ -1137,51 +1232,99 @@ def btn_secondary_qss() -> str:
 
 
 def btn_danger_qss() -> str:
-    """Destructive / danger action button."""
+    """Destructive / danger action button.
+
+    Includes ``[running="true"]`` rules for RunningButton compatibility.
+    """
     p, f = PALETTE, FONT
     dark = active_theme() == "dark"
     dng  = p["danger"]
+    warn = p["warning"]
     return f"""
     QPushButton {{
-        background: {'#2a0810' if dark else '#fde8ee'};
+        background: {p['errorBg']};
         color: {dng}; border: 1px solid {dng};
         border-radius: 6px; padding: 6px 14px;
         font-size: {f['body']}pt; font-weight: 600;
     }}
-    QPushButton:hover   {{ background: {'#3a0c18' if dark else '#f8d0db'}; }}
+    QPushButton:hover   {{ background: {'#3a0c18' if dark else '#f8d0db'}; color: {dng}; }}
     QPushButton:pressed {{ background: {'#1a040c' if dark else '#f0bec8'};
                            padding-top: 7px; padding-bottom: 5px; }}
     QPushButton:disabled {{ color: {p['textSub']}; background: {p['surface2']};
                             border-color: {p['border']}; }}
+    QPushButton[running="true"] {{
+        background: {'#2a1e00' if dark else '#fff4d0'};
+        color: {'#ff9f0a' if dark else '#8b5200'};
+        border: 2px solid {warn}55;
+        border-radius: 6px; font-weight: 600;
+        padding: 5px 13px;
+    }}
+    """
+
+
+def btn_cold_qss() -> str:
+    """Blue info-tinted button for cold frame capture."""
+    dark = active_theme() == "dark"
+    f = FONT
+    return f"""
+    QPushButton {{
+        background: {'#001830' if dark else '#e0eeff'};
+        color: {'#409cff' if dark else '#0060c0'};
+        border: 1px solid {'#0a84ff55' if dark else '#007aff66'};
+        border-radius: 6px; font-weight: 600;
+        padding: 6px 14px; font-size: {f['body']}pt;
+    }}
+    QPushButton:hover {{ background: {'#002040' if dark else '#cce0ff'};
+                         border-color: {'#409cff' if dark else '#0060c0'}; }}
+    """
+
+
+def btn_hot_qss() -> str:
+    """Orange warning-tinted button for hot frame capture."""
+    dark = active_theme() == "dark"
+    f = FONT
+    warn = PALETTE['warning']
+    return f"""
+    QPushButton {{
+        background: {'#2e1800' if dark else '#fff0d8'};
+        color: {warn};
+        border: 1px solid {'#ff9f0a55' if dark else '#ff950066'};
+        border-radius: 6px; font-weight: 600;
+        padding: 6px 14px; font-size: {f['body']}pt;
+    }}
+    QPushButton:hover {{ background: {'#3e2000' if dark else '#ffe4b8'};
+                         border-color: {warn}; }}
     """
 
 
 def btn_wizard_primary_qss() -> str:
     """Blue primary button for the first-run wizard."""
-    f = FONT
+    p, f = PALETTE, FONT
+    dark = active_theme() == "dark"
     return f"""
     QPushButton {{
-        background: #4188f5; color: #fff; border: none;
+        background: {p['cta']}; color: {p['textOnAccent']}; border: none;
         border-radius: 6px; padding: 8px 22px;
         font-size: {f['body']}pt; font-weight: 600;
     }}
-    QPushButton:hover    {{ background: #5c9ef7; }}
-    QPushButton:pressed  {{ background: #2e68d8; padding-top: 9px; padding-bottom: 7px; }}
-    QPushButton:disabled {{ background: #2a3050; color: #5070a0; }}
+    QPushButton:hover    {{ background: {p['ctaHover']}; }}
+    QPushButton:pressed  {{ background: {'#2e68d8' if dark else '#005ec4'};
+                            padding-top: 9px; padding-bottom: 7px; }}
+    QPushButton:disabled {{ background: {p['surface2']}; color: {p['textSub']}; }}
     """
 
 
 def btn_wizard_secondary_qss() -> str:
     """Muted secondary button for the first-run wizard."""
-    f = FONT
+    p, f = PALETTE, FONT
     return f"""
     QPushButton {{
-        background: #1e2337; color: #aaa;
-        border: 1px solid #333; border-radius: 6px;
+        background: {p['surface2']}; color: {p['textDim']};
+        border: 1px solid {p['border']}; border-radius: 6px;
         padding: 8px 22px; font-size: {f['body']}pt;
     }}
-    QPushButton:hover   {{ background: #2a3249; color: #ccc; }}
-    QPushButton:pressed {{ background: #1a1f33; }}
+    QPushButton:hover   {{ background: {p['surfaceHover']}; color: {p['text']}; }}
+    QPushButton:pressed {{ background: {p['surface']}; }}
     """
 
 
@@ -1207,18 +1350,18 @@ def input_qss() -> str:
 
 def wizard_input_qss() -> str:
     """Input style for the first-run wizard (blue focus accent)."""
-    f = FONT
+    p, f = PALETTE, FONT
     return f"""
     QLineEdit, QComboBox {{
-        background: #13172a; color: #ddd;
-        border: 1px solid #2a3249; border-radius: 6px;
+        background: {p['surface3']}; color: {p['text']};
+        border: 1px solid {p['border']}; border-radius: 6px;
         padding: 6px 10px; font-size: {f['body']}pt;
-        selection-background-color: #4188f5;
+        selection-background-color: {p['cta']};
     }}
-    QLineEdit:focus, QComboBox:focus {{ border-color: #4188f5; }}
+    QLineEdit:focus, QComboBox:focus {{ border-color: {p['cta']}; }}
     QComboBox::drop-down {{ border: none; }}
     QComboBox QAbstractItemView {{
-        background: #13172a; color: #ddd; border: 1px solid #2a3249;
+        background: {p['surface']}; color: {p['text']}; border: 1px solid {p['border']};
     }}
     """
 
@@ -1256,7 +1399,7 @@ def status_pill_qss(semantic: str) -> str:
     ----------
     semantic : ``'success'`` | ``'warning'`` | ``'danger'`` | ``'info'``
     """
-    color = PALETTE.get(semantic, PALETTE["info"])
+    color = PALETTE.get(semantic, PALETTE['info'])
     f = FONT
     return f"""
     QLabel {{
@@ -1319,7 +1462,7 @@ def segmented_control_qss() -> str:
         font-size: {f['label']}pt;
     }}
     QPushButton:checked {{
-        background: {acc}; color: #ffffff; border-color: {acc};
+        background: {acc}; color: {p['textOnAccent']}; border-color: {acc};
     }}
     QPushButton:hover:!checked {{
         background: {p['surfaceHover']}; color: {p['text']};
@@ -1334,12 +1477,12 @@ def badge_qss(semantic: str) -> str:
     ----------
     semantic : ``'success'`` | ``'warning'`` | ``'danger'`` | ``'info'``
     """
-    color = PALETTE.get(semantic, PALETTE["info"])
+    color = PALETTE.get(semantic, PALETTE['info'])
     f = FONT
     return f"""
     QLabel {{
         background: {color};
-        color: #ffffff;
+        color: {PALETTE['textOnAccent']};
         border-radius: 4px;
         padding: 1px 6px;
         font-size: {f['caption']}pt;
@@ -1359,7 +1502,7 @@ def dual_label(primary: str, secondary: str) -> "QLabel":
     """
     from PyQt5.QtWidgets import QLabel
     from PyQt5.QtCore import Qt
-    td, cap = PALETTE["textDim"], FONT["caption"]
+    td, cap = PALETTE['textDim'], FONT["caption"]
     lbl = QLabel(
         f'{primary}'
         f'<br><span style="font-size:{cap}pt; color:{td};">{secondary}</span>'

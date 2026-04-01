@@ -31,9 +31,9 @@ _STATUS_ICON = {
     "fail": "✗",
 }
 _STATUS_COLOR = {
-    "pass": lambda: PALETTE.get("success", "#00d479"),
-    "warn": lambda: PALETTE.get("warning", "#ffb300"),
-    "fail": lambda: PALETTE.get("danger",  "#ff4444"),
+    "pass": lambda: PALETTE['success'],
+    "warn": lambda: PALETTE['warning'],
+    "fail": lambda: PALETTE['danger'],
 }
 
 
@@ -87,13 +87,13 @@ class PreflightDialog(QDialog):
         # ── Timing ────────────────────────────────────────────────────
         timing = QLabel(f"Completed in {preflight.duration_ms:.0f} ms")
         timing.setStyleSheet(
-            f"font-size:{FONT['caption']}pt; color:{PALETTE.get('textDim', '#888')};")
+            f"font-size:{FONT['caption']}pt; color:{PALETTE['textDim']};")
         root.addWidget(timing)
 
         # ── Separator ─────────────────────────────────────────────────
         sep = QFrame()
         sep.setFrameShape(QFrame.HLine)
-        sep.setStyleSheet(f"color: {PALETTE.get('border', '#444')};")
+        sep.setStyleSheet(f"color: {PALETTE['border']};")
         root.addWidget(sep)
 
         # ── Buttons ───────────────────────────────────────────────────
@@ -151,14 +151,14 @@ class PreflightDialog(QDialog):
         name_lbl = QLabel(check.display_name)
         name_lbl.setStyleSheet(
             f"font-size:{FONT['label']}pt; font-weight:600; "
-            f"color:{PALETTE.get('text', '#eee')};")
+            f"color:{PALETTE['text']};")
         details.addWidget(name_lbl)
 
         obs_lbl = QLabel(check.observed)
         obs_lbl.setStyleSheet(
             f"font-family:{MONO_FONT}; "
             f"font-size:{FONT['caption']}pt; "
-            f"color:{PALETTE.get('textDim', '#888')};")
+            f"color:{PALETTE['textDim']};")
         details.addWidget(obs_lbl)
 
         if check.hint and check.status != "pass":
@@ -179,15 +179,15 @@ class PreflightDialog(QDialog):
             fix_btn.setToolTip(remediation.description)
             fix_btn.setStyleSheet(
                 f"QPushButton {{ "
-                f"background: {PALETTE.get('accent', '#00bcd4')}; "
-                f"color: {PALETTE.get('bg', '#111')}; "
+                f"background: {PALETTE['accent']}; "
+                f"color: {PALETTE['bg']}; "
                 f"border: none; border-radius: 4px; "
                 f"font-size: {FONT['caption']}pt; font-weight: 700; "
                 f"padding: 4px 12px; }}"
                 f"QPushButton:hover {{ "
-                f"background: {PALETTE.get('accentHover', '#26c6da')}; }}"
+                f"background: {PALETTE['accentHover']}; }}"
                 f"QPushButton:disabled {{ "
-                f"background: {PALETTE.get('textDim', '#888')}; }}")
+                f"background: {PALETTE['textDim']}; }}")
             fix_btn.clicked.connect(
                 lambda _, r=remediation, b=fix_btn: self._run_fix(r, b))
             lay.addWidget(fix_btn, 0, Qt.AlignTop)
@@ -212,8 +212,8 @@ class PreflightDialog(QDialog):
             btn.setText("✓ Applied")
             btn.setStyleSheet(
                 f"QPushButton {{ "
-                f"background: {PALETTE.get('success', '#00d479')}; "
-                f"color: {PALETTE.get('bg', '#111')}; "
+                f"background: {PALETTE['success']}; "
+                f"color: {PALETTE['bg']}; "
                 f"border: none; border-radius: 4px; "
                 f"font-size: {FONT['caption']}pt; font-weight: 700; "
                 f"padding: 4px 12px; }}")

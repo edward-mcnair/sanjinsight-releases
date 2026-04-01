@@ -82,6 +82,27 @@ class ProfilePicker(QWidget):
         """Alias for filter_by_modality."""
         self.filter_by_modality(modality)
 
+    def set_profile(self, profile: Optional[MaterialProfile]) -> None:
+        """Programmatically select a profile in the combo box (no signal)."""
+        if profile is None:
+            self._active_profile = None
+            self._detail_lbl.setVisible(False)
+            self._combo.blockSignals(True)
+            self._combo.setCurrentIndex(0)
+            self._combo.blockSignals(False)
+            return
+        # Find the profile in the visible list and select it
+        for i in range(self._combo.count()):
+            if self._combo.itemData(i) == profile.uid:
+                self._active_profile = profile
+                self._combo.blockSignals(True)
+                self._combo.setCurrentIndex(i)
+                self._combo.blockSignals(False)
+                self._show_detail(profile)
+                return
+        # Profile not in current list — may need modality filter update
+        log.debug("ProfilePicker.set_profile: %r not in visible list", profile.name)
+
     def filter_by_wavelength(self, wavelength_nm: int) -> None:
         """Legacy — filter by wavelength (0 = show all)."""
         # Modality filter is the primary mechanism now; wavelength is
@@ -175,7 +196,7 @@ class ProfilePicker(QWidget):
         if p.recommended_objective:
             parts.append(p.recommended_objective)
 
-        accent = CATEGORY_ACCENTS.get(p.category, PALETTE.get("accent", "#00d4aa"))
+        accent = CATEGORY_ACCENTS.get(p.category, PALETTE['accent'])
         self._detail_lbl.setText("  ·  ".join(parts))
         self._detail_lbl.setStyleSheet(
             f"font-size:{FONT['caption']}pt; color:{accent}; padding-left:2px;")
@@ -184,11 +205,11 @@ class ProfilePicker(QWidget):
     # ── Theme ────────────────────────────────────────────────────────
 
     def _apply_styles(self) -> None:
-        accent = PALETTE.get("accent", "#00d4aa")
-        surface = PALETTE.get("surface", "#2d2d2d")
-        surface2 = PALETTE.get("surface2", "#242424")
-        text = PALETTE.get("text", "#e0e0e0")
-        dim = PALETTE.get("textDim", "#888")
+        accent = PALETTE['accent']
+        surface = PALETTE['surface']
+        surface2 = PALETTE['surface2']
+        text = PALETTE['text']
+        dim = PALETTE['textDim']
 
         self._hint_lbl.setStyleSheet(
             f"font-size:{FONT['caption']}pt; color:{dim}; padding:0;")

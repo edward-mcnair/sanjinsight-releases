@@ -48,14 +48,14 @@ class CollapsiblePanel(QWidget):
             Qt.DownArrow if not start_collapsed else Qt.RightArrow)
         self.btn.setStyleSheet(f"""
             QToolButton {{
-                color: {PALETTE["textDim"]};
+                color: {PALETTE['textDim']};
                 border: none;
                 font-size: {FONT["sublabel"]}pt;
                 padding: 4px 0;
                 background: transparent;
             }}
-            QToolButton:hover   {{ color: {PALETTE["text"]}; }}
-            QToolButton:checked {{ color: {PALETTE["text"]}; }}
+            QToolButton:hover   {{ color: {PALETTE['text']}; }}
+            QToolButton:checked {{ color: {PALETTE['text']}; }}
         """)
 
         # ── Content frame ─────────────────────────────────────────────
@@ -95,14 +95,14 @@ class CollapsiblePanel(QWidget):
         """Re-apply PALETTE-derived styles after a theme switch."""
         self.btn.setStyleSheet(f"""
             QToolButton {{
-                color: {PALETTE["textDim"]};
+                color: {PALETTE['textDim']};
                 border: none;
                 font-size: {FONT["sublabel"]}pt;
                 padding: 4px 0;
                 background: transparent;
             }}
-            QToolButton:hover   {{ color: {PALETTE["text"]}; }}
-            QToolButton:checked {{ color: {PALETTE["text"]}; }}
+            QToolButton:hover   {{ color: {PALETTE['text']}; }}
+            QToolButton:checked {{ color: {PALETTE['text']}; }}
         """)
 
     # ── Internal ──────────────────────────────────────────────────────

@@ -195,11 +195,11 @@ class MovieTab(QWidget):
         rl = QVBoxLayout(run_box)
 
         self._run_btn   = QPushButton("Run Movie")
-        set_btn_icon(self._run_btn, "fa5s.play", "#00d4aa")
+        set_btn_icon(self._run_btn, "fa5s.play", PALETTE['accent'])
         self._run_btn.setObjectName("primary")
         self._run_btn.setFixedHeight(34)
         self._abort_btn = QPushButton("Abort")
-        set_btn_icon(self._abort_btn, "fa5s.stop", "#ff6666")
+        set_btn_icon(self._abort_btn, "fa5s.stop", PALETTE['danger'])
         self._abort_btn.setObjectName("danger")
         self._abort_btn.setFixedHeight(32)
         self._abort_btn.setEnabled(False)
@@ -298,7 +298,7 @@ class MovieTab(QWidget):
         self._img_lbl.setSizePolicy(
             QSizePolicy.Expanding, QSizePolicy.Expanding)
         self._img_lbl.setStyleSheet(
-            f"background:#0d0d0d; border:1px solid {PALETTE['border']};")
+            f"background:{PALETTE['canvas']}; border:1px solid {PALETTE['border']};")
         self._img_lbl.setAlignment(Qt.AlignCenter)
         _dim  = PALETTE['textDim']
         _body = FONT['body']

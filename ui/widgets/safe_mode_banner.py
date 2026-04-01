@@ -12,7 +12,7 @@ Visual design
 -------------
 * Solid amber/orange strip full-width between the StatusHeader and the
   content area.
-* ⊗ icon + short reason text on the left.
+* icon + short reason text on the left.
 * "Open Device Manager" button on the right.
 * Clicking anywhere on the banner (or the button) opens the Device Manager.
 """
@@ -23,15 +23,28 @@ import sys
 from PyQt5.QtCore    import pyqtSignal, Qt
 from PyQt5.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton
 
-# Amber palette — high visibility without looking like an error
-_BG       = "#5a3a00"
-_BORDER   = "#f5a623"
-_FG       = "#ffcc66"
-_BTN_BG   = "#3a2400"
-_BTN_FG   = "#f5a623"
-_BTN_HVR  = "#4a2e00"
+from ui.theme import PALETTE
 
 _PT = 9 if sys.platform == "win32" else 12   # match main_app _style_pt scaling
+
+
+def _BG() -> str:
+    return PALETTE['warningBg']
+
+def _BORDER() -> str:
+    return PALETTE['warning']
+
+def _FG() -> str:
+    return PALETTE['textOnWarn']
+
+def _BTN_BG() -> str:
+    return PALETTE['surface']
+
+def _BTN_FG() -> str:
+    return PALETTE['warning']
+
+def _BTN_HVR() -> str:
+    return PALETTE['surfaceHover']
 
 
 class SafeModeBanner(QWidget):
@@ -48,13 +61,6 @@ class SafeModeBanner(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setVisible(False)      # hidden until safe mode is active
-
-        self.setStyleSheet(
-            f"SafeModeBanner {{ "
-            f"    background: {_BG}; "
-            f"    border-bottom: 2px solid {_BORDER}; "
-            f"}}"
-        )
         self.setFixedHeight(36)
 
         lay = QHBoxLayout(self)
@@ -64,8 +70,6 @@ class SafeModeBanner(QWidget):
         # Icon + reason label — use CSS font-size so Qt picks the correct
         # system UI font on every platform (Segoe UI on Windows, SF on macOS).
         self._label = QLabel()
-        self._label.setStyleSheet(
-            f"color: {_FG}; background: transparent; font-size: {_PT}pt;")
         self._label.setTextFormat(Qt.PlainText)
         lay.addWidget(self._label, stretch=1)
 
@@ -73,22 +77,36 @@ class SafeModeBanner(QWidget):
         self._btn = QPushButton("Open Device Manager")
         self._btn.setFixedHeight(24)
         self._btn.setCursor(Qt.PointingHandCursor)
-        self._btn.setStyleSheet(
-            f"QPushButton {{ "
-            f"    background: {_BTN_BG}; color: {_BTN_FG}; "
-            f"    border: 1px solid {_BORDER}; border-radius: 3px; "
-            f"    padding: 2px 10px; font-size: {_PT}pt; "
-            f"}}"
-            f"QPushButton:hover {{ background: {_BTN_HVR}; }}"
-        )
         self._btn.clicked.connect(self.device_manager_requested)
         lay.addWidget(self._btn)
+
+        self._apply_styles()
+
+    # ── Theme ────────────────────────────────────────────────────────
+
+    def _apply_styles(self) -> None:
+        self.setStyleSheet(
+            f"SafeModeBanner {{ "
+            f"    background: {_BG()}; "
+            f"    border-bottom: 2px solid {_BORDER()}; "
+            f"}}"
+        )
+        self._label.setStyleSheet(
+            f"color: {_FG()}; background: transparent; font-size: {_PT}pt;")
+        self._btn.setStyleSheet(
+            f"QPushButton {{ "
+            f"    background: {_BTN_BG()}; color: {_BTN_FG()}; "
+            f"    border: 1px solid {_BORDER()}; border-radius: 3px; "
+            f"    padding: 2px 10px; font-size: {_PT}pt; "
+            f"}}"
+            f"QPushButton:hover {{ background: {_BTN_HVR()}; }}"
+        )
 
     # ── Public API ────────────────────────────────────────────────────
 
     def activate(self, reason: str) -> None:
         """Show the banner with *reason* as the blocking explanation."""
-        self._label.setText(f"⊗  Safe Mode — {reason}")
+        self._label.setText(f"Safe Mode -- {reason}")
         self.setVisible(True)
 
     def deactivate(self) -> None:

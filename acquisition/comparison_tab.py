@@ -67,7 +67,7 @@ def _array_to_pixmap(arr: np.ndarray,
     """Render a 2D float32 array as a colormapped QPixmap."""
     if arr is None or arr.ndim != 2:
         pm = QPixmap(width, height)
-        pm.fill(QColor(PALETTE["bg"]))
+        pm.fill(QColor(PALETTE['bg']))
         return pm
 
     v_lo = float(vmin if vmin is not None else np.nanmin(arr))
@@ -197,7 +197,7 @@ class _StatsTable(QTableWidget):
         """)
         for r, (name, _) in enumerate(self._METRICS):
             item = QTableWidgetItem(name)
-            item.setForeground(QColor(PALETTE["textDim"]))
+            item.setForeground(QColor(PALETTE['textDim']))
             self.setItem(r, 0, item)
         self._clear_col(1)
         self._clear_col(2)
@@ -608,15 +608,15 @@ class ComparisonTab(QWidget):
                              and arrA.shape == arrB.shape else 0)
 
         fig, axes = plt.subplots(1, n_panels, figsize=(6 * n_panels, 5),
-                                 facecolor=PALETTE["bg"])
-        fig.suptitle("Microsanj Session Comparison", color=PALETTE["text"], fontsize=13)
+                                 facecolor=PALETTE['bg'])
+        fig.suptitle("Microsanj Session Comparison", color=PALETTE['text'], fontsize=13)
 
         for ax, arr, title in [
             (axes[0], arrA, f"Session A\n{Path(self._pathA).name if self._pathA else ''}"),
             (axes[1], arrB, f"Session B\n{Path(self._pathB).name if self._pathB else ''}"),
         ]:
-            ax.set_facecolor(PALETTE["surface"])
-            ax.set_title(title, color=PALETTE["textDim"], fontsize=9)
+            ax.set_facecolor(PALETTE['surface'])
+            ax.set_title(title, color=PALETTE['textDim'], fontsize=9)
             ax.axis("off")
             if arr is not None:
                 im = ax.imshow(arr, cmap=cmap, aspect="equal")
@@ -625,8 +625,8 @@ class ComparisonTab(QWidget):
         if n_panels == 3 and arrA is not None and arrB is not None:
             diff = arrB - arrA
             abs_max = float(max(abs(np.nanmin(diff)), abs(np.nanmax(diff)), 1e-9))
-            axes[2].set_facecolor(PALETTE["surface"])
-            axes[2].set_title("Difference (B − A)", color=PALETTE["textDim"], fontsize=9)
+            axes[2].set_facecolor(PALETTE['surface'])
+            axes[2].set_title("Difference (B − A)", color=PALETTE['textDim'], fontsize=9)
             axes[2].axis("off")
             im = axes[2].imshow(diff, cmap="RdBu_r",
                                 vmin=-abs_max, vmax=abs_max, aspect="equal")

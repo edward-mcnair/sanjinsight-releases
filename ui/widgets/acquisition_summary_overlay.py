@@ -97,10 +97,10 @@ class AcquisitionSummaryOverlay(QFrame):
         self._apply_styles(scorecard)
 
         # Badge
-        gc = PALETTE.get(scorecard.overall_color, PALETTE.get("textDim", "#888"))
+        gc = PALETTE.get(scorecard.overall_color, PALETTE['textDim'])
         self._badge.setText(scorecard.overall_grade)
         self._badge.setStyleSheet(
-            f"background: {gc}; color: {PALETTE.get('bg', '#111')}; "
+            f"background: {gc}; color: {PALETTE['bg']}; "
             f"border-radius: 24px; "
             f"font-size: {FONT['title']}pt; font-weight: 800;")
 
@@ -149,10 +149,10 @@ class AcquisitionSummaryOverlay(QFrame):
 
     def _apply_styles(self, sc: QualityScorecard = None) -> None:
         """Reapply theme-dependent styles."""
-        bg = PALETTE.get("bg2", "#1a1a1c")
-        border = PALETTE.get("border", "#333")
-        text = PALETTE.get("text", "#eee")
-        dim = PALETTE.get("textDim", "#888")
+        bg = PALETTE['surface']
+        border = PALETTE['border']
+        text = PALETTE['text']
+        dim = PALETTE['textDim']
         gc = PALETTE.get(sc.overall_color, dim) if sc is not None else border
 
         self.setStyleSheet(

@@ -73,7 +73,7 @@ class ColourBar(QWidget):
         p.setPen(Qt.NoPen)
         p.drawRect(pad, 4, W - 2*pad, H - 8)
 
-        p.setPen(QPen(QColor(120, 120, 120)))
+        p.setPen(QPen(QColor(PALETTE['canvasText'])))
         p.setFont(mono_font(11))
         lo_s = format(self._lo, self._fmt)
         hi_s = format(self._hi, self._fmt)
@@ -104,19 +104,19 @@ class MapPane(QWidget):
         self._img_lbl.setMinimumSize(300, 220)
         self._img_lbl.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self._img_lbl.setStyleSheet(
-            "background:#0d0d0d; border:1px solid #2a2a2a;")
+            f"background:{PALETTE['canvas']}; border:1px solid {PALETTE['border']};")
         self._img_lbl.setAlignment(Qt.AlignCenter)
 
         self._title_lbl = QLabel(title)
         self._title_lbl.setAlignment(Qt.AlignCenter)
         self._title_lbl.setStyleSheet(
-            f"font-size:{FONT['label']}pt; color:#555; letter-spacing:1px;")
+            f"font-size:{FONT['label']}pt; color:{PALETTE['textDim']}; letter-spacing:1px;")
 
         self._bar  = ColourBar()
         self._stat = QLabel("")
         self._stat.setAlignment(Qt.AlignCenter)
         self._stat.setStyleSheet(
-            f"font-family:{MONO_FONT}; font-size:{FONT['label']}pt; color:#444;")
+            f"font-family:{MONO_FONT}; font-size:{FONT['label']}pt; color:{PALETTE['textDim']};")
 
         lay.addWidget(self._img_lbl)
         lay.addWidget(self._title_lbl)
@@ -417,10 +417,10 @@ class CalibrationTab(QWidget):
         rl = QVBoxLayout(run_box)
 
         self._run_btn   = QPushButton("Run Calibration")
-        set_btn_icon(self._run_btn, "fa5s.play", "#00d4aa")
+        set_btn_icon(self._run_btn, "fa5s.play", PALETTE['accent'])
         self._run_btn.setObjectName("primary")
         self._abort_btn = QPushButton("Abort")
-        set_btn_icon(self._abort_btn, "fa5s.stop", "#ff6666")
+        set_btn_icon(self._abort_btn, "fa5s.stop", PALETTE['danger'])
         self._abort_btn.setObjectName("danger")
         self._abort_btn.setEnabled(False)
         self._run_btn.setFixedHeight(34)
@@ -436,7 +436,7 @@ class CalibrationTab(QWidget):
 
         self._step_lbl = QLabel("Ready")
         self._step_lbl.setStyleSheet(
-            f"font-family:{MONO_FONT}; font-size:{FONT['heading']}pt; color:#555;")
+            f"font-family:{MONO_FONT}; font-size:{FONT['heading']}pt; color:{PALETTE['textDim']};")
         self._step_lbl.setWordWrap(True)
 
         rl.addWidget(self._run_btn)
@@ -479,7 +479,7 @@ class CalibrationTab(QWidget):
             val = QLabel("—")
             val.setAlignment(Qt.AlignCenter)
             val.setStyleSheet(scaled_qss(
-                f"font-family:{MONO_FONT}; font-size:18pt; color:#00d4aa;"))
+                f"font-family:{MONO_FONT}; font-size:18pt; color:{PALETTE['accent']};"))
             v.addWidget(sub)
             v.addWidget(val)
             w2._val = val
@@ -531,12 +531,12 @@ class CalibrationTab(QWidget):
         self._load_btn = QPushButton("Load .cal")
         set_btn_icon(self._load_btn, "fa5s.folder-open")
         self._apply_btn = QPushButton("Apply to Acquisitions")
-        set_btn_icon(self._apply_btn, "fa5s.check", "#00d4aa")
+        set_btn_icon(self._apply_btn, "fa5s.check", PALETTE['accent'])
         self._apply_btn.setObjectName("primary")
         self._apply_btn.setEnabled(False)
         self._file_lbl = QLabel("None loaded")
         self._file_lbl.setStyleSheet(
-            f"font-family:{MONO_FONT}; font-size:{FONT['label']}pt; color:#555;")
+            f"font-family:{MONO_FONT}; font-size:{FONT['label']}pt; color:{PALETTE['textDim']};")
         for b in [self._save_btn, self._load_btn, self._apply_btn]:
             b.setFixedHeight(30)
             fl.addWidget(b)
@@ -552,6 +552,24 @@ class CalibrationTab(QWidget):
     # ---------------------------------------------------------------- #
     #  Public API                                                       #
     # ---------------------------------------------------------------- #
+
+    def _apply_styles(self):
+        """Re-apply PALETTE-driven colours on theme switch."""
+        set_btn_icon(self._run_btn, "fa5s.play", PALETTE['accent'])
+        set_btn_icon(self._abort_btn, "fa5s.stop", PALETTE['danger'])
+        set_btn_icon(self._apply_btn, "fa5s.check", PALETTE['accent'])
+        self._step_lbl.setStyleSheet(
+            f"font-family:{MONO_FONT}; font-size:{FONT['heading']}pt; color:{PALETTE['textDim']};")
+        self._file_lbl.setStyleSheet(
+            f"font-family:{MONO_FONT}; font-size:{FONT['label']}pt; color:{PALETTE['textDim']};")
+        self._img_lbl = getattr(self._ct_pane, '_img_lbl', None)
+        for pane in (self._ct_pane, self._r2_pane, self._res_pane):
+            pane._img_lbl.setStyleSheet(
+                f"background:{PALETTE['canvas']}; border:1px solid {PALETTE['border']};")
+            pane._title_lbl.setStyleSheet(
+                f"font-size:{FONT['label']}pt; color:{PALETTE['textDim']}; letter-spacing:1px;")
+            pane._stat.setStyleSheet(
+                f"font-family:{MONO_FONT}; font-size:{FONT['label']}pt; color:{PALETTE['textDim']};")
 
     def get_calibration(self) -> Optional[CalibrationResult]:
         """Return current (valid) calibration for use by acquisition."""
@@ -570,8 +588,8 @@ class CalibrationTab(QWidget):
         self._step_lbl.setText(
             f"{label}  —  {prog.message}")
         self._stats["state"]._val.setText(label)
-        _color = ("#00d4aa" if prog.state == "complete" else
-                  "#ff6666" if prog.state in ("error", "aborted") else "#ffaa44")
+        _color = (PALETTE['accent'] if prog.state == "complete" else
+                  PALETTE['danger'] if prog.state in ("error", "aborted") else PALETTE['warning'])
         self._stats["state"]._val.setStyleSheet(scaled_qss(
             f"font-family:{MONO_FONT}; font-size:18pt; color:{_color};"))
 
@@ -662,7 +680,7 @@ class CalibrationTab(QWidget):
         del_btn.setText("✕")
         del_btn.setFixedSize(22, 22)
         del_btn.setStyleSheet(
-            "background:transparent; color:#555; border:none;")
+            f"background:transparent; color:{PALETTE['textDim']}; border:none;")
         del_btn.clicked.connect(lambda: self._remove_temp_row(row_w))
 
         rl.addWidget(spin)
@@ -784,7 +802,7 @@ class CalibrationTab(QWidget):
         self._stats["ct_mean"]._val.setText(f"{ct_mean:.3e}")
         self._stats["state"]._val.setText("COMPLETE ✓")
         self._stats["state"]._val.setStyleSheet(scaled_qss(
-            f"font-family:{MONO_FONT}; font-size:18pt; color:#00d4aa;"))
+            f"font-family:{MONO_FONT}; font-size:18pt; color:{PALETTE['accent']};"))
 
     def _redisplay(self):
         if self._result and self._result.valid:
@@ -808,7 +826,7 @@ class CalibrationTab(QWidget):
         self._file_lbl.setText(os.path.basename(saved))
         self._stats["saved"]._val.setText("Saved ✓")
         self._stats["saved"]._val.setStyleSheet(scaled_qss(
-            f"font-family:{MONO_FONT}; font-size:18pt; color:#00d4aa;"))
+            f"font-family:{MONO_FONT}; font-size:18pt; color:{PALETTE['accent']};"))
 
     def _load(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -829,7 +847,7 @@ class CalibrationTab(QWidget):
             self._stats["valid_px"]._val.setText(f"{valid_pct:.1f}%")
             self._stats["saved"]._val.setText("Loaded ✓")
             self._stats["saved"]._val.setStyleSheet(scaled_qss(
-                f"font-family:{MONO_FONT}; font-size:18pt; color:#00d4aa;"))
+                f"font-family:{MONO_FONT}; font-size:18pt; color:{PALETTE['accent']};"))
         except Exception as e:
             QMessageBox.critical(self, "Load Failed", str(e))
 
@@ -840,7 +858,7 @@ class CalibrationTab(QWidget):
             app_state.active_calibration = self._result
             self._stats["saved"]._val.setText("Applied ✓")
             self._stats["saved"]._val.setStyleSheet(scaled_qss(
-                f"font-family:{MONO_FONT}; font-size:18pt; color:#00d4aa;"))
+                f"font-family:{MONO_FONT}; font-size:18pt; color:{PALETTE['accent']};"))
         except Exception as e:
             QMessageBox.warning(self, "Apply Failed", str(e))
 

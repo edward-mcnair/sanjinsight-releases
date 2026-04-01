@@ -100,18 +100,18 @@ class TemperatureTab(QWidget):
         lay.setAlignment(Qt.AlignCenter)
         lay.setSpacing(16)
 
-        icon_lbl = make_icon_label(IC.LINK_OFF, color="#555555", size=64)
+        icon_lbl = make_icon_label(IC.LINK_OFF, color=PALETTE['textSub'], size=64)
         icon_lbl.setAlignment(Qt.AlignCenter)
 
         title_lbl = QLabel(f"{title} Not Connected")
         title_lbl.setAlignment(Qt.AlignCenter)
         title_lbl.setStyleSheet(
-            f"font-size: {FONT['readoutSm']}pt; font-weight: bold; color: #888;")
+            f"font-size: {FONT['readoutSm']}pt; font-weight: bold; color: {PALETTE['textDim']};")
 
         tip_lbl = QLabel(tip)
         tip_lbl.setAlignment(Qt.AlignCenter)
         tip_lbl.setWordWrap(True)
-        tip_lbl.setStyleSheet(f"font-size: {FONT['label']}pt; color: #555;")
+        tip_lbl.setStyleSheet(f"font-size: {FONT['label']}pt; color: {PALETTE['textSub']};")
         tip_lbl.setMaximumWidth(400)
 
         btn = QPushButton("Open Device Manager")
@@ -119,11 +119,11 @@ class TemperatureTab(QWidget):
         btn.setFixedHeight(36)
         btn.setStyleSheet(f"""
             QPushButton {{
-                background: {PALETTE.get('surface','#2d2d2d')}; color: #00d4aa;
-                border: 1px solid #00d4aa66; border-radius: 5px;
+                background: {PALETTE['surface']}; color: {PALETTE['accent']};
+                border: 1px solid {PALETTE['accent']}66; border-radius: 5px;
                 font-size: {FONT['label']}pt; font-weight: 600;
             }}
-            QPushButton:hover {{ background: {PALETTE.get('surface2','#3d3d3d')}; }}
+            QPushButton:hover {{ background: {PALETTE['surface2']}; }}
         """)
         btn.clicked.connect(self.open_device_manager)
 
@@ -147,10 +147,10 @@ class TemperatureTab(QWidget):
         # ── Alarm banner (hidden by default) ─────────────────────────
         alarm_banner = QWidget()
         alarm_banner.setVisible(False)
-        _dng  = PALETTE.get("danger",   "#ff453a")
-        _warn = PALETTE.get("warning",  "#ff9f0a")
-        _surf = PALETTE.get("surface",  "#2d2d2d")
-        _sur2 = PALETTE.get("surface2", "#3d3d3d")
+        _dng  = PALETTE['danger']
+        _warn = PALETTE['warning']
+        _surf = PALETTE['surface']
+        _sur2 = PALETTE['surface2']
         alarm_banner.setStyleSheet(
             f"background:{_dng}22; border:1px solid {_dng}; border-radius:3px;")
         ab_lay = QHBoxLayout(alarm_banner)
@@ -254,8 +254,8 @@ class TemperatureTab(QWidget):
         box._dis_btn = dis_btn
         en_btn.setMinimumWidth(85)
         dis_btn.setMinimumWidth(85)
-        _acc2 = PALETTE.get("accent", "#00d4aa")
-        _dng2 = PALETTE.get("danger", "#ff453a")
+        _acc2 = PALETTE['accent']
+        _dng2 = PALETTE['danger']
         _ar, _ag, _ab = int(_acc2[1:3],16), int(_acc2[3:5],16), int(_acc2[5:7],16)
         _dr, _dg, _db = int(_dng2[1:3],16), int(_dng2[3:5],16), int(_dng2[5:7],16)
         en_btn.setStyleSheet(
@@ -346,7 +346,7 @@ class TemperatureTab(QWidget):
         main.setSpacing(8)
 
         # ── "Not configured" placeholder (shown when no chuck controller) ─
-        _dim = PALETTE.get("textDim", "#999999")
+        _dim = PALETTE['textDim']
         nc_lbl = QLabel("Not configured")
         nc_lbl.setAlignment(Qt.AlignCenter)
         nc_lbl.setStyleSheet(
@@ -377,7 +377,7 @@ class TemperatureTab(QWidget):
         stab_sub.setAlignment(Qt.AlignCenter)
         stab_dot = QLabel("○")
         stab_dot.setAlignment(Qt.AlignCenter)
-        _dim2 = PALETTE.get("textDim", "#999999")
+        _dim2 = PALETTE['textDim']
         stab_dot.setStyleSheet(
             f"font-size:{FONT['readoutLg']}pt; color:{_dim2};")
         stab_v.addWidget(stab_sub)
@@ -411,7 +411,7 @@ class TemperatureTab(QWidget):
         # ── Horizontal separator ──────────────────────────────────────
         sep = QFrame()
         sep.setFrameShape(QFrame.HLine)
-        _bdr = PALETTE.get("border", "#3a3a3a")
+        _bdr = PALETTE['border']
         sep.setStyleSheet(f"color:{_bdr};")
         box._chuck_sep = sep
 
@@ -508,7 +508,7 @@ class TemperatureTab(QWidget):
 
         # ── Stability indicator dot ───────────────────────────────────
         if is_stable:
-            _grn = PALETTE.get("success", "#32d74b")
+            _grn = PALETTE['success']
             box._chuck_stab_dot.setText("●")
             box._chuck_stab_dot.setStyleSheet(
                 f"font-size:{FONT['readoutLg']}pt; color:{_grn};")
@@ -516,7 +516,7 @@ class TemperatureTab(QWidget):
                 f"Chuck stable: within ±{_CHUCK_STAB_TOLERANCE_C}°C "
                 f"for ≥{_CHUCK_STAB_DURATION_S:.0f}s")
         else:
-            _dim = PALETTE.get("textDim", "#999999")
+            _dim = PALETTE['textDim']
             box._chuck_stab_dot.setText("○")
             box._chuck_stab_dot.setStyleSheet(
                 f"font-size:{FONT['readoutLg']}pt; color:{_dim};")
@@ -532,11 +532,11 @@ class TemperatureTab(QWidget):
 
     def _apply_styles(self) -> None:
         P    = PALETTE
-        acc  = P.get("accent",  "#00d4aa")
-        dng  = P.get("danger",  "#ff453a")
-        warn = P.get("warning", "#ff9f0a")
-        surf = P.get("surface", "#2d2d2d")
-        sur2 = P.get("surface2","#3d3d3d")
+        acc  = P['accent']
+        dng  = P['danger']
+        warn = P['warning']
+        surf = P['surface']
+        sur2 = P['surface2']
 
         def _rgb(h):
             h = h.lstrip("#")
@@ -595,7 +595,7 @@ class TemperatureTab(QWidget):
                 if lbl:
                     lbl.setStyleSheet(
                         f"font-family:{MONO_FONT}; font-size:{FONT['readoutLg']}pt; "
-                        f"color:{P.get(pal_key,'#00d4aa')};")
+                        f"color:{P[pal_key]};")
 
         # ── Chuck box ─────────────────────────────────────────────────
         chuck = getattr(self, "_chuck_box", None)
@@ -604,12 +604,12 @@ class TemperatureTab(QWidget):
             nc = getattr(chuck, "_not_configured_lbl", None)
             if nc:
                 nc.setStyleSheet(
-                    f"color:{P.get('textDim','#999999')}; "
+                    f"color:{P['textDim']}; "
                     f"font-size:{FONT['body']}pt; padding:8px;")
             # Separator colour
             sep = getattr(chuck, "_chuck_sep", None)
             if sep:
-                sep.setStyleSheet(f"color:{P.get('border','#3a3a3a')};")
+                sep.setStyleSheet(f"color:{P['border']};")
             # Readout labels
             for attr, pal_key in [
                 ("_chuck_actual_lbl", "accent"),
@@ -619,11 +619,11 @@ class TemperatureTab(QWidget):
                 if lbl:
                     lbl.setStyleSheet(
                         f"font-family:{MONO_FONT}; font-size:{FONT['readoutLg']}pt; "
-                        f"color:{P.get(pal_key,'#00d4aa')};")
+                        f"color:{P[pal_key]};")
             # Stability dot — colour preserved by update_chuck; just reset font
             dot = getattr(chuck, "_chuck_stab_dot", None)
             if dot:
-                _dim3 = P.get("textDim", "#999999")
+                _dim3 = P['textDim']
                 dot.setStyleSheet(
                     f"font-size:{FONT['readoutLg']}pt; color:{_dim3};")
 
@@ -663,8 +663,8 @@ class TemperatureTab(QWidget):
         p._target_lbl.setText(f"{status.target_temp:.1f} °C")
         p._power_lbl.setText( f"{status.output_power:.2f} W")
         if not status.enabled:
-            _sub = PALETTE.get("textSub", "#6a6a6a")
-            _dim = PALETTE.get("textDim", "#999999")
+            _sub = PALETTE['textSub']
+            _dim = PALETTE['textDim']
             p._state_lbl.setText("DISABLED")
             p._state_lbl.setStyleSheet(
                 f"font-family:{MONO_FONT}; font-size:{FONT['readout']}pt; color:{_sub};")
@@ -702,7 +702,7 @@ class TemperatureTab(QWidget):
         p._warn_banner.setVisible(False)
         p._actual_lbl.setStyleSheet(
             f"font-family:{MONO_FONT}; font-size:{FONT['readoutLg']}pt; color:{PALETTE['danger']};")
-        p.setStyleSheet(f"QGroupBox {{ border-color: {PALETTE.get('danger','#ff453a')}; }}")
+        p.setStyleSheet(f"QGroupBox {{ border-color: {PALETTE['danger']}; }}")
 
     def show_warning(self, index: int, message: str):
         """Show the warning banner for the given TEC panel."""

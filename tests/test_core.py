@@ -424,7 +424,7 @@ class TestModality:
         for m in all_modalities():
             info = get_info(m)
             assert info.display_name
-            assert info.accent_color.startswith("#")
+            assert info.accent_color  # PALETTE key name (resolved via get_accent_color)
 
     def test_ct_map_flags_correct(self):
         from acquisition.modality import ImagingModality, get_info

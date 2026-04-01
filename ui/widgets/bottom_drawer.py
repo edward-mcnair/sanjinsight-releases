@@ -64,8 +64,8 @@ class BottomDrawer(QWidget):
         root.addWidget(self._tabs, 1)
 
     def _apply_tab_icons(self) -> None:
-        console_icon = make_icon(IC.CONSOLE, color=PALETTE.get("textDim", "#8892aa"), size=14)
-        log_icon     = make_icon(IC.LOG,     color=PALETTE.get("textDim", "#8892aa"), size=14)
+        console_icon = make_icon(IC.CONSOLE, color=PALETTE["textDim"], size=14)
+        log_icon     = make_icon(IC.LOG,     color=PALETTE["textDim"], size=14)
         if console_icon:
             self._tabs.setTabIcon(0, console_icon)
         if log_icon:
@@ -90,7 +90,7 @@ class BottomDrawer(QWidget):
         """
         idx = self._tabs.addTab(widget, f"  {label}")
         if icon_name:
-            icon = make_icon(icon_name, color=PALETTE.get("textDim", "#8892aa"), size=14)
+            icon = make_icon(icon_name, color=PALETTE["textDim"], size=14)
             if icon:
                 self._tabs.setTabIcon(idx, icon)
         return idx
@@ -105,25 +105,25 @@ class BottomDrawer(QWidget):
         P = PALETTE
         return f"""
             QTabWidget::pane {{
-                border-top: 1px solid {P.get('border', '#2e3245')};
-                background: {P.get('surface', '#1a1d28')};
+                border-top: 1px solid {P['border']};
+                background: {P['surface']};
             }}
             QTabBar::tab {{
-                background: {P.get('surface2', '#20232e')};
-                color: {P.get('textDim', '#8892aa')};
+                background: {P['surface2']};
+                color: {P['textDim']};
                 border: none;
-                border-right: 1px solid {P.get('border', '#2e3245')};
+                border-right: 1px solid {P['border']};
                 padding: 5px 16px;
                 font-size: {FONT['label']}pt;
             }}
             QTabBar::tab:selected {{
-                background: {P.get('surface', '#1a1d28')};
-                color: {P.get('text', '#dde3f2')};
-                border-bottom: 2px solid {P.get('accent', '#00d4aa')};
+                background: {P['surface']};
+                color: {P['text']};
+                border-bottom: 2px solid {P['accent']};
             }}
             QTabBar::tab:hover:!selected {{
-                background: {P.get('surfaceHover', '#262a38')};
-                color: {P.get('text', '#dde3f2')};
+                background: {P['surfaceHover']};
+                color: {P['text']};
             }}
         """
 
@@ -173,7 +173,7 @@ class _GripPill(QWidget):
         # Hover:   textDim at 100 % — immediately obvious.
         # Using alpha rather than a separate palette key so both light and
         # dark themes look correct without extra configuration.
-        col = QColor(PALETTE.get("textDim", "#8892aa"))
+        col = QColor(PALETTE["textDim"])
         if not self._hovered:
             col.setAlphaF(0.30)
 
@@ -285,12 +285,12 @@ class DrawerToggleBar(QWidget):
 
     def _apply_styles(self) -> None:
         P       = PALETTE
-        bg      = P.get("surface3",     "#252830")
-        border  = P.get("border",       "#2e3245")
-        accent  = P.get("accent",       "#00d4aa")
-        text    = P.get("text",         "#dde3f2")
-        textdim = P.get("textDim",      "#8892aa")
-        hover   = P.get("surfaceHover", "#262a38")
+        bg      = P["surface3"]
+        border  = P["border"]
+        accent  = P["accent"]
+        text    = P["text"]
+        textdim = P["textDim"]
+        hover   = P["surfaceHover"]
         sz      = FONT["label"]
 
         # Bar: normal bg + gentle hover highlight across the whole strip.

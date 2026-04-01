@@ -10,7 +10,7 @@ Usage
 
     icon_name = NAV_ICONS["Live"]          # → "mdi.circle-medium"
     set_btn_icon(self._run_btn, IC.PLAY)   # colour from active PALETTE
-    icon = make_icon(IC.SAVE, color="#00d4aa", size=20)
+    icon = make_icon(IC.SAVE, color=PALETTE['accent'], size=20)
 
 Migration note
 --------------
@@ -277,7 +277,7 @@ def _validate_icons() -> None:
         if not isinstance(name, str) or "." not in name:
             continue
         try:
-            qta.icon(name, color="#ffffff").pixmap(16, 16)
+            qta.icon(name, color=PALETTE['text']).pixmap(16, 16)
         except Exception:
             import logging as _log
             _log.getLogger(__name__).warning(
@@ -303,7 +303,7 @@ def make_icon(icon_name: str, color: str | None = None, size: int = 16):
     icon_name : str
         MDI name (e.g. ``IC.PLAY``) or legacy ``fa5s.*`` name (auto-upgraded).
     color : str | None
-        Hex colour string.  Defaults to ``PALETTE["textDim"]``.
+        Hex colour string.  Defaults to ``PALETTE['textDim']``.
     size : int
         Pixel size for the icon.
 
@@ -314,9 +314,9 @@ def make_icon(icon_name: str, color: str | None = None, size: int = 16):
     if color is None:
         try:
             from ui.theme import PALETTE
-            color = PALETTE.get("textDim", "#8892aa")
+            color = PALETTE['textDim']
         except Exception:
-            color = "#8892aa"
+            color = PALETTE['textDim']
     try:
         import qtawesome as qta
         return qta.icon(icon_name, color=color, scale_factor=size / 16)
@@ -363,7 +363,7 @@ def set_btn_icon(
     ----------
     btn       : QPushButton
     icon_name : str    MDI name (e.g. ``IC.PLAY``) or legacy ``fa5s.*``
-    color     : str | None    hex colour; defaults to ``PALETTE["textDim"]``
+    color     : str | None    hex colour; defaults to ``PALETTE['textDim']``
     size      : int    icon pixel size (default 16)
     """
     icon_name = _FA5_TO_MDI.get(icon_name, icon_name)
@@ -371,9 +371,9 @@ def set_btn_icon(
     if color is None:
         try:
             from ui.theme import PALETTE
-            color = PALETTE.get("textDim", "#8892aa")
+            color = PALETTE['textDim']
         except Exception:
-            color = "#8892aa"
+            color = PALETTE['textDim']
     try:
         import qtawesome as qta
         from PyQt5.QtCore import QSize

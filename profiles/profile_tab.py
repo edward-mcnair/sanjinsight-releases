@@ -367,7 +367,7 @@ class ProfileTab(QWidget):
                 QTableWidgetItem(f"{p.ct_value:.3e}"),
                 QTableWidgetItem(p.category),
             ]
-            accent = CATEGORY_ACCENTS.get(p.category, "#aaaaaa")
+            accent = CATEGORY_ACCENTS.get(p.category, PALETTE['textSub'])
             for item in items:
                 item.setForeground(QColor(accent))
             for col, item in enumerate(items):
@@ -481,8 +481,8 @@ class ProfileTab(QWidget):
                 padding: 5px 14px;
                 font-size: {FONT['label']}pt;
             }}
-            QPushButton:hover  {{ background: #252525; color: {PALETTE['text']}; }}
-            QPushButton:pressed {{ background: #111; }}
+            QPushButton:hover  {{ background: {PALETTE['surfaceHover']}; color: {PALETTE['text']}; }}
+            QPushButton:pressed {{ background: {PALETTE['bg']}; }}
         """)
         fl = QFormLayout(dlg)
         fl.setContentsMargins(12, 12, 12, 12)

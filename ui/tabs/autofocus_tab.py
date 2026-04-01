@@ -110,9 +110,9 @@ class AutofocusTab(QWidget):
         adv_toggle.setToolButtonStyle(Qt.ToolButtonTextOnly)
         adv_toggle.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         adv_toggle.setStyleSheet(
-            f"QToolButton {{ background:transparent; color:{PALETTE.get('textDim','#999')}; "
+            f"QToolButton {{ background:transparent; color:{PALETTE['textDim']}; "
             f"font-size:{FONT['body']}pt; border:none; text-align:left; padding:2px 4px; }}"
-            f"QToolButton:hover {{ color:{PALETTE.get('text','#ebebeb')}; }}")
+            f"QToolButton:hover {{ color:{PALETTE['text']}; }}")
         cl.addWidget(adv_toggle, 5, 0, 1, 2)
 
         # Advanced body (row 6) — hidden by default
@@ -186,10 +186,10 @@ class AutofocusTab(QWidget):
         # ---- Run controls ----
         ctrl = QHBoxLayout()
         self._run_btn   = QPushButton("Run Autofocus")
-        set_btn_icon(self._run_btn, "fa5s.play", PALETTE.get("accent", "#00d4aa"))
+        set_btn_icon(self._run_btn, "fa5s.play", PALETTE['accent'])
         self._run_btn.setObjectName("primary")
         self._abort_btn = QPushButton("Abort")
-        set_btn_icon(self._abort_btn, "fa5s.stop", PALETTE.get("danger", "#ff453a"))
+        set_btn_icon(self._abort_btn, "fa5s.stop", PALETTE['danger'])
         self._abort_btn.setObjectName("danger")
         self._abort_btn.setEnabled(False)
         self._run_btn.setFixedWidth(150)
@@ -244,8 +244,8 @@ class AutofocusTab(QWidget):
             color = PALETTE.get(rw._pal_key, "#00d4aa")
             rw._val.setStyleSheet(
                 f"font-family:{MONO_FONT}; font-size:{FONT['readout']}pt; color:{color};")
-        set_btn_icon(self._run_btn,   "fa5s.play", PALETTE.get("accent", "#00d4aa"))
-        set_btn_icon(self._abort_btn, "fa5s.stop", PALETTE.get("danger", "#ff453a"))
+        set_btn_icon(self._run_btn,   "fa5s.play", PALETTE['accent'])
+        set_btn_icon(self._abort_btn, "fa5s.stop", PALETTE['danger'])
 
     def _sub(self, text):
         l = QLabel(text)
@@ -460,6 +460,10 @@ class FocusPlot(QWidget):
         self._best_z = None
         self.repaint()
 
+    def _apply_styles(self):
+        """Re-apply PALETTE-driven colours on theme switch."""
+        self.update()
+
     def set_data(self, z, scores, best_z=None):
         self._z      = list(z)
         self._scores = list(scores)
@@ -472,10 +476,10 @@ class FocusPlot(QWidget):
         H   = self.height()
         pad = 40
 
-        p.fillRect(0, 0, W, H, QColor(13, 13, 13))
+        p.fillRect(0, 0, W, H, QColor(PALETTE['canvas']))
 
         if len(self._z) < 2:
-            p.setPen(QPen(QColor(60, 60, 60)))
+            p.setPen(QPen(QColor(PALETTE['canvasText'])))
             p.setFont(mono_font(14))
             p.drawText(W//2 - 80, H//2, "No data yet")
             p.end()
@@ -495,43 +499,43 @@ class FocusPlot(QWidget):
             frac = i / 4
             y    = int(pad + frac * (H - 2*pad))
             sv   = s_max - frac * s_span
-            p.setPen(QPen(QColor(35, 35, 35)))
+            p.setPen(QPen(QColor(PALETTE['border2'])))
             p.drawLine(pad, y, W - pad, y)
-            p.setPen(QPen(QColor(70, 70, 70)))
+            p.setPen(QPen(QColor(PALETTE['canvasGrid'])))
             p.drawText(2, y + 4, f"{sv:.3f}")
 
         for i in range(5):
             frac = i / 4
             x    = int(pad + frac * (W - 2*pad))
             zv   = z_min + frac * z_span
-            p.setPen(QPen(QColor(35, 35, 35)))
+            p.setPen(QPen(QColor(PALETTE['border2'])))
             p.drawLine(x, pad, x, H - pad)
-            p.setPen(QPen(QColor(70, 70, 70)))
+            p.setPen(QPen(QColor(PALETTE['canvasGrid'])))
             p.drawText(x - 15, H - 5, f"{zv:.0f}")
 
         # Score curve
-        p.setPen(QPen(QColor(0, 212, 170), 2))
+        p.setPen(QPen(QColor(PALETTE['accent']), 2))
         pts = [(tx(z), ty(s)) for z, s in zip(self._z, self._scores)]
         for i in range(1, len(pts)):
             p.drawLine(pts[i-1][0], pts[i-1][1], pts[i][0], pts[i][1])
 
         # Data points
-        p.setBrush(QBrush(QColor(0, 212, 170)))
+        p.setBrush(QBrush(QColor(PALETTE['accent'])))
         for x, y in pts:
             p.drawEllipse(x-3, y-3, 6, 6)
 
         # Best-focus marker
         if self._best_z is not None:
             bx = tx(self._best_z)
-            p.setPen(QPen(QColor(255, 170, 68), 1, Qt.DashLine))
+            p.setPen(QPen(QColor(PALETTE['warning']), 1, Qt.DashLine))
             p.drawLine(bx, pad, bx, H - pad)
-            p.setPen(QPen(QColor(255, 170, 68)))
+            p.setPen(QPen(QColor(PALETTE['warning'])))
             p.setFont(mono_font(12))
             p.drawText(bx + 4, pad + 14,
                        f"best: {self._best_z:.1f}μm")
 
         # Axis labels
-        p.setPen(QPen(QColor(80, 80, 80)))
+        p.setPen(QPen(QColor(PALETTE['canvasText'])))
         p.setFont(mono_font(12))
         p.drawText(W//2 - 20, H - 1, "Z position (μm)")
 

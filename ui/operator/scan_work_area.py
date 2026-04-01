@@ -56,9 +56,8 @@ from ui.theme import FONT, PALETTE
 
 log = logging.getLogger(__name__)
 
-_BG        = "#0b0e1a"
-_SURF      = "#0f1120"
-_CANVAS_BG = "#080a12"
+
+# Module-level constants removed — use PALETTE directly.
 
 
 # ── Live canvas ───────────────────────────────────────────────────────────────
@@ -71,7 +70,10 @@ class _LiveCanvas(QWidget):
         self._pixmap: QPixmap | None = None
         self.setMinimumSize(320, 240)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.setStyleSheet(f"background:{_CANVAS_BG};")
+        self._apply_styles()
+
+    def _apply_styles(self) -> None:
+        self.setStyleSheet(f"background:{PALETTE['canvas']};")
 
     def update_frame(self, frame) -> None:
         """Accept a CameraFrame (frame.data uint16 H×W) and render it."""
@@ -107,7 +109,7 @@ class _LiveCanvas(QWidget):
         if self._pixmap is None:
             p.setPen(
                 __import__("PyQt5.QtGui", fromlist=["QColor"])
-                .QColor(PALETTE.get("textSub", "#6a6a6a")))
+                .QColor(PALETTE['textSub']))
             p.drawText(self.rect(), Qt.AlignCenter, "No signal")
             return
 
@@ -139,7 +141,6 @@ class ScanWorkArea(QWidget):
         self._scanning  = False
 
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.setStyleSheet(f"background:{_BG};")
 
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 12, 16, 12)
@@ -149,32 +150,19 @@ class ScanWorkArea(QWidget):
         pid_row = QHBoxLayout()
         pid_row.setSpacing(8)
 
-        pid_lbl = QLabel("Part ID / Serial:")
-        pid_lbl.setFixedWidth(140)
-        pid_lbl.setStyleSheet(
-            f"font-size:{FONT.get('label', 10)}pt; "
-            f"color:{PALETTE.get('textDim','#999')}; background:transparent;")
-        pid_row.addWidget(pid_lbl)
+        self._pid_lbl = QLabel("Part ID / Serial:")
+        self._pid_lbl.setFixedWidth(140)
+        pid_row.addWidget(self._pid_lbl)
 
         self._pid_edit = QLineEdit()
         self._pid_edit.setPlaceholderText(
             "Enter or scan barcode — press Enter to start")
         self._pid_edit.setFixedHeight(36)
-        self._pid_edit.setStyleSheet(
-            f"QLineEdit {{ background:#13172a; color:{PALETTE.get('text','#ebebeb')}; "
-            f"border:1px solid #2a3249; border-radius:4px; "
-            f"padding:4px 10px; font-size:{FONT.get('body', 11)}pt; }}"
-            f"QLineEdit:focus {{ border-color:{PALETTE.get('accent','#00d4aa')}; }}")
         pid_row.addWidget(self._pid_edit, 1)
 
         self._clear_btn = QPushButton("⟳")
         self._clear_btn.setToolTip("Clear part ID")
         self._clear_btn.setFixedSize(36, 36)
-        self._clear_btn.setStyleSheet(
-            f"QPushButton {{ background:#1a1e30; color:#777; "
-            f"border:1px solid #2a3249; border-radius:4px; "
-            f"font-size:14pt; }}"
-            "QPushButton:hover { background:#2a3249; color:#ccc; }")
         pid_row.addWidget(self._clear_btn)
         root.addLayout(pid_row)
 
@@ -186,9 +174,6 @@ class ScanWorkArea(QWidget):
         self._recipe_note = QLabel(
             "← Select a recipe to enable scanning")
         self._recipe_note.setAlignment(Qt.AlignCenter)
-        self._recipe_note.setStyleSheet(
-            f"font-size:{FONT.get('sublabel', 9)}pt; "
-            f"color:{PALETTE.get('textSub','#6a6a6a')}; background:transparent;")
         root.addWidget(self._recipe_note)
 
         # ── START SCAN button ──────────────────────────────────────────────
@@ -205,10 +190,6 @@ class ScanWorkArea(QWidget):
         self._progress.setFixedHeight(8)
         self._progress.setTextVisible(False)
         self._progress.setVisible(False)
-        self._progress.setStyleSheet(
-            f"QProgressBar {{ background:#1a1e30; border:none; border-radius:4px; }}"
-            f"QProgressBar::chunk {{ background:{PALETTE.get('accent','#00d4aa')}; "
-            "border-radius:4px; }}")
         root.addWidget(self._progress)
 
         # ── Wire signals ───────────────────────────────────────────────────
@@ -216,6 +197,35 @@ class ScanWorkArea(QWidget):
         self._clear_btn.clicked.connect(self.clear_part_id)
         self._pid_edit.returnPressed.connect(self._on_enter_in_pid)
         self._pid_edit.textChanged.connect(self._update_scan_btn)
+
+        self._apply_styles()
+
+    # ── Theming ─────────────────────────────────────────────────────────────────
+
+    def _apply_styles(self) -> None:
+        """Re-apply PALETTE-driven styles."""
+        P = PALETTE
+        self.setStyleSheet(f"background:{P['bg']};")
+        self._pid_lbl.setStyleSheet(
+            f"font-size:{FONT.get('label', 10)}pt; "
+            f"color:{P['textDim']}; background:transparent;")
+        self._pid_edit.setStyleSheet(
+            f"QLineEdit {{ background:{P['surface']}; color:{P['text']}; "
+            f"border:1px solid {P['border']}; border-radius:4px; "
+            f"padding:4px 10px; font-size:{FONT.get('body', 11)}pt; }}"
+            f"QLineEdit:focus {{ border-color:{P['accent']}; }}")
+        self._clear_btn.setStyleSheet(
+            f"QPushButton {{ background:{P['surface']}; color:{P['textDim']}; "
+            f"border:1px solid {P['border']}; border-radius:4px; "
+            "font-size:14pt; }}"
+            f"QPushButton:hover {{ background:{P['border']}; color:{P['text']}; }}")
+        self._recipe_note.setStyleSheet(
+            f"font-size:{FONT.get('sublabel', 9)}pt; "
+            f"color:{P['textSub']}; background:transparent;")
+        self._progress.setStyleSheet(
+            f"QProgressBar {{ background:{P['surface']}; border:none; border-radius:4px; }}"
+            f"QProgressBar::chunk {{ background:{P['accent']}; border-radius:4px; }}")
+        self._canvas._apply_styles()
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -301,7 +311,7 @@ class ScanWorkArea(QWidget):
     @staticmethod
     def _scan_btn_qss(enabled: bool) -> str:
         if enabled:
-            acc = PALETTE.get("accent", "#00d4aa")
+            acc = PALETTE['accent']
             return (
                 f"QPushButton {{ background:{acc}22; color:{acc}; "
                 f"border:2px solid {acc}; border-radius:8px; "
@@ -311,16 +321,17 @@ class ScanWorkArea(QWidget):
                 f"QPushButton:pressed {{ background:{acc}66; }}"
             )
         else:
+            P = PALETTE
             return (
-                "QPushButton { background:#151825; color:#333344; "
-                "border:2px solid #1e2235; border-radius:8px; "
+                f"QPushButton {{ background:{P['surface']}; color:{P['textSub']}; "
+                f"border:2px solid {P['border']}; border-radius:8px; "
                 f"font-size:{FONT.get('h3', 13)}pt; font-weight:800; "
                 "letter-spacing:2px; }"
             )
 
     @staticmethod
     def _abort_btn_qss() -> str:
-        dng = PALETTE.get("danger", "#ff4466")
+        dng = PALETTE['danger']
         return (
             f"QPushButton {{ background:{dng}22; color:{dng}; "
             f"border:2px solid {dng}; border-radius:8px; "

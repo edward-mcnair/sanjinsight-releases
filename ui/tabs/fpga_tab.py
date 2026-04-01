@@ -79,12 +79,12 @@ class FpgaTab(QWidget):
         # ── Status readouts ───────────────────────────────────────────
         status_box = QGroupBox("Status")
         sl = QHBoxLayout(status_box)
-        self._freq_w   = self._readout("FREQUENCY",   "--",     PALETTE["accent"])
-        self._duty_w   = self._readout("DUTY CYCLE",  "--",     PALETTE["warning"])
-        self._frames_w = self._readout("FRAME COUNT", "--",     PALETTE["info"])
-        self._sync_w   = self._readout("SYNC",        "UNKNOWN",PALETTE["textDim"])
-        self._stim_w   = self._readout("STIMULUS",    "OFF",    PALETTE["textDim"])
-        self._trig_w   = self._readout("TRIGGER",     "CONT",   PALETTE["textDim"])
+        self._freq_w   = self._readout("FREQUENCY",   "--",     PALETTE['accent'])
+        self._duty_w   = self._readout("DUTY CYCLE",  "--",     PALETTE['warning'])
+        self._frames_w = self._readout("FRAME COUNT", "--",     PALETTE['info'])
+        self._sync_w   = self._readout("SYNC",        "UNKNOWN",PALETTE['textDim'])
+        self._stim_w   = self._readout("STIMULUS",    "OFF",    PALETTE['textDim'])
+        self._trig_w   = self._readout("TRIGGER",     "CONT",   PALETTE['textDim'])
         self._trig_w.setVisible(False)   # shown only for BNC 745
         for w in [self._freq_w, self._duty_w, self._frames_w,
                   self._sync_w, self._stim_w, self._trig_w]:
@@ -189,19 +189,21 @@ class FpgaTab(QWidget):
         # Start / Stop / Output row
         btn_row = QHBoxLayout()
         start_btn = QPushButton("Start Modulation")
-        set_btn_icon(start_btn, "fa5s.play", "#00d4aa")
+        set_btn_icon(start_btn, "fa5s.play", PALETTE['accent'])
         start_btn.setObjectName("primary")
         stop_btn  = QPushButton("Stop")
-        set_btn_icon(stop_btn, "fa5s.stop", "#ff6666")
+        set_btn_icon(stop_btn, "fa5s.stop", PALETTE['danger'])
         stop_btn.setObjectName("danger")
         self._stim_on_btn  = QPushButton("Output ON")
         self._stim_off_btn = QPushButton("Output OFF")
         stim_on  = self._stim_on_btn
         stim_off = self._stim_off_btn
         stim_on.setStyleSheet(
-            f"background:#331a00; color:{PALETTE['warning']}; border-color:#cc6600;")
+            f"background:{PALETTE['warningBg']}; color:{PALETTE['warning']}; "
+            f"border:1px solid {PALETTE['warning']}55; border-radius:6px;")
         stim_off.setStyleSheet(
-            f"background:#1a1a2e; color:{PALETTE['info']}; border-color:#3355aa;")
+            f"background:{PALETTE['infoBg']}; color:{PALETTE['info']}; "
+            f"border:1px solid {PALETTE['info']}55; border-radius:6px;")
         start_btn.setFixedWidth(150)
         for b in [stop_btn, stim_on, stim_off]:
             b.setFixedWidth(110)
@@ -238,7 +240,7 @@ class FpgaTab(QWidget):
         adv_grid.addWidget(self._freq_spin, 0, 1)
         self._freq_indicator = QLabel("✓")
         self._freq_indicator.setStyleSheet(
-            f"color:#00d4aa; font-size:{FONT['body']}pt; padding-left:4px;")
+            f"color:{PALETTE['accent']}; font-size:{FONT['body']}pt; padding-left:4px;")
         adv_grid.addWidget(self._freq_indicator, 0, 2)
 
         adv_grid.addWidget(self._sub("Exact duty cycle (%)"), 1, 0)
@@ -253,7 +255,7 @@ class FpgaTab(QWidget):
         adv_grid.addWidget(self._duty_spin, 1, 1)
         self._duty_indicator = QLabel("✓")
         self._duty_indicator.setStyleSheet(
-            f"color:#00d4aa; font-size:{FONT['body']}pt; padding-left:4px;")
+            f"color:{PALETTE['accent']}; font-size:{FONT['body']}pt; padding-left:4px;")
         adv_grid.addWidget(self._duty_indicator, 1, 2)
 
         apply_btn = QPushButton("Apply Only (no start)")
@@ -349,17 +351,17 @@ class FpgaTab(QWidget):
         lay.setAlignment(Qt.AlignCenter)
         lay.setSpacing(16)
 
-        icon_lbl = make_icon_label(IC.LINK_OFF, color="#555555", size=64)
+        icon_lbl = make_icon_label(IC.LINK_OFF, color=PALETTE['textSub'], size=64)
         icon_lbl.setAlignment(Qt.AlignCenter)
 
         title_lbl = QLabel(f"{title} Not Connected")
         title_lbl.setAlignment(Qt.AlignCenter)
-        title_lbl.setStyleSheet(f"font-size: {FONT['readoutSm']}pt; font-weight: bold; color: #888;")
+        title_lbl.setStyleSheet(f"font-size: {FONT['readoutSm']}pt; font-weight: bold; color: {PALETTE['textDim']};")
 
         tip_lbl = QLabel(tip)
         tip_lbl.setAlignment(Qt.AlignCenter)
         tip_lbl.setWordWrap(True)
-        tip_lbl.setStyleSheet(f"font-size: {FONT['label']}pt; color: #555;")
+        tip_lbl.setStyleSheet(f"font-size: {FONT['label']}pt; color: {PALETTE['textSub']};")
         tip_lbl.setMaximumWidth(400)
 
         btn = QPushButton("Open Device Manager")
@@ -367,11 +369,11 @@ class FpgaTab(QWidget):
         btn.setFixedHeight(36)
         btn.setStyleSheet(f"""
             QPushButton {{
-                background: {PALETTE.get('surface','#2d2d2d')}; color: #00d4aa;
-                border: 1px solid #00d4aa66; border-radius: 5px;
+                background: {PALETTE['surface']}; color: {PALETTE['accent']};
+                border: 1px solid {PALETTE['accent']}66; border-radius: 5px;
                 font-size: {FONT['label']}pt; font-weight: 600;
             }}
-            QPushButton:hover {{ background: {PALETTE.get('surface2','#3d3d3d')}; }}
+            QPushButton:hover {{ background: {PALETTE['surface2']}; }}
         """)
         btn.clicked.connect(self.open_device_manager)
 
@@ -392,17 +394,16 @@ class FpgaTab(QWidget):
 
     def _apply_styles(self) -> None:
         P   = PALETTE
-        warn = P.get("warning", "#f5a623")
-        info = P.get("info",    "#4a9eff")
-        wbg  = P.get("surface", "#1a1d28")
-        ibg  = wbg
-        wbdr = P.get("border",  "#2e3245")
+        warn = P['warning']
+        info = P['info']
         if hasattr(self, "_stim_on_btn"):
             self._stim_on_btn.setStyleSheet(
-                f"background:{warn}22; color:{warn}; border-color:{warn}55;")
+                f"background:{P['warningBg']}; color:{warn}; "
+                f"border:1px solid {warn}55; border-radius:6px;")
         if hasattr(self, "_stim_off_btn"):
             self._stim_off_btn.setStyleSheet(
-                f"background:{info}22; color:{info}; border-color:{info}55;")
+                f"background:{P['infoBg']}; color:{info}; "
+                f"border:1px solid {info}55; border-radius:6px;")
 
     # ── Inline validation indicator ───────────────────────────────────
 
@@ -412,11 +413,11 @@ class FpgaTab(QWidget):
         if min_val <= value <= max_val:
             label.setText("✓")
             label.setStyleSheet(
-                f"color:#00d4aa; font-size:{FONT['body']}pt; padding-left:4px;")
+                f"color:{PALETTE['accent']}; font-size:{FONT['body']}pt; padding-left:4px;")
         else:
             label.setText("✗")
             label.setStyleSheet(
-                f"color:#ff5555; font-size:{FONT['body']}pt; padding-left:4px;")
+                f"color:{PALETTE['danger']}; font-size:{FONT['body']}pt; padding-left:4px;")
 
     # ── Duty cycle overheating warning ───────────────────────────────
 
@@ -425,7 +426,7 @@ class FpgaTab(QWidget):
         visible = val >= DUTY_CYCLE_WARN_PCT
         self._dc_warn_lbl.setVisible(visible)
         if visible:
-            color = PALETTE["danger"] if val >= DUTY_CYCLE_FAIL_PCT else PALETTE["warning"]
+            color = PALETTE['danger'] if val >= DUTY_CYCLE_FAIL_PCT else PALETTE['warning']
             self._dc_warn_lbl.setStyleSheet(
                 f"color:{color}; font-size:{FONT['caption']}pt;")
 
@@ -543,17 +544,17 @@ class FpgaTab(QWidget):
             self._stim_w._val.setText("OFF ○")
             self._stim_w._val.setStyleSheet(
                 f"font-family:{MONO_FONT}; font-size:{FONT['readout']}pt; "
-                f"color:#444;")
+                f"color:{PALETTE['textSub']};")
 
         # Trigger mode readout (BNC 745 only — hidden for NI-9637)
         if self._trig_w.isVisible():
             from hardware.fpga.base import FpgaTriggerMode
             if status.trigger_mode == FpgaTriggerMode.SINGLE_SHOT:
                 label = "SINGLE ✦" if status.trigger_armed else "SINGLE"
-                color = PALETTE["warning"]
+                color = PALETTE['warning']
             else:
                 label = "CONT"
-                color = PALETTE["textDim"]
+                color = PALETTE['textDim']
             self._trig_w._val.setText(label)
             self._trig_w._val.setStyleSheet(
                 f"font-family:{MONO_FONT}; font-size:{FONT['readout']}pt; "

@@ -350,6 +350,7 @@ class MetricsService(QObject):
 
     def _build_snapshot(self) -> dict:
         """Assemble the full metrics dict from current state."""
+        from hardware.app_state import app_state
         # TEC per-channel metrics
         tec_list = []
         for i, state in enumerate(self._tec_state):
@@ -391,12 +392,13 @@ class MetricsService(QObject):
         cam["focus_trend"] = self._compute_trend(self._focus_history, lower_is_better=False)
 
         return {
-            "camera": cam,
-            "tec":    tec_list,
-            "fpga":   dict(self._fpga_metrics),
-            "stage":  dict(self._stage_metrics),
-            "issues": issues,
-            "ready":  ready,
+            "camera":      cam,
+            "camera_type": getattr(app_state, "active_camera_type", "tr"),
+            "tec":         tec_list,
+            "fpga":        dict(self._fpga_metrics),
+            "stage":       dict(self._stage_metrics),
+            "issues":      issues,
+            "ready":       ready,
         }
 
     def _set_or_clear(self, code: str, condition: bool, message: str) -> None:

@@ -29,45 +29,50 @@ from version import (
     __version__, BUILD_DATE, APP_NAME, APP_VENDOR,
     full_version_string, RELEASES_PAGE_URL, SUPPORT_EMAIL, DOCS_URL,
 )
-from ui.theme import FONT, scaled_qss, MONO_FONT
+from ui.theme import FONT, PALETTE, scaled_qss, MONO_FONT
 
 log = logging.getLogger(__name__)
 
-# ── Shared style constants ────────────────────────────────────────────────────
+# ── Style helpers (read PALETTE at call time for theme-awareness) ─────────────
+def _BG():      return PALETTE['bg']
+def _BG2():     return PALETTE['surface']
+def _BORDER():  return PALETTE['border']
+def _TEXT():    return PALETTE['text']
+def _MUTED():   return PALETTE['textDim']
+def _ACCENT():  return PALETTE['accent']
+def _GREEN():   return PALETTE['success']
+def _AMBER():   return PALETTE['warning']
+def _RED():     return PALETTE['danger']
 
-_BG        = "#0e1120"
-_BG2       = "#13172a"
-_BORDER    = "#1e2337"
-_TEXT      = "#c0c8e0"
-_MUTED     = "#8892a4"
-_ACCENT    = "#4e73df"
-_GREEN     = "#00d4aa"
-_AMBER     = "#f5a623"
-_RED       = "#ff4444"
 
-_BTN_PRIMARY = f"""
+def _btn_primary():
+    return f"""
     QPushButton {{
-        background:{_ACCENT}; color:#fff; border:none;
+        background:{_ACCENT()}; color:{PALETTE['textOnAccent']}; border:none;
         border-radius:6px; padding:8px 22px; font-size:{FONT["body"]}pt; font-weight:600;
     }}
-    QPushButton:hover   {{ background:#3a5fc8; }}
-    QPushButton:pressed {{ background:#2e4fa8; }}
+    QPushButton:hover   {{ background:{PALETTE['accentHover']}; }}
+    QPushButton:pressed {{ background:{PALETTE['accentDim']}; }}
 """
-_BTN_SECONDARY = f"""
+
+def _btn_secondary():
+    return f"""
     QPushButton {{
-        background:{_BG2}; color:{_MUTED}; border:1px solid {_BORDER};
+        background:{_BG2()}; color:{_MUTED()}; border:1px solid {_BORDER()};
         border-radius:6px; padding:8px 22px; font-size:{FONT["body"]}pt;
     }}
-    QPushButton:hover   {{ background:#1e2540; color:{_TEXT}; }}
-    QPushButton:pressed {{ background:#1a1f33; }}
+    QPushButton:hover   {{ background:{PALETTE['surfaceHover']}; color:{_TEXT()}; }}
+    QPushButton:pressed {{ background:{PALETTE['surface2']}; }}
 """
-_BTN_AMBER = f"""
+
+def _btn_amber():
+    return f"""
     QPushButton {{
-        background:{_AMBER}; color:#1a1200; border:none;
+        background:{_AMBER()}; color:{PALETTE['textOnWarn']}; border:none;
         border-radius:6px; padding:8px 22px; font-size:{FONT["body"]}pt; font-weight:700;
     }}
-    QPushButton:hover   {{ background:#e6961a; }}
-    QPushButton:pressed {{ background:#cc8615; }}
+    QPushButton:hover   {{ background:{PALETTE['warning']}cc; }}
+    QPushButton:pressed {{ background:{PALETTE['warning']}aa; }}
 """
 
 
@@ -89,18 +94,22 @@ class UpdateBadge(QPushButton):
         self._info = None
         self.setFixedHeight(30)
         self.hide()
+        self._apply_styles()
+        self.setToolTip("A newer version of SanjINSIGHT is available — click for details")
+        self.clicked.connect(self._on_click)
+
+    def _apply_styles(self):
+        """Re-apply all styles from PALETTE. Called on init and theme switch."""
         self.setStyleSheet(f"""
             QPushButton {{
-                background:{_AMBER}22; color:{_AMBER};
-                border:1px solid {_AMBER}66; border-radius:4px;
+                background:{_AMBER()}22; color:{_AMBER()};
+                border:1px solid {_AMBER()}66; border-radius:4px;
                 font-size:{FONT["label"]}pt; font-weight:700; padding:0 10px;
             }}
             QPushButton:hover {{
-                background:{_AMBER}44; border-color:{_AMBER};
+                background:{_AMBER()}44; border-color:{_AMBER()};
             }}
         """)
-        self.setToolTip("A newer version of SanjINSIGHT is available — click for details")
-        self.clicked.connect(self._on_click)
 
     def show_update(self, info) -> None:
         """Make the badge visible with the new version number."""
@@ -134,101 +143,113 @@ class UpdateDialog(QDialog):
         self.setWindowTitle(f"{APP_NAME} — Update Available")
         self.setModal(True)
         self.resize(620, 500)
-        self.setStyleSheet(f"QDialog {{ background:{_BG}; }} QLabel {{ background:transparent; }}")
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
         # ── Header band ───────────────────────────────────────────────
-        hdr = QWidget()
-        hdr.setStyleSheet(f"background:{_AMBER}18; border-bottom:1px solid {_AMBER}44;")
-        hdr.setFixedHeight(80)
-        hdr_lay = QHBoxLayout(hdr)
+        self._hdr = QWidget()
+        self._hdr.setFixedHeight(80)
+        hdr_lay = QHBoxLayout(self._hdr)
         hdr_lay.setContentsMargins(30, 0, 30, 0)
 
-        icon = QLabel("↑")
-        icon.setStyleSheet(scaled_qss(f"font-size:30pt; color:{_AMBER}; font-weight:700;"))
-        hdr_lay.addWidget(icon)
+        self._hdr_icon = QLabel("↑")
+        hdr_lay.addWidget(self._hdr_icon)
         hdr_lay.addSpacing(16)
 
         title_col = QVBoxLayout()
-        t1 = QLabel(f"Update available for {APP_NAME}")
-        t1.setStyleSheet(scaled_qss(f"font-size:15pt; font-weight:700; color:#fff;"))
-        t2 = QLabel(f"v{__version__}  →  v{info.version}")
-        t2.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_AMBER};")
-        title_col.addWidget(t1)
-        title_col.addWidget(t2)
+        self._hdr_title = QLabel(f"Update available for {APP_NAME}")
+        self._hdr_ver = QLabel(f"v{__version__}  →  v{info.version}")
+        title_col.addWidget(self._hdr_title)
+        title_col.addWidget(self._hdr_ver)
         hdr_lay.addLayout(title_col, 1)
 
+        self._pre_lbl = None
         if info.is_prerelease:
-            pre = QLabel("PRE-RELEASE")
-            pre.setStyleSheet(
-                f"background:{_RED}22; color:{_RED}; border:1px solid {_RED}66; "
-                f"border-radius:4px; font-size:{FONT['caption']}pt; font-weight:700; padding:2px 6px;")
-            hdr_lay.addWidget(pre)
+            self._pre_lbl = QLabel("PRE-RELEASE")
+            hdr_lay.addWidget(self._pre_lbl)
 
-        root.addWidget(hdr)
+        root.addWidget(self._hdr)
 
         # ── Release notes ─────────────────────────────────────────────
-        notes_area = QWidget()
-        notes_area.setStyleSheet(f"background:{_BG};")
-        notes_lay = QVBoxLayout(notes_area)
+        self._notes_area = QWidget()
+        notes_lay = QVBoxLayout(self._notes_area)
         notes_lay.setContentsMargins(30, 20, 30, 10)
 
-        rn_title = QLabel("What's new:")
-        rn_title.setStyleSheet(f"font-size:{FONT['label']}pt; font-weight:700; color:{_TEXT};")
-        notes_lay.addWidget(rn_title)
+        self._rn_title = QLabel("What's new:")
+        notes_lay.addWidget(self._rn_title)
 
-        rn_text = QTextEdit()
-        rn_text.setReadOnly(True)
-        rn_text.setPlainText(info.release_notes or "No release notes available.")
-        rn_text.setStyleSheet(f"""
+        self._rn_text = QTextEdit()
+        self._rn_text.setReadOnly(True)
+        self._rn_text.setPlainText(info.release_notes or "No release notes available.")
+        self._rn_text.setMinimumHeight(200)
+        notes_lay.addWidget(self._rn_text)
+
+        root.addWidget(self._notes_area, 1)
+
+        # ── Separator ─────────────────────────────────────────────────
+        self._sep = QFrame()
+        self._sep.setFrameShape(QFrame.HLine)
+        root.addWidget(self._sep)
+
+        # ── Button row ────────────────────────────────────────────────
+        self._btn_row = QWidget()
+        self._btn_row.setFixedHeight(60)
+        btn_lay = QHBoxLayout(self._btn_row)
+        btn_lay.setContentsMargins(30, 0, 30, 0)
+        btn_lay.setSpacing(10)
+
+        self._view_btn = QPushButton("View Release on GitHub")
+        self._view_btn.clicked.connect(
+            lambda: QDesktopServices.openUrl(QUrl(info.release_url)))
+        btn_lay.addWidget(self._view_btn)
+
+        btn_lay.addStretch(1)
+
+        self._remind_btn = QPushButton("Remind Me Later")
+        self._remind_btn.clicked.connect(self.reject)
+        btn_lay.addWidget(self._remind_btn)
+
+        self._download_btn = QPushButton(f"⬇  Download v{info.version}")
+        self._download_btn.clicked.connect(self._on_download)
+        btn_lay.addWidget(self._download_btn)
+
+        root.addWidget(self._btn_row)
+        self._apply_styles()
+
+    def _apply_styles(self):
+        """Re-apply all styles from PALETTE. Called on init and theme switch."""
+        self.setStyleSheet(
+            f"QDialog {{ background:{_BG()}; }} QLabel {{ background:transparent; }}")
+        self._hdr.setStyleSheet(
+            f"background:{_AMBER()}18; border-bottom:1px solid {_AMBER()}44;")
+        self._hdr_icon.setStyleSheet(
+            scaled_qss(f"font-size:30pt; color:{_AMBER()}; font-weight:700;"))
+        self._hdr_title.setStyleSheet(
+            scaled_qss(f"font-size:15pt; font-weight:700; color:{PALETTE['text']};"))
+        self._hdr_ver.setStyleSheet(
+            f"font-size:{FONT['label']}pt; color:{_AMBER()};")
+        if self._pre_lbl:
+            self._pre_lbl.setStyleSheet(
+                f"background:{_RED()}22; color:{_RED()}; border:1px solid {_RED()}66; "
+                f"border-radius:4px; font-size:{FONT['caption']}pt; font-weight:700; padding:2px 6px;")
+        self._notes_area.setStyleSheet(f"background:{_BG()};")
+        self._rn_title.setStyleSheet(
+            f"font-size:{FONT['label']}pt; font-weight:700; color:{_TEXT()};")
+        self._rn_text.setStyleSheet(f"""
             QTextEdit {{
-                background:{_BG2}; color:{_MUTED};
-                border:1px solid {_BORDER}; border-radius:4px;
+                background:{_BG2()}; color:{_MUTED()};
+                border:1px solid {_BORDER()}; border-radius:4px;
                 font-size:{FONT["label"]}pt; padding:10px;
                 font-family:{MONO_FONT};
             }}
         """)
-        rn_text.setMinimumHeight(200)
-        notes_lay.addWidget(rn_text)
-
-        root.addWidget(notes_area, 1)
-
-        # ── Separator ─────────────────────────────────────────────────
-        sep = QFrame()
-        sep.setFrameShape(QFrame.HLine)
-        sep.setStyleSheet(f"color:{_BORDER};")
-        root.addWidget(sep)
-
-        # ── Button row ────────────────────────────────────────────────
-        btn_row = QWidget()
-        btn_row.setFixedHeight(60)
-        btn_row.setStyleSheet(f"background:{_BG2};")
-        btn_lay = QHBoxLayout(btn_row)
-        btn_lay.setContentsMargins(30, 0, 30, 0)
-        btn_lay.setSpacing(10)
-
-        view_btn = QPushButton("View Release on GitHub")
-        view_btn.setStyleSheet(_BTN_SECONDARY)
-        view_btn.clicked.connect(
-            lambda: QDesktopServices.openUrl(QUrl(info.release_url)))
-        btn_lay.addWidget(view_btn)
-
-        btn_lay.addStretch(1)
-
-        remind_btn = QPushButton("Remind Me Later")
-        remind_btn.setStyleSheet(_BTN_SECONDARY)
-        remind_btn.clicked.connect(self.reject)
-        btn_lay.addWidget(remind_btn)
-
-        download_btn = QPushButton(f"⬇  Download v{info.version}")
-        download_btn.setStyleSheet(_BTN_AMBER)
-        download_btn.clicked.connect(self._on_download)
-        btn_lay.addWidget(download_btn)
-
-        root.addWidget(btn_row)
+        self._sep.setStyleSheet(f"color:{_BORDER()};")
+        self._btn_row.setStyleSheet(f"background:{_BG2()};")
+        self._view_btn.setStyleSheet(_btn_secondary())
+        self._remind_btn.setStyleSheet(_btn_secondary())
+        self._download_btn.setStyleSheet(_btn_amber())
 
     def _on_download(self):
         QDesktopServices.openUrl(QUrl(self._info.download_url))
@@ -255,44 +276,28 @@ class AboutDialog(QDialog):
         self.setWindowTitle(f"About {APP_NAME}")
         self.setModal(True)
         self.setFixedSize(560, 520)
-        self.setStyleSheet(f"QDialog {{ background:{_BG}; }} QLabel {{ background:transparent; }}")
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
         # ── Header ────────────────────────────────────────────────────
-        hdr = QWidget()
-        hdr.setFixedHeight(100)
-        hdr.setStyleSheet(f"background:{_BG2}; border-bottom:1px solid {_BORDER};")
-        hdr_lay = QVBoxLayout(hdr)
+        self._about_hdr = QWidget()
+        self._about_hdr.setFixedHeight(100)
+        hdr_lay = QVBoxLayout(self._about_hdr)
         hdr_lay.setContentsMargins(30, 16, 30, 16)
         hdr_lay.setSpacing(4)
 
-        app_name = QLabel(f"{APP_VENDOR}  {APP_NAME}")
-        app_name.setStyleSheet(
-            scaled_qss("font-size:18pt; font-weight:700; color:#fff; letter-spacing:1px;"))
-        hdr_lay.addWidget(app_name)
+        self._app_name_lbl = QLabel(f"{APP_VENDOR}  {APP_NAME}")
+        hdr_lay.addWidget(self._app_name_lbl)
 
-        ver_lbl = QLabel(full_version_string())
-        ver_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_GREEN};")
-        hdr_lay.addWidget(ver_lbl)
+        self._ver_lbl = QLabel(full_version_string())
+        hdr_lay.addWidget(self._ver_lbl)
 
-        root.addWidget(hdr)
+        root.addWidget(self._about_hdr)
 
         # ── Tabbed body ───────────────────────────────────────────────
-        tabs = QTabWidget()
-        tabs.setStyleSheet(f"""
-            QTabWidget::pane {{
-                border: 1px solid {_BORDER}; background: {_BG};
-            }}
-            QTabBar::tab {{
-                background: {_BG2}; color: {_MUTED};
-                padding: 6px 18px; border: 1px solid {_BORDER};
-                border-bottom: none; margin-right: 2px;
-            }}
-            QTabBar::tab:selected {{ background: {_BG}; color: #fff; }}
-        """)
+        self._tabs = QTabWidget()
 
         # ── "About" tab ───────────────────────────────────────────────
         about_widget = QWidget()
@@ -302,74 +307,103 @@ class AboutDialog(QDialog):
 
         self._sys_info = self._build_sys_info()
 
-        info_box = QTextEdit()
-        info_box.setReadOnly(True)
-        info_box.setPlainText(self._sys_info)
-        info_box.setStyleSheet(f"""
+        self._info_box = QTextEdit()
+        self._info_box.setReadOnly(True)
+        self._info_box.setPlainText(self._sys_info)
+        self._info_box.setFixedHeight(170)
+        about_lay.addWidget(self._info_box)
+
+        self._copy_btn = QPushButton("Copy Info to Clipboard  (for support tickets)")
+        self._copy_btn.setToolTip(
+            "Copies version + system info to clipboard so you can paste it\n"
+            "into a support ticket or email to " + SUPPORT_EMAIL)
+        self._copy_btn.clicked.connect(self._copy_to_clipboard)
+        about_lay.addWidget(self._copy_btn)
+        about_lay.addStretch(1)
+
+        self._tabs.addTab(about_widget, "About")
+
+        # ── "Shortcuts" tab ───────────────────────────────────────────
+        self._tabs.addTab(self._build_shortcuts_tab(), "Keyboard Shortcuts")
+
+        root.addWidget(self._tabs, 1)
+
+        # ── Separator ─────────────────────────────────────────────────
+        self._about_sep = QFrame()
+        self._about_sep.setFrameShape(QFrame.HLine)
+        root.addWidget(self._about_sep)
+
+        # ── Footer links ──────────────────────────────────────────────
+        self._about_footer = QWidget()
+        self._about_footer.setFixedHeight(56)
+        foot_lay = QHBoxLayout(self._about_footer)
+        foot_lay.setContentsMargins(30, 0, 30, 0)
+        foot_lay.setSpacing(12)
+
+        self._docs_btn = QPushButton("Documentation")
+        self._docs_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(DOCS_URL)))
+        foot_lay.addWidget(self._docs_btn)
+
+        self._releases_btn = QPushButton("Releases")
+        self._releases_btn.clicked.connect(
+            lambda: QDesktopServices.openUrl(QUrl(RELEASES_PAGE_URL)))
+        foot_lay.addWidget(self._releases_btn)
+
+        foot_lay.addStretch(1)
+
+        self._support_lbl = QLabel(f"Support: {SUPPORT_EMAIL}")
+        foot_lay.addWidget(self._support_lbl)
+
+        self._about_close_btn = QPushButton("Close")
+        self._about_close_btn.clicked.connect(self.accept)
+        foot_lay.addWidget(self._about_close_btn)
+
+        root.addWidget(self._about_footer)
+        self._apply_styles()
+
+    def _apply_styles(self):
+        """Re-apply all styles from PALETTE. Called on init and theme switch."""
+        self.setStyleSheet(
+            f"QDialog {{ background:{_BG()}; }} QLabel {{ background:transparent; }}")
+        self._about_hdr.setStyleSheet(
+            f"background:{_BG2()}; border-bottom:1px solid {_BORDER()};")
+        self._app_name_lbl.setStyleSheet(
+            scaled_qss(f"font-size:18pt; font-weight:700; color:{PALETTE['text']}; letter-spacing:1px;"))
+        self._ver_lbl.setStyleSheet(
+            f"font-size:{FONT['label']}pt; color:{_GREEN()};")
+        self._tabs.setStyleSheet(f"""
+            QTabWidget::pane {{
+                border: 1px solid {_BORDER()}; background: {_BG()};
+            }}
+            QTabBar::tab {{
+                background: {_BG2()}; color: {_MUTED()};
+                padding: 6px 18px; border: 1px solid {_BORDER()};
+                border-bottom: none; margin-right: 2px;
+            }}
+            QTabBar::tab:selected {{ background: {_BG()}; color: {PALETTE['text']}; }}
+        """)
+        self._info_box.setStyleSheet(f"""
             QTextEdit {{
-                background:{_BG2}; color:{_MUTED};
-                border:1px solid {_BORDER}; border-radius:4px;
+                background:{_BG2()}; color:{_MUTED()};
+                border:1px solid {_BORDER()}; border-radius:4px;
                 font-size:{FONT["sublabel"]}pt; padding:10px;
                 font-family:{MONO_FONT};
             }}
         """)
-        info_box.setFixedHeight(170)
-        about_lay.addWidget(info_box)
-
-        copy_btn = QPushButton("📋  Copy Info to Clipboard  (for support tickets)")
-        copy_btn.setStyleSheet(_BTN_SECONDARY.replace("padding:8px 22px", "padding:6px 14px"))
-        copy_btn.setToolTip(
-            "Copies version + system info to clipboard so you can paste it\n"
-            "into a support ticket or email to " + SUPPORT_EMAIL)
-        copy_btn.clicked.connect(self._copy_to_clipboard)
-        about_lay.addWidget(copy_btn)
-        about_lay.addStretch(1)
-
-        tabs.addTab(about_widget, "About")
-
-        # ── "Shortcuts" tab ───────────────────────────────────────────
-        tabs.addTab(self._build_shortcuts_tab(), "Keyboard Shortcuts")
-
-        root.addWidget(tabs, 1)
-
-        # ── Separator ─────────────────────────────────────────────────
-        sep = QFrame()
-        sep.setFrameShape(QFrame.HLine)
-        sep.setStyleSheet(f"color:{_BORDER};")
-        root.addWidget(sep)
-
-        # ── Footer links ──────────────────────────────────────────────
-        footer = QWidget()
-        footer.setFixedHeight(56)
-        footer.setStyleSheet(f"background:{_BG2};")
-        foot_lay = QHBoxLayout(footer)
-        foot_lay.setContentsMargins(30, 0, 30, 0)
-        foot_lay.setSpacing(12)
-
-        def _link(text, url):
-            btn = QPushButton(text)
-            btn.setStyleSheet(
-                f"QPushButton {{ background:transparent; color:{_ACCENT}; border:none; "
-                f"font-size:{FONT['label']}pt; text-decoration:underline; }}"
-                f"QPushButton:hover {{ color:#6b8ef7; }}")
-            btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(url)))
-            return btn
-
-        foot_lay.addWidget(_link("Documentation", DOCS_URL))
-        foot_lay.addWidget(_link("Releases", RELEASES_PAGE_URL))
-
-        foot_lay.addStretch(1)
-
-        support_lbl = QLabel(f"Support: {SUPPORT_EMAIL}")
-        support_lbl.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_MUTED};")
-        foot_lay.addWidget(support_lbl)
-
-        close_btn = QPushButton("Close")
-        close_btn.setStyleSheet(_BTN_SECONDARY.replace("padding:8px 22px", "padding:6px 16px"))
-        close_btn.clicked.connect(self.accept)
-        foot_lay.addWidget(close_btn)
-
-        root.addWidget(footer)
+        self._copy_btn.setStyleSheet(
+            _btn_secondary().replace("padding:8px 22px", "padding:6px 14px"))
+        self._about_sep.setStyleSheet(f"color:{_BORDER()};")
+        self._about_footer.setStyleSheet(f"background:{_BG2()};")
+        _link_qss = (
+            f"QPushButton {{ background:transparent; color:{_ACCENT()}; border:none; "
+            f"font-size:{FONT['label']}pt; text-decoration:underline; }}"
+            f"QPushButton:hover {{ color:{PALETTE['accentHover']}; }}")
+        self._docs_btn.setStyleSheet(_link_qss)
+        self._releases_btn.setStyleSheet(_link_qss)
+        self._support_lbl.setStyleSheet(
+            f"font-size:{FONT['sublabel']}pt; color:{_MUTED()};")
+        self._about_close_btn.setStyleSheet(
+            _btn_secondary().replace("padding:8px 22px", "padding:6px 16px"))
 
     # ── Helpers ───────────────────────────────────────────────────────
 
@@ -453,14 +487,14 @@ class AboutDialog(QDialog):
         table.setFocusPolicy(Qt.NoFocus)
         table.setStyleSheet(f"""
             QTableWidget {{
-                background:{_BG}; alternate-background-color:{_BG2};
-                border:none; font-size:{FONT["sublabel"]}pt; color:{_MUTED};
-                selection-background-color:#252525; outline:none;
+                background:{_BG()}; alternate-background-color:{_BG2()};
+                border:none; font-size:{FONT["sublabel"]}pt; color:{_MUTED()};
+                selection-background-color:{PALETTE['selectionBg']}; outline:none;
             }}
             QHeaderView::section {{
-                background:{_BG2}; color:#555;
+                background:{_BG2()}; color:{PALETTE['textDim']};
                 padding:4px 8px; border:none;
-                border-bottom:1px solid {_BORDER};
+                border-bottom:1px solid {_BORDER()};
             }}
         """)
         mono = QFont("Menlo, Consolas, monospace")

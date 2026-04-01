@@ -46,11 +46,8 @@ from ui.theme import FONT, PALETTE
 
 log = logging.getLogger(__name__)
 
-_PANEL_BG  = "#0f1120"
-_CARD_BG   = "#181b2e"
-_CARD_SEL  = "#1e2640"
-_CARD_BDR  = "#2a3249"
-_CARD_ABDR = PALETTE.get("accent", "#00d4aa")
+
+# Module-level constants removed — use PALETTE directly.
 
 
 class _RecipeCard(QFrame):
@@ -78,14 +75,14 @@ class _RecipeCard(QFrame):
         self._title_lbl = QLabel(label_txt)
         self._title_lbl.setStyleSheet(
             f"font-size:{FONT.get('body', 11)}pt; font-weight:700; "
-            f"color:{PALETTE.get('text','#ebebeb')}; background:transparent;")
+            f"color:{PALETTE['text']}; background:transparent;")
         title_row.addWidget(self._title_lbl, 1)
 
         version = getattr(recipe, "version", 1)
         ver_lbl = QLabel(f"v{version}")
         ver_lbl.setStyleSheet(
             f"font-size:{FONT.get('caption', 8)}pt; "
-            f"color:{PALETTE.get('textDim','#999')}; background:transparent;")
+            f"color:{PALETTE['textDim']}; background:transparent;")
         ver_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         title_row.addWidget(ver_lbl)
         lay.addLayout(title_row)
@@ -98,7 +95,7 @@ class _RecipeCard(QFrame):
             desc_lbl = QLabel(desc)
             desc_lbl.setStyleSheet(
                 f"font-size:{FONT.get('sublabel', 9)}pt; "
-                f"color:{PALETTE.get('textDim','#999')}; background:transparent;")
+                f"color:{PALETTE['textDim']}; background:transparent;")
             desc_lbl.setWordWrap(True)
             lay.addWidget(desc_lbl)
 
@@ -108,7 +105,7 @@ class _RecipeCard(QFrame):
             appr_lbl = QLabel(f"Approved by {approved_by}")
             appr_lbl.setStyleSheet(
                 f"font-size:{FONT.get('caption', 8)}pt; "
-                f"color:{PALETTE.get('accent','#00d4aa')}; background:transparent;")
+                f"color:{PALETTE['accent']}; background:transparent;")
             lay.addWidget(appr_lbl)
 
     def set_selected(self, selected: bool) -> None:
@@ -116,14 +113,15 @@ class _RecipeCard(QFrame):
         self._refresh_style()
 
     def _refresh_style(self) -> None:
+        P = PALETTE
         if self._selected:
             self.setStyleSheet(
-                f"QFrame {{ background:{_CARD_SEL}; "
-                f"border:1px solid {_CARD_ABDR}; border-radius:6px; }}")
+                f"QFrame {{ background:{P['surfaceHover']}; "
+                f"border:1px solid {P['accent']}; border-radius:6px; }}")
         else:
             self.setStyleSheet(
-                f"QFrame {{ background:{_CARD_BG}; "
-                f"border:1px solid {_CARD_BDR}; border-radius:6px; }}")
+                f"QFrame {{ background:{P['surface']}; "
+                f"border:1px solid {P['border']}; border-radius:6px; }}")
 
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.LeftButton:
@@ -153,44 +151,29 @@ class RecipeSelectorPanel(QWidget):
 
         self.setFixedWidth(300)
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
-        self.setStyleSheet(f"background:{_PANEL_BG};")
 
         root = QVBoxLayout(self)
         root.setContentsMargins(10, 12, 10, 10)
         root.setSpacing(8)
 
         # ── Header ─────────────────────────────────────────────────────────
-        hdr = QLabel("Select Scan Profile")
-        hdr.setStyleSheet(
-            f"font-size:{FONT.get('body', 11)}pt; font-weight:700; "
-            f"color:{PALETTE.get('text','#ebebeb')}; background:transparent;")
-        root.addWidget(hdr)
+        self._hdr = QLabel("Select Scan Profile")
+        root.addWidget(self._hdr)
 
         # ── Search box ─────────────────────────────────────────────────────
         self._search = QLineEdit()
         self._search.setPlaceholderText("Search scan profiles…")
         self._search.setFixedHeight(32)
-        self._search.setStyleSheet(
-            f"QLineEdit {{ background:#13172a; color:{PALETTE.get('text','#ebebeb')}; "
-            f"border:1px solid {_CARD_BDR}; border-radius:4px; "
-            f"padding:4px 8px; font-size:{FONT.get('body', 11)}pt; }}"
-            f"QLineEdit:focus {{ border-color:{PALETTE.get('accent','#00d4aa')}; }}")
         root.addWidget(self._search)
 
-        sep = QFrame()
-        sep.setFrameShape(QFrame.HLine)
-        sep.setStyleSheet(f"color:{_CARD_BDR};")
-        root.addWidget(sep)
+        self._sep = QFrame()
+        self._sep.setFrameShape(QFrame.HLine)
+        root.addWidget(self._sep)
 
         # ── Scroll area ────────────────────────────────────────────────────
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setStyleSheet(
-            "QScrollArea { border:none; background:transparent; }"
-            f"QScrollBar:vertical {{ background:{_PANEL_BG}; width:6px; border:none; }}"
-            "QScrollBar::handle:vertical { background:#333; border-radius:3px; }"
-            "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height:0; }")
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
         self._list_widget = QWidget()
         self._list_widget.setStyleSheet("background:transparent;")
@@ -199,8 +182,8 @@ class RecipeSelectorPanel(QWidget):
         self._list_lay.setSpacing(6)
         self._list_lay.addStretch(1)
 
-        scroll.setWidget(self._list_widget)
-        root.addWidget(scroll, 1)
+        self._scroll.setWidget(self._list_widget)
+        root.addWidget(self._scroll, 1)
 
         # ── Empty-state label ──────────────────────────────────────────────
         self._empty_lbl = QLabel(
@@ -209,18 +192,41 @@ class RecipeSelectorPanel(QWidget):
             "from the Library tab.")
         self._empty_lbl.setAlignment(Qt.AlignCenter)
         self._empty_lbl.setWordWrap(True)
-        self._empty_lbl.setStyleSheet(
-            f"font-size:{FONT.get('sublabel', 9)}pt; "
-            f"color:{PALETTE.get('textSub','#6a6a6a')}; "
-            "background:transparent; padding:20px;")
         self._empty_lbl.setVisible(False)
         root.addWidget(self._empty_lbl)
 
         # ── Wire signals ───────────────────────────────────────────────────
         self._search.textChanged.connect(self._filter)
 
+        self._apply_styles()
+
         # Load recipes after event loop starts
         QTimer.singleShot(0, self.refresh)
+
+    # ── Theming ────────────────────────────────────────────────────────────────
+
+    def _apply_styles(self) -> None:
+        """Re-apply PALETTE-driven styles."""
+        P = PALETTE
+        self.setStyleSheet(f"background:{P['bg']};")
+        self._hdr.setStyleSheet(
+            f"font-size:{FONT.get('body', 11)}pt; font-weight:700; "
+            f"color:{P['text']}; background:transparent;")
+        self._search.setStyleSheet(
+            f"QLineEdit {{ background:{P['surface']}; color:{P['text']}; "
+            f"border:1px solid {P['border']}; border-radius:4px; "
+            f"padding:4px 8px; font-size:{FONT.get('body', 11)}pt; }}"
+            f"QLineEdit:focus {{ border-color:{P['accent']}; }}")
+        self._sep.setStyleSheet(f"color:{P['border']};")
+        self._scroll.setStyleSheet(
+            "QScrollArea { border:none; background:transparent; }"
+            f"QScrollBar:vertical {{ background:{P['bg']}; width:6px; border:none; }}"
+            f"QScrollBar::handle:vertical {{ background:{P['border2']}; border-radius:3px; }}"
+            "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height:0; }")
+        self._empty_lbl.setStyleSheet(
+            f"font-size:{FONT.get('sublabel', 9)}pt; "
+            f"color:{P['textSub']}; "
+            "background:transparent; padding:20px;")
 
     # ── Public API ─────────────────────────────────────────────────────────────
 

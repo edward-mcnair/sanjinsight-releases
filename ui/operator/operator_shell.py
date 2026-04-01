@@ -83,10 +83,8 @@ from ui.operator.verdict_overlay       import VerdictOverlay
 
 log = logging.getLogger(__name__)
 
-_TOP_BG   = "#0a0c18"
-_BODY_BG  = "#0b0e1a"
-_SEPAR    = "#1e2235"
-_ACCENT   = PALETTE.get("accent", "#00d4aa")
+
+# Module-level constants removed — use PALETTE directly.
 
 
 # ── Type badge ────────────────────────────────────────────────────────────────
@@ -111,73 +109,85 @@ class _TopBar(QWidget):
 
     def __init__(self, auth_session=None, parent=None):
         super().__init__(parent)
+        self._auth_session = auth_session
         self.setFixedHeight(48)
-        self.setStyleSheet(
-            f"background:{_TOP_BG}; border-bottom:1px solid {_SEPAR};")
 
         lay = QHBoxLayout(self)
         lay.setContentsMargins(16, 0, 16, 0)
         lay.setSpacing(16)
 
         # ── Logo ───────────────────────────────────────────────────────────
-        logo = QLabel("Sanj<span style='color:#00d4aa;'>INSIGHT</span>")
-        logo.setTextFormat(Qt.RichText)
-        logo.setStyleSheet(
-            "font-size:14pt; font-weight:800; color:#ffffff; background:transparent;")
-        lay.addWidget(logo)
+        self._logo = QLabel()
+        self._logo.setTextFormat(Qt.RichText)
+        lay.addWidget(self._logo)
 
         # ── Mode label ─────────────────────────────────────────────────────
-        mode = QLabel("Operator Mode")
-        mode.setStyleSheet(
-            f"font-size:{FONT.get('label', 10)}pt; font-weight:600; "
-            f"color:{_ACCENT}; background:transparent; "
-            "border:1px solid #00d4aa44; border-radius:3px; padding:2px 8px;")
-        lay.addWidget(mode)
+        self._mode_lbl = QLabel("Operator Mode")
+        lay.addWidget(self._mode_lbl)
 
         lay.addStretch(1)
 
         # ── User info ──────────────────────────────────────────────────────
         self._user_lbl = QLabel()
-        self._user_lbl.setStyleSheet(
-            f"font-size:{FONT.get('body', 11)}pt; color:#cccccc; "
-            "background:transparent;")
         self._set_user_label(auth_session)
         lay.addWidget(self._user_lbl)
 
         # ── Shift summary (updated dynamically) ───────────────────────────
         self._shift_lbl = QLabel("0 scans this shift")
-        self._shift_lbl.setStyleSheet(
-            f"font-size:{FONT.get('sublabel', 9)}pt; color:#555555; "
-            "background:transparent;")
         lay.addWidget(self._shift_lbl)
 
         # ── Lock button ────────────────────────────────────────────────────
-        lock_btn = QPushButton("Lock")
-        lock_btn.setFixedSize(64, 30)
-        lock_btn.setStyleSheet(
-            "QPushButton { background:#1a1e30; color:#888888; "
-            "border:1px solid #2a3249; border-radius:4px; "
+        self._lock_btn = QPushButton("Lock")
+        self._lock_btn.setFixedSize(64, 30)
+        self._lock_btn.clicked.connect(self.lock_clicked)
+        lay.addWidget(self._lock_btn)
+
+        self._apply_styles()
+
+    def _apply_styles(self) -> None:
+        """Re-apply PALETTE-driven styles."""
+        P = PALETTE
+        self.setStyleSheet(
+            f"background:{P['bg']}; border-bottom:1px solid {P['border']};")
+        self._logo.setText(
+            f"Sanj<span style='color:{P['accent']};'>INSIGHT</span>")
+        self._logo.setStyleSheet(
+            f"font-size:14pt; font-weight:800; color:{P['text']}; "
+            "background:transparent;")
+        acc = P["accent"]
+        self._mode_lbl.setStyleSheet(
+            f"font-size:{FONT.get('label', 10)}pt; font-weight:600; "
+            f"color:{acc}; background:transparent; "
+            f"border:1px solid {acc}44; border-radius:3px; padding:2px 8px;")
+        self._shift_lbl.setStyleSheet(
+            f"font-size:{FONT.get('sublabel', 9)}pt; color:{P['textSub']}; "
+            "background:transparent;")
+        self._lock_btn.setStyleSheet(
+            f"QPushButton {{ background:{P['surface']}; color:{P['textDim']}; "
+            f"border:1px solid {P['border']}; border-radius:4px; "
             f"font-size:{FONT.get('label', 10)}pt; }}"
-            "QPushButton:hover { background:#2a3249; color:#cccccc; }")
-        lock_btn.clicked.connect(self.lock_clicked)
-        lay.addWidget(lock_btn)
+            f"QPushButton:hover {{ background:{P['border']}; color:{P['text']}; }}")
+        # Re-apply user label style
+        self._set_user_label(self._auth_session)
 
     def _set_user_label(self, session) -> None:
+        P = PALETTE
         if session is not None:
             user  = session.user
             badge = _user_badge(user)
             self._user_lbl.setText(f"{user.display_name}  {badge}")
             self._user_lbl.setStyleSheet(
-                f"font-size:{FONT.get('body', 11)}pt; color:#cccccc; "
+                f"font-size:{FONT.get('body', 11)}pt; color:{P['text']}; "
                 "background:transparent;")
         else:
             self._user_lbl.setText("Guest")
             self._user_lbl.setStyleSheet(
-                f"font-size:{FONT.get('body', 11)}pt; color:#666666; "
+                f"font-size:{FONT.get('body', 11)}pt; color:{P['textSub']}; "
                 "background:transparent;")
 
     def update_user(self, session) -> None:
         """Update the user name label after re-login."""
+        self._auth_session = session
         self._set_user_label(session)
 
     def update_shift(self, n_scans: int, n_pass: int) -> None:
@@ -226,8 +236,8 @@ class OperatorShell(QMainWindow):
 
         # ── Central widget ─────────────────────────────────────────────────
         central = QWidget()
-        central.setStyleSheet(f"background:{_BODY_BG};")
         self.setCentralWidget(central)
+        self._central = central
         main_lay = QVBoxLayout(central)
         main_lay.setContentsMargins(0, 0, 0, 0)
         main_lay.setSpacing(0)
@@ -238,37 +248,34 @@ class OperatorShell(QMainWindow):
         main_lay.addWidget(self._top_bar)
 
         # ── Body splitter ──────────────────────────────────────────────────
-        splitter = QSplitter(Qt.Horizontal)
-        splitter.setHandleWidth(2)
-        splitter.setStyleSheet(
-            f"QSplitter::handle {{ background:{_SEPAR}; }}")
+        self._splitter = QSplitter(Qt.Horizontal)
+        self._splitter.setHandleWidth(2)
 
         self._recipe_panel = RecipeSelectorPanel()
         self._scan_area    = ScanWorkArea()
         self._shift_log    = ShiftLogPanel()
 
-        splitter.addWidget(self._recipe_panel)
-        splitter.addWidget(self._scan_area)
-        splitter.addWidget(self._shift_log)
+        self._splitter.addWidget(self._recipe_panel)
+        self._splitter.addWidget(self._scan_area)
+        self._splitter.addWidget(self._shift_log)
 
         # Fixed widths for side panels; centre stretches
-        splitter.setStretchFactor(0, 0)
-        splitter.setStretchFactor(1, 1)
-        splitter.setStretchFactor(2, 0)
-        splitter.setSizes([300, 700, 260])
+        self._splitter.setStretchFactor(0, 0)
+        self._splitter.setStretchFactor(1, 1)
+        self._splitter.setStretchFactor(2, 0)
+        self._splitter.setSizes([300, 700, 260])
 
-        main_lay.addWidget(splitter, 1)
+        main_lay.addWidget(self._splitter, 1)
 
         # ── Status bar ─────────────────────────────────────────────────────
         sb = QStatusBar()
         sb.setFixedHeight(22)
-        sb.setStyleSheet(
-            f"QStatusBar {{ background:{_TOP_BG}; color:#555555; "
-            f"border-top:1px solid {_SEPAR}; "
-            f"font-size:{FONT.get('caption', 8)}pt; }}")
         self.setStatusBar(sb)
         self._status_bar = sb
         self._set_status("Ready")
+
+        # Apply initial styles
+        self._apply_shell_styles()
 
         # ── Wire internal signals ──────────────────────────────────────────
         self._recipe_panel.recipe_selected.connect(self._on_recipe_selected)
@@ -599,8 +606,8 @@ class OperatorShell(QMainWindow):
         dlg.setWindowTitle(f"Scan Details — {part_id}")
         dlg.setMinimumSize(520, 420)
         dlg.setStyleSheet(
-            f"QDialog {{ background:{PALETTE.get('surface','#2d2d2d')}; "
-            f"color:{PALETTE.get('text','#ebebeb')}; }}"
+            f"QDialog {{ background:{PALETTE['surface']}; "
+            f"color:{PALETTE['text']}; }}"
             f"QLabel  {{ background:transparent; }}"
         )
         lay = QVBoxLayout(dlg)
@@ -610,10 +617,10 @@ class OperatorShell(QMainWindow):
         # ── Title ──────────────────────────────────────────────────────────
         verdict = getattr(result, "verdict", "UNKNOWN")
         _vc = {
-            "PASS":    PALETTE.get("success",  "#30d158"),
-            "FAIL":    PALETTE.get("danger",   "#ff453a"),
-            "WARNING": PALETTE.get("warning",  "#ff9f0a"),
-        }.get(verdict, PALETTE.get("textDim", "#999"))
+            "PASS":    PALETTE['success'],
+            "FAIL":    PALETTE['danger'],
+            "WARNING": PALETTE['warning'],
+        }.get(verdict, PALETTE['textDim'])
         title_lbl = QLabel(f"{verdict}  —  {part_id}")
         title_lbl.setStyleSheet(
             f"font-size:{FONT.get('heading',15)}pt; font-weight:700; color:{_vc};"
@@ -625,7 +632,7 @@ class OperatorShell(QMainWindow):
             w = QLabel(f"<b>{label}</b>  {value}")
             w.setStyleSheet(
                 f"font-size:{FONT.get('label',11)}pt; "
-                f"color:{PALETTE.get('textDim','#999')};"
+                f"color:{PALETTE['textDim']};"
             )
             return w
 
@@ -650,14 +657,14 @@ class OperatorShell(QMainWindow):
             table.setEditTriggers(QTableWidget.NoEditTriggers)
             table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
             table.setStyleSheet(
-                f"QTableWidget {{ background:{PALETTE.get('bg','#242424')}; "
-                f"color:{PALETTE.get('text','#ebebeb')}; border:none; gridline-color:{PALETTE.get('border','#484848')}; }}"
-                f"QHeaderView::section {{ background:{PALETTE.get('surface2','#353535')}; "
-                f"color:{PALETTE.get('textDim','#999')}; border:none; padding:4px; }}"
+                f"QTableWidget {{ background:{PALETTE['bg']}; "
+                f"color:{PALETTE['text']}; border:none; gridline-color:{PALETTE['border']}; }}"
+                f"QHeaderView::section {{ background:{PALETTE['surface2']}; "
+                f"color:{PALETTE['textDim']}; border:none; padding:4px; }}"
             )
             _sev_colors = {
-                "critical": PALETTE.get("danger",  "#ff453a"),
-                "warning":  PALETTE.get("warning", "#ff9f0a"),
+                "critical": PALETTE['danger'],
+                "warning":  PALETTE['warning'],
             }
             for row_i, hs in enumerate(hotspots):
                 table.setItem(row_i, 0, QTableWidgetItem(str(row_i + 1)))
@@ -668,13 +675,13 @@ class OperatorShell(QMainWindow):
                 sev  = getattr(hs, "severity", "")
                 sev_item = QTableWidgetItem(sev.capitalize() if sev else "—")
                 sev_item.setForeground(
-                    QColor(_sev_colors.get(sev.lower(), PALETTE.get("text", "#ebebeb"))))
+                    QColor(_sev_colors.get(sev.lower(), PALETTE['text'])))
                 table.setItem(row_i, 3, sev_item)
             lay.addWidget(table, 1)
         else:
             no_hs = QLabel("No hotspots detected.")
             no_hs.setStyleSheet(
-                f"color:{PALETTE.get('textDim','#999')}; font-style:italic; padding:8px;")
+                f"color:{PALETTE['textDim']}; font-style:italic; padding:8px;")
             lay.addWidget(no_hs)
 
         # ── Notes ──────────────────────────────────────────────────────────
@@ -684,18 +691,18 @@ class OperatorShell(QMainWindow):
             notes_lbl.setWordWrap(True)
             notes_lbl.setStyleSheet(
                 f"font-size:{FONT.get('caption',10)}pt; "
-                f"color:{PALETTE.get('textSub','#6a6a6a')}; font-style:italic;")
+                f"color:{PALETTE['textSub']}; font-style:italic;")
             lay.addWidget(notes_lbl)
 
         # ── Close button ───────────────────────────────────────────────────
         close_btn = QPushButton("Close")
         close_btn.setFixedHeight(30)
         close_btn.setStyleSheet(
-            f"QPushButton {{ background:{PALETTE.get('surface2','#353535')}; "
-            f"color:{PALETTE.get('textDim','#999')}; border:1px solid {PALETTE.get('border','#484848')}; "
+            f"QPushButton {{ background:{PALETTE['surface2']}; "
+            f"color:{PALETTE['textDim']}; border:1px solid {PALETTE['border']}; "
             f"border-radius:4px; padding:4px 20px; font-size:{FONT.get('body',12)}pt; }}"
-            f"QPushButton:hover {{ background:{PALETTE.get('surfaceHover','#404040')}; "
-            f"color:{PALETTE.get('text','#ebebeb')}; }}"
+            f"QPushButton:hover {{ background:{PALETTE['surfaceHover']}; "
+            f"color:{PALETTE['text']}; }}"
         )
         close_btn.clicked.connect(dlg.accept)
         btn_row = QHBoxLayout()
@@ -712,6 +719,21 @@ class OperatorShell(QMainWindow):
 
     # ── Theme ──────────────────────────────────────────────────────────────────
 
+    def _apply_shell_styles(self) -> None:
+        """Apply PALETTE-driven styles to shell-owned widgets."""
+        P = PALETTE
+        self._central.setStyleSheet(f"background:{P['bg']};")
+        self._splitter.setStyleSheet(
+            f"QSplitter::handle {{ background:{P['border']}; }}")
+        self._status_bar.setStyleSheet(
+            f"QStatusBar {{ background:{P['bg']}; color:{P['textSub']}; "
+            f"border-top:1px solid {P['border']}; "
+            f"font-size:{FONT.get('caption', 8)}pt; }}")
+
     def _apply_styles(self) -> None:
-        """Re-apply theme if app theme changes (OperatorShell uses fixed dark UI)."""
-        pass
+        """Re-apply theme when app theme changes."""
+        self._apply_shell_styles()
+        self._top_bar._apply_styles()
+        self._recipe_panel._apply_styles()
+        self._scan_area._apply_styles()
+        self._shift_log._apply_styles()

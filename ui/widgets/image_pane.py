@@ -18,7 +18,7 @@ import numpy as np
 
 from acquisition.processing import to_display
 from acquisition             import apply_colormap
-from ui.theme import FONT, scaled_qss, MONO_FONT
+from ui.theme                import PALETTE, FONT, MONO_FONT, scaled_qss
 
 
 class ImagePane(QWidget):
@@ -29,14 +29,14 @@ class ImagePane(QWidget):
         layout.setSpacing(3)
         self._lbl = QLabel()
         self._lbl.setFixedSize(w, h)
-        self._lbl.setStyleSheet("background:#0d0d0d; border:1px solid #2a2a2a;")
+        self._lbl.setStyleSheet(f"background:{PALETTE['canvas']}; border:1px solid {PALETTE['border']};")
         self._lbl.setAlignment(Qt.AlignCenter)
         self._title = QLabel(title)
         self._title.setAlignment(Qt.AlignCenter)
-        self._title.setStyleSheet(f"font-size:{FONT['body']}pt; color:#666; letter-spacing:1px;")
+        self._title.setStyleSheet(f"font-size:{FONT['body']}pt; color:{PALETTE['textSub']}; letter-spacing:1px;")
         self._stats = QLabel("")
         self._stats.setAlignment(Qt.AlignCenter)
-        self._stats.setStyleSheet(f"font-family:{MONO_FONT}; font-size:{FONT['body']}pt; color:#666;")
+        self._stats.setStyleSheet(f"font-family:{MONO_FONT}; font-size:{FONT['body']}pt; color:{PALETTE['textSub']};")
         layout.addWidget(self._lbl)
         layout.addWidget(self._title)
         layout.addWidget(self._stats)

@@ -122,7 +122,7 @@ class GuidanceCard(QFrame):
     # ── Styling ─────────────────────────────────────────────────────
 
     def _apply_frame_style(self) -> None:
-        accent = PALETTE.get("accent", "#00d4aa")
+        accent = PALETTE['accent']
         self.setStyleSheet(
             f"QFrame#GuidanceCard {{"
             f"  background: {accent}0F;"
@@ -133,7 +133,7 @@ class GuidanceCard(QFrame):
     def _apply_badge_style(self) -> None:
         if self._badge is None:
             return
-        accent = PALETTE.get("accent", "#00d4aa")
+        accent = PALETTE['accent']
         self._badge.setStyleSheet(
             f"QLabel {{"
             f"  background: {accent}20;"
@@ -148,30 +148,30 @@ class GuidanceCard(QFrame):
     def _title_qss() -> str:
         return (
             f"font-weight: 600;"
-            f"color: {PALETTE.get('accent', '#00d4aa')};"
+            f"color: {PALETTE['accent']};"
             f"font-size: {FONT.get('body', 12)}pt;")
 
     @staticmethod
     def _body_qss() -> str:
         return (
-            f"color: {PALETTE.get('text', '#e0e0e0')};"
+            f"color: {PALETTE['text']};"
             f"font-size: {FONT.get('caption', 11)}pt;"
             f"line-height: 1.5;")
 
     @staticmethod
     def _dismiss_qss() -> str:
-        accent = PALETTE.get("accent", "#00d4aa")
+        accent = PALETTE['accent']
         return (
             f"QPushButton {{"
             f"  background: transparent;"
             f"  border: 1px solid {accent}44;"
             f"  border-radius: 4px;"
-            f"  color: {PALETTE.get('textDim', '#888')};"
+            f"  color: {PALETTE['textDim']};"
             f"  padding: 2px 10px;"
             f"  font-size: {FONT.get('caption', 11)}pt;"
             f"}}"
             f"QPushButton:hover {{"
-            f"  color: {PALETTE.get('text', '#e0e0e0')};"
+            f"  color: {PALETTE['text']};"
             f"  border-color: {accent}88;"
             f"}}")
 
@@ -221,7 +221,7 @@ class WorkflowFooter(QFrame):
 
         header = QLabel("What happens next?")
         header.setStyleSheet(
-            f"color: {PALETTE.get('textDim', '#888')};"
+            f"color: {PALETTE['textDim']};"
             f"font-size: {FONT.get('caption', 11)}pt;"
             f"font-weight: 600;")
         layout.addWidget(header)
@@ -236,7 +236,7 @@ class WorkflowFooter(QFrame):
 
             t = QLabel(f"→ {title}")
             t.setStyleSheet(
-                f"color: {PALETTE.get('accent' if i == 0 else 'textDim', '#888')};"
+                f"color: {PALETTE['accent' if i == 0 else 'textDim']};"
                 f"font-weight: {'600' if i == 0 else '400'};"
                 f"font-size: {FONT.get('caption', 11)}pt;")
             t.setCursor(Qt.PointingHandCursor)
@@ -245,7 +245,7 @@ class WorkflowFooter(QFrame):
 
             d = QLabel(desc)
             d.setStyleSheet(
-                f"color: {PALETTE.get('textDim', '#888')};"
+                f"color: {PALETTE['textDim']};"
                 f"font-size: {FONT.get('caption', 11) - 1}pt;")
             d.setWordWrap(True)
             col.addWidget(d)
@@ -256,8 +256,8 @@ class WorkflowFooter(QFrame):
     def _apply_frame_style(self) -> None:
         self.setStyleSheet(
             f"QFrame#WorkflowFooter {{"
-            f"  background: {PALETTE.get('surface', '#2a2a2a')};"
-            f"  border: 1px solid {PALETTE.get('border', '#3a3a3a')};"
+            f"  background: {PALETTE['surface']};"
+            f"  border: 1px solid {PALETTE['border']};"
             f"  border-radius: 8px;"
             f"}}")
 
@@ -265,9 +265,9 @@ class WorkflowFooter(QFrame):
         self._apply_frame_style()
         for i, (t, d) in enumerate(self._step_labels):
             t.setStyleSheet(
-                f"color: {PALETTE.get('accent' if i == 0 else 'textDim', '#888')};"
+                f"color: {PALETTE['accent' if i == 0 else 'textDim']};"
                 f"font-weight: {'600' if i == 0 else '400'};"
                 f"font-size: {FONT.get('caption', 11)}pt;")
             d.setStyleSheet(
-                f"color: {PALETTE.get('textDim', '#888')};"
+                f"color: {PALETTE['textDim']};"
                 f"font-size: {FONT.get('caption', 11) - 1}pt;")

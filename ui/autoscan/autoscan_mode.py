@@ -58,12 +58,12 @@ class AutoScanStepBar(QWidget):
         p.setRenderHint(QPainter.Antialiasing)
         W, H = self.width(), self.height()
 
-        bg_c   = QColor(PALETTE.get("bg",      "#242424"))
-        bdr_c  = QColor(PALETTE.get("border",  "#484848"))
-        surf_c = QColor(PALETTE.get("surface", "#2d2d2d"))
-        sub_c  = QColor(PALETTE.get("textSub", "#6a6a6a"))
-        txt_c  = QColor(PALETTE.get("text",    "#ebebeb"))
-        acc_c  = QColor(PALETTE.get("accent",  "#00d4aa"))
+        bg_c   = QColor(PALETTE['bg'])
+        bdr_c  = QColor(PALETTE['border'])
+        surf_c = QColor(PALETTE['surface'])
+        sub_c  = QColor(PALETTE['textSub'])
+        txt_c  = QColor(PALETTE['text'])
+        acc_c  = QColor(PALETTE['accent'])
         p.fillRect(0, 0, W, H, bg_c)
 
         n      = len(self.STEPS)

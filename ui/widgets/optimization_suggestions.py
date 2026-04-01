@@ -28,28 +28,47 @@ def _evaluate(snapshot: dict) -> list[dict]:
     tips: list[dict] = []
     cam = snapshot.get("camera", {})
     tec = snapshot.get("tec", [])
+    is_ir = snapshot.get("camera_type", "tr") == "ir"
 
     # Saturation risk
     sat = cam.get("saturation_pct", 0)
     if sat > 1.0:
-        tips.append({
-            "code": "auto_expose",
-            "icon": "⚠",
-            "message": f"Saturation at {sat:.1f}% — reduce exposure to avoid clipping.",
-            "action": "Auto-Expose",
-            "priority": 1,
-        })
+        if is_ir:
+            tips.append({
+                "code": "ir_gain_high",
+                "icon": "⚠",
+                "message": f"Saturation at {sat:.1f}% — try switching to Low gain mode.",
+                "action": None,
+                "priority": 1,
+            })
+        else:
+            tips.append({
+                "code": "auto_expose",
+                "icon": "⚠",
+                "message": f"Saturation at {sat:.1f}% — reduce exposure to avoid clipping.",
+                "action": "Auto-Expose",
+                "priority": 1,
+            })
 
     # Under-exposure
     under = cam.get("underexposure_pct", 0)
     if under > 30.0:
-        tips.append({
-            "code": "auto_expose",
-            "icon": "⚠",
-            "message": f"Under-exposure at {under:.0f}% — increase exposure for better SNR.",
-            "action": "Auto-Expose",
-            "priority": 2,
-        })
+        if is_ir:
+            tips.append({
+                "code": "ir_gain_low",
+                "icon": "⚠",
+                "message": f"Under-exposure at {under:.0f}% — try switching to High gain mode.",
+                "action": None,
+                "priority": 2,
+            })
+        else:
+            tips.append({
+                "code": "auto_expose",
+                "icon": "⚠",
+                "message": f"Under-exposure at {under:.0f}% — increase exposure for better SNR.",
+                "action": "Auto-Expose",
+                "priority": 2,
+            })
 
     # Poor focus
     focus = cam.get("focus_score", 999)
@@ -131,9 +150,9 @@ class OptimizationSuggestionsWidget(QWidget):
         lay.setContentsMargins(8, 2, 8, 2)
         lay.setSpacing(6)
 
-        dim = PALETTE.get("textDim", "#888")
-        text = PALETTE.get("text", "#eee")
-        accent = PALETTE.get("accent", "#00bcd4")
+        dim = PALETTE['textDim']
+        text = PALETTE['text']
+        accent = PALETTE['accent']
 
         icon_lbl = QLabel(tip.get("icon", "💡"))
         icon_lbl.setFixedWidth(18)

@@ -116,8 +116,8 @@ class TimeEstimateLabel(QFrame):
     def _apply_styles(self) -> None:
         """Re-apply palette-derived styles (call after theme switch)."""
         from ui.theme import PALETTE, FONT
-        color = PALETTE.get("systemIndigo", "#5e5ce6")
-        bg    = PALETTE.get("bg", "#111113")
+        color = PALETTE['systemIndigo']
+        bg    = PALETTE['bg']
         self.setStyleSheet(
             f"QFrame#TimeEstimatePill {{ "
             f"background: {color}; border: none; "

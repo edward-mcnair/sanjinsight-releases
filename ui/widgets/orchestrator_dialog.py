@@ -59,7 +59,7 @@ class OrchestratorDialog(QDialog):
         header = QLabel("Preparing instrument…")
         header.setStyleSheet(
             f"font-size: {FONT['readoutSm']}pt; font-weight: 700; "
-            f"color: {PALETTE.get('text', '#eee')};")
+            f"color: {PALETTE['text']};")
         root.addWidget(header)
         self._header = header
 
@@ -79,16 +79,16 @@ class OrchestratorDialog(QDialog):
         self._overall_bar.setFixedHeight(6)
         self._overall_bar.setTextVisible(False)
         self._overall_bar.setStyleSheet(
-            f"QProgressBar {{ background: {PALETTE.get('bg2', '#1a1a1c')}; "
+            f"QProgressBar {{ background: {PALETTE['surface']}; "
             f"border: none; border-radius: 3px; }}"
-            f"QProgressBar::chunk {{ background: {PALETTE.get('accent', '#00bcd4')}; "
+            f"QProgressBar::chunk {{ background: {PALETTE['accent']}; "
             f"border-radius: 3px; }}")
         root.addWidget(self._overall_bar)
 
         # ── Button row ────────────────────────────────────────────────
         sep = QFrame()
         sep.setFrameShape(QFrame.HLine)
-        sep.setStyleSheet(f"color: {PALETTE.get('border', '#444')};")
+        sep.setStyleSheet(f"color: {PALETTE['border']};")
         root.addWidget(sep)
 
         btn_row = QHBoxLayout()
@@ -125,7 +125,7 @@ class OrchestratorDialog(QDialog):
         icon.setAlignment(Qt.AlignCenter)
         icon.setStyleSheet(
             f"font-size: {FONT['readoutSm']}pt; "
-            f"color: {PALETTE.get('textDim', '#888')};")
+            f"color: {PALETTE['textDim']};")
         lay.addWidget(icon)
 
         col = QVBoxLayout()
@@ -134,13 +134,13 @@ class OrchestratorDialog(QDialog):
         name = QLabel(label)
         name.setStyleSheet(
             f"font-size: {FONT['label']}pt; font-weight: 600; "
-            f"color: {PALETTE.get('text', '#eee')};")
+            f"color: {PALETTE['text']};")
         col.addWidget(name)
 
         msg = QLabel("Pending")
         msg.setStyleSheet(
             f"font-size: {FONT['caption']}pt; "
-            f"color: {PALETTE.get('textDim', '#888')};")
+            f"color: {PALETTE['textDim']};")
         msg.setWordWrap(True)
         col.addWidget(msg)
 
@@ -160,7 +160,7 @@ class OrchestratorDialog(QDialog):
         card["icon"].setText(_ICONS["running"])
         card["icon"].setStyleSheet(
             f"font-size: {FONT['readoutSm']}pt; "
-            f"color: {PALETTE.get('accent', '#00bcd4')};")
+            f"color: {PALETTE['accent']};")
         card["msg"].setText(sp.message)
 
         self._skip_btn.setEnabled(sp.can_skip)
@@ -180,13 +180,13 @@ class OrchestratorDialog(QDialog):
             card["icon"].setText(_ICONS["complete"])
             card["icon"].setStyleSheet(
                 f"font-size: {FONT['readoutSm']}pt; "
-                f"color: {PALETTE.get('success', '#00d479')};")
+                f"color: {PALETTE['success']};")
         else:
             card["status"] = "failed"
             card["icon"].setText(_ICONS["failed"])
             card["icon"].setStyleSheet(
                 f"font-size: {FONT['readoutSm']}pt; "
-                f"color: {PALETTE.get('danger', '#ff4444')};")
+                f"color: {PALETTE['danger']};")
 
     def _on_complete(self, result) -> None:
         """Handle sequence completion."""
@@ -200,7 +200,7 @@ class OrchestratorDialog(QDialog):
             self._header.setText("Preparation complete")
             self._header.setStyleSheet(
                 f"font-size: {FONT['readoutSm']}pt; font-weight: 700; "
-                f"color: {PALETTE.get('success', '#00d479')};")
+                f"color: {PALETTE['success']};")
             # Auto-close after short delay on full success
             from PyQt5.QtCore import QTimer
             QTimer.singleShot(800, self.accept)
@@ -208,13 +208,13 @@ class OrchestratorDialog(QDialog):
             self._header.setText(result.message or "Preparation incomplete")
             self._header.setStyleSheet(
                 f"font-size: {FONT['readoutSm']}pt; font-weight: 700; "
-                f"color: {PALETTE.get('warning', '#ffb300')};")
+                f"color: {PALETTE['warning']};")
 
             # Add "Proceed Anyway" button
             proceed_btn = QPushButton("Proceed Anyway")
             proceed_btn.setStyleSheet(
-                f"QPushButton {{ border: 1px solid {PALETTE.get('warning', '#ffb300')}; "
-                f"color: {PALETTE.get('warning', '#ffb300')}; padding: 6px 16px; "
+                f"QPushButton {{ border: 1px solid {PALETTE['warning']}; "
+                f"color: {PALETTE['warning']}; padding: 6px 16px; "
                 f"border-radius: 4px; }}")
             proceed_btn.clicked.connect(self.accept)
             self.layout().addWidget(proceed_btn, alignment=Qt.AlignRight)

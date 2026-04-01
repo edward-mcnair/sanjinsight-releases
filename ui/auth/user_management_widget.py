@@ -75,32 +75,37 @@ def _pw_strength(password: str) -> tuple[int, str]:
     return score, labels[score]
 
 
-_STRENGTH_COLORS = {1: "#ff4466", 2: "#ffaa44", 3: "#4e73df", 4: "#00d4aa"}
-
-_DLG_BG     = "#0f1120"
-_DLG_SURF   = "#181b2e"
-_DLG_BORDER = "#2a3249"
+def _strength_color(score: int) -> str:
+    """Return PALETTE-driven color for password strength score."""
+    return {
+        1: PALETTE['danger'],
+        2: PALETTE['warning'],
+        3: PALETTE['cta'],
+        4: PALETTE['accent'],
+    }.get(score, PALETTE['danger'])
 
 
 # ── Profile-card widget ────────────────────────────────────────────────────────
 
-_CARD_INFO = {
-    UserType.TECHNICIAN: {
-        "icon": "Technician",
-        "color": "#5b8ff9",
-        "desc":  "Runs QA scans per SOP.\nGuided UI with PASS/FAIL verdict.",
-    },
-    UserType.FAILURE_ANALYST: {
-        "icon": "Failure Analyst",
-        "color": "#00d4aa",
-        "desc":  "Diagnoses device failures.\nEvidence-first AI. Full UI.",
-    },
-    UserType.RESEARCHER: {
-        "icon": "Researcher",
-        "color": "#ffaa44",
-        "desc":  "Explores, learns, and publishes.\nExplanatory AI. Full UI.",
-    },
-}
+def _card_info():
+    """Return role card info with PALETTE-driven colors."""
+    return {
+        UserType.TECHNICIAN: {
+            "icon": "Technician",
+            "color": PALETTE['cta'],
+            "desc":  "Runs QA scans per SOP.\nGuided UI with PASS/FAIL verdict.",
+        },
+        UserType.FAILURE_ANALYST: {
+            "icon": "Failure Analyst",
+            "color": PALETTE['accent'],
+            "desc":  "Diagnoses device failures.\nEvidence-first AI. Full UI.",
+        },
+        UserType.RESEARCHER: {
+            "icon": "Researcher",
+            "color": PALETTE['warning'],
+            "desc":  "Explores, learns, and publishes.\nExplanatory AI. Full UI.",
+        },
+    }
 
 
 class _ProfileCardSet(QWidget):
@@ -121,7 +126,7 @@ class _ProfileCardSet(QWidget):
         row.setSpacing(10)
 
         for ut in (UserType.TECHNICIAN, UserType.FAILURE_ANALYST, UserType.RESEARCHER):
-            info  = _CARD_INFO[ut]
+            info  = _card_info()[ut]
             card  = QFrame()
             card.setFixedSize(160, 110)
             card.setStyleSheet(self._card_qss(info["color"], selected=False))
@@ -140,7 +145,7 @@ class _ProfileCardSet(QWidget):
             desc = QLabel(info["desc"])
             desc.setWordWrap(True)
             desc.setStyleSheet(
-                f"font-size:{FONT.get('caption', 8)}pt; color:#777777; "
+                f"font-size:{FONT.get('captionf', 8)}pt; color:{PALETTE['textDim']}; "
                 "background:transparent;")
             inner.addWidget(desc)
             inner.addStretch(1)
@@ -155,18 +160,19 @@ class _ProfileCardSet(QWidget):
 
     @staticmethod
     def _card_qss(color: str, selected: bool) -> str:
-        bg     = _DLG_SURF if not selected else f"{color}18"
-        border = color if selected else _DLG_BORDER
+        P = PALETTE
+        bg     = P["surface"] if not selected else f"{color}18"
+        border = color if selected else P["border"]
         width  = 2 if selected else 1
         return (
             f"QFrame {{ background:{bg}; border:{width}px solid {border}; "
-            "border-radius:8px; }}"
+            f"border-radius:8px; }}"
         )
 
     def _select(self, user_type: UserType) -> None:
         self._selected = user_type
         for ut, card in self._cards.items():
-            info = _CARD_INFO[ut]
+            info = _card_info()[ut]
             card.setStyleSheet(self._card_qss(info["color"], selected=(ut == user_type)))
         self.selection_changed.emit(user_type)
 
@@ -191,7 +197,7 @@ class _AddUserDialog(QDialog):
 
         self.setWindowTitle("Add User")
         self.setFixedSize(560, 560)
-        self.setStyleSheet(f"QDialog {{ background:{_DLG_BG}; }}")
+        self.setStyleSheet(f"QDialog {{ background:{PALETTE['bg']}; }}")
         self.setModal(True)
 
         lay = QVBoxLayout(self)
@@ -201,7 +207,7 @@ class _AddUserDialog(QDialog):
         # Title
         title = QLabel("Who is this user?")
         title.setStyleSheet(
-            "font-size:16pt; font-weight:700; color:#ffffff; background:transparent;")
+            f"font-size:16pt; font-weight:700; color:{PALETTE['text']}; background:transparent;")
         lay.addWidget(title)
 
         # Profile cards
@@ -213,13 +219,13 @@ class _AddUserDialog(QDialog):
             "Grant administrator privileges  "
             "(user management, global settings, recipe approval)")
         self._admin_chk.setStyleSheet(
-            f"color:{PALETTE.get('textDim', '#999999')}; "
+            f"color:{PALETTE['textDim']}; "
             f"font-size:{FONT.get('sublabel', 9)}pt; background:transparent;")
         lay.addWidget(self._admin_chk)
 
         sep = QFrame()
         sep.setFrameShape(QFrame.HLine)
-        sep.setStyleSheet(f"color:{_DLG_BORDER};")
+        sep.setStyleSheet(f"color:{PALETTE['border']};")
         lay.addWidget(sep)
 
         input_ss = wizard_input_qss()
@@ -257,13 +263,13 @@ class _AddUserDialog(QDialog):
         self._strength_bar.setFixedHeight(5)
         self._strength_bar.setTextVisible(False)
         self._strength_bar.setStyleSheet(
-            "QProgressBar { background:#1a1e30; border:none; border-radius:2px; }"
-            "QProgressBar::chunk { background:#ff4466; border-radius:2px; }")
+            f"QProgressBar {{ background:{PALETTE['surface']}; border:none; border-radius:2px; }}"
+            f"QProgressBar::chunk {{ background:{PALETTE['danger']}; border-radius:2px; }}")
         self._strength_lbl = QLabel("")
         self._strength_lbl.setFixedWidth(55)
         self._strength_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self._strength_lbl.setStyleSheet(
-            f"font-size:{FONT.get('caption', 8)}pt; color:#888; background:transparent;")
+            f"font-size:{FONT.get('captionf', 8)}pt; color:{PALETTE['textDim']}; background:transparent;")
         srow.addWidget(self._strength_bar)
         srow.addSpacing(8)
         srow.addWidget(self._strength_lbl)
@@ -281,7 +287,7 @@ class _AddUserDialog(QDialog):
         # Error label
         self._err_lbl = QLabel("")
         self._err_lbl.setStyleSheet(
-            f"color:{PALETTE.get('danger', '#ff4466')}; "
+            f"color:{PALETTE['danger']}; "
             f"font-size:{FONT.get('sublabel', 9)}pt; background:transparent;")
         lay.addWidget(self._err_lbl)
 
@@ -309,15 +315,15 @@ class _AddUserDialog(QDialog):
     def _lbl(text: str) -> QLabel:
         l = QLabel(text)
         l.setStyleSheet(
-            f"font-size:{FONT.get('label', 10)}pt; color:#777777; background:transparent;")
+            f"font-size:{FONT.get('labelf', 10)}pt; color:{PALETTE['textDim']}; background:transparent;")
         return l
 
     def _update_strength(self, text: str) -> None:
         score, label = _pw_strength(text)
         self._strength_bar.setValue(score)
-        color = _STRENGTH_COLORS.get(score, "#ff4466")
+        color = _strength_color(score)
         self._strength_bar.setStyleSheet(
-            "QProgressBar { background:#1a1e30; border:none; border-radius:2px; }"
+            f"QProgressBar {{ background:{PALETTE['surface']}; border:none; border-radius:2px; }}"
             f"QProgressBar::chunk {{ background:{color}; border-radius:2px; }}")
         self._strength_lbl.setText(label)
         self._strength_lbl.setStyleSheet(
@@ -405,7 +411,7 @@ class _EditUserDialog(QDialog):
 
         self.setWindowTitle(f"Edit User — {user.display_name}")
         self.setFixedSize(560, 380)
-        self.setStyleSheet(f"QDialog {{ background:{_DLG_BG}; }}")
+        self.setStyleSheet(f"QDialog {{ background:{PALETTE['bg']}; }}")
         self.setModal(True)
 
         lay = QVBoxLayout(self)
@@ -414,7 +420,7 @@ class _EditUserDialog(QDialog):
 
         title = QLabel(f"Edit: {user.display_name}")
         title.setStyleSheet(
-            "font-size:15pt; font-weight:700; color:#ffffff; background:transparent;")
+            f"font-size:15pt; font-weight:700; color:{PALETTE['text']}; background:transparent;")
         lay.addWidget(title)
 
         input_ss = wizard_input_qss()
@@ -428,12 +434,12 @@ class _EditUserDialog(QDialog):
 
         sep = QFrame()
         sep.setFrameShape(QFrame.HLine)
-        sep.setStyleSheet(f"color:{_DLG_BORDER};")
+        sep.setStyleSheet(f"color:{PALETTE['border']};")
         lay.addWidget(sep)
 
         user_type_lbl = QLabel("User type")
         user_type_lbl.setStyleSheet(
-            f"font-size:{FONT.get('label', 10)}pt; color:#777777; background:transparent;")
+            f"font-size:{FONT.get('labelf', 10)}pt; color:{PALETTE['textDim']}; background:transparent;")
         lay.addWidget(user_type_lbl)
 
         self._cards = _ProfileCardSet()
@@ -445,13 +451,13 @@ class _EditUserDialog(QDialog):
             "(user management, global settings, recipe approval)")
         self._admin_chk.setChecked(user.is_admin)
         self._admin_chk.setStyleSheet(
-            f"color:{PALETTE.get('textDim', '#999999')}; "
+            f"color:{PALETTE['textDim']}; "
             f"font-size:{FONT.get('sublabel', 9)}pt; background:transparent;")
         lay.addWidget(self._admin_chk)
 
         self._err_lbl = QLabel("")
         self._err_lbl.setStyleSheet(
-            f"color:{PALETTE.get('danger', '#ff4466')}; "
+            f"color:{PALETTE['danger']}; "
             f"font-size:{FONT.get('sublabel', 9)}pt; background:transparent;")
         lay.addWidget(self._err_lbl)
 
@@ -477,7 +483,7 @@ class _EditUserDialog(QDialog):
     def _lbl(text: str) -> QLabel:
         l = QLabel(text)
         l.setStyleSheet(
-            f"font-size:{FONT.get('label', 10)}pt; color:#777777; background:transparent;")
+            f"font-size:{FONT.get('labelf', 10)}pt; color:{PALETTE['textDim']}; background:transparent;")
         return l
 
     def _save(self) -> None:
@@ -523,7 +529,7 @@ class _ResetPasswordDialog(QDialog):
 
         self.setWindowTitle(f"Reset Password — {user.display_name}")
         self.setFixedSize(400, 300)
-        self.setStyleSheet(f"QDialog {{ background:{_DLG_BG}; }}")
+        self.setStyleSheet(f"QDialog {{ background:{PALETTE['bg']}; }}")
         self.setModal(True)
 
         lay = QVBoxLayout(self)
@@ -533,7 +539,7 @@ class _ResetPasswordDialog(QDialog):
         title = QLabel(f"Reset password for {user.display_name}")
         title.setWordWrap(True)
         title.setStyleSheet(
-            "font-size:14pt; font-weight:700; color:#ffffff; background:transparent;")
+            f"font-size:14pt; font-weight:700; color:{PALETTE['text']}; background:transparent;")
         lay.addWidget(title)
 
         input_ss = wizard_input_qss()
@@ -554,13 +560,13 @@ class _ResetPasswordDialog(QDialog):
         self._strength_bar.setFixedHeight(5)
         self._strength_bar.setTextVisible(False)
         self._strength_bar.setStyleSheet(
-            "QProgressBar { background:#1a1e30; border:none; border-radius:2px; }"
-            "QProgressBar::chunk { background:#ff4466; border-radius:2px; }")
+            f"QProgressBar {{ background:{PALETTE['surface']}; border:none; border-radius:2px; }}"
+            f"QProgressBar::chunk {{ background:{PALETTE['danger']}; border-radius:2px; }}")
         self._strength_lbl = QLabel("")
         self._strength_lbl.setFixedWidth(55)
         self._strength_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self._strength_lbl.setStyleSheet(
-            f"font-size:{FONT.get('caption', 8)}pt; color:#888; background:transparent;")
+            f"font-size:{FONT.get('captionf', 8)}pt; color:{PALETTE['textDim']}; background:transparent;")
         srow.addWidget(self._strength_bar)
         srow.addSpacing(8)
         srow.addWidget(self._strength_lbl)
@@ -576,7 +582,7 @@ class _ResetPasswordDialog(QDialog):
 
         self._err_lbl = QLabel("")
         self._err_lbl.setStyleSheet(
-            f"color:{PALETTE.get('danger', '#ff4466')}; "
+            f"color:{PALETTE['danger']}; "
             f"font-size:{FONT.get('sublabel', 9)}pt; background:transparent;")
         lay.addWidget(self._err_lbl)
 
@@ -603,15 +609,15 @@ class _ResetPasswordDialog(QDialog):
     def _lbl(text: str) -> QLabel:
         l = QLabel(text)
         l.setStyleSheet(
-            f"font-size:{FONT.get('label', 10)}pt; color:#777777; background:transparent;")
+            f"font-size:{FONT.get('labelf', 10)}pt; color:{PALETTE['textDim']}; background:transparent;")
         return l
 
     def _update_strength(self, text: str) -> None:
         score, label = _pw_strength(text)
         self._strength_bar.setValue(score)
-        color = _STRENGTH_COLORS.get(score, "#ff4466")
+        color = _strength_color(score)
         self._strength_bar.setStyleSheet(
-            "QProgressBar { background:#1a1e30; border:none; border-radius:2px; }"
+            f"QProgressBar {{ background:{PALETTE['surface']}; border:none; border-radius:2px; }}"
             f"QProgressBar::chunk {{ background:{color}; border-radius:2px; }}")
         self._strength_lbl.setText(label)
         self._strength_lbl.setStyleSheet(
@@ -681,13 +687,13 @@ class UserManagementWidget(QWidget):
         hdr = QLabel("User Accounts")
         hdr.setStyleSheet(
             f"font-size:{FONT.get('h3', 13)}pt; font-weight:700; "
-            f"color:{PALETTE.get('text', '#ebebeb')}; background:transparent;")
+            f"color:{PALETTE['text']}; background:transparent;")
         root.addWidget(hdr)
 
         sub = QLabel("Manage who can access SanjINSIGHT and their permissions.")
         sub.setStyleSheet(
             f"font-size:{FONT.get('sublabel', 9)}pt; "
-            f"color:{PALETTE.get('textDim', '#999999')}; background:transparent;")
+            f"color:{PALETTE['textDim']}; background:transparent;")
         root.addWidget(sub)
 
         # ── Toolbar ────────────────────────────────────────────────────────
@@ -777,7 +783,7 @@ class UserManagementWidget(QWidget):
                     item.setTextAlignment(Qt.AlignCenter)
                 if not user.is_active:
                     item.setForeground(
-                        QColor(PALETTE.get("textSub", "#6a6a6a")))
+                        QColor(PALETTE['textSub']))
                 self._table.setItem(row, col, item)
 
         self._update_toolbar_state()
@@ -805,24 +811,24 @@ class UserManagementWidget(QWidget):
         P = PALETTE
         self._table.setStyleSheet(f"""
             QTableWidget {{
-                background:{P.get('surface','#2d2d2d')};
-                alternate-background-color:{P.get('surface2','#333333')};
-                color:{P.get('text','#ebebeb')};
-                border:1px solid {P.get('border','#484848')};
+                background:{P['surface']};
+                alternate-background-color:{P['surface2']};
+                color:{P['text']};
+                border:1px solid {P['border']};
                 border-radius:4px;
                 gridline-color:transparent;
                 font-size:{FONT.get('body', 11)}pt;
             }}
             QHeaderView::section {{
-                background:{P.get('surface2','#333333')};
-                color:{P.get('textDim','#999999')};
-                border:none; border-bottom:1px solid {P.get('border','#484848')};
+                background:{P['surface2']};
+                color:{P['textDim']};
+                border:none; border-bottom:1px solid {P['border']};
                 padding:5px 8px;
                 font-size:{FONT.get('label', 10)}pt; font-weight:600;
             }}
             QTableWidget::item:selected {{
-                background:{P.get('accentDim','#00d4aa2e')};
-                color:{P.get('text','#ebebeb')};
+                background:{P['accentDim']};
+                color:{P['text']};
             }}
         """)
 

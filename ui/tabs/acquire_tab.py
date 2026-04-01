@@ -138,7 +138,7 @@ class AcquireTab(QWidget):
         # Buttons
         btn_row = QHBoxLayout()
         self._cold_btn = QPushButton("COLD")
-        set_btn_icon(self._cold_btn, "fa5s.snowflake", "#66aaff")
+        set_btn_icon(self._cold_btn, "fa5s.snowflake", PALETTE['info'])
         self._cold_btn.setObjectName("cold_btn")
         self._cold_btn.setAccessibleName("Capture cold frames")
         self._cold_btn.setToolTip(
@@ -146,14 +146,14 @@ class AcquireTab(QWidget):
             "Use this when you want to set up the cold reference manually "
             "before applying the stimulus.")
         self._hot_btn  = QPushButton("HOT")
-        set_btn_icon(self._hot_btn, "fa5s.fire", "#ff8866")
+        set_btn_icon(self._hot_btn, "fa5s.fire", PALETTE['danger'])
         self._hot_btn.setObjectName("hot_btn")
         self._hot_btn.setAccessibleName("Capture hot frames")
         self._hot_btn.setToolTip(
             "Capture hot (stimulus) frames and compute ΔR/R immediately.\n"
             "Requires a cold reference to already be captured.")
         self._run_btn  = QPushButton("RUN SEQUENCE")
-        set_btn_icon(self._run_btn, "fa5s.play", "#00d4aa")
+        set_btn_icon(self._run_btn, "fa5s.play", PALETTE['accent'])
         self._run_btn.setObjectName("primary")
         self._run_btn.setAccessibleName("Run acquisition sequence")
         self._run_btn.setAccessibleDescription(
@@ -164,14 +164,14 @@ class AcquireTab(QWidget):
             "then computes ΔR/R and ΔT.\n\n"
             "Keyboard shortcut: F5")
         self._opt_acq_btn = QPushButton("OPTIMIZE && ACQUIRE")
-        set_btn_icon(self._opt_acq_btn, "fa5s.magic", PALETTE.get("accent", "#00bcd4"))
+        set_btn_icon(self._opt_acq_btn, "fa5s.magic", PALETTE['accent'])
         self._opt_acq_btn.setToolTip(
             "Run auto-expose, auto-gain, TEC preconditioning, and preflight\n"
             "validation, then start acquisition automatically.\n\n"
             "Equivalent to manually optimising each parameter before clicking\n"
             "RUN SEQUENCE, but in one click.")
         self._abort_btn = QPushButton("ABORT")
-        set_btn_icon(self._abort_btn, "fa5s.stop", "#ff6666")
+        set_btn_icon(self._abort_btn, "fa5s.stop", PALETTE['danger'])
         self._abort_btn.setObjectName("danger")
         self._abort_btn.setAccessibleName("Abort acquisition")
         self._abort_btn.setAccessibleDescription(
@@ -203,11 +203,11 @@ class AcquireTab(QWidget):
         from PyQt5.QtWidgets import QFrame as _QFrame
         recipe_row = QHBoxLayout()
         recipe_lbl = QLabel("Recipe:")
-        recipe_lbl.setStyleSheet(f"color:#555; font-size:{FONT['label']}pt;")
+        recipe_lbl.setStyleSheet(f"color:{PALETTE['textSub']}; font-size:{FONT['label']}pt;")
         recipe_row.addWidget(recipe_lbl)
         self._active_recipe_lbl = QLabel("(none)")
         self._active_recipe_lbl.setStyleSheet(
-            f"color:#00d4aa; font-size:{FONT['label']}pt; font-style:italic;")
+            f"color:{PALETTE['accent']}; font-size:{FONT['label']}pt; font-style:italic;")
         recipe_row.addWidget(self._active_recipe_lbl, 1)
         self._load_recipe_btn = QPushButton("Load Recipe…")
         set_btn_icon(self._load_recipe_btn, "fa5s.clipboard-list")
@@ -243,7 +243,7 @@ class AcquireTab(QWidget):
             "e.g.  Au on Si, 25°C ambient, Vbias=1.5 V, dark room")
         self._notes_edit.setMaximumHeight(70)
         self._notes_edit.setStyleSheet(
-            f"background:{PALETTE.get('bg','#242424')}; color:{PALETTE.get('text','#ebebeb')}; border:1px solid {PALETTE.get('border','#484848')}; "
+            f"background:{PALETTE['bg']}; color:{PALETTE['text']}; border:1px solid {PALETTE['border']}; "
             f"font-size:{FONT['body']}pt; font-family:{MONO_FONT};")
         nl.addWidget(self._notes_edit)
 
@@ -259,10 +259,10 @@ class AcquireTab(QWidget):
             btn = QPushButton(chip_text)
             btn.setFixedHeight(22)
             btn.setStyleSheet(
-                f"QPushButton {{ background:{PALETTE.get('surface2','#3d3d3d')}; color:{PALETTE.get('accent','#00d4aa')}; "
-                f"border:1px solid {PALETTE.get('accent','#00d4aa')}44; border-radius:10px; "
+                f"QPushButton {{ background:{PALETTE['surface2']}; color:{PALETTE['accent']}; "
+                f"border:1px solid {PALETTE['accent']}44; border-radius:10px; "
                 f"font-size:{FONT['sublabel']}pt; padding:0 8px; }}"
-                f"QPushButton:hover {{ background:{PALETTE.get('surface','#2d2d2d')}; }}")
+                f"QPushButton:hover {{ background:{PALETTE['surface']}; }}")
             btn.clicked.connect(
                 lambda _, t=chip_text: self._insert_notes_chip(t))
             chips_row.addWidget(btn)
@@ -307,7 +307,7 @@ class AcquireTab(QWidget):
         bot = QHBoxLayout()
         self._snr_lbl = QLabel("SNR  —")
         self._snr_lbl.setStyleSheet(
-            scaled_qss(f"font-family:{MONO_FONT}; font-size:15pt; color:#555;"))
+            scaled_qss(f"font-family:{MONO_FONT}; font-size:15pt; color:{PALETTE['textSub']};"))
         self._export_btn = QPushButton("Export")
         set_btn_icon(self._export_btn, "fa5s.file-export")
         self._export_btn.setToolTip("Export acquisition results to a folder")
@@ -347,19 +347,19 @@ class AcquireTab(QWidget):
 
     def _apply_styles(self) -> None:
         P = PALETTE
-        bg  = P.get("bg",      "#242424")
-        txt = P.get("text",    "#ebebeb")
-        bdr = P.get("border",  "#484848")
+        bg  = P['bg']
+        txt = P['text']
+        bdr = P['border']
         if hasattr(self, "_notes_edit"):
             self._notes_edit.setStyleSheet(
                 f"background:{bg}; color:{txt}; border:1px solid {bdr}; "
                 f"font-size:{FONT['body']}pt; font-family:{MONO_FONT};")
-        acc = P.get("accent",   "#00d4aa")
-        su2 = P.get("surface2", "#3d3d3d")
-        sur = P.get("surface",  "#2d2d2d")
+        acc = P['accent']
+        su2 = P['surface2']
+        sur = P['surface']
         if hasattr(self, "_time_est_lbl"):
             self._time_est_lbl.setStyleSheet(
-                f"color:{P.get('textDim','#888')}; font-size:{FONT['caption']}pt;")
+                f"color:{P['textDim']}; font-size:{FONT['caption']}pt;")
         for btn in getattr(self, "_chip_btns", []):
             btn.setStyleSheet(
                 f"QPushButton {{ background:{su2}; color:{acc}; "

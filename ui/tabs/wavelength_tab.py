@@ -377,20 +377,20 @@ class WavelengthTab(QWidget):
         # Connection dot
         if status.connected:
             self._conn_dot.setStyleSheet(
-                f"color: {P.get('accent', '#00d4aa')}; font-size: {FONT['label']}pt;")
+                f"color: {P['accent']}; font-size: {FONT['label']}pt;")
             self._conn_lbl.setText("Connected")
         else:
             self._conn_dot.setStyleSheet(
-                f"color: {P.get('danger', '#ff453a')}; font-size: {FONT['label']}pt;")
+                f"color: {P['danger']}; font-size: {FONT['label']}pt;")
             self._conn_lbl.setText("Not connected")
 
         if status.error_msg:
             self._conn_lbl.setText(f"Error: {status.error_msg[:60]}")
             self._conn_lbl.setStyleSheet(
-                f"color: {P.get('danger', '#ff453a')}; font-size: {FONT['label']}pt;")
+                f"color: {P['danger']}; font-size: {FONT['label']}pt;")
         else:
             self._conn_lbl.setStyleSheet(
-                f"color: {P.get('textDim', '#8892aa')}; font-size: {FONT['label']}pt;")
+                f"color: {P['textDim']}; font-size: {FONT['label']}pt;")
 
         # Wavelength readout
         self._status_wl.setText(f"  {status.wavelength_nm:.1f} nm")
@@ -399,13 +399,13 @@ class WavelengthTab(QWidget):
         if status.shutter_open:
             self._status_sh.setText("  Shutter: OPEN")
             self._status_sh.setStyleSheet(
-                f"color: {P.get('accent', '#00d4aa')}; font-size: {FONT['label']}pt;")
+                f"color: {P['accent']}; font-size: {FONT['label']}pt;")
             self._shutter_open_btn.setChecked(True)
             self._shutter_close_btn.setChecked(False)
         else:
             self._status_sh.setText("  Shutter: CLOSED")
             self._status_sh.setStyleSheet(
-                f"color: {P.get('danger', '#ff453a')}; font-size: {FONT['label']}pt;")
+                f"color: {P['danger']}; font-size: {FONT['label']}pt;")
             self._shutter_open_btn.setChecked(False)
             self._shutter_close_btn.setChecked(True)
 
@@ -431,8 +431,8 @@ class WavelengthTab(QWidget):
         Flash the wavelength field red and show the error in the status bar.
         Called from the main thread via queued signal connection.
         """
-        danger  = PALETTE.get("danger",  "#ff453a")
-        textDim = PALETTE.get("textDim", "#8892aa")
+        danger  = PALETTE["danger"]
+        textDim = PALETTE["textDim"]
         body_pt = FONT["body"]
 
         # Flash the wavelength readout and spinbox border red
@@ -476,14 +476,14 @@ class WavelengthTab(QWidget):
         P = PALETTE
         F = FONT
 
-        accent  = P.get("accent",   "#00d4aa")
-        danger  = P.get("danger",   "#ff453a")
-        surface = P.get("surface",  "#1a1d28")
-        surf2   = P.get("surface2", "#20232e")
-        border  = P.get("border",   "#2e3245")
-        text    = P.get("text",     "#dde3f2")
-        textDim = P.get("textDim",  "#8892aa")
-        cta     = P.get("cta",      "#3d8bef")
+        accent  = P["accent"]
+        danger  = P["danger"]
+        surface = P["surface"]
+        surf2   = P["surface2"]
+        border  = P["border"]
+        text    = P["text"]
+        textDim = P["textDim"]
+        cta     = P["cta"]
 
         def _rgb(h: str) -> tuple[int, int, int]:
             h = h.lstrip("#")
@@ -629,11 +629,11 @@ class WavelengthTab(QWidget):
         """Re-style the OPEN/CLOSE shutter buttons to reflect current state."""
         P = PALETTE
         F = FONT
-        accent = P.get("accent",  "#00d4aa")
-        danger = P.get("danger",  "#ff453a")
-        border = P.get("border",  "#2e3245")
-        surf2  = P.get("surface2","#20232e")
-        textDim = P.get("textDim","#8892aa")
+        accent = P["accent"]
+        danger = P["danger"]
+        border = P["border"]
+        surf2  = P["surface2"]
+        textDim = P["textDim"]
 
         def _rgb(h: str) -> tuple[int, int, int]:
             h = h.lstrip("#")
@@ -869,6 +869,6 @@ class WavelengthTab(QWidget):
         line.setFrameShape(QFrame.HLine)
         line.setFrameShadow(QFrame.Sunken)
         line.setStyleSheet(
-            f"color: {PALETTE.get('border', '#2e3245')};"
+            f"color: {PALETTE['border']};"
         )
         return line

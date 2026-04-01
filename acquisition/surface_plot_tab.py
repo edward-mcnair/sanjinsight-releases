@@ -36,7 +36,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QTimer
 from ui.icons import set_btn_icon
-from ui.theme import FONT, scaled_qss
+from ui.theme import FONT, PALETTE, scaled_qss
 from .processing import (COLORMAP_OPTIONS, COLORMAP_TOOLTIPS,
                          setup_cmap_combo, get_mpl_cmap_name)
 import config as cfg_mod
@@ -106,7 +106,7 @@ class SurfacePlotTab(QWidget):
 
         # Threshold plane
         self._thresh_cb = QCheckBox("Show threshold plane")
-        self._thresh_cb.setStyleSheet(f"color:#aaa; font-size:{FONT['label']}pt;")
+        self._thresh_cb.setStyleSheet(f"color:{PALETTE['textDim']}; font-size:{FONT['label']}pt;")
         self._thresh_cb.stateChanged.connect(self._replot)
         toolbar.addWidget(self._thresh_cb)
 
@@ -148,13 +148,13 @@ class SurfacePlotTab(QWidget):
 
         # ─ Status ─
         self._status_lbl = QLabel("No data loaded — call set_data() to display a surface.")
-        self._status_lbl.setStyleSheet(f"color:#888; font-size:{FONT['label']}pt; padding:2px 4px;")
+        self._status_lbl.setStyleSheet(f"color:{PALETTE['textDim']}; font-size:{FONT['label']}pt; padding:2px 4px;")
         root.addWidget(self._status_lbl)
 
         # Apply label styling to toolbar labels
         for lbl in toolbar.parentWidget().findChildren(QLabel) if toolbar.parentWidget() else []:
             if not lbl.styleSheet():
-                lbl.setStyleSheet(f"color:#aaa; font-size:{FONT['label']}pt;")
+                lbl.setStyleSheet(f"color:{PALETTE['textDim']}; font-size:{FONT['label']}pt;")
 
     def _build_empty_state(self, icon, title, desc, btn_text="", btn_callback=None):
         w = QWidget()
@@ -164,16 +164,16 @@ class SurfacePlotTab(QWidget):
 
         icon_lbl = QLabel(icon)
         icon_lbl.setAlignment(Qt.AlignCenter)
-        icon_lbl.setStyleSheet(scaled_qss("font-size: 52pt; color: #2a2a2a;"))
+        icon_lbl.setStyleSheet(scaled_qss(f"font-size: 52pt; color: {PALETTE['border']};"))
 
         title_lbl = QLabel(title)
         title_lbl.setAlignment(Qt.AlignCenter)
-        title_lbl.setStyleSheet(f"font-size: {FONT['readoutSm']}pt; font-weight: bold; color: #555;")
+        title_lbl.setStyleSheet(f"font-size: {FONT['readoutSm']}pt; font-weight: bold; color: {PALETTE['textSub']};")
 
         desc_lbl = QLabel(desc)
         desc_lbl.setAlignment(Qt.AlignCenter)
         desc_lbl.setWordWrap(True)
-        desc_lbl.setStyleSheet(f"font-size: {FONT['label']}pt; color: #444;")
+        desc_lbl.setStyleSheet(f"font-size: {FONT['label']}pt; color: {PALETTE['textSub']};")
         desc_lbl.setMaximumWidth(450)
 
         lay.addStretch()
@@ -187,11 +187,11 @@ class SurfacePlotTab(QWidget):
             btn.setFixedHeight(36)
             btn.setStyleSheet(f"""
                 QPushButton {{
-                    background: #1a2a20; color: #00d4aa;
-                    border: 1px solid #00d4aa55; border-radius: 5px;
+                    background: {PALETTE['accentDim']}; color: {PALETTE['accent']};
+                    border: 1px solid {PALETTE['accent']}55; border-radius: 5px;
                     font-size: {FONT['label']}pt; font-weight: 600;
                 }}
-                QPushButton:hover {{ background: #1e3028; }}
+                QPushButton:hover {{ background: {PALETTE['accentDim']}; }}
             """)
             btn.clicked.connect(btn_callback)
             lay.addSpacing(4)
@@ -208,7 +208,7 @@ class SurfacePlotTab(QWidget):
         lay.setSpacing(6)
 
         # ─ Matplotlib canvas ─
-        self._fig  = Figure(figsize=(8, 5), facecolor="#0d0d0d", tight_layout=True)
+        self._fig  = Figure(figsize=(8, 5), facecolor=PALETTE['canvas'], tight_layout=True)
         self._canvas = FigureCanvas(self._fig)
         self._canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         lay.addWidget(self._canvas, 1)
@@ -218,7 +218,7 @@ class SurfacePlotTab(QWidget):
         lay.addLayout(angle_row)
 
         el_lbl = QLabel("Elevation:")
-        el_lbl.setStyleSheet(f"color:#aaa; font-size:{FONT['label']}pt;")
+        el_lbl.setStyleSheet(f"color:{PALETTE['textDim']}; font-size:{FONT['label']}pt;")
         angle_row.addWidget(el_lbl)
         self._el_slider = QSlider(Qt.Horizontal)
         self._el_slider.setRange(-90, 90)
@@ -227,7 +227,7 @@ class SurfacePlotTab(QWidget):
         angle_row.addWidget(self._el_slider)
 
         az_lbl = QLabel("  Azimuth:")
-        az_lbl.setStyleSheet(f"color:#aaa; font-size:{FONT['label']}pt;")
+        az_lbl.setStyleSheet(f"color:{PALETTE['textDim']}; font-size:{FONT['label']}pt;")
         angle_row.addWidget(az_lbl)
         self._az_slider = QSlider(Qt.Horizontal)
         self._az_slider.setRange(0, 359)
@@ -266,21 +266,21 @@ class SurfacePlotTab(QWidget):
     def _replot(self):
         self._fig.clear()
         ax = self._fig.add_subplot(111, projection="3d")
-        ax.set_facecolor("#111")
-        self._fig.patch.set_facecolor("#0d0d0d")
+        ax.set_facecolor(PALETTE['bg'])
+        self._fig.patch.set_facecolor(PALETTE['canvas'])
 
         # Label styling
         for pane in [ax.xaxis.pane, ax.yaxis.pane, ax.zaxis.pane]:
             pane.fill = False
-            pane.set_edgecolor("#333")
-        ax.tick_params(colors="#777", labelsize=7)
-        ax.xaxis.label.set_color("#999")
-        ax.yaxis.label.set_color("#999")
-        ax.zaxis.label.set_color("#999")
+            pane.set_edgecolor(PALETTE['border'])
+        ax.tick_params(colors=PALETTE['textDim'], labelsize=7)
+        ax.xaxis.label.set_color(PALETTE['textDim'])
+        ax.yaxis.label.set_color(PALETTE['textDim'])
+        ax.zaxis.label.set_color(PALETTE['textDim'])
         ax.set_xlabel("X  (pixels)", labelpad=2)
         ax.set_ylabel("Y  (pixels)", labelpad=2)
         ax.set_zlabel("ΔR/R", labelpad=2)
-        ax.set_title(self._title, color="#ddd", fontsize=9, pad=6)
+        ax.set_title(self._title, color=PALETTE['text'], fontsize=9, pad=6)
         ax.view_init(elev=self._elevation, azim=self._azimuth)
 
         if self._arr is not None:
@@ -323,9 +323,9 @@ class SurfacePlotTab(QWidget):
                     xx = np.array([[0, W - 1], [0, W - 1]])
                     yy = np.array([[0, 0], [H - 1, H - 1]])
                     zz = np.full_like(xx, t_stretched, dtype=float)
-                    ax.plot_surface(xx, yy, zz, alpha=0.25, color="#ff4444")
+                    ax.plot_surface(xx, yy, zz, alpha=0.25, color=PALETTE['danger'])
                     ax.text(W * 0.05, H * 0.05, t_stretched,
-                            f"threshold={t:.4g}", color="#ff8888", fontsize=7)
+                            f"threshold={t:.4g}", color=PALETTE['danger'], fontsize=7)
 
         self._canvas.draw()
 

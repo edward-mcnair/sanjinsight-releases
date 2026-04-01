@@ -41,9 +41,12 @@ from PyQt5.QtGui     import QPainter, QColor, QFont, QFontMetrics
 
 from ui.theme import FONT, PALETTE, _DPI_SCALE
 
-# ── Colour constants ─────────────────────────────────────────────────────────
-_DT_POS_COLOR = "#f5a623"   # amber/warm — heating; also used for BT label
-_DT_NEG_COLOR = "#5ac8fa"   # sky blue — cooling
+# ── Colour helpers (read PALETTE at call-time for theme switching) ────────────
+def _DT_POS_COLOR() -> str:
+    return PALETTE['warning']   # amber/warm — heating; also used for BT label
+
+def _DT_NEG_COLOR() -> str:
+    return PALETTE['info']      # sky blue — cooling
 
 # ── Layout constants (logical pixels, DPI-scaled) ─────────────────────────────
 def _s(px: int) -> int:
@@ -83,9 +86,9 @@ class MeasurementReadoutStrip(QWidget):
 
         # ── Readout state — written by set_values(), read by paintEvent ───
         self._bt_text  : str  = "N/A"
-        self._bt_color : str  = PALETTE.get("textSub", "#9696a8")
+        self._bt_color : str  = PALETTE['textSub']
         self._dt_text  : str  = "N/A"
-        self._dt_color : str  = PALETTE.get("textSub", "#9696a8")
+        self._dt_color : str  = PALETTE['textSub']
         self._ct_text  : str  = ""
         self._ct_vis   : bool = False
 
@@ -118,25 +121,25 @@ class MeasurementReadoutStrip(QWidget):
         # BT — label and value share amber so they read as one warm unit.
         if bt_c is None:
             self._bt_text  = "N/A"
-            self._bt_color = PALETTE.get("textSub", "#9696a8")
+            self._bt_color = PALETTE['textSub']
         else:
             self._bt_text  = f"{bt_c:.1f} °C"
-            self._bt_color = _DT_POS_COLOR
+            self._bt_color = _DT_POS_COLOR()
 
         # dT
         if dt_c is None:
             self._dt_text  = "N/A"
-            self._dt_color = PALETTE.get("textSub", "#9696a8")
+            self._dt_color = PALETTE['textSub']
         elif dt_c > 0.005:
             self._dt_text  = f"+{dt_c:.2f}°C"
-            self._dt_color = _DT_POS_COLOR
+            self._dt_color = _DT_POS_COLOR()
         elif dt_c < -0.005:
             self._dt_text  = f"{dt_c:.2f}°C"
-            self._dt_color = _DT_NEG_COLOR
+            self._dt_color = _DT_NEG_COLOR()
         else:
             # Effectively zero — show as "±0.00°C" in neutral colour
             self._dt_text  = f"±{abs(dt_c):.2f}°C"
-            self._dt_color = PALETTE.get("textSub", "#9696a8")
+            self._dt_color = PALETTE['textSub']
 
         # CT
         self._ct_vis = self._show_ct and ct_c is not None
@@ -169,10 +172,10 @@ class MeasurementReadoutStrip(QWidget):
         w = self.width()
 
         # ── PALETTE colours (read live → theme changes are instant) ───────
-        bg   = QColor(PALETTE.get("surface",  "#1c1c1e"))
-        bdr  = QColor(PALETTE.get("border",   "#3a3a3a"))
-        dim  = QColor(PALETTE.get("textDim",  "#9696a8"))
-        text = QColor(PALETTE.get("text",     "#ffffff"))
+        bg   = QColor(PALETTE['surface'])
+        bdr  = QColor(PALETTE['border'])
+        dim  = QColor(PALETTE['textDim'])
+        text = QColor(PALETTE['text'])
 
         # ── Fonts ─────────────────────────────────────────────────────────
         # BT sublabel — bold, amber (matches its value so the pair reads
@@ -219,7 +222,7 @@ class MeasurementReadoutStrip(QWidget):
             p.drawLine(x, _DIV_H_INSET, x, h - _DIV_H_INSET)
 
         # ── BT cell ────────────────────────────────────────────────────────
-        draw_sub("BT", bt_sub_font, QColor(_DT_POS_COLOR))
+        draw_sub("BT", bt_sub_font, QColor(_DT_POS_COLOR()))
         x += sub_w("BT", bt_sub_font) + _SUB_GAP
 
         draw_val(self._bt_text, QColor(self._bt_color))

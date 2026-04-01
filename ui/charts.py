@@ -39,8 +39,6 @@ try:
     import pyqtgraph as pg
     pg.setConfigOption("antialias",  True)
     pg.setConfigOption("useOpenGL",  False)   # stable on all platforms/GPUs
-    pg.setConfigOption("foreground", "#8888a8")
-    pg.setConfigOption("background", "#111113")
     _PG_OK = True
 except ImportError:
     pg = None           # type: ignore[assignment]
@@ -61,6 +59,26 @@ from ui.theme import FONT, PALETTE
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  PyQtGraph global foreground / background
+# ─────────────────────────────────────────────────────────────────────────────
+
+def refresh_pyqtgraph_globals() -> None:
+    """Re-apply PALETTE colours to the pyqtgraph global config options.
+
+    Called once at startup and again from ``MainWindow._swap_visual_theme``
+    whenever the user switches between dark / light themes.
+    """
+    if not _PG_OK:
+        return
+    pg.setConfigOption("foreground", PALETTE['textDim'])
+    pg.setConfigOption("background", PALETTE['bg'])
+
+
+# Apply once at import time so the first widgets created get the right colours.
+refresh_pyqtgraph_globals()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  Internal helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -71,7 +89,7 @@ def _placeholder(msg: str = "Install pyqtgraph for charts\npip install pyqtgraph
     lbl.setAlignment(Qt.AlignCenter)
     lbl.setWordWrap(True)
     lbl.setStyleSheet(
-        f"color:{PALETTE.get('textDim','#888888')};"
+        f"color:{PALETTE['textDim']};"
         f"font-size:{FONT.get('body',9)}pt;"
     )
     lay.addWidget(lbl)
@@ -84,9 +102,9 @@ def _configure_plot(pw: "pg.PlotWidget",
     """Apply current PALETTE + FONT to a PlotWidget in-place."""
     if not _PG_OK:
         return
-    bg        = PALETTE.get("bg",       "#111113")
-    bdr       = PALETTE.get("border",   "#3a3a3a")
-    text_dim  = PALETTE.get("textDim",  "#8888a8")
+    bg        = PALETTE['bg']
+    bdr       = PALETTE['border']
+    text_dim  = PALETTE['textDim']
     pw.setBackground(bg)
 
     axis_pen   = pg.mkPen(color=bdr,      width=1)
@@ -217,10 +235,10 @@ class CalibrationQualityChart(QWidget):
         if not _PG_OK or result is None:
             return
 
-        accent   = PALETTE.get("accent",   "#00d4aa")
-        warning  = PALETTE.get("warning",  "#ffb300")
-        danger   = PALETTE.get("danger",   "#ff3b3b")
-        text_dim = PALETTE.get("textDim",  "#8888a8")
+        accent   = PALETTE['accent']
+        warning  = PALETTE['warning']
+        danger   = PALETTE['danger']
+        text_dim = PALETTE['textDim']
 
         mask = result.mask
 
@@ -387,10 +405,10 @@ class AnalysisHistogramChart(QWidget):
         threshold = float(getattr(result, "threshold_k", 1.0))
         verdict   = getattr(result, "verdict", "PASS")
 
-        accent   = PALETTE.get("accent",  "#00d4aa")
-        warning  = PALETTE.get("warning", "#ffb300")
-        danger   = PALETTE.get("danger",  "#ff3b3b")
-        text_dim = PALETTE.get("textDim", "#8888a8")
+        accent   = PALETTE['accent']
+        warning  = PALETTE['warning']
+        danger   = PALETTE['danger']
+        text_dim = PALETTE['textDim']
 
         finite = dt_map[np.isfinite(dt_map)]
         if finite.size == 0:
@@ -484,16 +502,16 @@ class TransientTraceChart(QWidget):
         lay.addWidget(self._plot)
 
         # Persistent plot items (updated in update_data)
-        accent = PALETTE.get("accent", "#00d4aa")
+        accent = PALETTE['accent']
         self._curve_item   = self._plot.plot([], [],
                                              pen=pg.mkPen(color=accent, width=2))
         self._cursor_line  = pg.InfiniteLine(
             pos=0, angle=90,
-            pen=pg.mkPen(color="#ffaa3c", width=1, style=Qt.DashLine),
+            pen=pg.mkPen(color=PALETTE['warning'], width=1, style=Qt.DashLine),
             movable=False)
         self._zero_line    = pg.InfiniteLine(
             pos=0, angle=0,
-            pen=pg.mkPen(color=PALETTE.get("border", "#3a3a3a"), width=1,
+            pen=pg.mkPen(color=PALETTE['border'], width=1,
                          style=Qt.DotLine),
             movable=False)
         self._plot.addItem(self._cursor_line)
@@ -533,10 +551,12 @@ class TransientTraceChart(QWidget):
         if not _PG_OK:
             return
         _configure_plot(self._plot)
-        accent = PALETTE.get("accent", "#00d4aa")
+        accent = PALETTE['accent']
         self._curve_item.setPen(pg.mkPen(color=accent, width=2))
+        self._cursor_line.setPen(
+            pg.mkPen(color=PALETTE['warning'], width=1, style=Qt.DashLine))
         self._zero_line.setPen(
-            pg.mkPen(color=PALETTE.get("border", "#3a3a3a"), width=1,
+            pg.mkPen(color=PALETTE['border'], width=1,
                      style=Qt.DotLine))
 
 
@@ -595,10 +615,10 @@ class SessionTrendChart(QWidget):
         if not _PG_OK or not metas:
             return
 
-        accent  = PALETTE.get("accent",  "#00d4aa")
-        warning = PALETTE.get("warning", "#ffb300")
-        danger  = PALETTE.get("danger",  "#ff3b3b")
-        dim     = PALETTE.get("textDim", "#8888a8")
+        accent  = PALETTE['accent']
+        warning = PALETTE['warning']
+        danger  = PALETTE['danger']
+        dim     = PALETTE['textDim']
 
         def _color(meta) -> str:
             s = getattr(meta, "status", "")
@@ -683,7 +703,7 @@ class dTSparklineWidget(QWidget):
             lbl = QLabel("pyqtgraph not installed")
             lbl.setAlignment(Qt.AlignCenter)
             lbl.setStyleSheet(
-                f"color:{PALETTE.get('textDim','#888')};"
+                f"color:{PALETTE['textDim']};"
                 f"font-size:{FONT.get('caption',9)}pt;")
             lay.addWidget(lbl)
             return
@@ -700,12 +720,12 @@ class dTSparklineWidget(QWidget):
         self._plot.getAxis("bottom").setStyle(showValues=False)
         lay.addWidget(self._plot)
 
-        accent = PALETTE.get("accent", "#00d4aa")
+        accent = PALETTE['accent']
         self._line  = self._plot.plot([], [],
                                       pen=pg.mkPen(color=accent, width=1))
         self._zero  = pg.InfiniteLine(
             pos=0, angle=0,
-            pen=pg.mkPen(color=PALETTE.get("border", "#3a3a3a"),
+            pen=pg.mkPen(color=PALETTE['border'],
                          width=1, style=Qt.DotLine))
         self._plot.addItem(self._zero)
 
@@ -745,9 +765,9 @@ class dTSparklineWidget(QWidget):
             return
         _configure_plot(self._plot)
         self._line.setPen(
-            pg.mkPen(color=PALETTE.get("accent", "#00d4aa"), width=1))
+            pg.mkPen(color=PALETTE['accent'], width=1))
         self._zero.setPen(
-            pg.mkPen(color=PALETTE.get("border", "#3a3a3a"),
+            pg.mkPen(color=PALETTE['border'],
                      width=1, style=Qt.DotLine))
 
 

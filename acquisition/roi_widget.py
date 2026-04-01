@@ -29,7 +29,7 @@ from PyQt5.QtGui     import (QImage, QPixmap, QPainter, QPen, QColor,
 from .roi import Roi
 from ui.icons        import set_btn_icon
 from ui.font_utils   import mono_font
-from ui.theme import FONT, scaled_qss, MONO_FONT
+from ui.theme import FONT, PALETTE, scaled_qss, MONO_FONT
 
 
 class RoiCanvas(QWidget):
@@ -181,7 +181,7 @@ class RoiCanvas(QWidget):
         p.setRenderHint(QPainter.Antialiasing, False)
 
         # Background
-        p.fillRect(self.rect(), QColor(13, 13, 13))
+        p.fillRect(self.rect(), QColor(PALETTE['canvas']))
 
         # Image
         if self._pixmap:
@@ -211,12 +211,12 @@ class RoiCanvas(QWidget):
 
                 # ROI border
                 p.setBrush(Qt.NoBrush)
-                p.setPen(QPen(QColor(0, 212, 170), 2))
+                p.setPen(QPen(QColor(PALETTE['accent']), 2))
                 p.drawRect(roi_rect)
 
                 # Corner handles
                 hs = 6
-                p.setBrush(QBrush(QColor(0, 212, 170)))
+                p.setBrush(QBrush(QColor(PALETTE['accent'])))
                 for cx, cy in [(roi_rect.x(), roi_rect.y()),
                                (roi_rect.right(), roi_rect.y()),
                                (roi_rect.x(), roi_rect.bottom()),
@@ -236,20 +236,24 @@ class RoiCanvas(QWidget):
                 self._drag_end.y() - self._drag_start.y())
 
             p.setBrush(Qt.NoBrush)
-            p.setPen(QPen(QColor(255, 255, 0), 1, Qt.DashLine))
+            p.setPen(QPen(QColor(PALETTE['warning']), 1, Qt.DashLine))
             p.drawRect(drag_rect)
 
             # Dimension label
             if not drag_roi.is_empty:
                 label = f"{drag_roi.w} × {drag_roi.h} px"
                 p.setFont(mono_font(8))
-                p.setPen(QPen(QColor(255, 255, 0)))
+                p.setPen(QPen(QColor(PALETTE['warning'])))
                 p.drawText(
                     min(self._drag_start.x(), self._drag_end.x()),
                     min(self._drag_start.y(), self._drag_end.y()) - 4,
                     label)
 
         p.end()
+
+    def _apply_styles(self):
+        """Re-apply PALETTE-driven colours on theme switch."""
+        self.update()
 
 
 class RoiSelector(QWidget):
@@ -273,7 +277,7 @@ class RoiSelector(QWidget):
         bar = QHBoxLayout()
         self._info = QLabel("No ROI — full frame")
         self._info.setStyleSheet(
-            scaled_qss(f"font-family:{MONO_FONT}; font-size:9pt; color:#555;"))
+            scaled_qss(f"font-family:{MONO_FONT}; font-size:9pt; color:{PALETTE['textDim']};"))
         bar.addWidget(self._info)
         bar.addStretch()
 
@@ -290,6 +294,12 @@ class RoiSelector(QWidget):
 
     def set_frame(self, data: np.ndarray):
         self._canvas.set_frame(data)
+
+    def _apply_styles(self):
+        """Re-apply PALETTE-driven colours on theme switch."""
+        self._canvas._apply_styles()
+        self._info.setStyleSheet(
+            scaled_qss(f"font-family:{MONO_FONT}; font-size:9pt; color:{PALETTE['textDim']};"))
 
     def _on_roi(self, roi: Roi):
         if roi.is_empty:

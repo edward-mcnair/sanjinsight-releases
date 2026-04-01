@@ -53,7 +53,7 @@ from typing import List, Optional
 import config as _config_module
 import numpy as np
 
-from ui.theme import FONT, scaled_qss
+from ui.theme import FONT, PALETTE, scaled_qss
 
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QPlainTextEdit,
@@ -112,10 +112,13 @@ class _PySyntaxHighlighter(QSyntaxHighlighter):
 
     def __init__(self, doc):
         super().__init__(doc)
-        self._kw_fmt  = self._fmt("#569cd6", bold=True)
-        self._str_fmt = self._fmt("#ce9178")
-        self._cm_fmt  = self._fmt("#6a9955", italic=True)
-        self._nm_fmt  = self._fmt("#b5cea8")
+        self._rebuild_formats()
+
+    def _rebuild_formats(self):
+        self._kw_fmt  = self._fmt(PALETTE['syntaxKeyword'], bold=True)
+        self._str_fmt = self._fmt(PALETTE['syntaxString'])
+        self._cm_fmt  = self._fmt(PALETTE['syntaxComment'], italic=True)
+        self._nm_fmt  = self._fmt(PALETTE['syntaxNumber'])
 
     @staticmethod
     def _fmt(hex_color: str, bold=False, italic=False) -> QTextCharFormat:
@@ -172,6 +175,7 @@ class ScriptingConsoleTab(QWidget):
         self._console_enabled: bool = bool(
             dev_cfg.get("enable_script_console", False))
         self._build()
+        self._apply_styles()
 
     # ── UI ──────────────────────────────────────────────────────────
 
@@ -184,17 +188,12 @@ class ScriptingConsoleTab(QWidget):
         toolbar = QHBoxLayout()
         root.addLayout(toolbar)
 
-        title_lbl = QLabel("Python Console")
-        title_lbl.setStyleSheet(
-            f"color:#ccc; font-size:{FONT['heading']}pt; font-weight:600; font-family:{_MONO_CSS_FAMILY};")
-        toolbar.addWidget(title_lbl)
+        self._title_lbl = QLabel("Python Console")
+        toolbar.addWidget(self._title_lbl)
         toolbar.addStretch(1)
 
         self._run_btn = QPushButton("▶  Run  (Shift+Enter)")
         self._run_btn.setFixedHeight(28)
-        self._run_btn.setStyleSheet(
-            "background:#005a30; color:#fff; font-weight:600; "
-            "border-radius:3px; padding:0 10px;")
         self._run_btn.clicked.connect(self._run_script)
         toolbar.addWidget(self._run_btn)
 
@@ -218,98 +217,125 @@ class ScriptingConsoleTab(QWidget):
         root.addWidget(splitter, 1)
 
         # Editor (left)
-        editor_frame = QFrame()
-        editor_frame.setStyleSheet("border:1px solid #2a2a2a; border-radius:4px;")
-        editor_lay   = QVBoxLayout(editor_frame)
+        self._editor_frame = QFrame()
+        editor_lay = QVBoxLayout(self._editor_frame)
         editor_lay.setContentsMargins(0, 0, 0, 0)
 
-        editor_lbl = QLabel("  Script Editor")
-        editor_lbl.setStyleSheet(
-            f"color:#888; font-size:{FONT['label']}pt; padding:3px 0; "
-            "background:#161616; border-bottom:1px solid #2a2a2a;")
-        editor_lay.addWidget(editor_lbl)
+        self._editor_lbl = QLabel("  Script Editor")
+        editor_lay.addWidget(self._editor_lbl)
 
         self._editor = QPlainTextEdit()
         self._editor.setFont(self._mono_font())
-        self._editor.setStyleSheet(
-            "background:#0d0d0d; color:#d4d4d4; border:none; "
-            "selection-background-color:#264f78;")
         self._editor.setPlainText(_STARTER_SCRIPT)
         self._editor.setLineWrapMode(QPlainTextEdit.NoWrap)
         editor_lay.addWidget(self._editor)
 
         # Syntax highlighting
-        _PySyntaxHighlighter(self._editor.document())
+        self._highlighter = _PySyntaxHighlighter(self._editor.document())
 
         # Shift+Enter shortcut
         _run_sc = QShortcut(QKeySequence("Shift+Return"), self._editor)
         _run_sc.activated.connect(self._run_script)
 
-        splitter.addWidget(editor_frame)
+        splitter.addWidget(self._editor_frame)
 
         # Output (right)
-        output_frame = QFrame()
-        output_frame.setStyleSheet("border:1px solid #2a2a2a; border-radius:4px;")
-        output_lay = QVBoxLayout(output_frame)
+        self._output_frame = QFrame()
+        output_lay = QVBoxLayout(self._output_frame)
         output_lay.setContentsMargins(0, 0, 0, 0)
 
-        output_lbl = QLabel("  Output")
-        output_lbl.setStyleSheet(
-            f"color:#888; font-size:{FONT['label']}pt; padding:3px 0; "
-            "background:#161616; border-bottom:1px solid #2a2a2a;")
-        output_lay.addWidget(output_lbl)
+        self._output_lbl = QLabel("  Output")
+        output_lay.addWidget(self._output_lbl)
 
         self._output = QPlainTextEdit()
         self._output.setFont(self._mono_font())
-        self._output.setStyleSheet(
-            "background:#0d0d0d; color:#b0b0b0; border:none;")
         self._output.setReadOnly(True)
         self._output.setLineWrapMode(QPlainTextEdit.NoWrap)
         output_lay.addWidget(self._output)
 
-        splitter.addWidget(output_frame)
+        splitter.addWidget(self._output_frame)
         splitter.setSizes([500, 500])
 
         # Connect clear button now that _output exists
         self._clear_btn.clicked.connect(self._output.clear)
 
         # ─ Namespace info ─
-        ns_lbl = QLabel(
+        self._ns_lbl = QLabel(
             "Namespace: app · cam · fpga · bias · stage · tecs · pipeline · np · log")
-        ns_lbl.setStyleSheet(f"color:#555; font-size:{FONT['label']}pt; font-family:{_MONO_CSS_FAMILY};"
-                             " padding:2px 4px;")
-        root.addWidget(ns_lbl)
+        root.addWidget(self._ns_lbl)
 
         # ─ Console enabled/disabled gate ─
         if self._console_enabled:
-            warn_lbl = QLabel(
+            self._gate_lbl = QLabel(
                 "⚠  Script console enabled — executes arbitrary Python in-process."
                 "  Enable only for trusted operators.")
-            warn_lbl.setStyleSheet(
-                f"background:#4a3200; color:#ffcc55; font-size:{FONT['sublabel']}pt;"
-                " padding:4px 8px; border-radius:3px;")
-            warn_lbl.setWordWrap(True)
-            root.addWidget(warn_lbl)
+            self._gate_lbl.setWordWrap(True)
+            root.addWidget(self._gate_lbl)
         else:
-            disabled_lbl = QLabel(
+            self._gate_lbl = QLabel(
                 "🔒  Script console is disabled.  "
                 "Set  developer.enable_script_console: true  in config.yaml to enable.")
-            disabled_lbl.setStyleSheet(
-                f"background:#1a1a1a; color:#666; font-size:{FONT['sublabel']}pt;"
-                " padding:4px 8px; border-radius:3px;")
-            disabled_lbl.setWordWrap(True)
-            root.addWidget(disabled_lbl)
+            self._gate_lbl.setWordWrap(True)
+            root.addWidget(self._gate_lbl)
             self._run_btn.setEnabled(False)
-            self._run_btn.setStyleSheet(
-                "background:#222; color:#555; font-weight:600; "
-                "border-radius:3px; padding:0 10px;")
             self._editor.setReadOnly(True)
-            self._editor.setStyleSheet(
-                "background:#0a0a0a; color:#444; border:none; "
-                "selection-background-color:#264f78;")
 
         # Print banner
-        self._print_to_output(_BANNER, color="#5ec4a0")
+        self._print_to_output(_BANNER, color=PALETTE['success'])
+
+    def _apply_styles(self):
+        """Re-apply all styles from PALETTE. Called on init and theme switch."""
+        # Rebuild syntax highlighter formats
+        self._highlighter._rebuild_formats()
+        self._highlighter.rehighlight()
+
+        self._title_lbl.setStyleSheet(
+            f"color:{PALETTE['text']}; font-size:{FONT['heading']}pt; "
+            f"font-weight:600; font-family:{_MONO_CSS_FAMILY};")
+
+        self._run_btn.setStyleSheet(
+            f"background:{PALETTE['success']}; color:{PALETTE['textOnAccent']}; font-weight:600; "
+            "border-radius:3px; padding:0 10px;")
+
+        self._editor_frame.setStyleSheet(
+            f"border:1px solid {PALETTE['border']}; border-radius:4px;")
+
+        self._editor_lbl.setStyleSheet(
+            f"color:{PALETTE['textDim']}; font-size:{FONT['label']}pt; padding:3px 0; "
+            f"background:{PALETTE['surface']}; border-bottom:1px solid {PALETTE['border']};")
+
+        self._editor.setStyleSheet(
+            f"background:{PALETTE['canvas']}; color:{PALETTE['text']}; border:none; "
+            f"selection-background-color:{PALETTE['selectionBg']};")
+
+        self._output_frame.setStyleSheet(
+            f"border:1px solid {PALETTE['border']}; border-radius:4px;")
+
+        self._output_lbl.setStyleSheet(
+            f"color:{PALETTE['textDim']}; font-size:{FONT['label']}pt; padding:3px 0; "
+            f"background:{PALETTE['surface']}; border-bottom:1px solid {PALETTE['border']};")
+
+        self._output.setStyleSheet(
+            f"background:{PALETTE['canvas']}; color:{PALETTE['textSub']}; border:none;")
+
+        self._ns_lbl.setStyleSheet(
+            f"color:{PALETTE['textDim']}; font-size:{FONT['label']}pt; "
+            f"font-family:{_MONO_CSS_FAMILY}; padding:2px 4px;")
+
+        if self._console_enabled:
+            self._gate_lbl.setStyleSheet(
+                f"background:{PALETTE['warnBg']}; color:{PALETTE['warning']}; "
+                f"font-size:{FONT['sublabel']}pt; padding:4px 8px; border-radius:3px;")
+        else:
+            self._gate_lbl.setStyleSheet(
+                f"background:{PALETTE['surface']}; color:{PALETTE['textDim']}; "
+                f"font-size:{FONT['sublabel']}pt; padding:4px 8px; border-radius:3px;")
+            self._run_btn.setStyleSheet(
+                f"background:{PALETTE['surface2']}; color:{PALETTE['textDim']}; font-weight:600; "
+                "border-radius:3px; padding:0 10px;")
+            self._editor.setStyleSheet(
+                f"background:{PALETTE['bg']}; color:{PALETTE['textDim']}; border:none; "
+                f"selection-background-color:{PALETTE['selectionBg']};")
 
     @staticmethod
     def _mono_font() -> QFont:
@@ -364,7 +390,7 @@ class ScriptingConsoleTab(QWidget):
                         "developer.enable_script_console is false in config")
             self._print_to_output(
                 "Script console is disabled — enable via developer.enable_script_console "
-                "in config.yaml.", color="#f44747")
+                "in config.yaml.", color=PALETTE['danger'])
             return
 
         script = self._editor.toPlainText().strip()
@@ -379,7 +405,7 @@ class ScriptingConsoleTab(QWidget):
 
         self._print_to_output(
             f"\n{'─' * 60}\n▶  {time.strftime('%H:%M:%S')}\n{'─' * 60}",
-            color="#444"
+            color=PALETTE['textDim']
         )
 
         ns  = self._build_namespace()
@@ -390,17 +416,17 @@ class ScriptingConsoleTab(QWidget):
                 exec(compile(script, "<console>", "exec"), ns)   # noqa: S102
             output = buf.getvalue()
             if output:
-                self._print_to_output(output, color="#d4d4d4")
-            self._print_to_output("✓  Done", color="#4ec94e")
+                self._print_to_output(output, color=PALETTE['text'])
+            self._print_to_output("✓  Done", color=PALETTE['success'])
         except SystemExit:
-            self._print_to_output("SystemExit caught — ignoring.", color="#ffaa00")
+            self._print_to_output("SystemExit caught — ignoring.", color=PALETTE['warning'])
         except Exception:
             tb = traceback.format_exc()
-            self._print_to_output(tb, color="#f44747")
+            self._print_to_output(tb, color=PALETTE['danger'])
 
-    def _print_to_output(self, text: str, color: str = "#b0b0b0"):
+    def _print_to_output(self, text: str, color: str | None = None):
         fmt = QTextCharFormat()
-        fmt.setForeground(QColor(color))
+        fmt.setForeground(QColor(color or PALETTE['textSub']))
         cursor = self._output.textCursor()
         cursor.movePosition(cursor.End)
         cursor.setCharFormat(fmt)
@@ -447,9 +473,9 @@ class ScriptingConsoleTab(QWidget):
             try:
                 with open(path, "w") as f:
                     f.write(self._editor.toPlainText())
-                self._print_to_output(f"Script saved → {path}", color="#4ec94e")
+                self._print_to_output(f"Script saved → {path}", color=PALETTE['success'])
             except Exception as e:
-                self._print_to_output(f"Save error: {e}", color="#f44747")
+                self._print_to_output(f"Save error: {e}", color=PALETTE['danger'])
 
     def _load_script(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -461,6 +487,6 @@ class ScriptingConsoleTab(QWidget):
             try:
                 with open(path) as f:
                     self._editor.setPlainText(f.read())
-                self._print_to_output(f"Loaded → {path}", color="#4ec94e")
+                self._print_to_output(f"Loaded → {path}", color=PALETTE['success'])
             except Exception as e:
-                self._print_to_output(f"Load error: {e}", color="#f44747")
+                self._print_to_output(f"Load error: {e}", color=PALETTE['danger'])

@@ -81,9 +81,9 @@ def _make_group_widget(groups: list[tuple[str, list[tuple[str, str]]]]) -> QWidg
     layout.setContentsMargins(0, 0, 0, 0)
     layout.setSpacing(18)
 
-    accent   = PALETTE["accent"]
-    text_col = PALETTE["text"]
-    dim_col  = PALETTE["textDim"]
+    accent   = PALETTE['accent']
+    text_col = PALETTE['text']
+    dim_col  = PALETTE['textDim']
     cap_pt   = FONT["caption"]
     body_pt  = FONT["body"]
     lbl_pt   = FONT["label"]
@@ -107,7 +107,7 @@ def _make_group_widget(groups: list[tuple[str, list[tuple[str, str]]]]) -> QWidg
         # Divider line
         line = QFrame()
         line.setFrameShape(QFrame.HLine)
-        line.setStyleSheet(f"color:#333; background:#333; max-height:1px;")
+        line.setStyleSheet(f"color:{PALETTE['border']}; background:{PALETTE['border']}; max-height:1px;")
         grp_layout.addWidget(line)
         grp_layout.addSpacing(2)
 
@@ -122,8 +122,8 @@ def _make_group_widget(groups: list[tuple[str, list[tuple[str, str]]]]) -> QWidg
             key_lbl = QLabel(key_str)
             key_lbl.setStyleSheet(
                 f"color:{text_col}; font-size:{cap_pt}pt; font-weight:600;"
-                f" font-family:{mono_css}; background:#1e1e28;"
-                f" border:1px solid #3a3a4a; border-radius:3px;"
+                f" font-family:{mono_css}; background:{PALETTE['surface']};"
+                f" border:1px solid {PALETTE['border']}; border-radius:3px;"
                 f" padding:1px 5px;"
             )
             key_lbl.setFixedWidth(120)
@@ -182,7 +182,7 @@ class ShortcutOverlay(QDialog):
         self._card.setStyleSheet(
             "#shortcutCard {"
             "  background: rgba(15, 15, 20, 0.96);"
-            "  border: 1px solid #333;"
+            f"  border: 1px solid {PALETTE['border']};"
             "  border-radius: 10px;"
             "}"
         )
@@ -222,7 +222,7 @@ class ShortcutOverlay(QDialog):
         # Horizontal divider below title
         sep = QFrame()
         sep.setFrameShape(QFrame.HLine)
-        sep.setStyleSheet("color:#2a2a2a; background:#2a2a2a; max-height:1px;")
+        sep.setStyleSheet(f"color:{PALETTE['border']}; background:{PALETTE['border']}; max-height:1px;")
         card_layout.addWidget(sep)
 
         # Two-column grid of shortcut groups

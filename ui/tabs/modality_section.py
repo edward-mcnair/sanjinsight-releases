@@ -282,7 +282,7 @@ class ModalitySection(QWidget):
         self._ffc_status = QLabel("—")
         self._ffc_status.setStyleSheet(_mono_style())
         self._ffc_run_btn = QPushButton("Run FFC")
-        set_btn_icon(self._ffc_run_btn, "mdi.grid-off", "#ffb300")
+        set_btn_icon(self._ffc_run_btn, "mdi.grid-off", PALETTE['warning'])
         self._ffc_run_btn.setFixedWidth(100)
         self._ffc_run_btn.setFixedHeight(28)
         self._ffc_run_btn.setToolTip(
@@ -386,8 +386,8 @@ class ModalitySection(QWidget):
     def _show_placeholder(self) -> None:
         """Render a generic microscope icon as the preview placeholder."""
         self._preview_live = False
-        bg_col = QColor(PALETTE.get("bg", "#242424"))
-        dim_col = QColor(PALETTE.get("textDim", "#888888"))
+        bg_col = QColor(PALETTE['bg'])
+        dim_col = QColor(PALETTE['textDim'])
 
         canvas = QPixmap(_PREVIEW_W, _PREVIEW_H)
         canvas.fill(bg_col)
@@ -408,8 +408,8 @@ class ModalitySection(QWidget):
     def _preview_frame_qss() -> str:
         return (
             f"QLabel {{"
-            f"  background:{PALETTE.get('bg', '#242424')};"
-            f"  border:1px solid {PALETTE.get('border', '#484848')};"
+            f"  background:{PALETTE['bg']};"
+            f"  border:1px solid {PALETTE['border']};"
             f"  border-radius:6px;"
             f"}}")
 
@@ -619,7 +619,7 @@ class ModalitySection(QWidget):
             self._ffc_status.setText("Not run this session")
             self._ffc_status.setStyleSheet(
                 f"font-family:{MONO_FONT}; font-size:{FONT['readoutSm']}pt; "
-                f"color:{PALETTE.get('warning', '#ffb300')};")
+                f"color:{PALETTE['warning']};")
         else:
             age_min = (_t.time() - last) / 60.0
             if age_min < 60:
@@ -629,7 +629,7 @@ class ModalitySection(QWidget):
                 self._ffc_status.setText(f"Stale ({age_min:.0f} min ago)")
                 self._ffc_status.setStyleSheet(
                     f"font-family:{MONO_FONT}; font-size:{FONT['readoutSm']}pt; "
-                    f"color:{PALETTE.get('warning', '#ffb300')};")
+                    f"color:{PALETTE['warning']};")
 
     def _on_ffc(self) -> None:
         """Run FFC on a background thread."""
@@ -663,7 +663,7 @@ class ModalitySection(QWidget):
         lay.setSpacing(16)
 
         self._es_icon = make_icon_label(
-            IC.LINK_OFF, color=PALETTE.get("textDim", "#555555"), size=64)
+            IC.LINK_OFF, color=PALETTE['textDim'], size=64)
         self._es_icon.setAlignment(Qt.AlignCenter)
 
         self._es_title = QLabel("Camera Not Connected")
@@ -693,19 +693,19 @@ class ModalitySection(QWidget):
         return w
 
     def _apply_empty_state_styles(self) -> None:
-        dim = PALETTE.get("textDim", "#888888")
-        accent = PALETTE.get("accent", "#00d4aa")
+        dim = PALETTE['textDim']
+        accent = PALETTE['accent']
         self._es_title.setStyleSheet(
             f"font-size:{FONT['readoutSm']}pt; font-weight:bold; color:{dim};")
         self._es_tip.setStyleSheet(
             f"font-size:{FONT['label']}pt; color:{dim};")
         self._es_btn.setStyleSheet(f"""
             QPushButton {{
-                background:{PALETTE.get('surface','#2d2d2d')}; color:{accent};
+                background:{PALETTE['surface']}; color:{accent};
                 border:1px solid {accent}66; border-radius:5px;
                 font-size:{FONT['label']}pt; font-weight:600;
             }}
-            QPushButton:hover {{ background:{PALETTE.get('surface2','#3d3d3d')}; }}
+            QPushButton:hover {{ background:{PALETTE['surface2']}; }}
         """)
         icon = make_icon(IC.LINK_OFF, color=dim, size=64)
         if icon:

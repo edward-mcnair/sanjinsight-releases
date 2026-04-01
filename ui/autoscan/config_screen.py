@@ -39,8 +39,8 @@ def _group_qss() -> str:
     P = PALETTE
     return scaled_qss(f"""
         QGroupBox {{
-            color: {P.get('textDim','#999999')};
-            border: 1px solid {P.get('border','#484848')};
+            color: {P['textDim']};
+            border: 1px solid {P['border']};
             border-radius: 6px;
             margin-top: 8px;
             padding-top: 10px;
@@ -63,7 +63,7 @@ def _seg_btn(label: str) -> QPushButton:
 def _hline() -> QFrame:
     f = QFrame()
     f.setFrameShape(QFrame.HLine)
-    f.setStyleSheet(f"color:{PALETTE.get('border','#484848')};")
+    f.setStyleSheet(f"color:{PALETTE['border']};")
     return f
 
 
@@ -366,16 +366,16 @@ class ConfigScreen(QWidget):
 
     def _apply_styles(self) -> None:
         P     = PALETTE
-        text  = P.get("text",    "#ebebeb")
-        dim   = P.get("textDim", "#999999")
-        surf  = P.get("surface", "#2d2d2d")
-        surf2 = P.get("surface2","#333333")
-        bdr   = P.get("border",  "#484848")
-        acc   = P.get("accent",  "#00d4aa")
+        text  = P['text']
+        dim   = P['textDim']
+        surf  = P['surface']
+        surf2 = P['surface2']
+        bdr   = P['border']
+        acc   = P['accent']
 
         self.setStyleSheet(scaled_qss(f"""
             QScrollArea, QWidget {{
-                background: {P.get('bg','#242424')};
+                background: {P['bg']};
             }}
             QLabel {{
                 color: {text}; font-size: {FONT['body']}pt;
@@ -427,12 +427,12 @@ class ConfigScreen(QWidget):
         # CTA button
         self._start_btn.setStyleSheet(scaled_qss(f"""
             QPushButton {{
-                background: {acc}; color: #000;
+                background: {acc}; color: {P['textOnAccent']};
                 border: none; border-radius: 5px;
                 font-size: {FONT['body']}pt; font-weight: 700;
                 padding: 0 20px;
             }}
-            QPushButton:hover   {{ background: {P.get('accentHover', acc)}; }}
+            QPushButton:hover   {{ background: {P['accentHover']}; }}
             QPushButton:pressed {{ background: {acc}; }}
         """))
 
@@ -441,10 +441,10 @@ class ConfigScreen(QWidget):
     def _refresh_seg_styles(self) -> None:
         """Re-apply segmented button styles with current PALETTE."""
         P    = PALETTE
-        surf = P.get("surface2", "#333333")
-        dim  = P.get("textDim",  "#999999")
-        bdr  = P.get("border",   "#484848")
-        acc  = P.get("accent",   "#00d4aa")
+        surf = P['surface2']
+        dim  = P['textDim']
+        bdr  = P['border']
+        acc  = P['accent']
 
         base = scaled_qss(f"""
             QPushButton {{
@@ -452,7 +452,7 @@ class ConfigScreen(QWidget):
                 border: 1px solid {bdr}; padding: 4px 0;
                 font-size: {FONT['label']}pt;
             }}
-            QPushButton:checked {{ background: {acc}; color: #000; border-color: {acc}; }}
+            QPushButton:checked {{ background: {acc}; color: {P['textOnAccent']}; border-color: {acc}; }}
         """)
 
         # Goal buttons

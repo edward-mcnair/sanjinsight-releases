@@ -49,10 +49,10 @@ def _dim_style() -> str:
 def _color_for_level(level: str) -> str:
     """Return PALETTE colour for 'good', 'warn', 'bad'."""
     if level == "good":
-        return PALETTE.get("success", "#30d158")
+        return PALETTE['success']
     elif level == "warn":
-        return PALETTE.get("warning", "#ff9f0a")
-    return PALETTE.get("danger", "#ff453a")
+        return PALETTE['warning']
+    return PALETTE['danger']
 
 
 class SignalCheckSection(QWidget):
@@ -364,7 +364,7 @@ class SignalCheckSection(QWidget):
         val_lbl = widget._val
         val_lbl.setText(text)
         if level == "text":
-            color = PALETTE.get("textDim", "#888")
+            color = PALETTE['textDim']
         else:
             color = _color_for_level(level)
         val_lbl.setStyleSheet(
@@ -398,7 +398,7 @@ class SignalCheckSection(QWidget):
         lay.setSpacing(16)
 
         self._es_icon = make_icon_label(
-            IC.LINK_OFF, color=PALETTE.get("textDim", "#555555"), size=64)
+            IC.LINK_OFF, color=PALETTE['textDim'], size=64)
         self._es_icon.setAlignment(Qt.AlignCenter)
 
         self._es_title = QLabel("No Live Feed")
@@ -427,19 +427,19 @@ class SignalCheckSection(QWidget):
         return w
 
     def _apply_empty_state_styles(self) -> None:
-        dim = PALETTE.get("textDim", "#888888")
-        accent = PALETTE.get("accent", "#00d4aa")
+        dim = PALETTE['textDim']
+        accent = PALETTE['accent']
         self._es_title.setStyleSheet(
             f"font-size:{FONT['readoutSm']}pt; font-weight:bold; color:{dim};")
         self._es_tip.setStyleSheet(
             f"font-size:{FONT['label']}pt; color:{dim};")
         self._es_btn.setStyleSheet(f"""
             QPushButton {{
-                background:{PALETTE.get('surface','#2d2d2d')}; color:{accent};
+                background:{PALETTE['surface']}; color:{accent};
                 border:1px solid {accent}66; border-radius:5px;
                 font-size:{FONT['label']}pt; font-weight:600;
             }}
-            QPushButton:hover {{ background:{PALETTE.get('surface2','#3d3d3d')}; }}
+            QPushButton:hover {{ background:{PALETTE['surface2']}; }}
         """)
         icon = make_icon(IC.LINK_OFF, color=dim, size=64)
         if icon:

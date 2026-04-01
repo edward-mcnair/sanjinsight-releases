@@ -76,7 +76,7 @@ class CameraControlTab(QWidget):
             self._tabs.setTabText(tab_index, base + self._DOT)
             icon_name = self._TAB_ICONS.get(tab_index)
             if icon_name:
-                icon = make_icon(icon_name, color=PALETTE.get("error", "#ff453a"), size=14)
+                icon = make_icon(icon_name, color=PALETTE["danger"], size=14)
                 if icon:
                     self._tabs.setTabIcon(tab_index, icon)
         else:
@@ -91,9 +91,9 @@ class CameraControlTab(QWidget):
 
     def _apply_tab_icons(self) -> None:
         icons = [
-            make_icon(IC.CAMERA,    color=PALETTE.get("textDim", "#8892aa"), size=14),
-            make_icon(IC.ROI,       color=PALETTE.get("textDim", "#8892aa"), size=14),
-            make_icon(IC.AUTOFOCUS, color=PALETTE.get("textDim", "#8892aa"), size=14),
+            make_icon(IC.CAMERA,    color=PALETTE["textDim"], size=14),
+            make_icon(IC.ROI,       color=PALETTE["textDim"], size=14),
+            make_icon(IC.AUTOFOCUS, color=PALETTE["textDim"], size=14),
         ]
         self._tabs.setIconSize(QSize(14, 14))
         for i, icon in enumerate(icons):
@@ -104,17 +104,17 @@ class CameraControlTab(QWidget):
 def _inner_tab_qss() -> str:
     P = PALETTE
     return f"""
-        QTabWidget::pane {{ border:none; background:{P.get('bg','#12151f')}; }}
+        QTabWidget::pane {{ border:none; background:{P['bg']}; }}
         QTabBar::tab {{
-            background:{P.get('surface2','#20232e')}; color:{P.get('textDim','#8892aa')};
-            border:none; border-right:1px solid {P.get('border','#2e3245')};
+            background:{P['surface2']}; color:{P['textDim']};
+            border:none; border-right:1px solid {P['border']};
             padding:6px 20px; font-size:{FONT['label']}pt;
         }}
         QTabBar::tab:selected {{
-            background:{P.get('surface','#1a1d28')}; color:{P.get('text','#dde3f2')};
-            border-bottom:2px solid {P.get('accent','#00d4aa')};
+            background:{P['surface']}; color:{P['text']};
+            border-bottom:2px solid {P['accent']};
         }}
         QTabBar::tab:hover:!selected {{
-            background:{P.get('surfaceHover','#262a38')}; color:{P.get('text','#dde3f2')};
+            background:{P['surfaceHover']}; color:{P['text']};
         }}
     """

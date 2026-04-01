@@ -69,7 +69,7 @@ class RoiTab(QWidget):
             il.addWidget(self._sub(label), r, 0)
             lbl = QLabel("--")
             lbl.setStyleSheet(
-                scaled_qss(f"font-family:{MONO_FONT}; font-size:15pt; color:{PALETTE.get('accent','#00d4aa')};"))
+                scaled_qss(f"font-family:{MONO_FONT}; font-size:15pt; color:{PALETTE['accent']};"))
             il.addWidget(lbl, r, 1)
             self._roi_labels[key] = lbl
 
@@ -116,7 +116,7 @@ class RoiTab(QWidget):
         ctrl_box = QGroupBox("Acquisition")
         ctl = QVBoxLayout(ctrl_box)
         self._apply_acq_btn = QPushButton("Apply ROI to Acquisition")
-        set_btn_icon(self._apply_acq_btn, "fa5s.check", PALETTE.get("accent", "#00d4aa"))
+        set_btn_icon(self._apply_acq_btn, "fa5s.check", PALETTE['accent'])
         self._apply_acq_btn.setObjectName("primary")
         self._clear_acq_btn = QPushButton("Clear  (use full frame)")
         set_btn_icon(self._clear_acq_btn, "fa5s.times")
@@ -125,7 +125,7 @@ class RoiTab(QWidget):
         self._acq_status = QLabel("No ROI active")
         self._acq_status.setStyleSheet(
             f"font-family:{MONO_FONT}; font-size:{FONT['heading']}pt; "
-            f"color:{PALETTE.get('textSub','#6a6a6a')};")
+            f"color:{PALETTE['textSub']};")
         ctl.addWidget(self._apply_acq_btn)
         ctl.addWidget(self._clear_acq_btn)
         ctl.addWidget(self._acq_status)
@@ -136,15 +136,15 @@ class RoiTab(QWidget):
 
     def _apply_styles(self):
         """Re-apply PALETTE-driven colours on theme switch."""
-        acc = PALETTE.get("accent",  "#00d4aa")
-        sub = PALETTE.get("textSub", "#6a6a6a")
+        acc = PALETTE['accent']
+        sub = PALETTE['textSub']
         lbl_ss = scaled_qss(f"font-family:{MONO_FONT}; font-size:15pt; color:{acc};")
         for key, lbl in self._roi_labels.items():
             if key == "status" and lbl.text() not in ("--", ""):
                 # keep warning colour for "ROI defined"
                 lbl.setStyleSheet(scaled_qss(
                     f"font-family:{MONO_FONT}; font-size:15pt; "
-                    f"color:{PALETTE.get('warning','#ff9f0a')};"))
+                    f"color:{PALETTE['warning']};"))
             else:
                 lbl.setStyleSheet(lbl_ss)
         set_btn_icon(self._apply_acq_btn, "fa5s.check", acc)
@@ -180,7 +180,7 @@ class RoiTab(QWidget):
                 l.setText("--")
             self._roi_labels["status"].setText("Full frame")
             self._roi_labels["status"].setStyleSheet(
-                scaled_qss(f"font-family:{MONO_FONT}; font-size:15pt; color:#555;"))
+                scaled_qss(f"font-family:{MONO_FONT}; font-size:15pt; color:{PALETTE['textSub']};"))
         else:
             self._roi_labels["x"].setText(str(roi.x))
             self._roi_labels["y"].setText(str(roi.y))
@@ -189,7 +189,7 @@ class RoiTab(QWidget):
             self._roi_labels["area"].setText(f"{roi.area:,} px")
             self._roi_labels["status"].setText("ROI defined")
             self._roi_labels["status"].setStyleSheet(
-                scaled_qss(f"font-family:{MONO_FONT}; font-size:15pt; color:{PALETTE.get('warning','#ff9f0a')};"))
+                scaled_qss(f"font-family:{MONO_FONT}; font-size:15pt; color:{PALETTE['warning']};"))
 
     def _apply_preset(self, rx, ry, rw, rh):
         fh, fw = self._frame_hw
@@ -216,7 +216,7 @@ class RoiTab(QWidget):
         self._acq_status.setText(f"Active: {msg}")
         self._acq_status.setStyleSheet(
             f"font-family:{MONO_FONT}; font-size:{FONT['heading']}pt; "
-            f"color:{PALETTE.get('accent','#00d4aa')};")
+            f"color:{PALETTE['accent']};")
         from ui.app_signals import signals
         signals.log_message.emit(f"ROI applied to acquisition: {msg}")
 
@@ -228,6 +228,6 @@ class RoiTab(QWidget):
         self._acq_status.setText("No ROI active (full frame)")
         self._acq_status.setStyleSheet(
             f"font-family:{MONO_FONT}; font-size:{FONT['heading']}pt; "
-            f"color:{PALETTE.get('textSub','#6a6a6a')};")
+            f"color:{PALETTE['textSub']};")
         from ui.app_signals import signals
         signals.log_message.emit("ROI cleared — acquisition using full frame")

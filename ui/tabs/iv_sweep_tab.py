@@ -123,7 +123,7 @@ class IVSweepTab(QWidget):
 
         def _lbl(text):
             l = QLabel(text)
-            l.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{PALETTE.get('textDim','#8892aa')};")
+            l.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{PALETTE['textDim']};")
             return l
 
         # Mode
@@ -214,7 +214,7 @@ class IVSweepTab(QWidget):
             f"Default: {os.path.join(os.path.expanduser('~'), 'microsanj_sweeps')}"
         )
         self._save_path_lbl.setStyleSheet(
-            f"font-size:{FONT['caption']}pt; color:{PALETTE.get('textDim','#8892aa')};")
+            f"font-size:{FONT['caption']}pt; color:{PALETTE['textDim']};")
         row.addWidget(self._save_path_lbl, 1)
         browse_btn = QPushButton("Browse…")
         browse_btn.setFixedWidth(80)
@@ -269,7 +269,7 @@ class IVSweepTab(QWidget):
 
         self._status_lbl = QLabel("No bias driver connected")
         self._status_lbl.setStyleSheet(
-            f"font-size:{FONT['caption']}pt; color:{PALETTE.get('textDim','#8892aa')};")
+            f"font-size:{FONT['caption']}pt; color:{PALETTE['textDim']};")
         lay.addWidget(self._status_lbl)
 
         return bar
@@ -422,13 +422,13 @@ class IVSweepTab(QWidget):
 
     def _apply_styles(self):
         P = PALETTE
-        accent  = P.get("accent",   "#00d4aa")
-        surface = P.get("surface",  "#1a1d28")
-        surface2= P.get("surface2", "#20232e")
-        border  = P.get("border",   "#2e3245")
-        text    = P.get("text",     "#dde3f2")
-        textDim = P.get("textDim",  "#8892aa")
-        danger  = P.get("danger",   "#ff4444")
+        accent  = P["accent"]
+        surface = P["surface"]
+        surface2= P["surface2"]
+        border  = P["border"]
+        text    = P["text"]
+        textDim = P["textDim"]
+        danger  = P["danger"]
 
         self.setStyleSheet(f"""
             QGroupBox {{
@@ -471,7 +471,7 @@ class IVSweepTab(QWidget):
                 padding: 6px 18px;
                 font-size: {FONT['body']}pt;
             }}
-            QPushButton:hover {{ background: {P.get('surfaceHover','#262a38')}; }}
+            QPushButton:hover {{ background: {P['surfaceHover']}; }}
             QPushButton:pressed {{ background: {surface}; }}
             QPushButton:disabled {{ color: {textDim}; border-color: {border}; }}
             QProgressBar {{
@@ -489,15 +489,15 @@ class IVSweepTab(QWidget):
         self._run_btn.setStyleSheet(f"""
             QPushButton {{
                 background: {accent};
-                color: #000;
+                color: {P['textOnAccent']};
                 border: none;
                 border-radius: 6px;
                 padding: 6px 18px;
                 font-size: {FONT['body']}pt;
                 font-weight: 600;
             }}
-            QPushButton:hover {{ background: #00bfa5; }}
-            QPushButton:pressed {{ background: #00a896; }}
+            QPushButton:hover {{ background: {P['accentHover']}; }}
+            QPushButton:pressed {{ background: {P['accentDim']}; }}
             QPushButton:disabled {{ background: {surface2}; color: {textDim}; }}
         """)
         # Stop button — danger

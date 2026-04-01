@@ -260,7 +260,7 @@ class HealthTab(QWidget):
         ax = self._axes[0]
         ax.cla()
         ax.set_ylabel("TEC Temp (°C)", fontsize=8)
-        colors = ["#4e9af1", "#f87171", "#34d399", "#fbbf24"]
+        colors = [PALETTE['info'], PALETTE['danger'], PALETTE['success'], PALETTE['warning']]
         for i, (idx, buf) in enumerate(sorted(self._tec_bufs.items())):
             ts, vals = buf.arrays()
             if len(ts) > 1:
@@ -279,9 +279,9 @@ class HealthTab(QWidget):
         ax.set_ylabel("FPGA Duty (%)", fontsize=8)
         ts, vals = self._fpga_buf.arrays()
         if len(ts) > 1:
-            ax.plot(ts / 60.0, vals, color="#a78bfa", linewidth=1.2)
+            ax.plot(ts / 60.0, vals, color=PALETTE['systemPurple'], linewidth=1.2)
             # Red danger zone
-            ax.axhline(80.0, color="#f87171", linewidth=0.8, linestyle="--",
+            ax.axhline(80.0, color=PALETTE['danger'], linewidth=0.8, linestyle="--",
                        label="80 % limit")
             ax.legend(fontsize=7, loc="upper right")
         ax.set_ylim(0, 105)
@@ -295,7 +295,7 @@ class HealthTab(QWidget):
         ax.set_xlabel("Time (min)", fontsize=8)
         ts, vals = self._fps_buf.arrays()
         if len(ts) > 1:
-            ax.plot(ts / 60.0, vals, color="#34d399", linewidth=1.2)
+            ax.plot(ts / 60.0, vals, color=PALETTE['success'], linewidth=1.2)
         ax.set_ylim(bottom=0)
         ax.tick_params(labelsize=8)
         ax.set_xlim(left=0)
@@ -318,8 +318,8 @@ class HealthTab(QWidget):
         try:
             from ui.theme import PALETTE, active_theme
             is_dark = active_theme() == "dark"
-            bg = PALETTE.get("base", "#1e1e1e") if is_dark else "#ffffff"
-            fg = PALETTE.get("text", "#e8e8e8") if is_dark else "#1a1a1a"
+            bg = PALETTE['bg']
+            fg = PALETTE['text'] if is_dark else PALETTE['text']
             if self._fig is not None:
                 self._fig.patch.set_facecolor(bg)
                 for ax in self._axes:

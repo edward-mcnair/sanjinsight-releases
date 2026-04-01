@@ -120,25 +120,25 @@ def _assemble_email(
 
 def _btn_primary_style() -> str:
     b    = FONT["body"]
-    cta  = PALETTE.get("cta",      "#0a84ff")
-    ctah = PALETTE.get("ctaHover", "#409cff")
-    ctad = PALETTE.get("ctaDim",   "#0a84ff26")
+    cta  = PALETTE['cta']
+    ctah = PALETTE['ctaHover']
+    ctad = PALETTE['ctaDim']
     return (
-        f"QPushButton {{ background:{cta}; color:#fff; border:none; border-radius:4px; "
+        f"QPushButton {{ background:{cta}; color:{PALETTE['textOnAccent']}; border:none; border-radius:4px; "
         f"padding:5px 16px; font-size:{b}pt; font-weight:600; }}"
         f"QPushButton:hover   {{ background:{ctah}; }}"
         f"QPushButton:pressed {{ background:{cta}; }}"
-        f"QPushButton:disabled {{ background:{ctad}; color:#ffffff66; }}"
+        f"QPushButton:disabled {{ background:{ctad}; color:{PALETTE['textOnAccent']}66; }}"
     )
 
 
 def _btn_secondary_style() -> str:
     b  = FONT["body"]
-    s  = PALETTE.get("surface3",     "#333333")
-    sh = PALETTE.get("surfaceHover", "#404040")
-    d  = PALETTE.get("border",       "#484848")
-    t  = PALETTE.get("textDim",      "#999999")
-    tn = PALETTE.get("text",         "#ebebeb")
+    s  = PALETTE['surface3']
+    sh = PALETTE['surfaceHover']
+    d  = PALETTE['border']
+    t  = PALETTE['textDim']
+    tn = PALETTE['text']
     return (
         f"QPushButton {{ background:{s}; color:{t}; border:1px solid {d}; "
         f"border-radius:4px; padding:5px 16px; font-size:{b}pt; }}"
@@ -201,7 +201,7 @@ class SupportDialog(QDialog):
             "Describe your problem below. Your system information and recent log are "
             "included automatically. Click <b>Open in Mail Client</b> to send the email, "
             f"or <b>Copy to Clipboard</b> and paste it manually.<br>"
-            f"<span style='color:{PALETTE['accent']};'>{SUPPORT_EMAIL}</span>"
+            f"<span style=f'color:{PALETTE['accent']};'>{SUPPORT_EMAIL}</span>"
         )
         intro.setWordWrap(True)
         intro.setStyleSheet(

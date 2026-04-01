@@ -284,7 +284,7 @@ def hline():
     f = QFrame()
     f.setFrameShape(QFrame.HLine)
     from ui.theme import PALETTE
-    f.setStyleSheet(f"color: {PALETTE.get('border', '#2a2a2a')};")
+    f.setStyleSheet(f"color: {PALETTE['border']};")
     return f
 
 
@@ -653,6 +653,9 @@ class MainWindow(QMainWindow):
         # Wire recipe RUN signal → apply recipe to hardware
         self._recipe_tab.recipe_run.connect(self._apply_recipe)
 
+        # Wire Library tab "Apply" → propagate profile to header + hardware
+        self._library_tab.profile_applied.connect(self._on_profile_applied)
+
         # Wire header Profile button → save / load / manage
         from acquisition.recipe_tab import RecipeStore
         self._recipe_store = RecipeStore()
@@ -864,11 +867,12 @@ class MainWindow(QMainWindow):
         self._ai_btn = self._header.add_ai_button(self._toggle_ai_panel)
         # Restore AI enabled state from preferences
         import config as _cfg_ai
-        if _cfg_ai.get_pref("ai.enabled", False):
-            model_path = _cfg_ai.get_pref("ai.model_path", "")
-            if model_path:
-                n_gpu = _cfg_ai.get_pref("ai.n_gpu_layers", 0)
-                self._ai_service.enable(model_path, n_gpu)
+        # AI model loading is deferred to _on_startup_done() (~10 s after
+        # first show) so that the heavy Metal/GPU init in llama-cpp doesn't
+        # starve the main thread during widget construction.
+        self._deferred_ai_enabled = _cfg_ai.get_pref("ai.enabled", False)
+        self._deferred_ai_model_path = _cfg_ai.get_pref("ai.model_path", "")
+        self._deferred_ai_n_gpu = _cfg_ai.get_pref("ai.n_gpu_layers", 0)
 
         # Help menu
         self._build_menu_bar()
@@ -1070,12 +1074,12 @@ class MainWindow(QMainWindow):
         """Apply PALETTE-aware colours to the native menu bar and drop-down menus."""
         from ui.theme import PALETTE
         mb = getattr(self, "_menu_bar", self.menuBar())
-        bg   = PALETTE.get("bg",      "#111111")
-        surf = PALETTE.get("surface", "#1e1e1e")
-        txt  = PALETTE.get("text",    "#dddddd")
-        sub  = PALETTE.get("textSub", "#888888")
-        bdr  = PALETTE.get("border",  "#333333")
-        sel  = PALETTE.get("accent",  "#00d4aa")
+        bg   = PALETTE['bg']
+        surf = PALETTE['surface']
+        txt  = PALETTE['text']
+        sub  = PALETTE['textSub']
+        bdr  = PALETTE['border']
+        sel  = PALETTE['accent']
         mb.setStyleSheet(
             f"QMenuBar {{ background:{bg}; color:{sub}; font-size:{_style_pt(12)}; }}"
             f"QMenuBar::item:selected {{ background:{surf}; color:{txt}; }}"
@@ -1083,16 +1087,40 @@ class MainWindow(QMainWindow):
             f"QMenu::item:selected {{ background:{sel}22; color:{txt}; }}"
         )
 
+    # ── Action-button restyling ───────────────────────────────────────
+    # Widget-level setStyleSheet("background:…") on parent containers
+    # (toolbars, panels) cascades to child QPushButtons and overrides
+    # the app-level QPushButton#primary / #danger rules.  Qt5 has no
+    # reliable !important for app-level stylesheets, so we must apply
+    # widget-level QSS directly on every named action button.  This is
+    # called once after first show and again on every theme switch.
+
+    def _restyle_action_buttons(self) -> None:
+        from ui.theme import (btn_primary_qss, btn_danger_qss,
+                              btn_cold_qss, btn_hot_qss)
+        _qss = {
+            "primary": btn_primary_qss(),
+            "danger":  btn_danger_qss(),
+            "cold_btn": btn_cold_qss(),
+            "hot_btn":  btn_hot_qss(),
+        }
+        for btn in self.findChildren(QPushButton):
+            qss = _qss.get(btn.objectName())
+            if qss:
+                btn.setStyleSheet(qss)
+
     def _swap_visual_theme(self, effective: str) -> None:
         """Core visual swap — applies 'dark' or 'light' with no flicker.
 
         Does NOT touch pref storage or the auto-polling timer.
         """
         from ui.theme import set_theme, build_qt_palette, build_style as _bs
+        from ui.charts import refresh_pyqtgraph_globals
         app = QApplication.instance()
         self.setUpdatesEnabled(False)
         try:
             set_theme(effective)
+            refresh_pyqtgraph_globals()
             app.setStyleSheet(_bs(effective))
             app.setPalette(build_qt_palette(effective))
             style = app.style()
@@ -1102,6 +1130,7 @@ class MainWindow(QMainWindow):
                 if hasattr(w, "_apply_styles"):
                     w._apply_styles()
                 w.update()
+            self._restyle_action_buttons()
             self._restyle_menu_bar()
         finally:
             self.setUpdatesEnabled(True)
@@ -2350,7 +2379,7 @@ class MainWindow(QMainWindow):
         """Apply update notification to all UI elements (runs on UI thread)."""
         self._update_badge.show_update(info)
         self._settings_tab.set_update_status(
-            f"v{info.version} available", color="#f5a623")
+            f"v{info.version} available", color=PALETTE['warning'])
 
     def _show_update_dialog(self, info):
         from ui.update_dialog import UpdateDialog
@@ -2368,8 +2397,8 @@ class MainWindow(QMainWindow):
         def _check():
             checker = UpdateChecker(
                 on_update=self._on_update_available,
-                on_no_update=lambda: _post_result("✓ You are up to date", "#00d4aa"),
-                on_error=lambda e: _post_result(f"Could not check: {e}", "#ff4444"),
+                on_no_update=lambda: _post_result("✓ You are up to date", PALETTE['accent']),
+                on_error=lambda e: _post_result(f"Could not check: {e}", PALETTE['danger']),
                 include_prerelease=include_pre,
             )
             checker.check_sync()
@@ -2626,6 +2655,12 @@ class MainWindow(QMainWindow):
 
         # 1. Update header indicator
         self._header.set_profile(profile)
+
+        # 1b. Sync the modality section's profile picker (no re-emit)
+        try:
+            self._modality_section._profile_picker.set_profile(profile)
+        except Exception as _e:
+            log.debug("Profile apply — modality picker sync: %s", _e)
 
         # 2. Push camera settings
         try:
@@ -3979,6 +4014,9 @@ class MainWindow(QMainWindow):
             # Evaluate device readiness at startup so the safe-mode banner
             # appears immediately if hardware is not connected.
             self._update_safe_mode()
+            # Force widget-level QSS on #primary/#danger buttons so parent
+            # container backgrounds don't cascade over them.
+            QTimer.singleShot(0, self._restyle_action_buttons)
             # Allow enough time for the hardware init sequence to finish before
             # surfacing device-connection toasts.  10 s covers the slowest real
             # hardware (FPGA firmware load) on both macOS demo and Windows.
@@ -3987,6 +4025,15 @@ class MainWindow(QMainWindow):
     def _on_startup_done(self):
         """Mark the startup window as complete; enable hotplug toasts."""
         self._startup_done = True
+        # Deferred AI model load — kicked off here so the Metal/GPU init
+        # in llama-cpp doesn't starve the main thread during widget
+        # construction (it was blocking _build_ui for ~50 s).
+        if getattr(self, "_deferred_ai_enabled", False):
+            model_path = getattr(self, "_deferred_ai_model_path", "")
+            if model_path:
+                n_gpu = getattr(self, "_deferred_ai_n_gpu", 0)
+                log.info("Starting deferred AI model load: %s", model_path)
+                self._ai_service.enable(model_path, n_gpu)
         # Ensure tab empty-state placeholders reflect actual hardware.
         # In demo mode all tabs are already shown; in normal mode this
         # hides controls for unconnected devices (stage, TEC, etc.).

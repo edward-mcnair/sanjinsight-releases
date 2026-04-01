@@ -89,7 +89,7 @@ class _LiveImageView(QLabel):
             ry = oy + int(y0f * draw_h)
             rw = int((x1f - x0f) * draw_w)
             rh = int((y1f - y0f) * draw_h)
-            pen = QPen(QColor("#ffaa44"), 2, Qt.DashLine)
+            pen = QPen(QColor(PALETTE['warning']), 2, Qt.DashLine)
             p.setPen(pen)
             p.setBrush(Qt.NoBrush)
             p.drawRect(rx, ry, rw, rh)
@@ -110,7 +110,7 @@ class _LiveImageView(QLabel):
             p.setBrush(QBrush(col_dim))
             p.setPen(QPen(col, 2))
             p.drawEllipse(cx - r, cy - r, r * 2, r * 2)
-            p.setPen(QPen(QColor("#ffffff")))
+            p.setPen(QPen(QColor(PALETTE['text'])))
             p.drawText(cx - r, cy - r, r * 2, r * 2, Qt.AlignCenter, label)
 
         p.end()
@@ -158,20 +158,20 @@ class _QualityPill(QWidget):
         self._val.setText(value_str)
         self._bar.setValue(int(fraction * 100))
         icons  = {"good": "✓", "ok": "✓", "warn": "⚠", "bad": "✗"}
-        colors = {"good": "#00d4aa", "ok": "#00d4aa", "warn": "#ffaa44", "bad": "#ff4466"}
-        col    = colors.get(status, PALETTE.get("textDim", "#999999"))
+        colors = {"good": PALETTE['accent'], "ok": PALETTE['accent'], "warn": PALETTE['warning'], "bad": PALETTE['danger']}
+        col    = colors.get(status, PALETTE['textDim'])
         self._icon.setText(icons.get(status, ""))
         self._icon.setStyleSheet(f"color:{col}; font-size:{FONT['label']}pt;")
         self._bar.setStyleSheet(f"""
-            QProgressBar {{ background: {PALETTE.get('surface2','#333333')};
+            QProgressBar {{ background: {PALETTE['surface2']};
                             border-radius: 3px; }}
             QProgressBar::chunk {{ background: {col}; border-radius: 3px; }}
         """)
 
     def _apply_styles(self) -> None:
         P   = PALETTE
-        txt = P.get("text",    "#ebebeb")
-        dim = P.get("textDim", "#999999")
+        txt = P['text']
+        dim = P['textDim']
         self._lbl.setStyleSheet(f"color:{dim}; font-size:{FONT['label']}pt;")
         self._val.setStyleSheet(f"color:{txt}; font-size:{FONT['label']}pt;")
 
@@ -396,7 +396,7 @@ class PreviewScreen(QWidget):
             # Confidence from average hotspot confidence
             avg_conf = sum(h.confidence for h in ar.hotspots) / n * 100
             conf_level = "High" if avg_conf >= 85 else "Medium" if avg_conf >= 65 else "Low"
-            conf_col   = "#00d4aa" if avg_conf >= 85 else "#ffaa44" if avg_conf >= 65 else "#ff4466"
+            conf_col   = PALETTE['accent'] if avg_conf >= 85 else PALETTE['warning'] if avg_conf >= 65 else PALETTE['danger']
             self._count_lbl.setText(f"{n} hotspot{'s' if n != 1 else ''} detected")
             conf_txt = f"Confidence: <span style='color:{conf_col};'>{conf_level}</span>"
 
@@ -427,9 +427,9 @@ class PreviewScreen(QWidget):
 
         # Hotspot overlay on image
         if n > 0 and ar.hotspots:
-            danger  = PALETTE.get("danger",  "#ff4466")
-            warning = PALETTE.get("warning", "#ffaa44")
-            info    = PALETTE.get("info",    "#5b8ff9")
+            danger  = PALETTE['danger']
+            warning = PALETTE['warning']
+            info    = PALETTE['info']
             h_data = []
             h = ar.hotspots[0]
             drr = getattr(self._analysis_result, "delta_r_over_r", None)
@@ -478,21 +478,21 @@ class PreviewScreen(QWidget):
     def _hline() -> QFrame:
         f = QFrame()
         f.setFrameShape(QFrame.HLine)
-        f.setStyleSheet(f"color:{PALETTE.get('border','#484848')};")
+        f.setStyleSheet(f"color:{PALETTE['border']};")
         return f
 
     # ── Theme ─────────────────────────────────────────────────────────
 
     def _apply_styles(self) -> None:
         P    = PALETTE
-        text = P.get("text",    "#ebebeb")
-        dim  = P.get("textDim", "#999999")
-        surf = P.get("surface", "#2d2d2d")
-        bdr  = P.get("border",  "#484848")
-        acc  = P.get("accent",  "#00d4aa")
+        text = P['text']
+        dim  = P['textDim']
+        surf = P['surface']
+        bdr  = P['border']
+        acc  = P['accent']
 
         self.setStyleSheet(scaled_qss(f"""
-            QWidget {{ background: {P.get('bg','#242424')}; }}
+            QWidget {{ background: {P['bg']}; }}
             QLabel {{ color: {text}; font-size: {FONT['body']}pt; background: transparent; }}
             QLabel#sectionHeader {{
                 color: {dim}; font-size: {FONT['label']}pt; font-weight: 600;
@@ -532,16 +532,16 @@ class PreviewScreen(QWidget):
                 border:1px solid {bdr}; border-radius:4px;
                 font-size:{FONT['body']}pt; padding:0 14px;
             }}
-            QPushButton:hover {{ background:{P.get('surfaceHover','#404040')}; color:{text}; }}
+            QPushButton:hover {{ background:{P['surfaceHover']}; color:{text}; }}
         """))
         self._scan_btn.setStyleSheet(scaled_qss(f"""
             QPushButton {{
-                background:{acc}; color:#000;
+                background:{acc}; color:{P['textOnAccent']};
                 border:none; border-radius:4px;
                 font-size:{FONT['body']}pt; font-weight:700; padding:0 14px;
             }}
-            QPushButton:disabled {{ background:{P.get('surface2','#333333')}; color:{dim}; }}
-            QPushButton:hover {{ background:{P.get('accentHover',acc)}; }}
+            QPushButton:disabled {{ background:{P['surface2']}; color:{dim}; }}
+            QPushButton:hover {{ background:{P['accentHover']}; }}
         """))
 
         for pill in (self._snr_pill, self._sat_pill, self._drift_pill):

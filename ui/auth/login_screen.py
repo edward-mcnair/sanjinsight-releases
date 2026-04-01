@@ -52,11 +52,8 @@ from ui.theme import (
 
 log = logging.getLogger(__name__)
 
-_BG      = "#0b0e1a"
-_CARD_BG = "#12172a"
-_BORDER  = "#2a3249"
-_TEXT    = "#e0e0e0"
-_DIM     = "#777777"
+
+# Module-level constants removed — use PALETTE directly.
 
 
 class LoginScreen(QWidget):
@@ -81,7 +78,6 @@ class LoginScreen(QWidget):
 
         self.setWindowTitle("SanjINSIGHT — Log In")
         self.setMinimumSize(480, 400)
-        self.setStyleSheet(f"background:{_BG};")
 
         # ── Centre card ────────────────────────────────────────────────────
         outer = QVBoxLayout(self)
@@ -91,47 +87,34 @@ class LoginScreen(QWidget):
         card_row = QHBoxLayout()
         card_row.addStretch(1)
 
-        card = QFrame()
-        card.setFixedWidth(400)
-        card.setStyleSheet(
-            f"QFrame {{ background:{_CARD_BG}; border:1px solid {_BORDER}; "
-            f"border-radius:12px; }}")
-        card_lay = QVBoxLayout(card)
+        self._card = QFrame()
+        self._card.setFixedWidth(400)
+        card_lay = QVBoxLayout(self._card)
         card_lay.setContentsMargins(40, 40, 40, 40)
         card_lay.setSpacing(14)
 
         # ── Logo / wordmark ────────────────────────────────────────────────
-        logo = QLabel("SanjINSIGHT")
-        logo.setAlignment(Qt.AlignCenter)
-        logo.setStyleSheet(
-            "font-size:22pt; font-weight:800; color:#ffffff; "
-            "background:transparent; border:none;")
-        card_lay.addWidget(logo)
+        self._logo = QLabel("SanjINSIGHT")
+        self._logo.setAlignment(Qt.AlignCenter)
+        card_lay.addWidget(self._logo)
 
-        tagline = QLabel("Thermoreflectance Imaging Platform")
-        tagline.setAlignment(Qt.AlignCenter)
-        tagline.setStyleSheet(
-            f"font-size:{FONT.get('sublabel', 9)}pt; color:#555555; "
-            "background:transparent; border:none;")
-        card_lay.addWidget(tagline)
+        self._tagline = QLabel("Thermoreflectance Imaging Platform")
+        self._tagline.setAlignment(Qt.AlignCenter)
+        card_lay.addWidget(self._tagline)
 
         card_lay.addSpacing(8)
 
-        sep = QFrame()
-        sep.setFrameShape(QFrame.HLine)
-        sep.setStyleSheet(f"color:{_BORDER}; border:none; border-top:1px solid {_BORDER};")
-        card_lay.addWidget(sep)
+        self._sep = QFrame()
+        self._sep.setFrameShape(QFrame.HLine)
+        card_lay.addWidget(self._sep)
 
         card_lay.addSpacing(6)
 
         input_ss = wizard_input_qss()
 
         # ── Username ───────────────────────────────────────────────────────
-        user_lbl = QLabel("Username")
-        user_lbl.setStyleSheet(
-            f"font-size:{FONT.get('label', 10)}pt; color:{_DIM}; "
-            "background:transparent; border:none;")
-        card_lay.addWidget(user_lbl)
+        self._user_lbl = QLabel("Username")
+        card_lay.addWidget(self._user_lbl)
 
         self._user_edit = QLineEdit()
         self._user_edit.setPlaceholderText("Enter your username")
@@ -140,11 +123,8 @@ class LoginScreen(QWidget):
         card_lay.addWidget(self._user_edit)
 
         # ── Password ───────────────────────────────────────────────────────
-        pw_lbl = QLabel("Password")
-        pw_lbl.setStyleSheet(
-            f"font-size:{FONT.get('label', 10)}pt; color:{_DIM}; "
-            "background:transparent; border:none;")
-        card_lay.addWidget(pw_lbl)
+        self._pw_lbl = QLabel("Password")
+        card_lay.addWidget(self._pw_lbl)
 
         self._pw_edit = QLineEdit()
         self._pw_edit.setEchoMode(QLineEdit.Password)
@@ -157,10 +137,6 @@ class LoginScreen(QWidget):
         self._msg_lbl = QLabel("")
         self._msg_lbl.setAlignment(Qt.AlignCenter)
         self._msg_lbl.setWordWrap(True)
-        self._msg_lbl.setStyleSheet(
-            f"color:{PALETTE.get('danger', '#ff4466')}; "
-            f"font-size:{FONT.get('sublabel', 9)}pt; "
-            "background:transparent; border:none;")
         self._msg_lbl.setFixedHeight(32)
         card_lay.addWidget(self._msg_lbl)
 
@@ -170,7 +146,7 @@ class LoginScreen(QWidget):
         self._login_btn.setStyleSheet(btn_wizard_primary_qss())
         card_lay.addWidget(self._login_btn)
 
-        card_row.addWidget(card)
+        card_row.addWidget(self._card)
         card_row.addStretch(1)
         outer.addLayout(card_row)
         outer.addStretch(1)
@@ -181,19 +157,19 @@ class LoginScreen(QWidget):
             ver_txt = f"v{_v.VERSION}"
         except Exception:
             ver_txt = ""
+        self._ver_lbl = None
         if ver_txt:
-            ver_lbl = QLabel(ver_txt)
-            ver_lbl.setAlignment(Qt.AlignCenter)
-            ver_lbl.setStyleSheet(
-                f"font-size:{FONT.get('caption', 8)}pt; color:#333333; "
-                "background:transparent;")
-            outer.addWidget(ver_lbl)
+            self._ver_lbl = QLabel(ver_txt)
+            self._ver_lbl.setAlignment(Qt.AlignCenter)
+            outer.addWidget(self._ver_lbl)
             outer.addSpacing(8)
 
         # ── Wire signals ───────────────────────────────────────────────────
         self._login_btn.clicked.connect(self._do_login)
         self._user_edit.returnPressed.connect(self._do_login)
         self._pw_edit.returnPressed.connect(self._do_login)
+
+        self._apply_styles()
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -202,12 +178,33 @@ class LoginScreen(QWidget):
         self._user_edit.setFocus()
 
     def _apply_styles(self) -> None:
-        """No-op by design.
-
-        LoginScreen uses a fixed dark-card aesthetic regardless of the app
-        theme (consistent with AdminSetupWizard and OperatorShell).  It is
-        shown before MainWindow exists, so the theme-swap loop never reaches it.
-        """
+        """Re-apply PALETTE-driven styles."""
+        P = PALETTE
+        self.setStyleSheet(f"background:{P['bg']};")
+        self._card.setStyleSheet(
+            f"QFrame {{ background:{P['surface']}; border:1px solid {P['border']}; "
+            f"border-radius:12px; }}")
+        self._logo.setStyleSheet(
+            f"font-size:22pt; font-weight:800; color:{P['text']}; "
+            "background:transparent; border:none;")
+        self._tagline.setStyleSheet(
+            f"font-size:{FONT.get('sublabel', 9)}pt; color:{P['textSub']}; "
+            "background:transparent; border:none;")
+        self._sep.setStyleSheet(
+            f"color:{P['border']}; border:none; border-top:1px solid {P['border']};")
+        lbl_ss = (
+            f"font-size:{FONT.get('label', 10)}pt; color:{P['textDim']}; "
+            "background:transparent; border:none;")
+        self._user_lbl.setStyleSheet(lbl_ss)
+        self._pw_lbl.setStyleSheet(lbl_ss)
+        self._msg_lbl.setStyleSheet(
+            f"color:{P['danger']}; "
+            f"font-size:{FONT.get('sublabel', 9)}pt; "
+            "background:transparent; border:none;")
+        if self._ver_lbl is not None:
+            self._ver_lbl.setStyleSheet(
+                f"font-size:{FONT.get('caption', 8)}pt; color:{P['textSub']}; "
+                "background:transparent;")
 
     # ── Login flow ─────────────────────────────────────────────────────────────
 
@@ -251,7 +248,7 @@ class LoginScreen(QWidget):
 
     def _set_error(self, msg: str) -> None:
         self._msg_lbl.setStyleSheet(
-            f"color:{PALETTE.get('danger', '#ff4466')}; "
+            f"color:{PALETTE['danger']}; "
             f"font-size:{FONT.get('sublabel', 9)}pt; "
             "background:transparent; border:none;")
         self._msg_lbl.setText(msg)
@@ -288,7 +285,7 @@ class LoginScreen(QWidget):
         mins = remaining // 60
         secs = remaining % 60
         self._msg_lbl.setStyleSheet(
-            f"color:{PALETTE.get('warning', '#ffaa44')}; "
+            f"color:{PALETTE['warning']}; "
             f"font-size:{FONT.get('sublabel', 9)}pt; "
             "background:transparent; border:none;")
         self._msg_lbl.setText(

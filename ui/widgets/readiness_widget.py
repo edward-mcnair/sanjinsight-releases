@@ -145,6 +145,7 @@ class ReadinessWidget(QWidget):
 
         # ── Issues area (hidden when ready) ───────────────────────────
         self._issues_widget = QWidget()
+        self._issues_widget.setStyleSheet("background: transparent;")
         self._issues_layout = QVBoxLayout(self._issues_widget)
         self._issues_layout.setContentsMargins(24, 2, 0, 0)
         self._issues_layout.setSpacing(3)
@@ -194,24 +195,24 @@ class ReadinessWidget(QWidget):
     def _apply_state(self, state: str, title: str, issues: list) -> None:
         """Re-render the widget for the given state."""
         if state == "ready":
-            bg, border, fg = (PALETTE["readyBg"],
-                              PALETTE["readyBorder"],
-                              PALETTE["success"])
+            bg, border, fg = (PALETTE['readyBg'],
+                              PALETTE['readyBorder'],
+                              PALETTE['success'])
             dot = "●"
         elif state == "warn":
-            bg, border, fg = (PALETTE["warnBg"],
-                              PALETTE["warnBorder"],
-                              PALETTE["warning"])
+            bg, border, fg = (PALETTE['warnBg'],
+                              PALETTE['warnBorder'],
+                              PALETTE['warning'])
             dot = "⚠"
         elif state == "error":
-            bg, border, fg = (PALETTE["errorBg"],
-                              PALETTE["errorBorder"],
-                              PALETTE["danger"])
+            bg, border, fg = (PALETTE['errorBg'],
+                              PALETTE['errorBorder'],
+                              PALETTE['danger'])
             dot = "✗"
         else:  # unknown
-            bg, border, fg = (PALETTE["unknownBg"],
-                              PALETTE["unknownBorder"],
-                              PALETTE["textDim"])
+            bg, border, fg = (PALETTE['unknownBg'],
+                              PALETTE['unknownBorder'],
+                              PALETTE['textDim'])
             dot = "○"
 
         self._frame.setStyleSheet(
@@ -244,7 +245,7 @@ class ReadinessWidget(QWidget):
 
         lbl = QLabel(f"✗  {message}")
         lbl.setStyleSheet(
-            f"color: {PALETTE['text']}; "
+            f"background: transparent; color: {PALETTE['text']}; "
             f"font-family:{MONO_FONT}; font-size: {FONT['sublabel']}pt;")
         lbl.setWordWrap(True)
         row.addWidget(lbl, 1)
@@ -256,13 +257,13 @@ class ReadinessWidget(QWidget):
             fix_btn.setStyleSheet(f"""
                 QPushButton {{
                     background: transparent;
-                    color: {PALETTE["accent"]};
+                    color: {PALETTE['accent']};
                     border: none;
                     font-size: {FONT["caption"]}pt;
                     font-weight: 600;
                     padding: 0 4px;
                 }}
-                QPushButton:hover {{ color: #fff; }}
+                QPushButton:hover {{ color: {PALETTE['textOnAccent']}; }}
             """)
             fix_btn.setToolTip(
                 f"Auto-fix this issue" if code else f"Open {nav_target} tab")
@@ -280,11 +281,11 @@ class ReadinessWidget(QWidget):
         """Update a single trend indicator label."""
         if trend == "improving":
             arrow = "↑"
-            color = PALETTE.get("success", "#00d479")
+            color = PALETTE['success']
             tip = f"{name} is improving"
         elif trend == "degrading":
             arrow = "↓"
-            color = PALETTE.get("warning", "#ffb300")
+            color = PALETTE['warning']
             tip = f"{name} is degrading"
         else:
             label.setText("")

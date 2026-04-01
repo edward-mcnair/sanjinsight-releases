@@ -22,45 +22,51 @@ from PyQt5.QtWidgets import (
 
 from version import APP_NAME, APP_VENDOR, SUPPORT_EMAIL
 from ui.icons import IC, make_icon_label
-from ui.theme import FONT, scaled_qss, MONO_FONT
+from ui.theme import FONT, PALETTE, scaled_qss, MONO_FONT
 
 log = logging.getLogger(__name__)
 
-# ── Style constants (shared with update_dialog.py) ───────────────────────────
-_BG        = "#0e1120"
-_BG2       = "#13172a"
-_BORDER    = "#1e2337"
-_TEXT      = "#c0c8e0"
-_MUTED     = "#8892a4"
-_ACCENT    = "#4e73df"
-_GREEN     = "#00d4aa"
-_AMBER     = "#f5a623"
-_RED       = "#ff4444"
+# ── Style helpers (read PALETTE at call time for theme-awareness) ─────────────
+def _BG():      return PALETTE['bg']
+def _BG2():     return PALETTE['surface']
+def _BORDER():  return PALETTE['border']
+def _TEXT():    return PALETTE['text']
+def _MUTED():   return PALETTE['textDim']
+def _ACCENT():  return PALETTE['accent']
+def _GREEN():   return PALETTE['success']
+def _AMBER():   return PALETTE['warning']
+def _RED():     return PALETTE['danger']
 
-_BTN_PRIMARY = f"""
+
+def _btn_primary():
+    return f"""
     QPushButton {{
-        background:{_ACCENT}; color:#fff; border:none;
+        background:{_ACCENT()}; color:{PALETTE['textOnAccent']}; border:none;
         border-radius:6px; padding:8px 22px; font-size:{FONT["body"]}pt; font-weight:600;
     }}
-    QPushButton:hover   {{ background:#3a5fc8; }}
-    QPushButton:pressed {{ background:#2e4fa8; }}
-    QPushButton:disabled {{ background:#2a3050; color:#555; }}
+    QPushButton:hover   {{ background:{PALETTE['accentHover']}; }}
+    QPushButton:pressed {{ background:{PALETTE['accentDim']}; }}
+    QPushButton:disabled {{ background:{PALETTE['surface2']}; color:{PALETTE['textDim']}; }}
 """
-_BTN_SECONDARY = f"""
+
+def _btn_secondary():
+    return f"""
     QPushButton {{
-        background:{_BG2}; color:{_MUTED}; border:1px solid {_BORDER};
+        background:{_BG2()}; color:{_MUTED()}; border:1px solid {_BORDER()};
         border-radius:6px; padding:8px 22px; font-size:{FONT["body"]}pt;
     }}
-    QPushButton:hover   {{ background:#1e2540; color:{_TEXT}; }}
-    QPushButton:pressed {{ background:#1a1f33; }}
+    QPushButton:hover   {{ background:{PALETTE['surfaceHover']}; color:{_TEXT()}; }}
+    QPushButton:pressed {{ background:{PALETTE['surface2']}; }}
 """
-_BTN_RED = f"""
+
+def _btn_red():
+    return f"""
     QPushButton {{
-        background:{_RED}22; color:{_RED}; border:1px solid {_RED}55;
+        background:{_RED()}22; color:{_RED()}; border:1px solid {_RED()}55;
         border-radius:6px; padding:8px 22px; font-size:{FONT["body"]}pt; font-weight:600;
     }}
-    QPushButton:hover   {{ background:{_RED}44; }}
-    QPushButton:pressed {{ background:{_RED}66; }}
+    QPushButton:hover   {{ background:{_RED()}44; }}
+    QPushButton:pressed {{ background:{_RED()}66; }}
 """
 
 
@@ -79,13 +85,60 @@ class LicenseDialog(QDialog):
         self.setWindowTitle(f"{APP_NAME} — License")
         self.setModal(True)
         self.resize(600, 520)
-        self.setStyleSheet(
-            f"QDialog {{ background:{_BG}; }} "
-            f"QLabel  {{ background:transparent; }}"
-        )
 
         self._build_ui()
+        self._apply_styles()
         self._refresh_status()
+
+    def _apply_styles(self):
+        """Re-apply all styles from PALETTE. Called on init and theme switch."""
+        self.setStyleSheet(
+            f"QDialog {{ background:{_BG()}; }} "
+            f"QLabel  {{ background:transparent; }}"
+        )
+        self._header.setStyleSheet(
+            f"background:{_BG2()}; border-bottom:1px solid {_BORDER()};")
+        self._header_title.setStyleSheet(
+            scaled_qss(f"font-size:15pt; font-weight:700; color:{PALETTE['text']};"))
+        self._header_sub.setStyleSheet(
+            f"font-size:{FONT['sublabel']}pt; color:{_MUTED()};")
+        self._status_card.setStyleSheet(f"background:{_BG()};")
+        self._status_title.setStyleSheet(
+            f"font-size:{FONT['sublabel']}pt; font-weight:700; color:{_MUTED()}; letter-spacing:1px;")
+        self._status_widget.setStyleSheet(
+            f"background:{_BG2()}; border:1px solid {_BORDER()}; border-radius:6px;")
+        for row_w in self._status_rows:
+            row_w.setStyleSheet("background:transparent; border:none;")
+        for lbl in self._status_row_labels:
+            lbl.setStyleSheet(
+                f"font-size:{FONT['sublabel']}pt; color:{_MUTED()}; min-width:90px;")
+        for val in self._status_row_vals:
+            val.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_TEXT()};")
+        self._remove_btn.setStyleSheet(_btn_red())
+        self._activate_section.setStyleSheet(f"background:{_BG()};")
+        self._activate_sep.setStyleSheet(f"color:{_BORDER()};")
+        self._activate_title.setStyleSheet(
+            f"font-size:{FONT['sublabel']}pt; font-weight:700; color:{_MUTED()}; letter-spacing:1px;")
+        self._activate_hint.setStyleSheet(
+            f"font-size:{FONT['sublabel']}pt; color:{_MUTED()};")
+        self._key_input.setStyleSheet(f"""
+            QTextEdit {{
+                background:{_BG2()}; color:{_TEXT()};
+                border:1px solid {_BORDER()}; border-radius:4px;
+                font-size:{FONT["caption"]}pt; font-family:{MONO_FONT};
+                padding:8px;
+            }}
+            QTextEdit:focus {{ border-color:{_ACCENT()}; }}
+        """)
+        self._msg_label.setStyleSheet(
+            f"font-size:{FONT['sublabel']}pt; color:{_MUTED()};")
+        self._activate_btn.setStyleSheet(_btn_primary())
+        self._footer.setStyleSheet(
+            f"background:{_BG2()}; border-top:1px solid {_BORDER()};")
+        self._footer_contact.setStyleSheet(
+            f"font-size:{FONT['caption']}pt; color:{_MUTED()};")
+        self._close_btn.setStyleSheet(
+            _btn_secondary().replace("padding:8px 22px", "padding:6px 18px"))
 
     # ── Build UI ──────────────────────────────────────────────────────────────
 
@@ -102,55 +155,53 @@ class LicenseDialog(QDialog):
     def _build_header(self) -> QWidget:
         hdr = QWidget()
         hdr.setFixedHeight(72)
-        hdr.setStyleSheet(f"background:{_BG2}; border-bottom:1px solid {_BORDER};")
+        self._header = hdr
         lay = QHBoxLayout(hdr)
         lay.setContentsMargins(28, 0, 28, 0)
         lay.setSpacing(12)
 
-        icon = make_icon_label(IC.KEY, color="#ffffff", size=28)
+        icon = make_icon_label(IC.KEY, color=PALETTE['text'], size=28)
         lay.addWidget(icon)
 
         col = QVBoxLayout()
         col.setSpacing(2)
-        t1 = QLabel(f"{APP_VENDOR} {APP_NAME} — License")
-        t1.setStyleSheet(scaled_qss(f"font-size:15pt; font-weight:700; color:#fff;"))
-        t2 = QLabel("Manage your software license key")
-        t2.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_MUTED};")
-        col.addWidget(t1)
-        col.addWidget(t2)
+        self._header_title = QLabel(f"{APP_VENDOR} {APP_NAME} — License")
+        self._header_sub = QLabel("Manage your software license key")
+        col.addWidget(self._header_title)
+        col.addWidget(self._header_sub)
         lay.addLayout(col, 1)
         return hdr
 
     def _build_status_card(self) -> QWidget:
         card = QWidget()
-        card.setStyleSheet(f"background:{_BG};")
+        self._status_card = card
         lay = QVBoxLayout(card)
         lay.setContentsMargins(28, 20, 28, 8)
         lay.setSpacing(6)
 
-        title = QLabel("Current License")
-        title.setStyleSheet(
-            f"font-size:{FONT['sublabel']}pt; font-weight:700; color:{_MUTED}; letter-spacing:1px;")
-        lay.addWidget(title)
+        self._status_title = QLabel("Current License")
+        lay.addWidget(self._status_title)
 
         # Status grid
         self._status_widget = QWidget()
-        self._status_widget.setStyleSheet(
-            f"background:{_BG2}; border:1px solid {_BORDER}; border-radius:6px;")
         grid_lay = QVBoxLayout(self._status_widget)
         grid_lay.setContentsMargins(20, 14, 20, 14)
         grid_lay.setSpacing(8)
 
+        self._status_rows = []
+        self._status_row_labels = []
+        self._status_row_vals = []
+
         def _row(label: str) -> QLabel:
             row = QWidget()
-            row.setStyleSheet("background:transparent; border:none;")
+            self._status_rows.append(row)
             rl = QHBoxLayout(row)
             rl.setContentsMargins(0, 0, 0, 0)
             lbl = QLabel(label)
-            lbl.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_MUTED}; min-width:90px;")
             lbl.setFixedWidth(110)
+            self._status_row_labels.append(lbl)
             val = QLabel("—")
-            val.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_TEXT};")
+            self._status_row_vals.append(val)
             rl.addWidget(lbl)
             rl.addWidget(val, 1)
             grid_lay.addWidget(row)
@@ -167,7 +218,6 @@ class LicenseDialog(QDialog):
 
         # Remove button (shown only when a license is active)
         self._remove_btn = QPushButton("Remove License Key")
-        self._remove_btn.setStyleSheet(_BTN_RED)
         self._remove_btn.setFixedHeight(34)
         self._remove_btn.clicked.connect(self._on_remove)
         self._remove_btn.hide()
@@ -177,56 +227,41 @@ class LicenseDialog(QDialog):
 
     def _build_activate_section(self) -> QWidget:
         sect = QWidget()
-        sect.setStyleSheet(f"background:{_BG};")
+        self._activate_section = sect
         lay = QVBoxLayout(sect)
         lay.setContentsMargins(28, 8, 28, 8)
         lay.setSpacing(8)
 
-        sep = QFrame()
-        sep.setFrameShape(QFrame.HLine)
-        sep.setStyleSheet(f"color:{_BORDER};")
-        lay.addWidget(sep)
+        self._activate_sep = QFrame()
+        self._activate_sep.setFrameShape(QFrame.HLine)
+        lay.addWidget(self._activate_sep)
 
-        title = QLabel("Activate License")
-        title.setStyleSheet(
-            f"font-size:{FONT['sublabel']}pt; font-weight:700; color:{_MUTED}; letter-spacing:1px;")
-        lay.addWidget(title)
+        self._activate_title = QLabel("Activate License")
+        lay.addWidget(self._activate_title)
 
-        hint = QLabel(
+        self._activate_hint = QLabel(
             "Paste your license key below. "
             f"To purchase a license, contact {SUPPORT_EMAIL}."
         )
-        hint.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_MUTED};")
-        hint.setWordWrap(True)
-        lay.addWidget(hint)
+        self._activate_hint.setWordWrap(True)
+        lay.addWidget(self._activate_hint)
 
         self._key_input = QTextEdit()
         self._key_input.setPlaceholderText(
             "Paste license key here…\n\n"
             "Example:  eyJjdXN0b21lciI6Ii4uLiJ9.AAAA…"
         )
-        self._key_input.setStyleSheet(f"""
-            QTextEdit {{
-                background:{_BG2}; color:{_TEXT};
-                border:1px solid {_BORDER}; border-radius:4px;
-                font-size:{FONT["caption"]}pt; font-family:{MONO_FONT};
-                padding:8px;
-            }}
-            QTextEdit:focus {{ border-color:{_ACCENT}; }}
-        """)
         self._key_input.setMaximumHeight(100)
         self._key_input.textChanged.connect(self._on_key_input_changed)
         lay.addWidget(self._key_input, 1)
 
         # Status message label (shown after activation attempt)
         self._msg_label = QLabel("")
-        self._msg_label.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_MUTED};")
         self._msg_label.setWordWrap(True)
         self._msg_label.hide()
         lay.addWidget(self._msg_label)
 
         self._activate_btn = QPushButton("Activate License")
-        self._activate_btn.setStyleSheet(_BTN_PRIMARY)
         self._activate_btn.setEnabled(False)
         self._activate_btn.clicked.connect(self._on_activate)
         lay.addWidget(self._activate_btn, 0, Qt.AlignRight)
@@ -236,18 +271,16 @@ class LicenseDialog(QDialog):
     def _build_footer(self) -> QWidget:
         footer = QWidget()
         footer.setFixedHeight(52)
-        footer.setStyleSheet(f"background:{_BG2}; border-top:1px solid {_BORDER};")
+        self._footer = footer
         lay = QHBoxLayout(footer)
         lay.setContentsMargins(28, 0, 28, 0)
 
-        contact = QLabel(f"Questions? Contact {SUPPORT_EMAIL}")
-        contact.setStyleSheet(f"font-size:{FONT['caption']}pt; color:{_MUTED};")
-        lay.addWidget(contact, 1)
+        self._footer_contact = QLabel(f"Questions? Contact {SUPPORT_EMAIL}")
+        lay.addWidget(self._footer_contact, 1)
 
-        close_btn = QPushButton("Close")
-        close_btn.setStyleSheet(_BTN_SECONDARY.replace("padding:8px 22px", "padding:6px 18px"))
-        close_btn.clicked.connect(self.accept)
-        lay.addWidget(close_btn)
+        self._close_btn = QPushButton("Close")
+        self._close_btn.clicked.connect(self.accept)
+        lay.addWidget(self._close_btn)
 
         return footer
 
@@ -263,7 +296,7 @@ class LicenseDialog(QDialog):
 
         if info.tier == LicenseTier.UNLICENSED:
             self._lbl_status.setText("⚠ Unlicensed — demo mode only")
-            self._lbl_status.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_AMBER}; font-weight:600;")
+            self._lbl_status.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_AMBER()}; font-weight:600;")
             self._lbl_tier.setText("—")
             self._lbl_customer.setText("—")
             self._lbl_email.setText("—")
@@ -273,10 +306,10 @@ class LicenseDialog(QDialog):
         else:
             # Active license
             if info.days_until_expiry is not None and info.days_until_expiry <= 30:
-                status_color = _AMBER
+                status_color = _AMBER()
                 status_text  = f"⚠ Active — expiring soon"
             else:
-                status_color = _GREEN
+                status_color = _GREEN()
                 status_text  = "✓ Active"
 
             self._lbl_status.setText(status_text)
@@ -290,9 +323,10 @@ class LicenseDialog(QDialog):
             self._lbl_expiry.setText(info.expiry_display)
             self._remove_btn.show()
 
-    def _set_message(self, text: str, color: str = _MUTED):
+    def _set_message(self, text: str, color: str | None = None):
         self._msg_label.setText(text)
-        self._msg_label.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{color};")
+        self._msg_label.setStyleSheet(
+            f"font-size:{FONT['sublabel']}pt; color:{color or _MUTED()};")
         self._msg_label.show()
 
     # ── Slots ─────────────────────────────────────────────────────────────────
@@ -315,13 +349,13 @@ class LicenseDialog(QDialog):
             self._set_message(
                 "Invalid license key. Check the key and try again, "
                 f"or contact {SUPPORT_EMAIL}.",
-                _RED,
+                _RED(),
             )
         else:
             self._key_input.clear()
             self._set_message(
                 f"✓ License activated for {info.customer}  ({info.tier_display})",
-                _GREEN,
+                _GREEN(),
             )
             self._refresh_status()
             self.license_changed.emit()

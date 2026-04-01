@@ -76,6 +76,8 @@ class PreflightRemediator:
 
     def _fix_pf_exposure(self, check) -> Optional[Remediation]:
         """Adjust exposure time to bring mean intensity into the ideal band."""
+        if getattr(self._as, "active_camera_type", "tr") == "ir":
+            return None  # IR cameras have fixed exposure
         cam = self._as.cam
         if cam is None:
             return None

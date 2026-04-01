@@ -44,9 +44,8 @@ from ui.theme import (
 
 log = logging.getLogger(__name__)
 
-_BG     = "#0f1120"
-_BORDER = "#2a3249"
-_DIM    = "#777777"
+
+# Module-level constants removed — use PALETTE directly.
 
 
 class SupervisorOverrideDialog(QDialog):
@@ -70,41 +69,30 @@ class SupervisorOverrideDialog(QDialog):
         self.setFixedSize(360, 310)
         self.setWindowFlags(Qt.Dialog | Qt.WindowTitleHint | Qt.CustomizeWindowHint)
         self.setModal(True)
-        self.setStyleSheet(f"QDialog {{ background:{_BG}; }}")
 
         lay = QVBoxLayout(self)
         lay.setContentsMargins(32, 28, 32, 28)
         lay.setSpacing(12)
 
         # ── Header ─────────────────────────────────────────────────────────
-        title = QLabel("Supervisor Override")
-        title.setStyleSheet(
-            "font-size:16pt; font-weight:700; color:#ffffff; "
-            "background:transparent;")
-        lay.addWidget(title)
+        self._title = QLabel("Supervisor Override")
+        lay.addWidget(self._title)
 
-        subtitle = QLabel(
+        self._subtitle = QLabel(
             "An engineer or administrator must authenticate "
             "to grant temporary access at this station.")
-        subtitle.setWordWrap(True)
-        subtitle.setStyleSheet(
-            f"font-size:{FONT.get('sublabel', 9)}pt; color:{_DIM}; "
-            "background:transparent;")
-        lay.addWidget(subtitle)
+        self._subtitle.setWordWrap(True)
+        lay.addWidget(self._subtitle)
 
-        sep = QFrame()
-        sep.setFrameShape(QFrame.HLine)
-        sep.setStyleSheet(f"color:{_BORDER};")
-        lay.addWidget(sep)
+        self._sep = QFrame()
+        self._sep.setFrameShape(QFrame.HLine)
+        lay.addWidget(self._sep)
 
         input_ss = wizard_input_qss()
 
         # ── Username ───────────────────────────────────────────────────────
-        user_lbl = QLabel("Engineer username")
-        user_lbl.setStyleSheet(
-            f"font-size:{FONT.get('label', 10)}pt; color:{_DIM}; "
-            "background:transparent;")
-        lay.addWidget(user_lbl)
+        self._user_lbl = QLabel("Engineer username")
+        lay.addWidget(self._user_lbl)
 
         self._user_edit = QLineEdit()
         self._user_edit.setPlaceholderText("Username")
@@ -113,11 +101,8 @@ class SupervisorOverrideDialog(QDialog):
         lay.addWidget(self._user_edit)
 
         # ── Password ───────────────────────────────────────────────────────
-        pw_lbl = QLabel("Password")
-        pw_lbl.setStyleSheet(
-            f"font-size:{FONT.get('label', 10)}pt; color:{_DIM}; "
-            "background:transparent;")
-        lay.addWidget(pw_lbl)
+        self._pw_lbl = QLabel("Password")
+        lay.addWidget(self._pw_lbl)
 
         self._pw_edit = QLineEdit()
         self._pw_edit.setEchoMode(QLineEdit.Password)
@@ -128,10 +113,6 @@ class SupervisorOverrideDialog(QDialog):
 
         # ── Error label ────────────────────────────────────────────────────
         self._err_lbl = QLabel("")
-        self._err_lbl.setStyleSheet(
-            f"color:{PALETTE.get('danger', '#ff4466')}; "
-            f"font-size:{FONT.get('sublabel', 9)}pt; "
-            "background:transparent;")
         lay.addWidget(self._err_lbl)
 
         lay.addStretch(1)
@@ -157,6 +138,31 @@ class SupervisorOverrideDialog(QDialog):
         self._auth_btn.clicked.connect(self._do_authenticate)
         self._pw_edit.returnPressed.connect(self._do_authenticate)
         self._user_edit.returnPressed.connect(self._pw_edit.setFocus)
+
+        self._apply_styles()
+
+    # ── Theming ────────────────────────────────────────────────────────────────
+
+    def _apply_styles(self) -> None:
+        """Re-apply PALETTE-driven styles."""
+        P = PALETTE
+        self.setStyleSheet(f"QDialog {{ background:{P['bg']}; }}")
+        self._title.setStyleSheet(
+            f"font-size:16pt; font-weight:700; color:{P['text']}; "
+            "background:transparent;")
+        self._subtitle.setStyleSheet(
+            f"font-size:{FONT.get('sublabel', 9)}pt; color:{P['textDim']}; "
+            "background:transparent;")
+        self._sep.setStyleSheet(f"color:{P['border']};")
+        lbl_ss = (
+            f"font-size:{FONT.get('label', 10)}pt; color:{P['textDim']}; "
+            "background:transparent;")
+        self._user_lbl.setStyleSheet(lbl_ss)
+        self._pw_lbl.setStyleSheet(lbl_ss)
+        self._err_lbl.setStyleSheet(
+            f"color:{P['danger']}; "
+            f"font-size:{FONT.get('sublabel', 9)}pt; "
+            "background:transparent;")
 
     # ── Authentication ─────────────────────────────────────────────────────────
 

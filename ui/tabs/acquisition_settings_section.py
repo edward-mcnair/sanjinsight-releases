@@ -230,22 +230,28 @@ class AcquisitionSettingsSection(QWidget):
             w.setVisible(is_ir)
 
     def get_settings(self) -> dict:
-        return {
+        is_ir = getattr(app_state, "active_camera_type", "tr") == "ir"
+        settings = {
             "n_frames":     self._frames_spin.value(),
-            "exposure_us":  self._exp_slider.value(),
-            "gain_db":      self._gain_slider.value() / 10.0,
             "averaging":    self._avg_combo.currentText(),
             "quality_gate": self._quality_spin.value(),
             "binning":      self._bin_combo.currentText(),
             "trigger_mode": self._trig_combo.currentText(),
         }
+        if is_ir:
+            settings["gain_mode"] = self._gain_combo_ir.currentText()
+        else:
+            settings["exposure_us"] = self._exp_slider.value()
+            settings["gain_db"] = self._gain_slider.value() / 10.0
+        return settings
 
     def set_settings(self, d: dict) -> None:
+        is_ir = getattr(app_state, "active_camera_type", "tr") == "ir"
         if "n_frames" in d:
             self._frames_spin.setValue(d["n_frames"])
-        if "exposure_us" in d:
+        if "exposure_us" in d and not is_ir:
             self._set_exp(d["exposure_us"])
-        if "gain_db" in d:
+        if "gain_db" in d and not is_ir:
             self._gain_slider.setValue(int(d["gain_db"] * 10))
 
     # ── Slots ──────────────────────────────────────────────────────────

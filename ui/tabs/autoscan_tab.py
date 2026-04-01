@@ -58,7 +58,7 @@ class _StatusRow(QWidget):
 
     action_clicked = pyqtSignal()
 
-    _COL = {"ok": "#00d479", "warn": "#ffb300", "err": "#ff4444", "dim": "#555555"}
+    _COL = {"ok": PALETTE['success'], "warn": PALETTE['warning'], "err": PALETTE['danger'], "dim": PALETTE['textSub']}
 
     def __init__(self, action_text: str = "", parent=None):
         super().__init__(parent)
@@ -89,7 +89,7 @@ class _StatusRow(QWidget):
         col = self._COL.get(state, self._COL["dim"])
         self._dot.setStyleSheet(f"color:{col}; background:transparent;")
         active = state in ("ok", "warn", "err")
-        txt_col = PALETTE.get("text", "#ebebeb") if active else PALETTE.get("textDim", "#777777")
+        txt_col = PALETTE['text'] if active else PALETTE['textDim']
         self._txt.setStyleSheet(
             f"color:{txt_col}; background:transparent; "
             f"font-size:{FONT.get('sublabel', 9)}pt;")
@@ -347,12 +347,12 @@ class _LiveImageView(QLabel):
             cam_connected = app_state.cam is not None
             if cam_connected:
                 msg = "Waiting for first frame…\n\nClick  Preview  to capture\na thermal image"
-                color = PALETTE.get("textSub", "#6a6a6a")
+                color = PALETTE['textSub']
             else:
                 msg = "No camera connected\n\nConnect a camera via\nHardware → Camera"
-                color = PALETTE.get("danger", "#ff5555")
+                color = PALETTE['danger']
             p = QPainter(self)
-            p.fillRect(self.rect(), QColor(PALETTE.get("surface", "#2d2d2d")))
+            p.fillRect(self.rect(), QColor(PALETTE['surface']))
             p.setPen(QColor(color))
             p.setFont(sans_font(13))
             p.drawText(self.rect(), Qt.AlignCenter, msg)
@@ -717,7 +717,7 @@ class AutoScanTab(QWidget):
         self._abort_btn.setFixedHeight(40)
         self._abort_btn.setFixedWidth(80)
         self._abort_btn.setEnabled(False)
-        set_btn_icon(self._abort_btn, IC.STOP, "#ff6666")
+        set_btn_icon(self._abort_btn, IC.STOP, PALETTE['danger'])
         apply_hand_cursor(self._abort_btn)
         self._abort_btn.clicked.connect(self._on_abort_clicked)
 
@@ -1113,15 +1113,15 @@ class AutoScanTab(QWidget):
 
     def _apply_styles(self) -> None:
         P     = PALETTE
-        text  = P.get("text",    "#ebebeb")
-        dim   = P.get("textDim", "#999999")
-        surf  = P.get("surface", "#2d2d2d")
-        surf2 = P.get("surface2","#333333")
-        bdr   = P.get("border",  "#484848")
-        acc   = P.get("accent",  "#00d4aa")
+        text  = P['text']
+        dim   = P.get("textDim", PALETTE['textDim'])
+        surf  = P['surface']
+        surf2 = P['surface2']
+        bdr   = P['border']
+        acc   = P.get("accent",  PALETTE['accent'])
 
         self.setStyleSheet(scaled_qss(f"""
-            QScrollArea, QWidget {{ background:{P.get('bg','#242424')}; }}
+            QScrollArea, QWidget {{ background:{P['bg']}; }}
             QLabel {{
                 color:{text}; font-size:{FONT['body']}pt; background:transparent;
             }}
@@ -1178,22 +1178,22 @@ class AutoScanTab(QWidget):
             self._meta_strip._apply_styles()
         if hasattr(self, "_new_scan_btn"):
             P = PALETTE
-            surf = P.get("surface2", "#333333")
-            bdr  = P.get("border",   "#484848")
-            txt  = P.get("text",     "#ebebeb")
+            surf = P['surface2']
+            bdr  = P['border']
+            txt  = P['text']
             self._new_scan_btn.setStyleSheet(scaled_qss(
                 f"QPushButton {{ background:{surf}; color:{txt}; "
                 f"border:1px solid {bdr}; border-radius:4px; "
                 f"font-size:{FONT['body']}pt; padding:0 12px; }}"
-                f"QPushButton:hover {{ border-color:{P.get('accent','#00d4aa')}; }}"
+                f"QPushButton:hover {{ border-color:{P.get('accent',PALETTE['accent'])}; }}"
             ))
 
     def _refresh_seg_styles(self) -> None:
         P    = PALETTE
-        surf = P.get("surface2", "#333333")
-        dim  = P.get("textDim",  "#999999")
-        bdr  = P.get("border",   "#484848")
-        acc  = P.get("accent",   "#00d4aa")
+        surf = P['surface2']
+        dim  = P.get("textDim",  PALETTE['textDim'])
+        bdr  = P['border']
+        acc  = P.get("accent",   PALETTE['accent'])
 
         base = scaled_qss(f"""
             QPushButton {{
@@ -1201,7 +1201,7 @@ class AutoScanTab(QWidget):
                 border:1px solid {bdr}; padding:4px 0;
                 font-size:{FONT['label']}pt;
             }}
-            QPushButton:checked {{ background:{acc}; color:#000; border-color:{acc}; }}
+            QPushButton:checked {{ background:{acc}; color:{PALETTE['textOnAccent']}; border-color:{acc}; }}
         """)
 
         self._goal_find.setStyleSheet(

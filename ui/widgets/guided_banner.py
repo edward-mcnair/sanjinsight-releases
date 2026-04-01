@@ -42,7 +42,7 @@ def _icon_pixmap(icon_name: str, size: int = 16, color: str | None = None):
     icon_name = _FA5_TO_MDI.get(icon_name, icon_name)
     icon_name = _safe_icon(icon_name)
     if color is None:
-        color = PALETTE.get("textDim", "#8892aa")
+        color = PALETTE['textDim']
     try:
         import qtawesome as qta
         return qta.icon(icon_name, color=color).pixmap(QSize(size, size))
@@ -165,7 +165,7 @@ class GuidedBanner(QWidget):
             self._current_step_idx = total
             self._current_phase = 0
             self._current_key = ""
-            self._set_icon(IC.CHECK, color=PALETTE.get("success", "#30d158"))
+            self._set_icon(IC.CHECK, color=PALETTE['success'])
             self._progress_lbl.setText(f"{total}/{total}")
             self._action_btn.setText("Capture →")
             self._action_btn.setVisible(True)
@@ -208,12 +208,12 @@ class GuidedBanner(QWidget):
     # ── Theme ─────────────────────────────────────────────────────────
 
     def _apply_styles(self) -> None:
-        accent = PALETTE.get("accent", "#00d4aa")
-        bg = PALETTE.get("accentDim", "#00d4aa1a")
-        text = PALETTE.get("text", "#ebebeb")
-        border = PALETTE.get("accent", "#00d4aa")
-        surface = PALETTE.get("surface", "#2d2d2d")
-        dim = PALETTE.get("textDim", "#8892aa")
+        accent = PALETTE['accent']
+        bg = PALETTE['accentDim']
+        text = PALETTE['text']
+        border = PALETTE['accent']
+        surface = PALETTE['surface']
+        dim = PALETTE['textDim']
 
         self.setStyleSheet(
             f"GuidedBanner {{ background:{bg}; "
@@ -223,11 +223,11 @@ class GuidedBanner(QWidget):
         self._progress_lbl.setStyleSheet(
             f"color:{dim}; font-size:{FONT['caption']}pt; background:transparent;")
         self._action_btn.setStyleSheet(
-            f"QPushButton {{ background:{accent}; color:#000; "
+            f"QPushButton {{ background:{accent}; color:{PALETTE['textOnAccent']}; "
             f"border-radius:4px; font-size:{FONT['sublabel']}pt; "
             f"font-weight:bold; padding:0 12px; border:none; }}"
-            f"QPushButton:hover {{ background:{accent}; color:#000; "
-            f"border:1px solid #fff4; }}")
+            f"QPushButton:hover {{ background:{accent}; color:{PALETTE['textOnAccent']}; "
+            f"border:1px solid {PALETTE['textOnAccent']}44; }}")
         self._skip_btn.setStyleSheet(
             f"QPushButton {{ background:transparent; color:{dim}; "
             f"border:1px solid {dim}44; border-radius:4px; "
@@ -253,7 +253,7 @@ class GuidedBanner(QWidget):
                             next_idx: int) -> None:
         """Briefly show a checkmark before advancing to the next step."""
         self._celebrating = True
-        self._set_icon(IC.CHECK, color=PALETTE.get("success", "#30d158"))
+        self._set_icon(IC.CHECK, color=PALETTE['success'])
         self._label.setText("Step complete!")
         self._action_btn.setVisible(False)
         self._skip_btn.setVisible(False)
@@ -280,7 +280,7 @@ class GuidedBanner(QWidget):
                 self._current_step_idx = len(_STEPS)
                 self._current_phase = 0
                 self._current_key = ""
-                self._set_icon(IC.CHECK, color=PALETTE.get("success", "#30d158"))
+                self._set_icon(IC.CHECK, color=PALETTE['success'])
                 self._action_btn.setText("View →")
                 self._action_btn.setVisible(True)
                 self._skip_btn.setVisible(False)

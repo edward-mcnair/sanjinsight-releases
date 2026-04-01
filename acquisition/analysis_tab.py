@@ -68,7 +68,7 @@ class VerdictBanner(QWidget):
         self._icon.setAlignment(Qt.AlignCenter)
 
         self._sub = QLabel("Run analysis to see verdict")
-        self._sub.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{PALETTE.get('textSub','#6a6a6a')};")
+        self._sub.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{PALETTE['textSub']};")
         self._sub.setAlignment(Qt.AlignCenter)
         self._sub.setWordWrap(True)
 
@@ -82,14 +82,14 @@ class VerdictBanner(QWidget):
     def _set(self, verdict: str, subtitle: str):
         self._current_verdict  = verdict
         self._current_subtitle = subtitle
-        surf = PALETTE.get('surface', '#2d2d2d')
-        bdr  = PALETTE.get('border',  '#484848')
+        surf = PALETTE['surface']
+        bdr  = PALETTE['border']
         if verdict == "NONE":
-            fg     = PALETTE.get('textDim', '#999999')
+            fg     = PALETTE['textDim']
             border = bdr
         else:
             _, pal_key = self.STYLES.get(verdict, ("—", "textDim"))
-            fg     = PALETTE.get(pal_key, PALETTE.get('textDim', '#999999'))
+            fg     = PALETTE.get(pal_key, PALETTE['textDim'])
             border = fg + "55"   # semantic colour at ~33 % opacity
         self._outer.setStyleSheet(
             f"background:{surf}; border:1px solid {border}; border-radius:4px;")
@@ -138,7 +138,7 @@ class OverlayCanvas(QWidget):
         self._result: Optional[AnalysisResult] = None
 
     def _apply_styles(self):
-        bg = PALETTE.get('bg', '#242424')
+        bg = PALETTE['bg']
         self.setStyleSheet(f"background:{bg};")
 
     def update_result(self, result: AnalysisResult):
@@ -159,9 +159,9 @@ class OverlayCanvas(QWidget):
 
     def paintEvent(self, e):
         p = QPainter(self)
-        p.fillRect(self.rect(), QColor(PALETTE.get('bg', '#242424')))
+        p.fillRect(self.rect(), QColor(PALETTE['bg']))
         if self._pixmap is None:
-            p.setPen(QColor(PALETTE.get('border', '#484848')))
+            p.setPen(QColor(PALETTE['border']))
             p.setFont(sans_font(18))
             p.drawText(self.rect(), Qt.AlignCenter,
                        "No analysis result\n\nPress  ▶  Run Analysis")
@@ -187,9 +187,9 @@ class OverlayCanvas(QWidget):
         from PyQt5.QtWidgets import QMenu
         menu = QMenu(self)
         menu.setStyleSheet(
-            f"QMenu {{ background:{PALETTE.get('surface','#2d2d2d')}; color:{PALETTE.get('text','#ebebeb')}; border:1px solid {PALETTE.get('border','#484848')}; }}"
-            f"QMenu::item:selected {{ background:{PALETTE.get('surface2','#3d3d3d')}; }}"
-            f"QMenu::separator {{ height:1px; background:{PALETTE.get('border','#484848')}; margin:3px 8px; }}")
+            f"QMenu {{ background:{PALETTE['surface']}; color:{PALETTE['text']}; border:1px solid {PALETTE['border']}; }}"
+            f"QMenu::item:selected {{ background:{PALETTE['surface2']}; }}"
+            f"QMenu::separator {{ height:1px; background:{PALETTE['border']}; margin:3px 8px; }}")
         act_save = menu.addAction("💾  Save Overlay Image…")
         act_save.setEnabled(self._pixmap is not None)
         act_save.triggered.connect(self.context_save_png)
@@ -226,22 +226,22 @@ class HotspotTable(QTableWidget):
     def _apply_styles(self):
         self.setStyleSheet(f"""
             QTableWidget {{
-                background:{PALETTE.get('bg','#242424')}; alternate-background-color:{PALETTE.get('surface','#2d2d2d')};
-                gridline-color:{PALETTE.get('border2','#3d3d3d')}; border:none;
+                background:{PALETTE['bg']}; alternate-background-color:{PALETTE['surface']};
+                gridline-color:{PALETTE['border2']}; border:none;
                 font-family:{MONO_FONT}; font-size:{FONT['label']}pt;
             }}
             QHeaderView::section {{
-                background:{PALETTE.get('surface','#2d2d2d')}; color:{PALETTE.get('textSub','#6a6a6a')};
+                background:{PALETTE['surface']}; color:{PALETTE['textSub']};
                 padding:3px 6px; border:none;
-                border-bottom:1px solid {PALETTE.get('border','#484848')};
+                border-bottom:1px solid {PALETTE['border']};
                 font-size:{FONT['body']}pt; letter-spacing:1px;
             }}
         """)
 
     def update_hotspots(self, hotspots: list):
         self.setRowCount(0)
-        _surf2 = PALETTE.get('surface2', '#3d3d3d')
-        _dim   = PALETTE.get('textDim',  '#999999')
+        _surf2 = PALETTE['surface2']
+        _dim   = PALETTE['textDim']
         for h in hotspots:
             r = self.rowCount()
             self.insertRow(r)
@@ -339,16 +339,16 @@ class AnalysisTab(QWidget):
 
         icon_lbl = QLabel(icon)
         icon_lbl.setAlignment(Qt.AlignCenter)
-        icon_lbl.setStyleSheet(scaled_qss(f"font-size: 52pt; color: {PALETTE.get('border','#484848')};"))
+        icon_lbl.setStyleSheet(scaled_qss(f"font-size: 52pt; color: {PALETTE['border']};"))
 
         title_lbl = QLabel(title)
         title_lbl.setAlignment(Qt.AlignCenter)
-        title_lbl.setStyleSheet(f"font-size: {FONT['readoutSm']}pt; font-weight: bold; color: {PALETTE.get('textSub','#6a6a6a')};")
+        title_lbl.setStyleSheet(f"font-size: {FONT['readoutSm']}pt; font-weight: bold; color: {PALETTE['textSub']};")
 
         desc_lbl = QLabel(desc)
         desc_lbl.setAlignment(Qt.AlignCenter)
         desc_lbl.setWordWrap(True)
-        desc_lbl.setStyleSheet(f"font-size: {FONT['label']}pt; color: {PALETTE.get('textDim','#999999')};")
+        desc_lbl.setStyleSheet(f"font-size: {FONT['label']}pt; color: {PALETTE['textDim']};")
         desc_lbl.setMaximumWidth(450)
 
         lay.addStretch()
@@ -362,11 +362,11 @@ class AnalysisTab(QWidget):
             btn.setMinimumHeight(34)
             btn.setStyleSheet(f"""
                 QPushButton {{
-                    background: {PALETTE.get('surface2','#3d3d3d')}; color: {PALETTE.get('accent','#00d4aa')};
-                    border: 1px solid {PALETTE.get('accent','#00d4aa')}55; border-radius: 5px;
+                    background: {PALETTE['surface2']}; color: {PALETTE['accent']};
+                    border: 1px solid {PALETTE['accent']}55; border-radius: 5px;
                     font-size: {FONT['label']}pt; font-weight: 600;
                 }}
-                QPushButton:hover {{ background: {PALETTE.get('surface','#2d2d2d')}; }}
+                QPushButton:hover {{ background: {PALETTE['surface']}; }}
             """)
             btn.clicked.connect(btn_callback)
             lay.addSpacing(4)
@@ -387,15 +387,15 @@ class AnalysisTab(QWidget):
     def _apply_styles(self) -> None:
         """Re-apply PALETTE-driven styles on theme switch."""
         P   = PALETTE
-        sur = P.get("surface",  "#2d2d2d")
-        su2 = P.get("surface2", "#3d3d3d")
-        bdr = P.get("border",   "#484848")
-        sub = P.get("textSub",  "#6a6a6a")
-        dim = P.get("textDim",  "#999999")
-        acc = P.get("accent",   "#00d4aa")
+        sur = P["surface"]
+        su2 = P["surface2"]
+        bdr = P["border"]
+        sub = P["textSub"]
+        dim = P["textDim"]
+        acc = P["accent"]
         if hasattr(self, "_toolbar"):
             self._toolbar.setStyleSheet(
-                f"background:{sur}; border-bottom:1px solid {bdr};")
+                f".QWidget {{ background:{sur}; border-bottom:1px solid {bdr}; }}")
         # Source / "No data" badge
         if hasattr(self, "_source_lbl"):
             cur_text = self._source_lbl.text()
@@ -447,13 +447,13 @@ class AnalysisTab(QWidget):
         bar.setMinimumHeight(46)
         self._toolbar = bar
         bar.setStyleSheet(
-            f"background:{PALETTE.get('surface','#2d2d2d')}; border-bottom:1px solid {PALETTE.get('border','#484848')};")
+            f".QWidget {{ background:{PALETTE['surface']}; border-bottom:1px solid {PALETTE['border']}; }}")
         lay = QHBoxLayout(bar)
         lay.setContentsMargins(12, 0, 12, 0)
         lay.setSpacing(8)
 
         self._run_btn    = QPushButton("Run Analysis")
-        set_btn_icon(self._run_btn, "fa5s.play", "#00d4aa")
+        set_btn_icon(self._run_btn, "fa5s.play", PALETTE['accent'])
         self._run_btn.setObjectName("primary")
         self._run_btn.setFixedHeight(30)
         self._run_btn.clicked.connect(self._run)
@@ -465,7 +465,7 @@ class AnalysisTab(QWidget):
 
         self._auto_cb    = QCheckBox("Auto-run after acquisition")
         self._auto_cb.setChecked(True)
-        self._auto_cb.setStyleSheet(f"font-size:{FONT['heading']}pt; color:{PALETTE.get('textSub','#6a6a6a')};")
+        self._auto_cb.setStyleSheet(f"font-size:{FONT['heading']}pt; color:{PALETTE['textSub']};")
 
         lay.addWidget(self._run_btn)
         lay.addWidget(self._clear_btn)
@@ -473,7 +473,7 @@ class AnalysisTab(QWidget):
         lay.addStretch()
 
         # Source indicator
-        self._source_lbl = self._badge("No data", PALETTE.get('surface2','#3d3d3d'), PALETTE.get('textDim','#999999'))
+        self._source_lbl = self._badge("No data", PALETTE['surface2'], PALETTE['textDim'])
         lay.addWidget(self._source_lbl)
 
         return bar
@@ -584,7 +584,7 @@ class AnalysisTab(QWidget):
             ("Min area (px)",     self._min_area_px),
         ]):
             l = QLabel(lbl)
-            l.setStyleSheet(f"font-size:{FONT['label']}pt; color:{PALETTE.get('textSub','#6a6a6a')};")
+            l.setStyleSheet(f"font-size:{FONT['label']}pt; color:{PALETTE['textSub']};")
             ml.addWidget(l, row, 0)
             ml.addWidget(widget, row, 1)
         adv_panel.addWidget(mo_box)
@@ -663,7 +663,7 @@ class AnalysisTab(QWidget):
             v = QLabel("—")
             v.setAlignment(Qt.AlignRight)
             v.setStyleSheet(
-                f"font-family:{MONO_FONT}; font-size:{FONT['body']}pt; color:{PALETTE.get('textDim','#999999')};")
+                f"font-family:{MONO_FONT}; font-size:{FONT['body']}pt; color:{PALETTE['textDim']};")
             sg.addWidget(v, r, 1)
             self._stat_vals[key] = v
         lay.addWidget(stats_box)
@@ -680,7 +680,7 @@ class AnalysisTab(QWidget):
 
         # Export
         sep = QFrame(); sep.setFrameShape(QFrame.HLine)
-        sep.setStyleSheet(f"color:{PALETTE.get('border','#484848')};")
+        sep.setStyleSheet(f"color:{PALETTE['border']};")
         lay.addWidget(sep)
 
         # Two-row export button layout so no label gets clipped.
@@ -742,7 +742,7 @@ class AnalysisTab(QWidget):
         self._base_img = base_image
         self._source_lbl.setText(source_label)
         self._source_lbl.setStyleSheet(
-            f"background:{PALETTE.get('surface2','#3d3d3d')}; color:{PALETTE.get('accent','#00d4aa')}; padding:0 10px; "
+            f"background:{PALETTE['surface2']}; color:{PALETTE['accent']}; padding:0 10px; "
             f"border-radius:3px; font-family:{MONO_FONT}; font-size:{FONT['label']}pt;")
         if dt_map is not None or drr_map is not None:
             self._data_stack.setCurrentIndex(1)
@@ -828,7 +828,7 @@ class AnalysisTab(QWidget):
             b.setEnabled(False)
         self._source_lbl.setText("No data")
         self._source_lbl.setStyleSheet(
-            f"background:{PALETTE.get('surface2','#3d3d3d')}; color:{PALETTE.get('textDim','#999999')}; padding:0 10px; "
+            f"background:{PALETTE['surface2']}; color:{PALETTE['textDim']}; padding:0 10px; "
             f"border-radius:3px; font-family:{MONO_FONT}; font-size:{FONT['label']}pt;")
 
     # ---------------------------------------------------------------- #
@@ -846,10 +846,10 @@ class AnalysisTab(QWidget):
         self._stat_vals["threshold"].setText(f"{r.threshold_k:.1f} °C")
 
         # Colour the stat values by verdict
-        colors = {VERDICT_PASS: "#00d479",
-                  VERDICT_WARNING: "#ffb300",
-                  VERDICT_FAIL: "#ff3b3b"}
-        c = colors.get(r.verdict, PALETTE.get('textDim', '#999999'))
+        colors = {VERDICT_PASS: PALETTE['success'],
+                  VERDICT_WARNING: PALETTE['warning'],
+                  VERDICT_FAIL: PALETTE['danger']}
+        c = colors.get(r.verdict, PALETTE['textDim'])
         for key in ["hotspots", "peak", "area_frac"]:
             self._stat_vals[key].setStyleSheet(
                 f"font-family:{MONO_FONT}; font-size:{FONT['body']}pt; color:{c};")

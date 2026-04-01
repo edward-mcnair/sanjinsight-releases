@@ -51,7 +51,7 @@ class ScanMapView(QWidget):
         super().__init__()
         self.setMinimumSize(400, 300)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.setStyleSheet("background:#0d0d0d;")
+        self.setStyleSheet(f".QWidget {{ background:{PALETTE['canvas']}; }}")
         self.setMouseTracking(True)
 
         self._data      = None   # float32 map
@@ -116,10 +116,10 @@ class ScanMapView(QWidget):
 
     def paintEvent(self, e):
         p = QPainter(self)
-        p.fillRect(self.rect(), QColor(13, 13, 13))
+        p.fillRect(self.rect(), QColor(PALETTE['canvas']))
 
         if self._pixmap is None:
-            p.setPen(QColor(60, 60, 60))
+            p.setPen(QColor(PALETTE['canvasText']))
             p.setFont(sans_font(15))
             p.drawText(self.rect(), Qt.AlignCenter,
                        "No scan data\n\nConfigure grid and run scan")
@@ -136,7 +136,8 @@ class ScanMapView(QWidget):
 
         # Tile grid overlay
         if self._show_grid and self._n_cols > 0 and self._n_rows > 0:
-            p.setPen(QPen(QColor(0, 180, 130, 80), 1, Qt.DotLine))
+            c = QColor(PALETTE['accent']); c.setAlpha(80)
+            p.setPen(QPen(c, 1, Qt.DotLine))
             tw = dw / self._n_cols
             th = dh / self._n_rows
             for c in range(1, self._n_cols):
@@ -162,7 +163,7 @@ class ScanMapView(QWidget):
 
         # Title
         if self._title:
-            p.setPen(QColor(100, 100, 100))
+            p.setPen(QColor(PALETTE['textDim']))
             p.setFont(sans_font(12))
             p.drawText(self.rect().adjusted(8, 4, -8, -4),
                        Qt.AlignTop | Qt.AlignRight, self._title)
@@ -249,9 +250,9 @@ class ScanMapView(QWidget):
         from PyQt5.QtWidgets import QMenu
         menu = QMenu(self)
         menu.setStyleSheet(
-            f"QMenu {{ background:{PALETTE.get('surface','#2d2d2d')}; color:{PALETTE.get('text','#ebebeb')}; border:1px solid {PALETTE.get('border','#484848')}; }}"
-            f"QMenu::item:selected {{ background:{PALETTE.get('surface2','#3d3d3d')}; }}"
-            f"QMenu::separator {{ height:1px; background:{PALETTE.get('border','#484848')}; margin:3px 8px; }}")
+            f"QMenu {{ background:{PALETTE['surface']}; color:{PALETTE['text']}; border:1px solid {PALETTE['border']}; }}"
+            f"QMenu::item:selected {{ background:{PALETTE['surface2']}; }}"
+            f"QMenu::separator {{ height:1px; background:{PALETTE['border']}; margin:3px 8px; }}")
         menu.addAction("🔍  Reset Zoom (fit)", self.reset_zoom)
         menu.addSeparator()
         act_save = menu.addAction("💾  Save Map Image…")
@@ -351,7 +352,7 @@ class ScanTab(QWidget):
         # ---- Tile size summary ----
         self._summary_lbl = QLabel("")
         self._summary_lbl.setStyleSheet(
-            f"font-family:{MONO_FONT}; font-size:{FONT['label']}pt; color:#666;")
+            f"font-family:{MONO_FONT}; font-size:{FONT['label']}pt; color:{PALETTE['textDim']};")
         self._summary_lbl.setWordWrap(True)
         lay.addWidget(self._summary_lbl)
 
@@ -369,14 +370,17 @@ class ScanTab(QWidget):
         rl.setSpacing(6)
 
         self._run_btn   = QPushButton("Start Scan")
-        set_btn_icon(self._run_btn, "fa5s.play", "#00d4aa")
+        set_btn_icon(self._run_btn, "fa5s.play", PALETTE['accent'])
         self._run_btn.setObjectName("primary")
         self._run_btn.setFixedHeight(42)   # was 34 — taller so spinner text is
-        self._run_btn.setStyleSheet(       # clearly readable while scanning
-            scaled_qss("font-size:15pt; font-weight:600;"))
+        # Font set via QFont instead of setStyleSheet to avoid overriding #primary
+        _f = self._run_btn.font()
+        _f.setPointSize(15)
+        _f.setWeight(75)  # QFont.Bold
+        self._run_btn.setFont(_f)
 
         self._abort_btn = QPushButton("Abort")
-        set_btn_icon(self._abort_btn, "fa5s.stop", "#ff6666")
+        set_btn_icon(self._abort_btn, "fa5s.stop", PALETTE['danger'])
         self._abort_btn.setObjectName("danger")
         self._abort_btn.setFixedHeight(30)
         self._abort_btn.setEnabled(False)
@@ -390,7 +394,7 @@ class ScanTab(QWidget):
 
         self._tile_lbl = QLabel("Ready")
         self._tile_lbl.setStyleSheet(
-            f"font-family:{MONO_FONT}; font-size:{FONT['heading']}pt; color:#555;")
+            f"font-family:{MONO_FONT}; font-size:{FONT['heading']}pt; color:{PALETTE['textDim']};")
         self._tile_lbl.setWordWrap(True)
 
         rl.addWidget(self._run_btn)
@@ -408,7 +412,7 @@ class ScanTab(QWidget):
         self._log.setReadOnly(True)
         self._log.setFixedHeight(120)
         self._log.setStyleSheet(
-            f"background:{PALETTE.get('bg','#242424')}; color:{PALETTE.get('textDim','#888')}; "
+            f"background:{PALETTE['bg']}; color:{PALETTE['textDim']}; "
             f"font-family:{MONO_FONT}; font-size:{FONT['sublabel']}pt;")
         ll.addWidget(self._log)
         self._scan_log_more.addWidget(log_box)
@@ -447,7 +451,7 @@ class ScanTab(QWidget):
             val = QLabel("—")
             val.setAlignment(Qt.AlignCenter)
             val.setStyleSheet(
-                scaled_qss(f"font-family:{MONO_FONT}; font-size:15pt; color:#aaa;"))
+                scaled_qss(f"font-family:{MONO_FONT}; font-size:15pt; color:{PALETTE['textSub']};"))
             v.addWidget(sub)
             v.addWidget(val)
             w2._val = val
@@ -462,14 +466,14 @@ class ScanTab(QWidget):
         # is floating in the wrong position.  Use explicit styling instead.
         result_tabs.setStyleSheet(f"""
             QTabWidget::pane {{
-                border: 1px solid {PALETTE.get('border','#484848')};
+                border: 1px solid {PALETTE['border']};
                 border-top: none;
-                background: {PALETTE.get('bg','#242424')};
+                background: {PALETTE['bg']};
             }}
             QTabBar::tab {{
-                background: {PALETTE.get('surface2','#3d3d3d')};
-                color: {PALETTE.get('textDim','#999999')};
-                border: 1px solid {PALETTE.get('border','#484848')};
+                background: {PALETTE['surface2']};
+                color: {PALETTE['textDim']};
+                border: 1px solid {PALETTE['border']};
                 border-bottom: none;
                 border-radius: 3px 3px 0 0;
                 padding: 4px 20px;
@@ -477,11 +481,11 @@ class ScanTab(QWidget):
                 font-size: {FONT['label']}pt;
             }}
             QTabBar::tab:selected {{
-                background: {PALETTE.get('bg','#242424')};
-                color: {PALETTE.get('accent','#00d4aa')};
-                border-bottom-color: {PALETTE.get('bg','#242424')};
+                background: {PALETTE['bg']};
+                color: {PALETTE['accent']};
+                border-bottom-color: {PALETTE['bg']};
             }}
-            QTabBar::tab:hover:!selected {{ color: {PALETTE.get('textSub','#6a6a6a')}; background: {PALETTE.get('surface','#2d2d2d')}; }}
+            QTabBar::tab:hover:!selected {{ color: {PALETTE['textSub']}; background: {PALETTE['surface']}; }}
         """)
 
         # Live / final ΔR/R
@@ -551,6 +555,21 @@ class ScanTab(QWidget):
     #  Public API                                                       #
     # ---------------------------------------------------------------- #
 
+    def _apply_styles(self):
+        """Re-apply PALETTE-driven colours on theme switch."""
+        set_btn_icon(self._run_btn, "fa5s.play", PALETTE['accent'])
+        set_btn_icon(self._abort_btn, "fa5s.stop", PALETTE['danger'])
+        self._tile_lbl.setStyleSheet(
+            f"font-family:{MONO_FONT}; font-size:{FONT['heading']}pt; color:{PALETTE['textDim']};")
+        self._summary_lbl.setStyleSheet(
+            f"font-family:{MONO_FONT}; font-size:{FONT['label']}pt; color:{PALETTE['textDim']};")
+        self._map_drr.setStyleSheet(
+            f"background:{PALETTE['canvas']};")
+        self._map_drr.update()
+        self._map_dt.setStyleSheet(
+            f"background:{PALETTE['canvas']};")
+        self._map_dt.update()
+
     def set_grid_from_profile(self, step_um: float, overlap_pct: float) -> None:
         """Apply grid scan defaults from a material profile."""
         if step_um > 0:
@@ -573,13 +592,14 @@ class ScanTab(QWidget):
         self._stat_fields["tiles"]._val.setText(
             f"{prog.tile}/{prog.total_tiles}")
         self._stat_fields["state"]._val.setText(state_str)
-        color = ("#00d4aa" if prog.state == "complete" else
-                 "#ff6666" if prog.state in ("error", "aborted") else "#ffaa44")
+        color = (PALETTE['accent'] if prog.state == "complete" else
+                 PALETTE['danger'] if prog.state in ("error", "aborted") else PALETTE['warning'])
         self._stat_fields["state"]._val.setStyleSheet(
             scaled_qss(f"font-family:{MONO_FONT}; font-size:15pt; color:{color};"))
 
+        _dim = PALETTE['textDim']
         self._log.append(
-            f"<span style='color:#444'>"
+            f"<span style='color:{_dim}'>"
             f"[{time.strftime('%H:%M:%S')}]</span>  {prog.message}")
         self._log.verticalScrollBar().setValue(
             self._log.verticalScrollBar().maximum())

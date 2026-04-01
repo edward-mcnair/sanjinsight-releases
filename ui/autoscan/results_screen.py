@@ -40,11 +40,11 @@ class _HotspotCard(QWidget):
         # Determine border color from confidence
         conf = getattr(hotspot, "confidence", 0.0)
         if conf >= 0.80:
-            border_col = PALETTE.get("danger",  "#ff4466")
+            border_col = PALETTE['danger']
         elif conf >= 0.50:
-            border_col = PALETTE.get("warning", "#ffaa44")
+            border_col = PALETTE['warning']
         else:
-            border_col = PALETTE.get("info",    "#5b8ff9")
+            border_col = PALETTE['info']
 
         lay = QHBoxLayout(self)
         lay.setContentsMargins(0, 0, 8, 0)
@@ -71,7 +71,7 @@ class _HotspotCard(QWidget):
 
         title_lbl = QLabel(title)
         title_lbl.setStyleSheet(
-            f"color:{PALETTE.get('text','#ebebeb')}; "
+            f"color:{PALETTE['text']}; "
             f"font-size:{FONT['body']}pt; font-weight:600; background:transparent;")
 
         # Detail line
@@ -81,7 +81,7 @@ class _HotspotCard(QWidget):
             details.append(f"{area:.0f} μm²")
         detail_lbl = QLabel("  ·  ".join(details))
         detail_lbl.setStyleSheet(
-            f"color:{PALETTE.get('textDim','#999999')}; "
+            f"color:{PALETTE['textDim']}; "
             f"font-size:{FONT['label']}pt; background:transparent;")
 
         body_lay.addWidget(title_lbl)
@@ -89,15 +89,15 @@ class _HotspotCard(QWidget):
         lay.addWidget(body, 1)
 
         # Background + border
-        surf = PALETTE.get("surface", "#2d2d2d")
-        bdr  = PALETTE.get("border",  "#484848")
+        surf = PALETTE['surface']
+        bdr  = PALETTE['border']
         self.setStyleSheet(
             f"#hotspotCard {{ background:{surf}; border:1px solid {bdr}; "
             f"border-left:none; border-radius:0 4px 4px 0; }}")
 
     def _apply_styles(self) -> None:
-        surf = PALETTE.get("surface", "#2d2d2d")
-        bdr  = PALETTE.get("border",  "#484848")
+        surf = PALETTE['surface']
+        bdr  = PALETTE['border']
         self.setStyleSheet(
             f"#hotspotCard {{ background:{surf}; border:1px solid {bdr}; "
             f"border-left:none; border-radius:0 4px 4px 0; }}")
@@ -154,7 +154,7 @@ class _ResultImageView(QLabel):
             p.setBrush(QBrush(dim))
             p.setPen(QPen(col, 2))
             p.drawEllipse(cx - r, cy - r, r * 2, r * 2)
-            p.setPen(QPen(QColor("#ffffff")))
+            p.setPen(QPen(QColor(PALETTE['text'])))
             p.drawText(cx - r, cy - r, r * 2, r * 2, Qt.AlignCenter, label)
 
         p.end()
@@ -338,9 +338,9 @@ class ResultsScreen(QWidget):
                     from acquisition.analysis import ThermalAnalysisEngine, AnalysisConfig
                     ar  = ThermalAnalysisEngine(AnalysisConfig()).run(display_map)
                     rows, cols = display_map.shape[:2]
-                    danger  = PALETTE.get("danger",  "#ff4466")
-                    warning = PALETTE.get("warning", "#ffaa44")
-                    info    = PALETTE.get("info",    "#5b8ff9")
+                    danger  = PALETTE['danger']
+                    warning = PALETTE['warning']
+                    info    = PALETTE['info']
                     for j, hs in enumerate(ar.hotspots[:6]):
                         col = danger if hs.confidence >= 0.8 else \
                               warning if hs.confidence >= 0.5 else info
@@ -409,22 +409,22 @@ class ResultsScreen(QWidget):
     def _hline() -> QFrame:
         f = QFrame()
         f.setFrameShape(QFrame.HLine)
-        f.setStyleSheet(f"color:{PALETTE.get('border','#484848')};")
+        f.setStyleSheet(f"color:{PALETTE['border']};")
         return f
 
     # ── Theme ─────────────────────────────────────────────────────────
 
     def _apply_styles(self) -> None:
         P    = PALETTE
-        text = P.get("text",    "#ebebeb")
-        dim  = P.get("textDim", "#999999")
-        surf = P.get("surface", "#2d2d2d")
-        bdr  = P.get("border",  "#484848")
-        acc  = P.get("accent",  "#00d4aa")
-        danger = P.get("danger","#ff4466")
+        text = P['text']
+        dim  = P['textDim']
+        surf = P['surface']
+        bdr  = P['border']
+        acc  = P['accent']
+        danger = P['danger']
 
         self.setStyleSheet(scaled_qss(f"""
-            QWidget {{ background: {P.get('bg','#242424')}; }}
+            QWidget {{ background: {P['bg']}; }}
             QLabel {{ color:{text}; font-size:{FONT['body']}pt; background:transparent; }}
             QLabel#sectionHeader {{
                 color:{dim}; font-size:{FONT['label']}pt; font-weight:600;
@@ -451,7 +451,7 @@ class ResultsScreen(QWidget):
         self._quality_card.setStyleSheet(
             f"#qualityCard {{ background:{surf}; border:1px solid {bdr}; border-radius:6px; }}")
         self._quality_bar.setStyleSheet(f"""
-            QProgressBar {{ background:{P.get('surface2','#333333')};
+            QProgressBar {{ background:{P['surface2']};
                             border-radius:3px; }}
             QProgressBar::chunk {{ background:{acc}; border-radius:3px; }}
         """)
@@ -467,23 +467,23 @@ class ResultsScreen(QWidget):
                 border:1px solid {bdr}; border-radius:4px;
                 font-size:{FONT['body']}pt; padding:0 14px;
             }}
-            QPushButton:hover {{ background:{P.get('surfaceHover','#404040')}; color:{text}; }}
+            QPushButton:hover {{ background:{P['surfaceHover']}; color:{text}; }}
         """)
         _acc_style = scaled_qss(f"""
             QPushButton {{
-                background:{acc}; color:#000;
+                background:{acc}; color:{P['textOnAccent']};
                 border:none; border-radius:4px;
                 font-size:{FONT['body']}pt; font-weight:700; padding:0 14px;
             }}
-            QPushButton:hover {{ background:{P.get('accentHover',acc)}; }}
+            QPushButton:hover {{ background:{P['accentHover']}; }}
         """)
         _analysis_style = scaled_qss(f"""
             QPushButton {{
-                background:{P.get('info','#5b8ff9')}33; color:{P.get('info','#5b8ff9')};
-                border:1px solid {P.get('info','#5b8ff9')}66; border-radius:4px;
+                background:{P['info']}33; color:{P['info']};
+                border:1px solid {P['info']}66; border-radius:4px;
                 font-size:{FONT['body']}pt; font-weight:600; padding:0 14px;
             }}
-            QPushButton:hover {{ background:{P.get('info','#5b8ff9')}55; }}
+            QPushButton:hover {{ background:{P['info']}55; }}
         """)
         self._back_btn.setStyleSheet(_back_style)
         self._new_btn.setStyleSheet(_back_style)

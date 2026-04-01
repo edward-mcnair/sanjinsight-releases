@@ -56,14 +56,14 @@ class NotesDialog(QDialog):
         self.setMinimumWidth(560)
         self.setMinimumHeight(340)
         self.setStyleSheet(
-            f"QDialog  {{ background:{PALETTE.get('bg','#242424')}; }}"
-            f"QLabel   {{ color:{PALETTE.get('text','#ebebeb')}; font-size:{FONT['heading']}pt; }}"
-            f"QGroupBox {{ color:{PALETTE.get('textDim','#999999')}; font-size:{FONT['body']}pt; border:1px solid {PALETTE.get('border','#484848')}; "
+            f"QDialog  {{ background:{PALETTE['bg']}; }}"
+            f"QLabel   {{ color:{PALETTE['text']}; font-size:{FONT['heading']}pt; }}"
+            f"QGroupBox {{ color:{PALETTE['textDim']}; font-size:{FONT['body']}pt; border:1px solid {PALETTE['border']}; "
             f"            border-radius:3px; margin-top:8px; padding-top:6px; }}"
             f"QGroupBox::title {{ subcontrol-origin:margin; left:8px; }}"
-            f"QPushButton {{ background:{PALETTE.get('surface2','#3d3d3d')}; color:{PALETTE.get('textSub','#6a6a6a')}; border:1px solid {PALETTE.get('border','#484848')}; "
+            f"QPushButton {{ background:{PALETTE['surface2']}; color:{PALETTE['textSub']}; border:1px solid {PALETTE['border']}; "
             f"              border-radius:2px; padding:4px 10px; font-size:{FONT['body']}pt; }}"
-            f"QPushButton:hover {{ background:{PALETTE.get('surface','#2d2d2d')}; color:{PALETTE.get('text','#ebebeb')}; }}")
+            f"QPushButton:hover {{ background:{PALETTE['surface']}; color:{PALETTE['text']}; }}")
 
         lay = QVBoxLayout(self)
         lay.setContentsMargins(16, 14, 16, 14)
@@ -71,21 +71,21 @@ class NotesDialog(QDialog):
 
         # Title
         title = QLabel("Edit Notes")
-        title.setStyleSheet(scaled_qss(f"font-size:18pt; font-weight:bold; color:{PALETTE.get('text','#ebebeb')};"))
+        title.setStyleSheet(scaled_qss(f"font-size:18pt; font-weight:bold; color:{PALETTE['text']};"))
         lay.addWidget(title)
 
         hint = QLabel(
             "Describe the sample, conditions, DUT ID, or anything needed "
             "to reproduce this measurement.")
         hint.setWordWrap(True)
-        hint.setStyleSheet(f"font-size:{FONT['body']}pt; color:{PALETTE.get('textDim','#999999')};")
+        hint.setStyleSheet(f"font-size:{FONT['body']}pt; color:{PALETTE['textDim']};")
         lay.addWidget(hint)
 
         # Main text editor
         self._edit = QTextEdit()
         self._edit.setPlainText(initial_text)
         self._edit.setStyleSheet(
-            f"background:{PALETTE.get('bg','#242424')}; color:{PALETTE.get('text','#ebebeb')}; border:1px solid {PALETTE.get('border','#484848')}; "
+            f"background:{PALETTE['bg']}; color:{PALETTE['text']}; border:1px solid {PALETTE['border']}; "
             f"font-size:{FONT['heading']}pt; font-family:{MONO_FONT};")
         self._edit.setMinimumHeight(120)
         lay.addWidget(self._edit)
@@ -99,17 +99,17 @@ class NotesDialog(QDialog):
             btn = QPushButton(tag)
             btn.setFixedHeight(26)
             btn.setStyleSheet(
-                f"QPushButton {{ background:{PALETTE.get('surface2','#3d3d3d')}; color:{PALETTE.get('accent','#00d4aa')}; "
-                f"border:1px solid {PALETTE.get('accent','#00d4aa')}33; border-radius:12px; "
+                f"QPushButton {{ background:{PALETTE['surface2']}; color:{PALETTE['accent']}; "
+                f"border:1px solid {PALETTE['accent']}33; border-radius:12px; "
                 f"font-size:{FONT['label']}pt; padding:0 8px; }}"
-                f"QPushButton:hover {{ background:{PALETTE.get('surface','#2d2d2d')}; border-color:{PALETTE.get('accent','#00d4aa')}99; }}")
+                f"QPushButton:hover {{ background:{PALETTE['surface']}; border-color:{PALETTE['accent']}99; }}")
             btn.clicked.connect(lambda _, t=tag: self._insert(t))
             chips_lay.addWidget(btn, i // cols, i % cols)
         lay.addWidget(chips_box)
 
         # Character count
         self._char_lbl = QLabel()
-        self._char_lbl.setStyleSheet(f"color:{PALETTE.get('textDim','#999999')}; font-size:{FONT['label']}pt;")
+        self._char_lbl.setStyleSheet(f"color:{PALETTE['textDim']}; font-size:{FONT['label']}pt;")
         self._edit.textChanged.connect(self._update_char_count)
         self._update_char_count()
         lay.addWidget(self._char_lbl)
@@ -177,7 +177,7 @@ class SessionCard(QFrame):
         # Thumbnail
         self._thumb = QLabel()
         self._thumb.setFixedSize(self.THUMB_W, self.THUMB_H)
-        self._thumb.setStyleSheet("background:#0d0d0d; border:1px solid #2a2a2a;")
+        self._thumb.setStyleSheet(f"background:{PALETTE['surface']}; border:1px solid {PALETTE['border']};")
         self._thumb.setAlignment(Qt.AlignCenter)
         self._load_thumbnail(meta)
         lay.addWidget(self._thumb)
@@ -188,7 +188,7 @@ class SessionCard(QFrame):
 
         self._label_lbl = QLabel(meta.label or meta.uid)
         self._label_lbl.setStyleSheet(
-            scaled_qss(f"font-size:15pt; color:{PALETTE.get('text','#ebebeb')}; font-weight:bold;"))
+            scaled_qss(f"font-size:15pt; color:{PALETTE['text']}; font-weight:bold;"))
         self._label_lbl.setWordWrap(False)
 
         snr_str = f"SNR {meta.snr_db:.1f} dB" if meta.snr_db else "SNR —"
@@ -196,7 +196,7 @@ class SessionCard(QFrame):
         sub = QLabel(
             f"{meta.timestamp_str}   ·   {meta.n_frames} frames   ·   "
             f"{snr_str}   ·   {size_str}")
-        sub.setStyleSheet(f"font-size:{FONT['label']}pt; color:{PALETTE.get('textDim','#999999')};")
+        sub.setStyleSheet(f"font-size:{FONT['label']}pt; color:{PALETTE['textDim']};")
 
         info.addWidget(self._label_lbl)
         info.addWidget(sub)
@@ -215,13 +215,13 @@ class SessionCard(QFrame):
             free_tags = list(getattr(meta, "tags", []) or [])
 
             if op:
-                chips_lay.addWidget(self._chip(op, "#4e73df", filled=True))
+                chips_lay.addWidget(self._chip(op, PALETTE['info'], filled=True))
             if dev:
-                chips_lay.addWidget(self._chip(dev, "#00d4aa"))
+                chips_lay.addWidget(self._chip(dev, PALETTE['accent']))
             if proj:
-                chips_lay.addWidget(self._chip(proj, "#f5a623"))
+                chips_lay.addWidget(self._chip(proj, PALETTE['warning']))
             for t in free_tags[:4]:          # show at most 4 free tags
-                chips_lay.addWidget(self._chip(t, PALETTE.get("textDim", "#8892aa")))
+                chips_lay.addWidget(self._chip(t, PALETTE['textDim']))
 
             chips_lay.addStretch()
             info.addWidget(chips_w)
@@ -236,7 +236,7 @@ class SessionCard(QFrame):
         lay.addWidget(self._status_badge)
 
         # Notes badge — visible only when the session has notes
-        self._notes_badge = make_icon_label(IC.NOTE, color="#00d4aa66", size=14)
+        self._notes_badge = make_icon_label(IC.NOTE, color=f"{PALETTE['accent']}66", size=14)
         self._notes_badge.setFixedSize(20, 20)
         self._notes_badge.setToolTip("This session has notes")
         self._notes_badge.setVisible(bool(meta.notes))
@@ -254,7 +254,7 @@ class SessionCard(QFrame):
         del_btn.setText("✕")
         del_btn.setFixedSize(22, 22)
         del_btn.setStyleSheet(
-            scaled_qss(f"background:transparent; color:{PALETTE.get('textDim','#999999')}; border:none; font-size:15pt;"))
+            scaled_qss(f"background:transparent; color:{PALETTE['textDim']}; border:none; font-size:15pt;"))
         del_btn.clicked.connect(lambda: self.deleted.emit(self.uid))
         lay.addWidget(del_btn)
 
@@ -265,7 +265,7 @@ class SessionCard(QFrame):
         lbl.setFixedHeight(16)
         if filled:
             lbl.setStyleSheet(
-                f"color:#fff; background:{color}; border-radius:7px; "
+                f"color:{PALETTE['textOnAccent']}; background:{color}; border-radius:7px; "
                 f"padding:0 6px; font-size:{FONT['sublabel']}pt;")
         else:
             lbl.setStyleSheet(
@@ -283,14 +283,14 @@ class SessionCard(QFrame):
         else:
             self._thumb.setText("No\npreview")
             self._thumb.setStyleSheet(
-                scaled_qss("background:#0d0d0d; border:1px solid #2a2a2a; "
-                           "color:#333; font-size:16.5pt;"))
+                scaled_qss(f"background:{PALETTE['canvas']}; border:1px solid {PALETTE['border']}; "
+                           f"color:{PALETTE['textSub']}; font-size:16.5pt;"))
 
     _STATUS_COLORS = {
-        "pending":  "#f5a623",
-        "reviewed": "#00d4aa",
-        "flagged":  "#ff6666",
-        "archived": "#666666",
+        "pending":  PALETTE['warning'],
+        "reviewed": PALETTE['accent'],
+        "flagged":  PALETTE['danger'],
+        "archived": PALETTE['textSub'],
     }
 
     def _set_status_badge(self, status: str):
@@ -302,7 +302,7 @@ class SessionCard(QFrame):
         self._status_badge.setText(status.capitalize())
         self._status_badge.setToolTip(f"Status: {status}")
         self._status_badge.setStyleSheet(
-            f"color:#fff; background:{color}; border-radius:7px; "
+            f"color:{PALETTE['textOnAccent']}; background:{color}; border-radius:7px; "
             f"padding:0 6px; font-size:{FONT['sublabel']}pt;")
         self._status_badge.setVisible(True)
 
@@ -319,12 +319,12 @@ class SessionCard(QFrame):
         if slot is None:
             self._cmp_badge.setVisible(False)
             return
-        color = "#00d4aa" if slot == "a" else "#4e73df"
+        color = PALETTE['accent'] if slot == "a" else PALETTE['info']
         letter = slot.upper()
         self._cmp_badge.setText(letter)
         self._cmp_badge.setToolTip(f"Assigned to compare slot {letter}")
         self._cmp_badge.setStyleSheet(
-            f"background:{color}; color:#fff; border-radius:10px; "
+            f"background:{color}; color:{PALETTE['textOnAccent']}; border-radius:10px; "
             f"font-size:{FONT['sublabel']}pt; font-weight:700;"
         )
         self._cmp_badge.setVisible(True)
@@ -334,10 +334,10 @@ class SessionCard(QFrame):
         self._apply_style()
 
     def _apply_style(self):
-        acc  = PALETTE.get('accent',   '#00d4aa')
-        surf = PALETTE.get('surface',  '#2d2d2d')
-        surf2 = PALETTE.get('surface2', '#3d3d3d')
-        bdr  = PALETTE.get('border',   '#484848')
+        acc  = PALETTE['accent']
+        surf = PALETTE['surface']
+        surf2 = PALETTE['surface2']
+        bdr  = PALETTE['border']
         if self._selected:
             self.setStyleSheet(
                 f"SessionCard {{ background:{surf2}; border:1px solid {acc}; "
@@ -365,16 +365,16 @@ class DataImagePane(QWidget):
         lay.setSpacing(3)
         self._lbl = QLabel()
         self._lbl.setMinimumSize(300, 220)
-        self._lbl.setStyleSheet("background:#0d0d0d; border:1px solid #2a2a2a;")
+        self._lbl.setStyleSheet(f"background:{PALETTE['canvas']}; border:1px solid {PALETTE['border']};")
         self._lbl.setAlignment(Qt.AlignCenter)
         self._title = QLabel(title)
         self._title.setAlignment(Qt.AlignCenter)
         self._title.setStyleSheet(
-            f"font-size:{FONT['label']}pt; color:#444; letter-spacing:1px;")
+            f"font-size:{FONT['label']}pt; color:{PALETTE['textSub']}; letter-spacing:1px;")
         self._stats = QLabel("")
         self._stats.setAlignment(Qt.AlignCenter)
         self._stats.setStyleSheet(
-            f"font-family:{MONO_FONT}; font-size:{FONT['label']}pt; color:#444;")
+            f"font-family:{MONO_FONT}; font-size:{FONT['label']}pt; color:{PALETTE['textSub']};")
         lay.addWidget(self._lbl)
         lay.addWidget(self._title)
         lay.addWidget(self._stats)
@@ -458,10 +458,10 @@ class DataTab(QWidget):
 
     def _apply_styles(self) -> None:
         P   = PALETTE
-        bg  = P.get("bg",      "#242424")
-        bdr = P.get("border",  "#484848")
-        dim = P.get("textDim", "#999999")
-        txt = P.get("text",    "#ebebeb")
+        bg  = P['bg']
+        bdr = P['border']
+        dim = P.get("textDim", PALETTE['textDim'])
+        txt = P['text']
         # Inline-styled notes editor — the most visibly affected widget
         if hasattr(self, "_notes_edit"):
             self._notes_edit.setStyleSheet(
@@ -486,14 +486,14 @@ class DataTab(QWidget):
         hdr = QHBoxLayout()
         title = QLabel("Sessions")
         title.setStyleSheet(
-            scaled_qss("font-size:15pt; color:#888; letter-spacing:2px; "
+            scaled_qss(f"font-size:15pt; color:{PALETTE['textDim']}; letter-spacing:2px; "
                        "text-transform:uppercase;"))
         hdr.addWidget(title)
         hdr.addStretch()
 
         self._count_lbl = QLabel("0")
         self._count_lbl.setStyleSheet(
-            f"font-family:{MONO_FONT}; font-size:{FONT['heading']}pt; color:#444;")
+            f"font-family:{MONO_FONT}; font-size:{FONT['heading']}pt; color:{PALETTE['textSub']};")
         hdr.addWidget(self._count_lbl)
         lay.addLayout(hdr)
 
@@ -507,8 +507,8 @@ class DataTab(QWidget):
         self._status_filter.addItems(["All", "Pending", "Reviewed", "Flagged", "Archived"])
         self._status_filter.setFixedHeight(26)
         self._status_filter.setStyleSheet(
-            f"QComboBox {{ background:{PALETTE.get('surface2','#3d3d3d')}; "
-            f"color:{PALETTE.get('text','#ebebeb')}; border:1px solid {PALETTE.get('border','#484848')}; "
+            f"QComboBox {{ background:{PALETTE['surface2']}; "
+            f"color:{PALETTE['text']}; border:1px solid {PALETTE['border']}; "
             f"padding:2px 8px; font-size:{FONT['body']}pt; }}")
         self._status_filter.currentTextChanged.connect(
             lambda _: self._filter_cards(self._search.text()))
@@ -518,7 +518,7 @@ class DataTab(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setStyleSheet(f"QScrollArea {{ border:none; background:{PALETTE.get('bg','#242424')}; }}")
+        scroll.setStyleSheet(f"QScrollArea {{ border:none; background:{PALETTE['bg']}; }}")
 
         self._list_widget = QWidget()
         self._list_layout = QVBoxLayout(self._list_widget)
@@ -569,7 +569,7 @@ class DataTab(QWidget):
         try:
             import qtawesome as qta
             icon_lbl = QLabel()
-            px = qta.icon(IC.FOLDER, color=PALETTE.get("textDim", "#555")).pixmap(64, 64)
+            px = qta.icon(IC.FOLDER, color=PALETTE['textDim']).pixmap(64, 64)
             icon_lbl.setPixmap(px)
             icon_lbl.setAlignment(Qt.AlignCenter)
             lay.addWidget(icon_lbl)
@@ -583,7 +583,7 @@ class DataTab(QWidget):
         title.setStyleSheet(
             f"font-size: {FONT.get('title', 16)}pt;"
             f"font-weight: 600;"
-            f"color: {PALETTE.get('textSub', '#6a6a6a')};")
+            f"color: {PALETTE['textSub']};")
         lay.addWidget(title)
 
         lay.addSpacing(6)
@@ -596,7 +596,7 @@ class DataTab(QWidget):
         desc.setMaximumWidth(420)
         desc.setStyleSheet(
             f"font-size: {FONT.get('body', 12)}pt;"
-            f"color: {PALETTE.get('textDim', '#999')};")
+            f"color: {PALETTE['textDim']};")
         lay.addWidget(desc, 0, Qt.AlignCenter)
 
         lay.addSpacing(16)
@@ -605,7 +605,7 @@ class DataTab(QWidget):
         go_btn.setObjectName("primary")
         go_btn.setFixedHeight(34)
         go_btn.setCursor(Qt.PointingHandCursor)
-        set_btn_icon(go_btn, IC.PLAY, "#00d4aa")
+        set_btn_icon(go_btn, IC.PLAY, PALETTE['accent'])
         go_btn.clicked.connect(lambda: self.navigate_requested.emit("Capture"))
         lay.addWidget(go_btn, 0, Qt.AlignCenter)
 
@@ -646,7 +646,7 @@ class DataTab(QWidget):
             ml.addWidget(self._sub(lbl), r, 0)
             val = QLabel("—")
             val.setStyleSheet(
-                f"font-family:{MONO_FONT}; font-size:{FONT['heading']}pt; color:#aaa;")
+                f"font-family:{MONO_FONT}; font-size:{FONT['heading']}pt; color:{PALETTE['textDim']};")
             val.setWordWrap(True)
             ml.addWidget(val, r, 1)
             self._meta_fields[key] = val
@@ -658,7 +658,7 @@ class DataTab(QWidget):
         self._notes_edit.setPlaceholderText("Click to add notes…")
         self._notes_edit.setFixedHeight(72)
         self._notes_edit.setStyleSheet(
-            f"background:{PALETTE.get('bg','#242424')}; color:{PALETTE.get('text','#ebebeb')}; border:1px solid {PALETTE.get('border','#484848')}; "
+            f"background:{PALETTE['bg']}; color:{PALETTE['text']}; border:1px solid {PALETTE['border']}; "
             f"font-size:{FONT['body']}pt; font-family:{MONO_FONT};")
         self._notes_edit.focusOutEvent = self._notes_focus_out
         ml.addWidget(self._notes_edit, notes_row, 1)
@@ -683,20 +683,20 @@ class DataTab(QWidget):
         status_row = QHBoxLayout()
         status_lbl = QLabel("Status:")
         status_lbl.setStyleSheet(
-            f"font-size:{FONT['body']}pt; color:{PALETTE.get('textDim','#999999')};")
+            f"font-size:{FONT['body']}pt; color:{PALETTE['textDim']};")
         self._status_combo = QComboBox()
         self._status_combo.addItems(["pending", "reviewed", "flagged", "archived"])
         self._status_combo.setFixedHeight(26)
         self._status_combo.setStyleSheet(
-            f"QComboBox {{ background:{PALETTE.get('surface2','#3d3d3d')}; "
-            f"color:{PALETTE.get('text','#ebebeb')}; border:1px solid {PALETTE.get('border','#484848')}; "
+            f"QComboBox {{ background:{PALETTE['surface2']}; "
+            f"color:{PALETTE['text']}; border:1px solid {PALETTE['border']}; "
             f"padding:2px 6px; font-size:{FONT['body']}pt; }}")
         self._status_combo.currentTextChanged.connect(self._on_status_changed)
         status_row.addWidget(status_lbl)
         status_row.addWidget(self._status_combo, 1)
 
         self._delete_btn   = QPushButton("Delete")
-        set_btn_icon(self._delete_btn, "fa5s.trash", "#ff6666")
+        set_btn_icon(self._delete_btn, "fa5s.trash", PALETTE['danger'])
         self._delete_btn.setObjectName("danger")
         self._cmp_a_btn    = QPushButton("Set as A")
         self._cmp_b_btn    = QPushButton("Set as B")
@@ -715,14 +715,14 @@ class DataTab(QWidget):
 
         cmp_lbl = QLabel("Compare")
         cmp_lbl.setStyleSheet(
-            f"font-size:{FONT['label']}pt; color:#555; letter-spacing:1px;")
+            f"font-size:{FONT['label']}pt; color:{PALETTE['textSub']}; letter-spacing:1px;")
         cl.addWidget(cmp_lbl)
 
         self._cmp_a_lbl = QLabel("A: —")
         self._cmp_b_lbl = QLabel("B: —")
         for l in [self._cmp_a_lbl, self._cmp_b_lbl]:
             l.setStyleSheet(
-                f"font-family:{MONO_FONT}; font-size:{FONT['label']}pt; color:#666;")
+                f"font-family:{MONO_FONT}; font-size:{FONT['label']}pt; color:{PALETTE['textSub']};")
             l.setWordWrap(True)
 
         for b in [self._cmp_a_btn, self._cmp_b_btn]:
@@ -732,7 +732,7 @@ class DataTab(QWidget):
         cl.addWidget(self._cmp_b_lbl)
 
         self._compare_btn = QPushButton("Compare A vs B")
-        set_btn_icon(self._compare_btn, "fa5s.exchange-alt", "#00d4aa")
+        set_btn_icon(self._compare_btn, "fa5s.exchange-alt", PALETTE['accent'])
         self._compare_btn.setObjectName("primary")
         self._compare_btn.setFixedHeight(32)
         self._compare_btn.setEnabled(False)
@@ -1068,31 +1068,31 @@ class DataTab(QWidget):
         dlg = QDialog(self)
         dlg.setWindowTitle("Export Session")
         dlg.setStyleSheet(scaled_qss(
-            f"QDialog {{ background:{PALETTE.get('bg','#242424')}; }} "
-            f"QLabel  {{ color:{PALETTE.get('text','#ebebeb')}; font-size:15pt; }} "
-            f"QCheckBox {{ color:{PALETTE.get('text','#ebebeb')}; font-size:15pt; }} "
-            f"QComboBox {{ background:{PALETTE.get('surface2','#3d3d3d')}; "
-            f"  color:{PALETTE.get('text','#ebebeb')}; border:1px solid {PALETTE.get('border','#484848')}; "
+            f"QDialog {{ background:{PALETTE['bg']}; }} "
+            f"QLabel  {{ color:{PALETTE['text']}; font-size:15pt; }} "
+            f"QCheckBox {{ color:{PALETTE['text']}; font-size:15pt; }} "
+            f"QComboBox {{ background:{PALETTE['surface2']}; "
+            f"  color:{PALETTE['text']}; border:1px solid {PALETTE['border']}; "
             f"  padding:3px 8px; font-size:{FONT['heading']}pt; }} "
-            f"QPushButton {{ background:{PALETTE.get('surface2','#3d3d3d')}; color:{PALETTE.get('textSub','#6a6a6a')}; "
-            f"  border:1px solid {PALETTE.get('border','#484848')}; border-radius:2px; padding:5px 14px; }} "
-            f"QPushButton:hover {{ background:{PALETTE.get('surface','#2d2d2d')}; color:{PALETTE.get('text','#ebebeb')}; }}"))
+            f"QPushButton {{ background:{PALETTE['surface2']}; color:{PALETTE['textSub']}; "
+            f"  border:1px solid {PALETTE['border']}; border-radius:2px; padding:5px 14px; }} "
+            f"QPushButton:hover {{ background:{PALETTE['surface']}; color:{PALETTE['text']}; }}"))
         v = QVBoxLayout(dlg)
         v.setContentsMargins(20, 16, 20, 16)
         v.setSpacing(8)
 
         title = QLabel("Select export formats")
-        title.setStyleSheet(scaled_qss(f"font-size:18pt; font-weight:bold; color:{PALETTE.get('text','#ebebeb')};"))
+        title.setStyleSheet(scaled_qss(f"font-size:18pt; font-weight:bold; color:{PALETTE['text']};"))
         v.addWidget(title)
         sub = QLabel("All selected formats will be written to a single output folder.")
-        sub.setStyleSheet(f"font-size:{FONT['heading']}pt; color:{PALETTE.get('textDim','#999999')};")
+        sub.setStyleSheet(f"font-size:{FONT['heading']}pt; color:{PALETTE['textDim']};")
         v.addWidget(sub)
         v.addSpacing(4)
 
         # Preset selector row
         preset_row = QHBoxLayout()
         preset_lbl = QLabel("Preset:")
-        preset_lbl.setStyleSheet(f"font-size:{FONT['heading']}pt; color:{PALETTE.get('textDim','#999999')};")
+        preset_lbl.setStyleSheet(f"font-size:{FONT['heading']}pt; color:{PALETTE['textDim']};")
         preset_combo = QComboBox()
         preset_combo.addItem("Custom")
         preset_combo.addItems(_list_ep())
@@ -1126,14 +1126,14 @@ class DataTab(QWidget):
         v.addSpacing(8)
         px_row = QHBoxLayout()
         px_lbl = QLabel("Spatial calibration (px/μm, 0 = unknown):")
-        px_lbl.setStyleSheet(f"color:#888; font-size:{FONT['heading']}pt;")
+        px_lbl.setStyleSheet(f"color:{PALETTE['textDim']}; font-size:{FONT['heading']}pt;")
         px_spin = QDoubleSpinBox()
         px_spin.setRange(0, 100)
         px_spin.setValue(0)
         px_spin.setDecimals(4)
         px_spin.setFixedWidth(100)
         px_spin.setStyleSheet(
-            "background:#222; color:#ccc; border:1px solid #444; "
+            f"background:{PALETTE['surface2']}; color:{PALETTE['text']}; border:1px solid {PALETTE['border']}; "
             "padding:3px 6px;")
         px_row.addWidget(px_lbl)
         px_row.addWidget(px_spin)
@@ -1252,19 +1252,19 @@ class DataTab(QWidget):
         dlg.setWindowTitle("Batch Report Generation")
         dlg.setMinimumSize(560, 480)
         dlg.setStyleSheet(scaled_qss(
-            f"QDialog {{ background:{PALETTE.get('bg','#242424')}; }} "
-            f"QLabel  {{ color:{PALETTE.get('text','#ebebeb')}; font-size:{FONT['heading']}pt; }} "
-            f"QCheckBox {{ color:{PALETTE.get('text','#ebebeb')}; font-size:{FONT['body']}pt; }} "
-            f"QPushButton {{ background:{PALETTE.get('surface2','#3d3d3d')}; color:{PALETTE.get('textSub','#6a6a6a')}; "
-            f"  border:1px solid {PALETTE.get('border','#484848')}; border-radius:2px; padding:5px 14px; }} "
-            f"QPushButton:hover {{ background:{PALETTE.get('surface','#2d2d2d')}; color:{PALETTE.get('text','#ebebeb')}; }}"))
+            f"QDialog {{ background:{PALETTE['bg']}; }} "
+            f"QLabel  {{ color:{PALETTE['text']}; font-size:{FONT['heading']}pt; }} "
+            f"QCheckBox {{ color:{PALETTE['text']}; font-size:{FONT['body']}pt; }} "
+            f"QPushButton {{ background:{PALETTE['surface2']}; color:{PALETTE['textSub']}; "
+            f"  border:1px solid {PALETTE['border']}; border-radius:2px; padding:5px 14px; }} "
+            f"QPushButton:hover {{ background:{PALETTE['surface']}; color:{PALETTE['text']}; }}"))
         v = QVBoxLayout(dlg)
         v.setContentsMargins(16, 14, 16, 14)
         v.setSpacing(8)
 
         title = QLabel("Select sessions for batch report")
         title.setStyleSheet(scaled_qss(
-            f"font-size:18pt; font-weight:bold; color:{PALETTE.get('text','#ebebeb')};"))
+            f"font-size:18pt; font-weight:bold; color:{PALETTE['text']};"))
         v.addWidget(title)
 
         # Select all / none
@@ -1315,8 +1315,8 @@ class DataTab(QWidget):
         r_pdf = QRadioButton("PDF")
         r_html = QRadioButton("HTML")
         r_pdf.setChecked(True)
-        r_pdf.setStyleSheet(f"color:{PALETTE.get('text','#ebebeb')};")
-        r_html.setStyleSheet(f"color:{PALETTE.get('text','#ebebeb')};")
+        r_pdf.setStyleSheet(f"color:{PALETTE['text']};")
+        r_html.setStyleSheet(f"color:{PALETTE['text']};")
         fmt_grp.addButton(r_pdf, 0)
         fmt_grp.addButton(r_html, 1)
         fmt_row.addWidget(QLabel("Format:"))
@@ -1366,8 +1366,8 @@ class DataTab(QWidget):
         progress_dlg.setWindowTitle("Generating Reports…")
         progress_dlg.setMinimumWidth(400)
         progress_dlg.setStyleSheet(
-            f"QDialog {{ background:{PALETTE.get('bg','#242424')}; }} "
-            f"QLabel  {{ color:{PALETTE.get('text','#ebebeb')}; font-size:{FONT['body']}pt; }}")
+            f"QDialog {{ background:{PALETTE['bg']}; }} "
+            f"QLabel  {{ color:{PALETTE['text']}; font-size:{FONT['body']}pt; }}")
         pl = QVBoxLayout(progress_dlg)
         progress_label = QLabel(f"0 / {len(selected_uids)}")
         progress_label.setAlignment(Qt.AlignCenter)
@@ -1416,19 +1416,19 @@ class DataTab(QWidget):
         dlg.setWindowTitle("Package Sessions")
         dlg.setMinimumSize(480, 400)
         dlg.setStyleSheet(scaled_qss(
-            f"QDialog {{ background:{PALETTE.get('bg','#242424')}; }} "
-            f"QLabel  {{ color:{PALETTE.get('text','#ebebeb')}; font-size:{FONT['heading']}pt; }} "
-            f"QCheckBox {{ color:{PALETTE.get('text','#ebebeb')}; font-size:{FONT['body']}pt; }} "
-            f"QPushButton {{ background:{PALETTE.get('surface2','#3d3d3d')}; color:{PALETTE.get('textSub','#6a6a6a')}; "
-            f"  border:1px solid {PALETTE.get('border','#484848')}; border-radius:2px; padding:5px 14px; }} "
-            f"QPushButton:hover {{ background:{PALETTE.get('surface','#2d2d2d')}; color:{PALETTE.get('text','#ebebeb')}; }}"))
+            f"QDialog {{ background:{PALETTE['bg']}; }} "
+            f"QLabel  {{ color:{PALETTE['text']}; font-size:{FONT['heading']}pt; }} "
+            f"QCheckBox {{ color:{PALETTE['text']}; font-size:{FONT['body']}pt; }} "
+            f"QPushButton {{ background:{PALETTE['surface2']}; color:{PALETTE['textSub']}; "
+            f"  border:1px solid {PALETTE['border']}; border-radius:2px; padding:5px 14px; }} "
+            f"QPushButton:hover {{ background:{PALETTE['surface']}; color:{PALETTE['text']}; }}"))
         v = QVBoxLayout(dlg)
         v.setContentsMargins(16, 14, 16, 14)
         v.setSpacing(8)
 
         title = QLabel("Select sessions to package")
         title.setStyleSheet(scaled_qss(
-            f"font-size:18pt; font-weight:bold; color:{PALETTE.get('text','#ebebeb')};"))
+            f"font-size:18pt; font-weight:bold; color:{PALETTE['text']};"))
         v.addWidget(title)
 
         # Session checklist
@@ -1451,14 +1451,14 @@ class DataTab(QWidget):
 
         # Description field
         desc_lbl = QLabel("Description (optional):")
-        desc_lbl.setStyleSheet(f"font-size:{FONT['body']}pt; color:{PALETTE.get('textDim','#999')};")
+        desc_lbl.setStyleSheet(f"font-size:{FONT['body']}pt; color:{PALETTE['textDim']};")
         v.addWidget(desc_lbl)
         from PyQt5.QtWidgets import QTextEdit as _QTE
         desc_edit = _QTE()
         desc_edit.setMaximumHeight(60)
         desc_edit.setStyleSheet(
-            f"background:{PALETTE.get('bg','#242424')}; color:{PALETTE.get('text','#ebebeb')}; "
-            f"border:1px solid {PALETTE.get('border','#484848')}; font-size:{FONT['body']}pt;")
+            f"background:{PALETTE['bg']}; color:{PALETTE['text']}; "
+            f"border:1px solid {PALETTE['border']}; font-size:{FONT['body']}pt;")
         v.addWidget(desc_edit)
 
         from PyQt5.QtWidgets import QDialogButtonBox
@@ -1626,11 +1626,11 @@ class DataTab(QWidget):
         self._history_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self._history_table.setAlternatingRowColors(True)
         self._history_table.setStyleSheet(
-            f"QTableWidget {{ background:{PALETTE.get('bg','#242424')}; "
-            f"color:{PALETTE.get('text','#ebebeb')}; gridline-color:{PALETTE.get('border','#484848')}; "
+            f"QTableWidget {{ background:{PALETTE['bg']}; "
+            f"color:{PALETTE['text']}; gridline-color:{PALETTE['border']}; "
             f"font-size:{FONT['body']}pt; }} "
-            f"QHeaderView::section {{ background:{PALETTE.get('surface','#2d2d2d')}; "
-            f"color:{PALETTE.get('textDim','#999')}; border:1px solid {PALETTE.get('border','#484848')}; "
+            f"QHeaderView::section {{ background:{PALETTE['surface']}; "
+            f"color:{PALETTE['textDim']}; border:1px solid {PALETTE['border']}; "
             f"padding:3px; font-size:{FONT['label']}pt; }}")
         lay.addWidget(self._history_table)
         return w
@@ -1686,5 +1686,5 @@ class DataTab(QWidget):
     def _hline(self):
         f = QFrame()
         f.setFrameShape(QFrame.HLine)
-        f.setStyleSheet(f"color:{PALETTE.get('border','#484848')};")
+        f.setStyleSheet(f"color:{PALETTE['border']};")
         return f

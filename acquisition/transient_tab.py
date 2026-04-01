@@ -86,10 +86,10 @@ class TransientCurve(QWidget):
         W, H = self.width(), self.height()
         PAD = 6
 
-        p.fillRect(0, 0, W, H, QColor(PALETTE.get('bg', '#242424')))
+        p.fillRect(0, 0, W, H, QColor(PALETTE['bg']))
 
         if self._values is None or len(self._values) < 2:
-            p.setPen(QColor(PALETTE.get('border', '#484848')))
+            p.setPen(QColor(PALETTE['border']))
             p.setFont(sans_font(10))
             p.drawText(self.rect(), Qt.AlignCenter, "No data")
             p.end()
@@ -118,17 +118,18 @@ class TransientCurve(QWidget):
         # Zero reference
         if lo < 0 < hi:
             zy = _y(0.0)
-            p.setPen(QPen(QColor(PALETTE.get('border', '#484848')), 1, Qt.DotLine))
+            p.setPen(QPen(QColor(PALETTE['border']), 1, Qt.DotLine))
             p.drawLine(PAD, zy, W - PAD, zy)
 
         # Cursor line (selected delay)
         if 0 <= self._cursor_idx < n:
             cx = _x(self._cursor_idx)
-            p.setPen(QPen(QColor(255, 170, 60, 140), 1, Qt.DashLine))
+            _warn = QColor(PALETTE['warning']); _warn.setAlpha(140)
+            p.setPen(QPen(_warn, 1, Qt.DashLine))
             p.drawLine(cx, PAD, cx, H - PAD - 14)
 
         # Curve
-        pen = QPen(QColor(0, 212, 170), 1, Qt.SolidLine)
+        pen = QPen(QColor(PALETTE['accent']), 1, Qt.SolidLine)
         pen.setCapStyle(Qt.RoundCap)
         p.setPen(pen)
         pts = [(_x(i), _y(float(v) if np.isfinite(v) else lo))
@@ -137,7 +138,7 @@ class TransientCurve(QWidget):
             p.drawLine(pts[i-1][0], pts[i-1][1], pts[i][0], pts[i][1])
 
         # X-axis label (first and last delay in ms)
-        p.setPen(QColor(PALETTE.get('textSub', '#6a6a6a')))
+        p.setPen(QColor(PALETTE['textSub']))
         p.setFont(mono_font(8))
         if self._times_s is not None and len(self._times_s) >= 2:
             t0 = self._times_s[0] * 1e3
@@ -146,7 +147,7 @@ class TransientCurve(QWidget):
             p.drawText(W - 64, H - 4, f"{t1:.2f} ms")
 
         # Value labels
-        p.setPen(QColor(PALETTE.get('textSub', '#6a6a6a')))
+        p.setPen(QColor(PALETTE['textSub']))
         p.drawText(PAD + 2, PAD + 10, f"{hi:.3e}")
         p.drawText(PAD + 2, H - 16,   f"{lo:.3e}")
 
@@ -411,11 +412,11 @@ class TransientTab(QWidget):
         self._update_time_est()
 
         self._run_btn   = QPushButton("Run Transient")
-        set_btn_icon(self._run_btn, "fa5s.play", "#00d4aa")
+        set_btn_icon(self._run_btn, "fa5s.play", PALETTE['accent'])
         self._run_btn.setObjectName("primary")
         self._run_btn.setFixedHeight(34)
         self._abort_btn = QPushButton("Abort")
-        set_btn_icon(self._abort_btn, "fa5s.stop", "#ff6666")
+        set_btn_icon(self._abort_btn, "fa5s.stop", PALETTE['danger'])
         self._abort_btn.setObjectName("danger")
         self._abort_btn.setFixedHeight(32)
         self._abort_btn.setEnabled(False)
@@ -537,7 +538,7 @@ class TransientTab(QWidget):
         self._img_lbl.setSizePolicy(
             QSizePolicy.Expanding, QSizePolicy.Expanding)
         self._img_lbl.setStyleSheet(
-            f"background:#0d0d0d; border:1px solid {PALETTE['border']};")
+            f"background:{PALETTE['canvas']}; border:1px solid {PALETTE['border']};")
         self._img_lbl.setAlignment(Qt.AlignCenter)
         _dim  = PALETTE['textDim']
         _body = FONT['body']
@@ -713,7 +714,7 @@ class TransientTab(QWidget):
         self._stats["hw_trig"].setText("Yes" if result.hw_triggered else "No (SW)")
         self._stats["hw_trig"].setStyleSheet(
             f"font-family:{MONO_FONT}; font-size:{FONT['readoutSm']}pt; "
-            f"color:{'#00d4aa' if result.hw_triggered else PALETTE['warning']};")
+            f"color:{PALETTE['accent'] if result.hw_triggered else PALETTE['warning']};")
 
         # Delay slider
         n = result.n_delays

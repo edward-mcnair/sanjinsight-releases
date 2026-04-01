@@ -40,26 +40,75 @@ ALL_CATEGORIES = [
     CATEGORY_USER,
 ]
 
-# Accent colours matching the application dark theme
-CATEGORY_ACCENTS: dict = {
-    CATEGORY_SEMICONDUCTOR: "#00d4aa",   # teal
-    CATEGORY_PCB:           "#4488ff",   # blue
-    CATEGORY_AUTOMOTIVE:    "#ffaa00",   # amber
-    CATEGORY_METAL:         "#cc88ff",   # violet
-    CATEGORY_USER:          "#ff6688",   # pink
+# Category accent colours — theme-aware via PALETTE.
+_CAT_PALETTE_KEYS = {
+    CATEGORY_SEMICONDUCTOR: "catSemiconductor",
+    CATEGORY_PCB:           "catPcb",
+    CATEGORY_AUTOMOTIVE:    "catAutomotive",
+    CATEGORY_METAL:         "catMetal",
+    CATEGORY_USER:          "catUser",
+}
+_CAT_BG_PALETTE_KEYS = {
+    CATEGORY_SEMICONDUCTOR: "catSemiconductorBg",
+    CATEGORY_PCB:           "catPcbBg",
+    CATEGORY_AUTOMOTIVE:    "catAutomotiveBg",
+    CATEGORY_METAL:         "catMetalBg",
+    CATEGORY_USER:          "catUserBg",
 }
 
-# Subtle dark-tinted backgrounds for selected / hovered profile cards.
-# Used by _ProfileCard / _ProfileRow._refresh_style() in wizard.py.
-# Each value is a dark mix of the corresponding CATEGORY_ACCENTS colour
-# blended against the #111 app background (~15 % tint).
-CATEGORY_COLORS: dict = {
-    CATEGORY_SEMICONDUCTOR: "#0d2a22",   # dark teal tint
-    CATEGORY_PCB:           "#0d1a2a",   # dark blue tint
-    CATEGORY_AUTOMOTIVE:    "#2a1e0d",   # dark amber tint
-    CATEGORY_METAL:         "#1a0d2a",   # dark violet tint
-    CATEGORY_USER:          "#2a0d18",   # dark pink tint
-}
+
+def get_category_accent(category: str) -> str:
+    """Return the accent hex for a profile category (theme-aware)."""
+    from ui.theme import PALETTE
+    key = _CAT_PALETTE_KEYS.get(category)
+    return PALETTE[key] if key else PALETTE['textDim']
+
+
+def get_category_bg(category: str) -> str:
+    """Return the tinted background hex for a profile category (theme-aware)."""
+    from ui.theme import PALETTE
+    key = _CAT_BG_PALETTE_KEYS.get(category)
+    return PALETTE[key] if key else PALETTE['surface']
+
+
+# Legacy dicts — kept for backwards-compat but now read from PALETTE at call time.
+# Prefer get_category_accent() / get_category_bg() in new code.
+class _PaletteDict(dict):
+    """Dict that rebuilds from PALETTE on every access."""
+
+    def __init__(self, key_map):
+        super().__init__()
+        self._key_map = key_map
+
+    def _refresh(self):
+        from ui.theme import PALETTE
+        self.clear()
+        for cat, pk in self._key_map.items():
+            self[cat] = PALETTE.get(pk, "#888888")
+
+    def __getitem__(self, key):
+        self._refresh()
+        return super().__getitem__(key)
+
+    def get(self, key, default=None):
+        self._refresh()
+        return super().get(key, default)
+
+    def __iter__(self):
+        self._refresh()
+        return super().__iter__()
+
+    def items(self):
+        self._refresh()
+        return super().items()
+
+    def values(self):
+        self._refresh()
+        return super().values()
+
+
+CATEGORY_ACCENTS: dict = _PaletteDict(_CAT_PALETTE_KEYS)
+CATEGORY_COLORS: dict = _PaletteDict(_CAT_BG_PALETTE_KEYS)
 
 
 # ------------------------------------------------------------------ #

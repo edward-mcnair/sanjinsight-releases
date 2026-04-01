@@ -42,23 +42,24 @@ from ui.theme      import FONT, PALETTE, MONO_FONT, scaled_qss
 log = logging.getLogger(__name__)
 
 # ── Style helpers — read PALETTE at call-time so they respond to theme switches ─
-def _BG():     return PALETTE.get('bg',       '#242424')
-def _BG2():    return PALETTE.get('surface',  '#2d2d2d')
-def _BORDER(): return PALETTE.get('border',   '#484848')
-def _TEXT():   return PALETTE.get('text',     '#ebebeb')
-def _MUTED():  return PALETTE.get('textSub',  '#6a6a6a')
-_GREEN  = "#00d4aa"
-_AMBER  = "#ffaa44"
-_RED    = "#ff5555"
-_PURPLE = "#8888ff"
+def _BG():     return PALETTE['bg']
+def _BG2():    return PALETTE['surface']
+def _BORDER(): return PALETTE['border']
+def _TEXT():   return PALETTE['text']
+def _MUTED():  return PALETTE['textSub']
+def _GREEN():  return PALETTE['accent']
+def _AMBER():  return PALETTE['warning']
+def _RED():    return PALETTE['danger']
+def _PURPLE(): return PALETTE['systemIndigo']
 
-_STATUS_COLORS = {
-    "off":      None,       # resolved dynamically via _MUTED()
-    "loading":  _AMBER,
-    "ready":    _GREEN,
-    "thinking": _PURPLE,
-    "error":    _RED,
-}
+def _STATUS_COLORS():
+    return {
+        "off":      None,       # resolved dynamically via _MUTED()
+        "loading":  _AMBER(),
+        "ready":    _GREEN(),
+        "thinking": _PURPLE(),
+        "error":    _RED(),
+    }
 
 _STATUS_ICONS = {
     "off":      "○",
@@ -69,26 +70,26 @@ _STATUS_ICONS = {
 }
 
 def _BTN() -> str:
-    surf = PALETTE.get('surface2', '#3d3d3d')
-    bdr  = PALETTE.get('border',   '#484848')
-    sub  = PALETTE.get('textSub',  '#6a6a6a')
-    text = PALETTE.get('text',     '#ebebeb')
-    dim  = PALETTE.get('textDim',  '#999999')
+    surf = PALETTE['surface2']
+    bdr  = PALETTE['border']
+    sub  = PALETTE['textSub']
+    text = PALETTE['text']
+    dim  = PALETTE['textDim']
     return f"""
     QPushButton {{
         background:{surf}; color:{sub};
         border:1px solid {bdr}; border-radius:4px;
         font-size:{FONT["label"]}pt; padding:5px 10px;
     }}
-    QPushButton:hover   {{ color:{text}; border-color:{PALETTE.get('accent','#00d4aa')}44; }}
-    QPushButton:pressed {{ background:{PALETTE.get('surface','#2d2d2d')}; }}
+    QPushButton:hover   {{ color:{text}; border-color:{PALETTE['accent']}44; }}
+    QPushButton:pressed {{ background:{PALETTE['surface']}; }}
     QPushButton:disabled{{ color:{dim}; border-color:{bdr}; }}
 """
 
 
 def _BTN_PRIMARY() -> str:
-    acc  = PALETTE.get('accent',   '#00d4aa')
-    surf = PALETTE.get('surface2', '#3d3d3d')
+    acc  = PALETTE['accent']
+    surf = PALETTE['surface2']
     return f"""
     QPushButton {{
         background:{surf}; color:{acc};
@@ -96,8 +97,8 @@ def _BTN_PRIMARY() -> str:
         font-size:{FONT["label"]}pt; padding:5px 14px;
     }}
     QPushButton:hover   {{ border-color:{acc}88; }}
-    QPushButton:pressed {{ background:{PALETTE.get('surface','#2d2d2d')}; }}
-    QPushButton:disabled{{ color:{PALETTE.get('textDim','#999999')}; border-color:{PALETTE.get('border','#484848')}; }}
+    QPushButton:pressed {{ background:{PALETTE['surface']}; }}
+    QPushButton:disabled{{ color:{PALETTE['textDim']}; border-color:{PALETTE['border']}; }}
 """
 
 
@@ -204,7 +205,7 @@ class AIPanelWidget(QWidget):
             btn.setStyleSheet(
                 f"QPushButton {{ background:transparent; color:{_MUTED()}; "
                 f"border:none; text-align:left; padding:1px 4px; font-size:{FONT['caption']}pt; }}"
-                f"QPushButton:hover {{ background:{PALETTE.get('surface2','#3d3d3d')}; border-radius:3px; }}"
+                f"QPushButton:hover {{ background:{PALETTE['surface2']}; border-radius:3px; }}"
             )
             btn.clicked.connect(lambda checked, idx=i: self._on_issue_clicked(idx))
             row_lay.addWidget(btn, 1)
@@ -254,10 +255,10 @@ class AIPanelWidget(QWidget):
         self._support_btn = QPushButton("Get Support")
         set_btn_icon(self._support_btn, "fa5s.envelope")
         self._support_btn.setStyleSheet(
-            f"QPushButton {{ background:{_BG2()}; color:#88aacc; "
+            f"QPushButton {{ background:{_BG2()}; color:{PALETTE['textDim']}; "
             f"border:1px solid {_BORDER()}; border-radius:4px; "
             f"font-size:{FONT['sublabel']}pt; padding:4px 10px; }}"
-            f"QPushButton:hover   {{ border-color:#88aacc55; color:#aaccee; }}"
+            f"QPushButton:hover   {{ border-color:{PALETTE['textDim']}55; color:{PALETTE['accent']}; }}"
             f"QPushButton:pressed {{ background:{_BG()}; }}"
         )
         self._support_btn.setToolTip(
@@ -302,7 +303,7 @@ class AIPanelWidget(QWidget):
         self._input.returnPressed.connect(self._on_ask)
 
         self._ask_btn = QPushButton("Ask")
-        set_btn_icon(self._ask_btn, "fa5s.paper-plane", "#00d4aa")
+        set_btn_icon(self._ask_btn, "fa5s.paper-plane", PALETTE['accent'])
         self._ask_btn.setStyleSheet(_BTN_PRIMARY())
         self._ask_btn.setFixedWidth(74)
         self._ask_btn.setEnabled(False)
@@ -310,14 +311,14 @@ class AIPanelWidget(QWidget):
 
         # Stop button — visible only while "thinking", replaces Ask semantically
         self._stop_btn = QPushButton("Stop")
-        set_btn_icon(self._stop_btn, "fa5s.stop-circle", "#ff5555")
+        set_btn_icon(self._stop_btn, "fa5s.stop-circle", PALETTE['danger'])
         self._stop_btn.setStyleSheet(f"""
             QPushButton {{
-                background:{_BG2()}; color:{_RED};
-                border:1px solid {_RED}44; border-radius:4px;
+                background:{_BG2()}; color:{_RED()};
+                border:1px solid {_RED()}44; border-radius:4px;
                 font-size:{FONT["label"]}pt; padding:5px 10px;
             }}
-            QPushButton:hover   {{ border-color:{_RED}88; }}
+            QPushButton:hover   {{ border-color:{_RED()}88; }}
             QPushButton:pressed {{ background:{_BG()}; }}
         """)
         self._stop_btn.setFixedWidth(74)
@@ -384,7 +385,7 @@ class AIPanelWidget(QWidget):
 
         # ── User header ──────────────────────────────────────────────────
         fmt_you = QTextCharFormat()
-        fmt_you.setForeground(QColor(_GREEN))
+        fmt_you.setForeground(QColor(_GREEN()))
         fmt_you.setFont(mono_font(11, bold=True))
         cursor.insertText(f"\n▷ You  {ts}\n", fmt_you)
 
@@ -396,7 +397,7 @@ class AIPanelWidget(QWidget):
 
         # ── AI response header ───────────────────────────────────────────
         fmt_ai_hdr = QTextCharFormat()
-        fmt_ai_hdr.setForeground(QColor(_PURPLE))
+        fmt_ai_hdr.setForeground(QColor(_PURPLE()))
         fmt_ai_hdr.setFont(mono_font(11, bold=True))
         cursor.insertText("◉ AI\n", fmt_ai_hdr)
 
@@ -412,7 +413,7 @@ class AIPanelWidget(QWidget):
 
     def on_status_changed(self, status: str) -> None:
         """Update status indicator and enable/disable buttons."""
-        color = _STATUS_COLORS.get(status) or _MUTED()
+        color = _STATUS_COLORS().get(status) or _MUTED()
         icon  = _STATUS_ICONS.get(status, "○")
         self._status_dot.setText(icon)
         self._status_dot.setStyleSheet(f"color:{color}; font-size:{FONT['readoutSm']}pt;")
@@ -470,7 +471,7 @@ class AIPanelWidget(QWidget):
             cursor = self._display.textCursor()
             cursor.movePosition(cursor.End)
             fmt_err = QTextCharFormat()
-            fmt_err.setForeground(QColor(_RED))
+            fmt_err.setForeground(QColor(_RED()))
             fmt_err.setFont(mono_font(11))
             cursor.insertText(f"\n⚠  {msg}\n", fmt_err)
             fmt_sep = QTextCharFormat()
@@ -508,15 +509,15 @@ class AIPanelWidget(QWidget):
 
         # ── Grade ──
         if n_fail >= 2:
-            grade, color = "D", _RED
+            grade, color = "D", _RED()
         elif n_fail == 1:
-            grade, color = "C", _AMBER
+            grade, color = "C", _AMBER()
         elif n_warn >= 3:
-            grade, color = "C", _AMBER
+            grade, color = "C", _AMBER()
         elif n_warn >= 1:
-            grade, color = "B", "#88cc88"
+            grade, color = "B", PALETTE['success']
         else:
-            grade, color = "A", _GREEN
+            grade, color = "A", _GREEN()
 
         self._grade_lbl.setText(grade)
         self._grade_lbl.setStyleSheet(
@@ -539,7 +540,7 @@ class AIPanelWidget(QWidget):
         summary = "Instrument ready" if not parts else "  ·  ".join(parts)
         self._grade_summary_lbl.setText(summary)
         self._grade_summary_lbl.setStyleSheet(
-            f"font-size:{FONT['sublabel']}pt; color:{color if parts else _GREEN};"
+            f"font-size:{FONT['sublabel']}pt; color:{color if parts else _GREEN()};"
         )
 
         # ── Issue rows (fail first, then warn) ──
@@ -565,12 +566,12 @@ class AIPanelWidget(QWidget):
                 else:
                     r = active[i]
                     icon = "⊗" if r.severity == "fail" else "⚠"
-                    clr  = _RED if r.severity == "fail" else _AMBER
+                    clr  = _RED() if r.severity == "fail" else _AMBER()
                     issue_btn.setText(f"{icon}  {r.display_name}  ·  {r.observed}")
                     issue_btn.setStyleSheet(
                         f"QPushButton {{ background:transparent; color:{clr}; "
                         f"border:none; text-align:left; padding:1px 4px; font-size:{FONT['caption']}pt; }}"
-                        f"QPushButton:hover {{ background:{PALETTE.get('surface2','#3d3d3d')}; border-radius:3px; }}"
+                        f"QPushButton:hover {{ background:{PALETTE['surface2']}; border-radius:3px; }}"
                     )
                     issue_btn.setToolTip(f"{r.hint}\n\nClick to ask AI for guidance.")
                     issue_btn.setCursor(Qt.PointingHandCursor)
@@ -581,8 +582,8 @@ class AIPanelWidget(QWidget):
                         _auto_icon = "⚡" if fix.auto else "→"
                         fix_btn.setText(f"{_auto_icon} {fix.label}")
                         fix_btn.setToolTip(fix.description)
-                        _fix_bg = PALETTE.get("surface2", "#3d3d3d")
-                        _fix_acc = _GREEN if fix.auto else _MUTED()
+                        _fix_bg = PALETTE['surface2']
+                        _fix_acc = _GREEN() if fix.auto else _MUTED()
                         fix_btn.setStyleSheet(
                             f"QPushButton {{ background:{_fix_bg}; color:{_fix_acc}; "
                             f"border:1px solid {_fix_acc}40; border-radius:3px; "
@@ -628,16 +629,16 @@ class AIPanelWidget(QWidget):
             btn.setStyleSheet(
                 f"QPushButton {{ background:transparent; color:{_MUTED()}; "
                 f"border:none; text-align:left; padding:1px 4px; font-size:{FONT['caption']}pt; }}"
-                f"QPushButton:hover {{ background:{PALETTE.get('surface2','#3d3d3d')}; border-radius:3px; }}")
+                f"QPushButton:hover {{ background:{PALETTE['surface2']}; border-radius:3px; }}")
 
         # Action buttons
         self._explain_btn.setStyleSheet(_BTN())
         self._diagnose_btn.setStyleSheet(_BTN())
         self._support_btn.setStyleSheet(
-            f"QPushButton {{ background:{_BG2()}; color:#88aacc; "
+            f"QPushButton {{ background:{_BG2()}; color:{PALETTE['textDim']}; "
             f"border:1px solid {_BORDER()}; border-radius:4px; "
             f"font-size:{FONT['sublabel']}pt; padding:4px 10px; }}"
-            f"QPushButton:hover   {{ border-color:#88aacc55; color:#aaccee; }}"
+            f"QPushButton:hover   {{ border-color:{PALETTE['textDim']}55; color:{PALETTE['accent']}; }}"
             f"QPushButton:pressed {{ background:{_BG()}; }}")
 
         # Response display
@@ -654,11 +655,11 @@ class AIPanelWidget(QWidget):
         self._ask_btn.setStyleSheet(_BTN_PRIMARY())
         self._stop_btn.setStyleSheet(f"""
             QPushButton {{
-                background:{_BG2()}; color:{_RED};
-                border:1px solid {_RED}44; border-radius:4px;
+                background:{_BG2()}; color:{_RED()};
+                border:1px solid {_RED()}44; border-radius:4px;
                 font-size:{FONT["label"]}pt; padding:5px 10px;
             }}
-            QPushButton:hover   {{ border-color:{_RED}88; }}
+            QPushButton:hover   {{ border-color:{_RED()}88; }}
             QPushButton:pressed {{ background:{_BG()}; }}
         """)
 
@@ -723,7 +724,7 @@ class AIPanelWidget(QWidget):
             cursor = self._display.textCursor()
             cursor.movePosition(cursor.End)
             fmt = QTextCharFormat()
-            fmt.setForeground(QColor(_AMBER))
+            fmt.setForeground(QColor(_AMBER()))
             fmt.setFont(mono_font(9))
             cursor.insertText(" [stopped]\n", fmt)
             self._display.setTextCursor(cursor)

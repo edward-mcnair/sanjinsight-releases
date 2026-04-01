@@ -106,15 +106,15 @@ class CommandPalette(QDialog):
     def _apply_styles(self) -> None:
         """Re-apply all PALETTE-driven styles — called on construction and theme switch."""
         P    = PALETTE
-        bg   = P.get("bg",          "#242424")
-        sur  = P.get("surface",     "#2d2d2d")
-        sur2 = P.get("surface2",    "#3d3d3d")
-        hov  = P.get("surfaceHover","#404040")
-        bdr  = P.get("border",      "#484848")
-        txt  = P.get("text",        "#ebebeb")
-        dim  = P.get("textDim",     "#999999")
-        sub  = P.get("textSub",     "#6a6a6a")
-        acc  = P.get("accent",      "#00d4aa")
+        bg   = P['bg']
+        sur  = P['surface']
+        sur2 = P['surface2']
+        hov  = P['surfaceHover']
+        bdr  = P['border']
+        txt  = P['text']
+        dim  = P['textDim']
+        sub  = P['textSub']
+        acc  = P['accent']
 
         self._card.setStyleSheet(f"""
             QWidget#cmdCard {{
@@ -183,7 +183,7 @@ class CommandPalette(QDialog):
                 cur_group = item.group
                 sep = QListWidgetItem(f"  {cur_group.upper()}")
                 sep.setFlags(Qt.NoItemFlags)
-                sep.setForeground(QColor(PALETTE.get("textSub", "#6a6a6a")))
+                sep.setForeground(QColor(PALETTE['textSub']))
                 f = sans_font(FONT["caption"])
                 f.setLetterSpacing(QFont.AbsoluteSpacing, 1.5)
                 sep.setFont(f)

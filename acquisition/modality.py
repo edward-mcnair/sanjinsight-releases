@@ -58,7 +58,7 @@ class ModalityInfo:
     output_dimensions:   int       # 2 for 2D maps, 3 for time-resolved cubes
     output_description:  str
     instrument_examples: str
-    accent_color:        str       # Hex colour used in UI
+    accent_color:        str       # PALETTE key name (resolve via get_accent_color())
 
 
 MODALITY_INFO: dict[ImagingModality, ModalityInfo] = {
@@ -71,7 +71,7 @@ MODALITY_INFO: dict[ImagingModality, ModalityInfo] = {
         output_dimensions   = 2,
         output_description  = "2D ΔT map  (H × W, float32, °C)",
         instrument_examples = "SanjSCOPE, NT220, EZ-THERM",
-        accent_color        = "#00d4aa",
+        accent_color        = "modalityTr",       # PALETTE key
     ),
     ImagingModality.IR_LOCKIN: ModalityInfo(
         display_name        = "Infrared Lock-In (IR)",
@@ -82,7 +82,7 @@ MODALITY_INFO: dict[ImagingModality, ModalityInfo] = {
         output_dimensions   = 2,
         output_description  = "2D ΔT map  (H × W, float32, °C)",
         instrument_examples = "irSCOPE",
-        accent_color        = "#ff8844",
+        accent_color        = "modalityIr",        # PALETTE key
     ),
     ImagingModality.HYBRID: ModalityInfo(
         display_name        = "Hybrid TR + IR (Dual-Mode)",
@@ -93,7 +93,7 @@ MODALITY_INFO: dict[ImagingModality, ModalityInfo] = {
         output_dimensions   = 2,
         output_description  = "2D ΔT maps × 2 co-registered channels",
         instrument_examples = "SanjSCOPE (dual-mode)",
-        accent_color        = "#aa55ff",
+        accent_color        = "modalityHybrid",    # PALETTE key
     ),
     ImagingModality.OPP: ModalityInfo(
         display_name        = "Optical Pump-Probe (OPP)",
@@ -104,7 +104,7 @@ MODALITY_INFO: dict[ImagingModality, ModalityInfo] = {
         output_dimensions   = 3,
         output_description  = "3D ΔT cube  (H × W × N_delays, float32, °C)",
         instrument_examples = "OPP system, PS700",
-        accent_color        = "#4488ff",
+        accent_color        = "modalityOpp",       # PALETTE key
     ),
     ImagingModality.MOVIE: ModalityInfo(
         display_name        = "Movie Mode (Burst Capture)",
@@ -115,7 +115,7 @@ MODALITY_INFO: dict[ImagingModality, ModalityInfo] = {
         output_dimensions   = 3,
         output_description  = "3D frame cube  (N_frames × H × W, float32)",
         instrument_examples = "EZ-THERM, SanjSCOPE (high-speed camera config)",
-        accent_color        = "#ffcc22",
+        accent_color        = "modalityMovie",     # PALETTE key
     ),
     ImagingModality.TRANSIENT: ModalityInfo(
         display_name        = "Time-Resolved Transient (TR)",
@@ -126,7 +126,7 @@ MODALITY_INFO: dict[ImagingModality, ModalityInfo] = {
         output_dimensions   = 3,
         output_description  = "3D ΔT cube  (N_delays × H × W, float32, °C)",
         instrument_examples = "EZ-THERM (FPGA-triggered), SanjSCOPE",
-        accent_color        = "#22aaff",
+        accent_color        = "modalityTransient", # PALETTE key
     ),
     ImagingModality.UNKNOWN: ModalityInfo(
         display_name        = "Unknown",
@@ -137,9 +137,22 @@ MODALITY_INFO: dict[ImagingModality, ModalityInfo] = {
         output_dimensions   = 2,
         output_description  = "Unspecified",
         instrument_examples = "",
-        accent_color        = "#666666",
+        accent_color        = "textDim",           # PALETTE key
     ),
 }
+
+
+def get_accent_color(info_or_modality) -> str:
+    """Resolve a modality's accent_color PALETTE key to its current hex value.
+
+    Accepts a ModalityInfo or ImagingModality/str.
+    """
+    from ui.theme import PALETTE
+    if isinstance(info_or_modality, ModalityInfo):
+        key = info_or_modality.accent_color
+    else:
+        key = get_info(info_or_modality).accent_color
+    return PALETTE.get(key, PALETTE['textDim'])
 
 
 def get_info(modality: ImagingModality | str) -> ModalityInfo:

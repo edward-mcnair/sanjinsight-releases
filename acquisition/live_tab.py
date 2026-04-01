@@ -67,8 +67,8 @@ class SnrBar(QWidget):
         bar_x   = pad_l
 
         # Background — use PALETTE so it adapts to light/dark theme
-        bg_c  = QColor(PALETTE.get("bg",     "#242424"))
-        dim_c = QColor(PALETTE.get("border", "#484848"))
+        bg_c  = QColor(PALETTE['bg'])
+        dim_c = QColor(PALETTE['border'])
         p.fillRect(0, 0, W, H, bg_c)
 
         # Gradient fill (green → yellow → red from top = good)
@@ -79,7 +79,7 @@ class SnrBar(QWidget):
         grad.setColorAt(1.0,  QColor(200, 40,  20))
 
         # Track
-        p.setBrush(QColor(PALETTE.get("surface", "#2d2d2d")))
+        p.setBrush(QColor(PALETTE['surface']))
         p.setPen(Qt.NoPen)
         p.drawRoundedRect(bar_x, pad_top, bar_w, bar_h, 2, 2)
 
@@ -100,7 +100,7 @@ class SnrBar(QWidget):
             tf = (db - self._min) / (self._max - self._min)
             ty = int(pad_top + bar_h * (1.0 - tf))
             p.drawLine(bar_x + bar_w + 1, ty, bar_x + bar_w + 4, ty)
-            p.setPen(QColor(PALETTE.get("textSub", "#6a6a6a")))
+            p.setPen(QColor(PALETTE['textSub']))
             p.drawText(bar_x + bar_w + 5, ty + 4, str(db))
             p.setPen(dim_c)
 
@@ -146,10 +146,10 @@ class Histogram(QWidget):
     def paintEvent(self, e):
         p = QPainter(self)
         W, H = self.width(), self.height()
-        p.fillRect(0, 0, W, H, QColor(PALETTE.get("bg", "#242424")))
+        p.fillRect(0, 0, W, H, QColor(PALETTE['bg']))
 
         if self._bins is None:
-            p.setPen(QColor(PALETTE.get("border", "#484848")))
+            p.setPen(QColor(PALETTE['border']))
             p.drawText(self.rect(), Qt.AlignCenter, "No data")
             p.end()
             return
@@ -174,7 +174,7 @@ class Histogram(QWidget):
             p.fillRect(bx, by, max(1, int(bw) - 1), bh, QColor(r, g, b))
 
         # Zero line
-        p.setPen(QPen(QColor(60, 60, 60), 1, Qt.DotLine))
+        p.setPen(QPen(QColor(PALETTE['canvasGrid']), 1, Qt.DotLine))
         lo = self._edges[0]
         hi = self._edges[-1]
         if lo < 0 < hi:
@@ -215,10 +215,10 @@ class TempPlot(QWidget):
         p = QPainter(self)
         W, H = self.width(), self.height()
         PAD = 4
-        p.fillRect(0, 0, W, H, QColor(PALETTE.get("bg", "#242424")))
+        p.fillRect(0, 0, W, H, QColor(PALETTE['bg']))
 
         if len(self._buf) < 2:
-            p.setPen(QColor(PALETTE.get("border", "#484848")))
+            p.setPen(QColor(PALETTE['border']))
             p.setFont(mono_font(9))
             p.drawText(self.rect(), Qt.AlignCenter,
                        "Move cursor\nover image")
@@ -243,7 +243,7 @@ class TempPlot(QWidget):
         # Zero reference line
         if lo < 0.0 < hi:
             zy = _y(0.0)
-            p.setPen(QPen(QColor(PALETTE.get("border", "#484848")), 1, Qt.DotLine))
+            p.setPen(QPen(QColor(PALETTE['border']), 1, Qt.DotLine))
             p.drawLine(PAD, zy, W - PAD, zy)
 
         # Sparkline
@@ -252,7 +252,7 @@ class TempPlot(QWidget):
             (int(PAD + i / (n - 1) * plot_w), _y(v))
             for i, v in enumerate(data)
         ]
-        pen = QPen(QColor(0, 212, 170), 1, Qt.SolidLine)
+        pen = QPen(QColor(PALETTE['accent']), 1, Qt.SolidLine)
         pen.setCapStyle(Qt.RoundCap)
         p.setPen(pen)
         for i in range(1, len(pts)):
@@ -260,12 +260,12 @@ class TempPlot(QWidget):
 
         # Current-value dot
         cx, cy = pts[-1]
-        p.setBrush(QColor(0, 212, 170))
+        p.setBrush(QColor(PALETTE['accent']))
         p.setPen(Qt.NoPen)
         p.drawEllipse(cx - 3, cy - 3, 6, 6)
 
         # Current value label (top-left)
-        p.setPen(QColor(0, 180, 140))
+        p.setPen(QColor(PALETTE['accent']))
         p.setFont(mono_font(8))
         p.drawText(PAD + 2, PAD + 10, f"{data[-1]:.4e}")
 
@@ -287,7 +287,7 @@ class LiveCanvas(QWidget):
         super().__init__()
         self.setMinimumSize(200, 150)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.setStyleSheet("background:#0d0d0d;")
+        self.setStyleSheet(f"background:{PALETTE['canvas']};")
         self.setMouseTracking(True)
 
         self._pixmap    = None
@@ -376,13 +376,16 @@ class LiveCanvas(QWidget):
 
     def paintEvent(self, e):
         p = QPainter(self)
-        p.fillRect(self.rect(), QColor(13, 13, 13))
+        p.fillRect(self.rect(), QColor(PALETTE['canvas']))
 
         if self._pixmap is None:
-            p.setPen(QColor(45, 45, 45))
+            p.setPen(QColor(PALETTE['canvasGrid']))
             p.setFont(sans_font(18))
+            from hardware.app_state import app_state
+            is_ir = getattr(app_state, "active_camera_type", "tr") == "ir"
+            label = "Live Thermal" if is_ir else "Live ΔR/R"
             p.drawText(self.rect(), Qt.AlignCenter,
-                       "Live ΔR/R\n\nPress  ▶  Start  to begin")
+                       f"{label}\n\nPress  ▶  Start  to begin")
             if self._frozen:
                 self._draw_frozen_badge(p)
             p.end()
@@ -397,7 +400,8 @@ class LiveCanvas(QWidget):
         # Crosshair probe
         if self._probe_pos:
             px, py = self._probe_pos
-            pen = QPen(QColor(0, 220, 150, 160), 1, Qt.DashLine)
+            c = QColor(PALETTE['accent']); c.setAlpha(160)
+            pen = QPen(c, 1, Qt.DashLine)
             p.setPen(pen)
             p.drawLine(px, oy, px, oy + dh)
             p.drawLine(ox, py, ox + dw, py)
@@ -433,10 +437,11 @@ class LiveCanvas(QWidget):
         p.end()
 
     def _draw_frozen_badge(self, p: QPainter):
-        p.setBrush(QColor(0, 180, 130, 200))
+        c = QColor(PALETTE['accent']); c.setAlpha(200)
+        p.setBrush(c)
         p.setPen(Qt.NoPen)
         p.drawRoundedRect(8, 8, 70, 22, 4, 4)
-        p.setPen(QColor(255, 255, 255))
+        p.setPen(QColor(PALETTE['text']))
         p.setFont(QFont("Helvetica-Bold", 14))
         p.drawText(8, 8, 70, 22, Qt.AlignCenter, "FROZEN")
 
@@ -558,9 +563,9 @@ class LiveCanvas(QWidget):
         from PyQt5.QtWidgets import QMenu
         menu = QMenu(self)
         menu.setStyleSheet(
-            f"QMenu {{ background:{PALETTE.get('surface','#2d2d2d')}; color:{PALETTE.get('text','#ebebeb')}; border:1px solid {PALETTE.get('border','#484848')}; }}"
-            f"QMenu::item:selected {{ background:{PALETTE.get('surface2','#3d3d3d')}; }}"
-            f"QMenu::separator {{ height:1px; background:{PALETTE.get('border','#484848')}; margin:3px 8px; }}")
+            f"QMenu {{ background:{PALETTE['surface']}; color:{PALETTE['text']}; border:1px solid {PALETTE['border']}; }}"
+            f"QMenu::item:selected {{ background:{PALETTE['surface2']}; }}"
+            f"QMenu::separator {{ height:1px; background:{PALETTE['border']}; margin:3px 8px; }}")
         menu.addAction("▶  Start Live",       lambda: self.context_action.emit("start"))
         menu.addAction("■  Stop Live",         lambda: self.context_action.emit("stop"))
         menu.addAction("❄  Freeze / Resume",   lambda: self.context_action.emit("freeze"))
@@ -700,14 +705,24 @@ class LiveTab(QWidget):
     def _apply_styles(self) -> None:
         """Re-apply PALETTE-driven styles on theme switch."""
         P   = PALETTE
-        sur = P.get("surface",  "#2d2d2d")
-        su2 = P.get("surface2", "#3d3d3d")
-        bdr = P.get("border",   "#484848")
-        sub = P.get("textSub",  "#6a6a6a")
-        acc = P.get("accent",   "#00d4aa")
+        sur = P['surface']
+        su2 = P['surface2']
+        bdr = P['border']
+        sub = P['textSub']
+        acc = P['accent']
         if hasattr(self, "_toolbar"):
             self._toolbar.setStyleSheet(
-                f"background:{sur}; border-bottom:1px solid {bdr};")
+                f".QWidget {{ background:{sur}; border-bottom:1px solid {bdr}; }}")
+        # Toolbar button icons
+        if hasattr(self, "_start_btn"):
+            set_btn_icon(self._start_btn, "fa5s.play", P["accent"])
+            set_btn_icon(self._stop_btn, "fa5s.stop", P["danger"])
+            set_btn_icon(self._freeze_btn, "fa5s.snowflake", P["info"])
+            set_btn_icon(self._ffc_btn, "mdi.grid-off", P["warning"])
+        # Canvas background
+        if hasattr(self, "_canvas"):
+            self._canvas.setStyleSheet(
+                f"background:{P['canvas']};")
         # Status badges: re-apply with fresh palette so they switch correctly
         _badge_base = (
             f"padding:0 8px; border-radius:3px; "
@@ -728,24 +743,24 @@ class LiveTab(QWidget):
         bar.setFixedHeight(46)
         self._toolbar = bar
         bar.setStyleSheet(
-            f"background:{PALETTE.get('surface','#2d2d2d')}; border-bottom:1px solid {PALETTE.get('border','#484848')};")
+            f".QWidget {{ background:{PALETTE['surface']}; border-bottom:1px solid {PALETTE['border']}; }}")
         lay = QHBoxLayout(bar)
         lay.setContentsMargins(12, 0, 12, 0)
         lay.setSpacing(8)
 
         self._start_btn  = QPushButton("Start")
-        set_btn_icon(self._start_btn, "fa5s.play", "#00d4aa")
+        set_btn_icon(self._start_btn, "fa5s.play", PALETTE['accent'])
         self._stop_btn   = QPushButton("Stop")
-        set_btn_icon(self._stop_btn, "fa5s.stop", "#ff6666")
+        set_btn_icon(self._stop_btn, "fa5s.stop", PALETTE['danger'])
         self._freeze_btn = QPushButton("Freeze")
-        set_btn_icon(self._freeze_btn, "fa5s.snowflake", "#66aaff")
+        set_btn_icon(self._freeze_btn, "fa5s.snowflake", PALETTE['info'])
         self._capture_btn= QPushButton("Capture")
         set_btn_icon(self._capture_btn, "fa5s.camera")
         self._reset_btn  = QPushButton("Reset EMA")
         set_btn_icon(self._reset_btn, "fa5s.undo")
 
         self._ffc_btn = QPushButton("FFC")
-        set_btn_icon(self._ffc_btn, "mdi.grid-off", "#ffb300")
+        set_btn_icon(self._ffc_btn, "mdi.grid-off", PALETTE['warning'])
         self._ffc_btn.setToolTip(
             "Run Flat-Field Correction — recalibrate pixel offsets\n"
             "for the IR thermal camera (closes internal shutter briefly)")
@@ -767,9 +782,9 @@ class LiveTab(QWidget):
         lay.addSpacing(20)
 
         # Status indicators
-        self._fps_lbl    = self._badge("— fps",   PALETTE.get('surface2','#3d3d3d'))
-        self._cycle_lbl  = self._badge("cycle —", PALETTE.get('surface2','#3d3d3d'))
-        self._state_lbl  = self._badge("IDLE",    PALETTE.get('surface2','#3d3d3d'))
+        self._fps_lbl    = self._badge("— fps",   PALETTE['surface2'])
+        self._cycle_lbl  = self._badge("cycle —", PALETTE['surface2'])
+        self._state_lbl  = self._badge("IDLE",    PALETTE['surface2'])
 
         for l in [self._fps_lbl, self._cycle_lbl, self._state_lbl]:
             lay.addWidget(l)
@@ -802,7 +817,7 @@ class LiveTab(QWidget):
         l = QLabel(text)
         l.setFixedHeight(24)
         l.setStyleSheet(
-            f"background:{color}; color:{PALETTE.get('textSub','#6a6a6a')}; padding:0 8px; "
+            f"background:{color}; color:{PALETTE['textSub']}; padding:0 8px; "
             f"border-radius:3px; font-family:{MONO_FONT}; font-size:{FONT['label']}pt;")
         return l
 
@@ -883,7 +898,7 @@ class LiveTab(QWidget):
         self._accum.valueChanged.connect(self._accum_slider.setValue)
         self._accum_lbl = QLabel("16 frames")
         self._accum_lbl.setStyleSheet(
-            f"font-family:{MONO_FONT}; font-size:{FONT['heading']}pt; color:{PALETTE.get('textSub','#6a6a6a')};")
+            f"font-family:{MONO_FONT}; font-size:{FONT['heading']}pt; color:{PALETTE['textSub']};")
         self._accum.valueChanged.connect(
             lambda v: self._accum_lbl.setText(f"{v} frames"))
         dl.addWidget(self._accum_slider)
@@ -967,7 +982,7 @@ class LiveTab(QWidget):
             sl.addWidget(self._sub(lbl), r, 0)
             v = QLabel("—")
             v.setStyleSheet(
-                f"font-family:{MONO_FONT}; font-size:{FONT['sublabel']}pt; color:{PALETTE.get('textDim','#999999')};")
+                f"font-family:{MONO_FONT}; font-size:{FONT['sublabel']}pt; color:{PALETTE['textDim']};")
             v.setAlignment(Qt.AlignRight)
             sl.addWidget(v, r, 1)
             self._stat_vals[key] = v
@@ -982,7 +997,7 @@ class LiveTab(QWidget):
         self._probe_dt  = QLabel("—")
         for l in [self._probe_xy, self._probe_drr, self._probe_dt]:
             l.setStyleSheet(
-                f"font-family:{MONO_FONT}; font-size:{FONT['sublabel']}pt; color:{PALETTE.get('textDim','#999999')};")
+                f"font-family:{MONO_FONT}; font-size:{FONT['sublabel']}pt; color:{PALETTE['textDim']};")
         pl.addWidget(self._sub("Position"), 0, 0)
         pl.addWidget(self._probe_xy,         0, 1)
         pl.addWidget(self._sub("ΔR/R"),     1, 0)
@@ -1049,7 +1064,7 @@ class LiveTab(QWidget):
         self._stop_btn.setEnabled(True)
         self._frozen = False
         self._canvas.freeze(False)
-        self._set_state("RUNNING", "#00d4aa")
+        self._set_state("RUNNING", PALETTE['accent'])
 
     def _stop(self):
         self._timer.stop()
@@ -1059,7 +1074,7 @@ class LiveTab(QWidget):
         self._btn_runner.set_running(False)
         self._start_btn.setEnabled(True)
         self._stop_btn.setEnabled(False)
-        self._set_state("STOPPED", PALETTE.get('textSub', '#6a6a6a'))
+        self._set_state("STOPPED", PALETTE['textSub'])
         # Reset throttle timestamps so the next _start() renders the very
         # first frame immediately instead of waiting for the 333 ms window.
         self._last_canvas_ts = 0.0
@@ -1082,7 +1097,7 @@ class LiveTab(QWidget):
         self._canvas.freeze(self._frozen)
         self._freeze_btn.setText("▶  Resume" if self._frozen else "❄  Freeze")
         self._set_state("FROZEN" if self._frozen else "RUNNING",
-                        "#ffaa44" if self._frozen else "#00d4aa")
+                        PALETTE['warning'] if self._frozen else PALETTE['accent'])
 
     def _capture(self):
         """Save the current frozen/live frame to disk."""
@@ -1228,10 +1243,10 @@ class LiveTab(QWidget):
             # call it the first time a run goes "live" (not every 333 ms).
             if not self._badges_active:
                 self._fps_lbl.setStyleSheet(
-                    f"background:{PALETTE.get('surface2','#3d3d3d')}; color:{PALETTE.get('accent','#00d4aa')}; padding:0 8px; "
+                    f"background:{PALETTE['surface2']}; color:{PALETTE['accent']}; padding:0 8px; "
                     f"border-radius:3px; font-family:{MONO_FONT}; font-size:{FONT['label']}pt;")
                 self._cycle_lbl.setStyleSheet(
-                    f"background:{PALETTE.get('surface2','#3d3d3d')}; color:{PALETTE.get('textDim','#999999')}; padding:0 8px; "
+                    f"background:{PALETTE['surface2']}; color:{PALETTE['textDim']}; padding:0 8px; "
                     f"border-radius:3px; font-family:{MONO_FONT}; font-size:{FONT['label']}pt;")
                 self._badges_active = True
 
@@ -1275,7 +1290,7 @@ class LiveTab(QWidget):
     def _set_state(self, text: str, color: str):
         self._state_lbl.setText(text)
         self._state_lbl.setStyleSheet(
-            f"background:{PALETTE.get('surface2','#3d3d3d')}; color:{color}; padding:0 8px; "
+            f"background:{PALETTE['surface2']}; color:{color}; padding:0 8px; "
             f"border-radius:3px; font-family:{MONO_FONT}; font-size:{FONT['label']}pt; "
             f"border:1px solid {color};")
 

@@ -407,17 +407,17 @@ class CameraTab(QWidget):
         lay.setAlignment(Qt.AlignCenter)
         lay.setSpacing(16)
 
-        icon_lbl = make_icon_label(IC.LINK_OFF, color="#555555", size=64)
+        icon_lbl = make_icon_label(IC.LINK_OFF, color=PALETTE['textSub'], size=64)
         icon_lbl.setAlignment(Qt.AlignCenter)
 
         title_lbl = QLabel(f"{title} Not Connected")
         title_lbl.setAlignment(Qt.AlignCenter)
-        title_lbl.setStyleSheet(f"font-size: {FONT['readoutSm']}pt; font-weight: bold; color: #888;")
+        title_lbl.setStyleSheet(f"font-size: {FONT['readoutSm']}pt; font-weight: bold; color: {PALETTE['textDim']};")
 
         tip_lbl = QLabel(tip)
         tip_lbl.setAlignment(Qt.AlignCenter)
         tip_lbl.setWordWrap(True)
-        tip_lbl.setStyleSheet(f"font-size: {FONT['label']}pt; color: #555;")
+        tip_lbl.setStyleSheet(f"font-size: {FONT['label']}pt; color: {PALETTE['textSub']};")
         tip_lbl.setMaximumWidth(400)
 
         btn = QPushButton("Open Device Manager")
@@ -425,11 +425,11 @@ class CameraTab(QWidget):
         btn.setFixedHeight(36)
         btn.setStyleSheet(f"""
             QPushButton {{
-                background: {PALETTE.get('surface','#2d2d2d')}; color: #00d4aa;
-                border: 1px solid #00d4aa66; border-radius: 5px;
+                background: {PALETTE['surface']}; color: {PALETTE['accent']};
+                border: 1px solid {PALETTE['accent']}66; border-radius: 5px;
                 font-size: {FONT['label']}pt; font-weight: 600;
             }}
-            QPushButton:hover {{ background: {PALETTE.get('surface2','#3d3d3d')}; }}
+            QPushButton:hover {{ background: {PALETTE['surface2']}; }}
         """)
         btn.clicked.connect(self.open_device_manager)
 
@@ -521,13 +521,13 @@ class CameraTab(QWidget):
         sat_pct = float((d >= CAMERA_SAT_LIMIT).sum()) / max(d.size, 1) * 100
         if mx >= CAMERA_SAT_LIMIT:
             self._sat_w._val.setText("CLIPPED ✗")
-            color = PALETTE["danger"]
+            color = PALETTE['danger']
         elif mx >= CAMERA_SAT_WARN:
             self._sat_w._val.setText(f"{sat_pct:.2f}%")
-            color = PALETTE["warning"]
+            color = PALETTE['warning']
         else:
             self._sat_w._val.setText("OK")
-            color = PALETTE["success"]
+            color = PALETTE['success']
         self._sat_w._val.setStyleSheet(
             f"font-family:{MONO_FONT}; font-size:{FONT['readoutSm']}pt;"
             f" color:{color};")
@@ -535,29 +535,29 @@ class CameraTab(QWidget):
         # Update always-visible quality strip
         mean_val = float(d.mean())
         if mx >= CAMERA_SAT_LIMIT:
-            exp_color = PALETTE["danger"]
+            exp_color = PALETTE['danger']
             exp_text  = "EXPOSURE  SATURATED ✗"
         elif mx >= CAMERA_SAT_WARN:
-            exp_color = PALETTE["warning"]
+            exp_color = PALETTE['warning']
             exp_text  = "EXPOSURE  NEAR SAT ⚠"
         elif mean_val < 200:
-            exp_color = PALETTE["warning"]
+            exp_color = PALETTE['warning']
             exp_text  = "EXPOSURE  DARK ⚠"
         else:
-            exp_color = PALETTE["success"]
+            exp_color = PALETTE['success']
             exp_text  = "EXPOSURE  OK ✓"
         self._qual_exp_lbl.setText(exp_text)
         self._qual_exp_lbl.setStyleSheet(
             f"font-family:{MONO_FONT}; font-size:{FONT['label']}pt; color:{exp_color};")
 
         if mx >= CAMERA_SAT_LIMIT:
-            sat_color = PALETTE["danger"]
+            sat_color = PALETTE['danger']
             sat_text  = "SATURATION  CLIPPED ✗"
         elif mx >= CAMERA_SAT_WARN:
-            sat_color = PALETTE["warning"]
+            sat_color = PALETTE['warning']
             sat_text  = f"SATURATION  {sat_pct:.2f}% ⚠"
         else:
-            sat_color = PALETTE["success"]
+            sat_color = PALETTE['success']
             sat_text  = "SATURATION  OK ✓"
         self._qual_sat_lbl.setText(sat_text)
         self._qual_sat_lbl.setStyleSheet(
@@ -872,6 +872,8 @@ class CameraTab(QWidget):
 
     def _run_auto_expose(self):
         """Run auto-exposure in a background thread."""
+        if getattr(app_state, "active_camera_type", "tr") == "ir":
+            return  # IR cameras have fixed exposure
         cam = app_state.cam
         if cam is None:
             return
@@ -909,6 +911,8 @@ class CameraTab(QWidget):
 
     def _run_auto_gain(self):
         """Run auto-gain optimisation in a background thread."""
+        if getattr(app_state, "active_camera_type", "tr") == "ir":
+            return  # IR cameras use discrete High/Low gain, not continuous sweep
         cam = app_state.cam
         if cam is None:
             return

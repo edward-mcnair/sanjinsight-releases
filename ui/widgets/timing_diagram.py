@@ -108,15 +108,38 @@ class TimingDiagramWidget(QWidget):
     ROW_H = 66    # pixel height of each signal row
     SIG_H = 36    # waveform amplitude within ROW_H (vertically centred)
 
-    # ── Colours ───────────────────────────────────────────────────────────────
-    _C_DIGITAL  = "#c8d0e8"    # general digital signals
-    _C_PULSED   = "#00c878"    # pulsed (green)
-    _C_CONST    = "#4e73df"    # constant level (blue)
-    _C_CURRENT  = "#ff4444"    # current / threshold
-    _C_ANNOT    = "#8892aa"    # annotations / arrows
-    _C_MASK     = "#f5a62330"  # transient-mask highlight (amber, low opacity)
-    _C_M1       = "#4e73df44"  # M1 window (blue, low opacity)
-    _C_M2       = "#00c87844"  # M2 window (green, low opacity)
+    # ── Colours — read from PALETTE at paint time via properties ─────────────
+    @property
+    def _C_DIGITAL(self):
+        return PALETTE['text']
+
+    @property
+    def _C_PULSED(self):
+        return PALETTE['accent']
+
+    @property
+    def _C_CONST(self):
+        return PALETTE['info']
+
+    @property
+    def _C_CURRENT(self):
+        return PALETTE['danger']
+
+    @property
+    def _C_ANNOT(self):
+        return PALETTE['textDim']
+
+    @property
+    def _C_MASK(self):
+        return PALETTE['warning'] + "30"
+
+    @property
+    def _C_M1(self):
+        return PALETTE['info'] + "44"
+
+    @property
+    def _C_M2(self):
+        return PALETTE['accent'] + "44"
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -146,12 +169,12 @@ class TimingDiagramWidget(QWidget):
         p.setRenderHint(QPainter.Antialiasing)
         p.setRenderHint(QPainter.TextAntialiasing)
 
-        bg = PALETTE.get("bg", "#0e1120")
+        bg = PALETTE['bg']
         p.fillRect(self.rect(), QColor(bg))
 
         # Thin vertical separator between label column and plot area
         sep_x = self.LM - 2
-        pen = QPen(QColor(PALETTE.get("border", "#2e3245")), 1)
+        pen = QPen(QColor(PALETTE['border']), 1)
         p.setPen(pen)
         n_rows = 6 if self._params.mode == "double_pulse" else 7
         p.drawLine(sep_x, self.TM,
@@ -361,7 +384,7 @@ class TimingDiagramWidget(QWidget):
             self._text(p,
                        self._x(lf + 0.012),
                        self._y(row, 0.50),
-                       "100ns stop", "#f5a623", small=True)
+                       "100ns stop", PALETTE['warning'], small=True)
 
         # ── Time axis ─────────────────────────────────────────────────────────
         self._time_axis(p, 6, pr.period_us, pr.n_pulses)
@@ -479,7 +502,7 @@ class TimingDiagramWidget(QWidget):
 
     def _label(self, p: QPainter, text: str, row: int) -> None:
         """Signal name label in the left margin, right-aligned, vertically centred."""
-        color = QColor(PALETTE.get("text", "#dde3f2"))
+        color = QColor(PALETTE['text'])
         pt    = max(7, THEME_FONT.get("caption", 9) - 1)
         font  = QFont("Menlo, Consolas, monospace", pt)
         p.setFont(font)
@@ -572,8 +595,8 @@ class TimingDiagramWidget(QWidget):
     def _time_axis(self, p: QPainter, n_rows: int,
                    period_us: float, n_pulses: int) -> None:
         ax_y = self.TM + n_rows * self.ROW_H + 8
-        dim  = QColor(PALETTE.get("textDim", "#8892aa"))
-        bdr  = QColor(PALETTE.get("border", "#2e3245"))
+        dim  = QColor(PALETTE['textDim'])
+        bdr  = QColor(PALETTE['border'])
         # Axis line
         p.setPen(QPen(bdr, 1.0))
         p.drawLine(self.LM, ax_y, self.LM + self._pw(), ax_y)
@@ -589,6 +612,6 @@ class TimingDiagramWidget(QWidget):
     # ── Theme ─────────────────────────────────────────────────────────────────
 
     def _apply_styles(self) -> None:
-        bg = PALETTE.get("bg", "#0e1120")
+        bg = PALETTE['bg']
         self.setStyleSheet(f"TimingDiagramWidget {{ background: {bg}; }}")
         self.update()

@@ -27,39 +27,42 @@ from PyQt5.QtWidgets import (
 
 from version import APP_NAME, APP_VENDOR, SUPPORT_EMAIL
 from ui.icons import IC, make_icon_label
-from ui.theme import FONT, scaled_qss, MONO_FONT
+from ui.theme import FONT, PALETTE, scaled_qss, MONO_FONT
 
 log = logging.getLogger(__name__)
 
-# ── Shared style constants (mirrors license_dialog.py) ───────────────────────
-_BG        = "#0e1120"
-_BG2       = "#13172a"
-_BORDER    = "#1e2337"
-_TEXT      = "#c0c8e0"
-_MUTED     = "#8892a4"
-_ACCENT    = "#4e73df"
-_GREEN     = "#00d4aa"
-_AMBER     = "#f5a623"
-_RED       = "#ff4444"
+# ── Style helpers (read PALETTE at call time for theme-awareness) ─────────────
+def _BG():      return PALETTE['bg']
+def _BG2():     return PALETTE['surface']
+def _BORDER():  return PALETTE['border']
+def _TEXT():    return PALETTE['text']
+def _MUTED():   return PALETTE['textDim']
+def _ACCENT():  return PALETTE['accent']
+def _GREEN():   return PALETTE['success']
+def _RED():     return PALETTE['danger']
 
-_BTN_PRIMARY = f"""
+
+def _btn_primary():
+    return f"""
     QPushButton {{
-        background:{_ACCENT}; color:#fff; border:none;
+        background:{_ACCENT()}; color:{PALETTE['textOnAccent']}; border:none;
         border-radius:6px; padding:9px 26px;
         font-size:{FONT["body"]}pt; font-weight:600;
     }}
-    QPushButton:hover    {{ background:#3a5fc8; }}
-    QPushButton:pressed  {{ background:#2e4fa8; }}
-    QPushButton:disabled {{ background:#2a3050; color:#555; }}
+    QPushButton:hover    {{ background:{PALETTE['accentHover']}; }}
+    QPushButton:pressed  {{ background:{PALETTE['accentDim']}; }}
+    QPushButton:disabled {{ background:{PALETTE['surface2']}; color:{PALETTE['textDim']}; }}
 """
-_BTN_SECONDARY = f"""
+
+def _btn_secondary():
+    return f"""
     QPushButton {{
-        background:{_BG2}; color:{_MUTED}; border:1px solid {_BORDER};
+        background:{_BG2()}; color:{_MUTED()}; border:1px solid {_BORDER()};
         border-radius:6px; padding:9px 26px;
         font-size:{FONT["body"]}pt;
     }}
-    QPushButton:hover   {{ background:#1e2540; color:{_TEXT}; }}
-    QPushButton:pressed {{ background:#1a1f33; }}
+    QPushButton:hover   {{ background:{PALETTE['surfaceHover']}; color:{_TEXT()}; }}
+    QPushButton:pressed {{ background:{PALETTE['surface2']}; }}
 """
 
 
@@ -83,11 +86,41 @@ class LicenseActivationPrompt(QDialog):
         self.setWindowTitle(f"{APP_NAME} — Activate License")
         self.setModal(True)
         self.setFixedSize(580, 400)
+        self._build_ui()
+        self._apply_styles()
+
+    def _apply_styles(self):
+        """Re-apply all styles from PALETTE. Called on init and theme switch."""
         self.setStyleSheet(
-            f"QDialog {{ background:{_BG}; }} "
+            f"QDialog {{ background:{_BG()}; }} "
             f"QLabel  {{ background:transparent; }}"
         )
-        self._build_ui()
+        self._header.setStyleSheet(
+            f"background:{_BG2()}; border-bottom:1px solid {_BORDER()};")
+        self._header_title.setStyleSheet(
+            scaled_qss(f"font-size:15pt; font-weight:700; color:{PALETTE['text']};"))
+        self._header_sub.setStyleSheet(
+            f"font-size:{FONT['sublabel']}pt; color:{_MUTED()};")
+        self._intro.setStyleSheet(
+            f"font-size:{FONT['body']}pt; color:{_TEXT()}; line-height:150%;")
+        self._key_input.setStyleSheet(f"""
+            QTextEdit {{
+                background:{_BG2()}; color:{_TEXT()};
+                border:1px solid {_BORDER()}; border-radius:4px;
+                font-size:{FONT["caption"]}pt; font-family:{MONO_FONT};
+                padding:8px;
+            }}
+            QTextEdit:focus {{ border-color:{_ACCENT()}; }}
+        """)
+        self._msg_lbl.setStyleSheet(
+            f"font-size:{FONT['sublabel']}pt; color:{_MUTED()};")
+        self._footer.setStyleSheet(
+            f"background:{_BG2()}; border-top:1px solid {_BORDER()};")
+        self._contact_lbl.setStyleSheet(
+            f"font-size:{FONT['caption']}pt; color:{_MUTED()};"
+            f" qproperty-openExternalLinks: true;")
+        self._demo_btn.setStyleSheet(_btn_secondary())
+        self._activate_btn.setStyleSheet(_btn_primary())
 
     # ── Build ─────────────────────────────────────────────────────────────────
 
@@ -103,22 +136,20 @@ class LicenseActivationPrompt(QDialog):
     def _build_header(self) -> QWidget:
         hdr = QWidget()
         hdr.setFixedHeight(72)
-        hdr.setStyleSheet(f"background:{_BG2}; border-bottom:1px solid {_BORDER};")
+        self._header = hdr
         lay = QHBoxLayout(hdr)
         lay.setContentsMargins(28, 0, 28, 0)
         lay.setSpacing(12)
 
-        icon = make_icon_label(IC.KEY, color="#ffffff", size=28)
+        icon = make_icon_label(IC.KEY, color=PALETTE['text'], size=28)
         lay.addWidget(icon)
 
         col = QVBoxLayout()
         col.setSpacing(2)
-        t1 = QLabel(f"Activate {APP_VENDOR} {APP_NAME}")
-        t1.setStyleSheet(scaled_qss("font-size:15pt; font-weight:700; color:#fff;"))
-        t2 = QLabel("Enter your license key, or continue with simulated hardware")
-        t2.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_MUTED};")
-        col.addWidget(t1)
-        col.addWidget(t2)
+        self._header_title = QLabel(f"Activate {APP_VENDOR} {APP_NAME}")
+        self._header_sub = QLabel("Enter your license key, or continue with simulated hardware")
+        col.addWidget(self._header_title)
+        col.addWidget(self._header_sub)
         lay.addLayout(col, 1)
         return hdr
 
@@ -127,37 +158,25 @@ class LicenseActivationPrompt(QDialog):
         lay.setContentsMargins(28, 22, 28, 18)
         lay.setSpacing(10)
 
-        intro = QLabel(
+        self._intro = QLabel(
             "Paste your license key below to unlock full hardware access.\n"
             "Without a license, SanjINSIGHT runs in <b>demo mode</b> with "
             "simulated hardware — no real instrument is required."
         )
-        intro.setStyleSheet(f"font-size:{FONT['body']}pt; color:{_TEXT}; line-height:150%;")
-        intro.setWordWrap(True)
-        lay.addWidget(intro)
+        self._intro.setWordWrap(True)
+        lay.addWidget(self._intro)
 
         self._key_input = QTextEdit()
         self._key_input.setPlaceholderText(
             "Paste license key here…\n\n"
             "Example:  eyJjdXN0b21lciI6Ii4uLiJ9.AAAA…"
         )
-        self._key_input.setStyleSheet(f"""
-            QTextEdit {{
-                background:{_BG2}; color:{_TEXT};
-                border:1px solid {_BORDER}; border-radius:4px;
-                font-size:{FONT["caption"]}pt; font-family:{MONO_FONT};
-                padding:8px;
-            }}
-            QTextEdit:focus {{ border-color:{_ACCENT}; }}
-        """)
         self._key_input.setFixedHeight(88)
         self._key_input.textChanged.connect(self._on_key_changed)
         lay.addWidget(self._key_input)
 
         # Inline status message (hidden until activation is attempted)
         self._msg_lbl = QLabel("")
-        self._msg_lbl.setStyleSheet(
-            f"font-size:{FONT['sublabel']}pt; color:{_MUTED};")
         self._msg_lbl.setWordWrap(True)
         self._msg_lbl.hide()
         lay.addWidget(self._msg_lbl)
@@ -168,27 +187,22 @@ class LicenseActivationPrompt(QDialog):
     def _build_footer(self) -> QWidget:
         footer = QWidget()
         footer.setFixedHeight(64)
-        footer.setStyleSheet(f"background:{_BG2}; border-top:1px solid {_BORDER};")
+        self._footer = footer
         lay = QHBoxLayout(footer)
         lay.setContentsMargins(28, 0, 28, 0)
         lay.setSpacing(10)
 
-        contact = QLabel(f"To purchase a license, contact <a href='mailto:{SUPPORT_EMAIL}'>{SUPPORT_EMAIL}</a>")
-        contact.setStyleSheet(
-            f"font-size:{FONT['caption']}pt; color:{_MUTED};"
-            f" qproperty-openExternalLinks: true;"
-        )
-        contact.setOpenExternalLinks(True)
-        lay.addWidget(contact, 1)
+        self._contact_lbl = QLabel(
+            f"To purchase a license, contact <a href='mailto:{SUPPORT_EMAIL}'>{SUPPORT_EMAIL}</a>")
+        self._contact_lbl.setOpenExternalLinks(True)
+        lay.addWidget(self._contact_lbl, 1)
 
         self._demo_btn = QPushButton("Continue in Demo Mode")
-        self._demo_btn.setStyleSheet(_BTN_SECONDARY)
         self._demo_btn.setFixedHeight(38)
         self._demo_btn.clicked.connect(self._on_demo)
         lay.addWidget(self._demo_btn)
 
         self._activate_btn = QPushButton("Activate License")
-        self._activate_btn.setStyleSheet(_BTN_PRIMARY)
         self._activate_btn.setFixedHeight(38)
         self._activate_btn.setEnabled(False)
         self._activate_btn.clicked.connect(self._on_activate)
@@ -198,10 +212,10 @@ class LicenseActivationPrompt(QDialog):
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
-    def _set_message(self, text: str, color: str = _MUTED):
+    def _set_message(self, text: str, color: str | None = None):
         self._msg_lbl.setText(text)
         self._msg_lbl.setStyleSheet(
-            f"font-size:{FONT['sublabel']}pt; color:{color};")
+            f"font-size:{FONT['sublabel']}pt; color:{color or _MUTED()};")
         self._msg_lbl.show()
 
     # ── Slots ─────────────────────────────────────────────────────────────────
@@ -231,13 +245,13 @@ class LicenseActivationPrompt(QDialog):
             self._set_message(
                 f"⚠  Invalid license key — check the key and try again, "
                 f"or contact {SUPPORT_EMAIL}.",
-                _RED,
+                _RED(),
             )
             log.warning("License activation failed — invalid key entered at prompt")
         else:
             self._set_message(
                 f"✓  License activated for {info.customer}  ({info.tier_display})",
-                _GREEN,
+                _GREEN(),
             )
             log.info(
                 "License activated at first-run prompt: %s / %s",

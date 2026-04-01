@@ -165,13 +165,13 @@ class _DevicesPopup(QWidget):
         name_lbl = QLabel(name)
 
         if ok is True:
-            dot_color  = "#00d4aa"
+            dot_color  = PALETTE['stateConnected']
             status_txt = "Connected"
         elif ok is False:
-            dot_color  = "#ff4444"
+            dot_color  = PALETTE['stateError']
             status_txt = "Error"
         else:
-            dot_color  = "#ff9900"
+            dot_color  = PALETTE['stateConnecting']
             status_txt = "Connecting…"
 
         # Camera rows show an "Active" pill instead of "Connected" when selected
@@ -213,14 +213,14 @@ class _DevicesPopup(QWidget):
 
     def _apply_styles(self):
         P   = PALETTE
-        bg  = P.get("bg",           "#242424")
-        bg2 = P.get("surface",      "#2d2d2d")
-        bdr = P.get("border",       "#484848")
-        dim = P.get("textDim",      "#999999")
-        sub = P.get("textSub",      "#6a6a6a")
-        txt = P.get("text",         "#ebebeb")
-        acc = P.get("accent",       "#00d4aa")
-        hov = P.get("surfaceHover", "#404040")
+        bg  = P["bg"]
+        bg2 = P["surface"]
+        bdr = P["border"]
+        dim = P["textDim"]
+        sub = P["textSub"]
+        txt = P["text"]
+        acc = P["accent"]
+        hov = P["surfaceHover"]
 
         self.setStyleSheet(
             f"_DevicesPopup {{ background:{bg}; border:1px solid {bdr}; "
@@ -267,7 +267,7 @@ class _DevicesPopup(QWidget):
             f"font-size:{FONT['label']}pt; color:{acc}; background:transparent;")
 
     def _style_row(self, row, bg, bg2, hov, txt, sub):
-        acc = PALETTE.get("accent", "#00d4aa")
+        acc = PALETTE['accent']
         row.setStyleSheet(
             f"QWidget {{ background:{bg}; }}"
             f"QWidget:hover {{ background:{bg2}; }}")
@@ -455,13 +455,13 @@ class _ProfilePopup(QWidget):
 
     def _apply_styles(self):
         P   = PALETTE
-        bg  = P.get("bg",           "#242424")
-        bg2 = P.get("surface",      "#2d2d2d")
-        bdr = P.get("border",       "#484848")
-        dim = P.get("textDim",      "#999999")
-        sub = P.get("textSub",      "#6a6a6a")
-        txt = P.get("text",         "#ebebeb")
-        acc = P.get("accent",       "#00d4aa")
+        bg  = P["bg"]
+        bg2 = P["surface"]
+        bdr = P["border"]
+        dim = P["textDim"]
+        sub = P["textSub"]
+        txt = P["text"]
+        acc = P["accent"]
 
         self.setStyleSheet(
             f"_ProfilePopup {{ background:{bg}; border:1px solid {bdr}; "
@@ -580,8 +580,8 @@ class ProfileButton(QWidget):
         from profiles.profiles import CATEGORY_ACCENTS
         self._profile = profile
         if profile is None:
-            dim = PALETTE.get("textDim", "#999999")
-            sub = PALETTE.get("textSub", "#6a6a6a")
+            dim = PALETTE["textDim"]
+            sub = PALETTE["textSub"]
             self._name_lbl.setText("No profile")
             self._name_lbl.setStyleSheet(
                 f"font-size:{FONT['label']}pt; color:{dim}; "
@@ -590,7 +590,7 @@ class ProfileButton(QWidget):
                 f"color:{sub}; font-size:{FONT['label']}pt; background:transparent;")
             self.setToolTip("")
         else:
-            accent = CATEGORY_ACCENTS.get(profile.category, "#00d4aa")
+            accent = CATEGORY_ACCENTS.get(profile.category, PALETTE['accent'])
             name = profile.name if len(profile.name) <= 28 else profile.name[:26] + "…"
             self._name_lbl.setText(name)
             self._name_lbl.setStyleSheet(
@@ -650,10 +650,10 @@ class ProfileButton(QWidget):
 
     def _apply_styles(self):
         P     = PALETTE
-        surf  = P.get("surface",      "#2d2d2d")
-        bdr   = P.get("border",       "#484848")
-        hover = P.get("surfaceHover", "#404040")
-        txt   = P.get("text",         "#ebebeb")
+        surf  = P["surface"]
+        bdr   = P["border"]
+        hover = P["surfaceHover"]
+        txt   = P["text"]
 
         if self._open:
             radius   = "5px 5px 0 0"
@@ -705,17 +705,22 @@ class _SystemPopup(QWidget):
 
     diagnostics_requested = pyqtSignal()
 
-    _GRADE_COLORS = {
-        "A": "#00d4aa",
-        "B": "#4499ff",
-        "C": "#ffaa44",
-        "D": "#ff4444",
-    }
-    _SEVERITY_COLORS = {
-        "ok":   "#00d4aa",
-        "warn": "#ffaa44",
-        "fail": "#ff4444",
-    }
+    @staticmethod
+    def _grade_colors():
+        return {
+            "A": PALETTE['success'],
+            "B": PALETTE['info'],
+            "C": PALETTE['warning'],
+            "D": PALETTE['danger'],
+        }
+
+    @staticmethod
+    def _severity_colors():
+        return {
+            "ok":   PALETTE['success'],
+            "warn": PALETTE['warning'],
+            "fail": PALETTE['danger'],
+        }
 
     def __init__(self):
         super().__init__(None, Qt.Popup | Qt.FramelessWindowHint)
@@ -793,7 +798,7 @@ class _SystemPopup(QWidget):
                 item.widget().deleteLater()
 
         # Update header
-        color = self._GRADE_COLORS.get(grade, PALETTE.get("textSub", "#6a6a6a"))
+        color = self._grade_colors().get(grade, PALETTE["textSub"])
         self._hdr_dot.setStyleSheet(
             f"color:{color}; font-size:{FONT['label']}pt; background:transparent;")
         self._grade_lbl.setText(f"Grade {grade}")
@@ -826,7 +831,7 @@ class _SystemPopup(QWidget):
         name_lbl = QLabel(result.display_name)
         val_lbl  = QLabel(result.observed)
 
-        dot_color = self._SEVERITY_COLORS.get(result.severity, "#999999")
+        dot_color = self._severity_colors().get(result.severity, PALETTE['textDim'])
         dot.setStyleSheet(
             f"color:{dot_color}; font-size:{FONT['caption']}pt; background:transparent;")
 
@@ -848,13 +853,13 @@ class _SystemPopup(QWidget):
 
     def _apply_styles(self):
         P   = PALETTE
-        bg  = P.get("bg",           "#242424")
-        bg2 = P.get("surface",      "#2d2d2d")
-        bdr = P.get("border",       "#484848")
-        dim = P.get("textDim",      "#999999")
-        sub = P.get("textSub",      "#6a6a6a")
-        txt = P.get("text",         "#ebebeb")
-        acc = P.get("accent",       "#00d4aa")
+        bg  = P["bg"]
+        bg2 = P["surface"]
+        bdr = P["border"]
+        dim = P["textDim"]
+        sub = P["textSub"]
+        txt = P["text"]
+        acc = P["accent"]
 
         self.setStyleSheet(
             f"_SystemPopup {{ background:{bg}; border:1px solid {bdr}; "
@@ -927,7 +932,9 @@ class SystemStatusButton(QWidget):
 
     diagnostics_requested = pyqtSignal()
 
-    _GRADE_COLORS = _SystemPopup._GRADE_COLORS
+    @staticmethod
+    def _grade_colors():
+        return _SystemPopup._grade_colors()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -1000,8 +1007,8 @@ class SystemStatusButton(QWidget):
             self._popup.update_results(grade, results)
 
     def _refresh(self):
-        color = self._GRADE_COLORS.get(
-            self._grade, PALETTE.get("textSub", "#6a6a6a"))
+        color = self._grade_colors().get(
+            self._grade, PALETTE["textSub"])
         self._dot_lbl.setStyleSheet(
             f"color:{color}; font-size:{FONT['label']}pt; background:transparent;")
 
@@ -1020,10 +1027,10 @@ class SystemStatusButton(QWidget):
 
     def _apply_styles(self):
         P     = PALETTE
-        surf  = P.get("surface",      "#2d2d2d")
-        bdr   = P.get("border",       "#484848")
-        hover = P.get("surfaceHover", "#404040")
-        txt   = P.get("text",         "#ebebeb")
+        surf  = P["surface"]
+        bdr   = P["border"]
+        hover = P["surfaceHover"]
+        txt   = P["text"]
 
         if self._open:
             radius   = "5px 5px 0 0"
@@ -1179,13 +1186,13 @@ class ConnectedDevicesButton(QWidget):
     def _refresh(self):
         status = self._overall_status()
         if status is True:
-            dot_color = "#00d4aa"
+            dot_color = PALETTE['accent']
         elif status == "partial":
-            dot_color = "#ff9900"
+            dot_color = PALETTE['warning']
         elif status is False:
-            dot_color = "#ff4444"
+            dot_color = PALETTE['danger']
         else:
-            dot_color = PALETTE.get("textSub", "#6a6a6a")
+            dot_color = PALETTE["textSub"]
 
         n_ok    = sum(1 for d in self._devices.values() if d["ok"] is True)
         n_total = len(self._devices)
@@ -1197,10 +1204,10 @@ class ConnectedDevicesButton(QWidget):
 
     def _apply_styles(self):
         P     = PALETTE
-        surf  = P.get("surface",      "#2d2d2d")
-        bdr   = P.get("border",       "#484848")
-        hover = P.get("surfaceHover", "#404040")
-        txt   = P.get("text",         "#ebebeb")
+        surf  = P["surface"]
+        bdr   = P["border"]
+        hover = P["surfaceHover"]
+        txt   = P["text"]
 
         # When open: square bottom corners + no bottom border (merges with popup)
         if self._open:
@@ -1374,14 +1381,14 @@ class _OperatorPopup(QWidget):
 
     def _apply_styles(self):
         P   = PALETTE
-        bg  = P.get("bg",           "#242424")
-        bg2 = P.get("surface",      "#2d2d2d")
-        bdr = P.get("border",       "#484848")
-        txt = P.get("text",         "#ebebeb")
-        acc = P.get("accent",       "#00d4aa")
-        hov = P.get("surfaceHover", "#404040")
-        sub = P.get("textSub",      "#6a6a6a")
-        dim = P.get("textDim",      "#999999")
+        bg  = P["bg"]
+        bg2 = P["surface"]
+        bdr = P["border"]
+        txt = P["text"]
+        acc = P["accent"]
+        hov = P["surfaceHover"]
+        sub = P["textSub"]
+        dim = P["textDim"]
 
         self.setStyleSheet(
             f"_OperatorPopup {{ background:{bg}; border:1px solid {bdr}; "
@@ -1404,11 +1411,11 @@ class _OperatorPopup(QWidget):
 
     def _style_row(self, row, is_active: bool):
         P   = PALETTE
-        bg  = P.get("bg",           "#242424")
-        acc = P.get("accent",       "#00d4aa")
-        txt = P.get("text",         "#ebebeb")
-        dim = P.get("textDim",      "#999999")
-        hov = P.get("surfaceHover", "#404040")
+        bg  = P["bg"]
+        acc = P["accent"]
+        txt = P["text"]
+        dim = P["textDim"]
+        hov = P["surfaceHover"]
         row.setStyleSheet(
             f"QWidget {{ background:{bg}; }}"
             f"QWidget:hover {{ background:{hov}; }}")
@@ -1454,7 +1461,7 @@ class OperatorButton(QWidget):
         lay.setContentsMargins(10, 0, 10, 0)
         lay.setSpacing(5)
 
-        self._icon_lbl  = make_icon_label(IC.USER, color=PALETTE.get("textDim", "#8892aa"), size=18)
+        self._icon_lbl  = make_icon_label(IC.USER, color=PALETTE["textDim"], size=18)
         self._name_lbl  = QLabel("Operator")
         self._arrow_lbl = QLabel("▾")
 
@@ -1553,11 +1560,11 @@ class OperatorButton(QWidget):
 
     def _apply_styles(self):
         P     = PALETTE
-        surf  = P.get("surface",      "#2d2d2d")
-        bdr   = P.get("border",       "#484848")
-        hover = P.get("surfaceHover", "#404040")
-        txt   = P.get("text",         "#ebebeb")
-        dim   = P.get("textDim",      "#999999")
+        surf  = P["surface"]
+        bdr   = P["border"]
+        hover = P["surfaceHover"]
+        txt   = P["text"]
+        dim   = P["textDim"]
 
         if self._open:
             radius   = "5px 5px 0 0"
@@ -1657,8 +1664,8 @@ class StatusHeader(QWidget):
         # ── App name ─────────────────────────────────────────────────
         self._app_name_lbl = QLabel("SanjINSIGHT")
         self._app_name_lbl.setStyleSheet(
-            f"font-size:{FONT.get('heading', 14)}pt; font-weight:bold; "
-            f"color:{PALETTE.get('text', '#ebebeb')}; background:transparent; "
+            f"font-size:{FONT['heading']}pt; font-weight:bold; "
+            f"color:{PALETTE['text']}; background:transparent; "
             "letter-spacing:0.5px;")
         lay.addWidget(self._app_name_lbl)
 
@@ -1742,35 +1749,35 @@ class StatusHeader(QWidget):
             "Emergency Stop — immediately disables bias output, "
             "all TECs, stage motion, and aborts any active acquisition.\n"
             "Hardware stays connected. Click 'Clear' to re-arm.")
-        self._estop_btn.setStyleSheet(scaled_qss("""
-            QPushButton {
-                background: #5a0000;
-                color: #ff4444;
-                border: 2px solid #aa0000;
+        self._estop_btn.setStyleSheet(scaled_qss(f"""
+            QPushButton {{
+                background: {PALETTE['dangerBg']};
+                color: {PALETTE['danger']};
+                border: 2px solid {PALETTE['danger']};
                 border-radius: 5px;
                 font-size: 13pt;
                 font-weight: bold;
                 letter-spacing: 1px;
                 padding: 0 12px;
-            }
-            QPushButton:hover {
-                background: #7a0000;
-                color: #ff6666;
-                border-color: #cc2222;
-            }
-            QPushButton:pressed {
-                background: #3a0000;
-            }
-            QPushButton[armed="false"] {
-                background: #1a1a1a;
-                color: #555;
-                border: 1px solid #2a2a2a;
-            }
-            QPushButton[armed="false"]:hover {
-                background: #222;
-                color: #888;
-                border-color: #444;
-            }
+            }}
+            QPushButton:hover {{
+                background: {PALETTE['errorBg']};
+                color: {PALETTE['danger']};
+                border-color: {PALETTE['danger']};
+            }}
+            QPushButton:pressed {{
+                background: {PALETTE['dangerBg']};
+            }}
+            QPushButton[armed="false"] {{
+                background: {PALETTE['surface2']};
+                color: {PALETTE['textDim']};
+                border: 1px solid {PALETTE['border']};
+            }}
+            QPushButton[armed="false"]:hover {{
+                background: {PALETTE['surface4']};
+                color: {PALETTE['textSub']};
+                border-color: {PALETTE['border']};
+            }}
         """))
         self._estop_btn.setProperty("armed", "true")
         self._estop_armed = True
@@ -1786,11 +1793,11 @@ class StatusHeader(QWidget):
         P     = PALETTE
         # Header bar is the most elevated surface — use surface4 so it sits
         # visually above both the sidebar (surface) and the workspace (bg).
-        bg    = P.get("surface4", "#3a3a3c")
-        bdr   = P.get("border",   "#484848")
-        dim   = P.get("textDim",  "#999999")
-        sub   = P.get("textSub",  "#6a6a6a")
-        text  = P.get("text",     "#ebebeb")
+        bg    = P["surface4"]
+        bdr   = P["border"]
+        dim   = P["textDim"]
+        sub   = P["textSub"]
+        text  = P["text"]
 
         # Header background
         self.setStyleSheet(
@@ -1820,7 +1827,7 @@ class StatusHeader(QWidget):
         # App name label
         if hasattr(self, "_app_name_lbl"):
             self._app_name_lbl.setStyleSheet(
-                f"font-size:{FONT.get('heading', 14)}pt; font-weight:bold; "
+                f"font-size:{FONT['heading']}pt; font-weight:bold; "
                 f"color:{text}; background:transparent; letter-spacing:0.5px;")
 
         # Connected Devices button
@@ -1831,11 +1838,11 @@ class StatusHeader(QWidget):
             self._operator_btn._apply_styles()
 
         # Log-in / Log-out buttons
-        acc = P.get("accent", "#00d4aa")
+        acc = P["accent"]
         _btn_qss = (
             f"QPushButton {{ background:{acc}18; color:{acc}; "
             f"border:1px solid {acc}55; border-radius:4px; "
-            f"font-size:{FONT.get('label', 10)}pt; padding:0 10px; }}"
+            f"font-size:{FONT['label']}pt; padding:0 10px; }}"
             f"QPushButton:hover {{ background:{acc}33; }}"
         )
         if hasattr(self, "_login_btn"):
@@ -1860,12 +1867,12 @@ class StatusHeader(QWidget):
         # E-stop button: re-apply armed=false structural colours so they
         # read correctly in both dark and light modes.
         if hasattr(self, "_estop_btn"):
-            surf2 = P.get("surface2", "#3d3d3d")
+            surf2 = P["surface2"]
             self._estop_btn.setStyleSheet(scaled_qss(f"""
                 QPushButton {{
-                    background: #5a0000;
-                    color: #ff4444;
-                    border: 2px solid #aa0000;
+                    background: {PALETTE['dangerBg']};
+                    color: {PALETTE['danger']};
+                    border: 2px solid {PALETTE['danger']};
                     border-radius: 5px;
                     font-size: 13pt;
                     font-weight: bold;
@@ -1873,12 +1880,12 @@ class StatusHeader(QWidget):
                     padding: 0 12px;
                 }}
                 QPushButton:hover {{
-                    background: #7a0000;
-                    color: #ff6666;
-                    border-color: #cc2222;
+                    background: {PALETTE['errorBg']};
+                    color: {PALETTE['danger']};
+                    border-color: {PALETTE['danger']};
                 }}
                 QPushButton:pressed {{
-                    background: #3a0000;
+                    background: {PALETTE['dangerBg']};
                 }}
                 QPushButton[armed="false"] {{
                     background: {surf2};
@@ -1896,8 +1903,8 @@ class StatusHeader(QWidget):
 
     def _refresh_demo_banner_style(self) -> None:
         """Apply PALETTE info color to the unified demo banner button."""
-        _info = PALETTE.get("info", "#5b8ff9")
-        _bg   = PALETTE.get("bg",   "#242424")
+        _info = PALETTE["info"]
+        _bg   = PALETTE["bg"]
 
         def _blend(fg: str, bg: str, a: float) -> str:
             fr, fg2, fb = int(fg[1:3], 16), int(fg[3:5], 16), int(fg[5:7], 16)
@@ -1911,7 +1918,7 @@ class StatusHeader(QWidget):
 
         self._demo_banner.setStyleSheet(scaled_qss(
             f"QPushButton#demoBanner {{"
-            f" background:{_info}; color:#ffffff; border:none;"
+            f" background:{_info}; color:{PALETTE['text']}; border:none;"
             f" border-radius:5px; padding:0 14px;"
             f" font-size:{FONT['label']}pt; font-weight:600; letter-spacing:1px;"
             f"}}"
@@ -1924,10 +1931,10 @@ class StatusHeader(QWidget):
         if not hasattr(self, "_ai_btn"):
             return
         P     = PALETTE
-        surf  = P.get("surface",      "#2d2d2d")
-        bdr2  = P.get("border2",      "#3d3d3d")
-        hover = P.get("surfaceHover", "#404040")
-        sub   = P.get("textSub",      "#6a6a6a")
+        surf  = P["surface"]
+        bdr2  = P["border2"]
+        hover = P["surfaceHover"]
+        sub   = P["textSub"]
         # Keep accent from ai_status if set, else default sub colour
         accent = getattr(self._ai_btn, "_ai_accent", sub)
         self._ai_btn.setStyleSheet(f"""
@@ -1936,7 +1943,7 @@ class StatusHeader(QWidget):
                 border:1px solid {bdr2}; border-radius:4px;
                 font-size:{FONT['label']}pt; font-weight:600; letter-spacing:1px;
             }}
-            QPushButton:hover   {{ color:{P.get('textDim','#999')}; background:{hover}; }}
+            QPushButton:hover   {{ color:{P['textDim']}; background:{hover}; }}
             QPushButton:checked {{
                 background:{surf}; color:{accent};
                 border:1px solid {accent}66;
@@ -2068,13 +2075,13 @@ class StatusHeader(QWidget):
         if not hasattr(self, "_ai_btn"):
             return
         _colors = {
-            "off":      PALETTE.get("textSub", "#6a6a6a"),
-            "loading":  "#ffaa44",
-            "ready":    "#00d4aa",
-            "thinking": "#8888ff",
-            "error":    "#ff5555",
+            "off":      PALETTE["textSub"],
+            "loading":  PALETTE['warning'],
+            "ready":    PALETTE['accent'],
+            "thinking": PALETTE['systemIndigo'],
+            "error":    PALETTE['danger'],
         }
-        self._ai_btn._ai_accent = _colors.get(status, PALETTE.get("textSub", "#6a6a6a"))
+        self._ai_btn._ai_accent = _colors.get(status, PALETTE["textSub"])
         self._ai_btn.setToolTip(
             f"AI Assistant ({status}) — click to toggle panel.\n"
             "Explains tabs, diagnoses instrument state, answers questions.")

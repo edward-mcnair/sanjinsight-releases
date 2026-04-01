@@ -289,15 +289,15 @@ class RecipeTab(QWidget):
 
         self._list_hdr = QLabel("Saved Scan Profiles")
         list_hdr = self._list_hdr
-        list_hdr.setStyleSheet(f"color:#ccc; font-size:{FONT['heading']}pt; font-weight:600;")
+        list_hdr.setStyleSheet(f"color:{PALETTE['text']}; font-size:{FONT['heading']}pt; font-weight:600;")
         left_lay.addWidget(list_hdr)
 
         self._list = QListWidget()
         self._list.setStyleSheet(f"""
-            QListWidget {{ background:#141414; color:#ccc; border:1px solid #2a2a2a;
+            QListWidget {{ background:{PALETTE['bg']}; color:{PALETTE['text']}; border:1px solid {PALETTE['border']};
                           font-size:{FONT['label']}pt; font-family:{MONO_FONT}; }}
-            QListWidget::item:selected {{ background:#0d3a52; color:#fff; }}
-            QListWidget::item:hover    {{ background:#1a2a2a; }}
+            QListWidget::item:selected {{ background:{PALETTE['accentDim']}; color:{PALETTE['textOnAccent']}; }}
+            QListWidget::item:hover    {{ background:{PALETTE['surfaceHover']}; }}
         """)
         self._list.currentRowChanged.connect(self._on_select)
         left_lay.addWidget(self._list, 1)
@@ -306,11 +306,11 @@ class RecipeTab(QWidget):
         self._new_btn    = QPushButton("New")
         set_btn_icon(self._new_btn, "fa5s.plus")
         self._delete_btn = QPushButton("Delete")
-        set_btn_icon(self._delete_btn, "fa5s.trash", "#ff6666")
+        set_btn_icon(self._delete_btn, "fa5s.trash", PALETTE['danger'])
         self._run_btn    = QPushButton("RUN")
-        set_btn_icon(self._run_btn, "fa5s.play", "#00d4aa")
+        set_btn_icon(self._run_btn, "fa5s.play", PALETTE['accent'])
         self._run_btn.setStyleSheet(
-            "background:#006b40; color:#fff; font-weight:600; border-radius:3px;")
+            f"background:{PALETTE['accent']}; color:{PALETTE['textOnAccent']}; font-weight:600; border-radius:3px;")
         self._compare_btn = QPushButton("Compare…")
         set_btn_icon(self._compare_btn, "fa5s.exchange-alt")
         self._compare_btn.setFixedHeight(28)
@@ -343,7 +343,7 @@ class RecipeTab(QWidget):
 
         self._right_hdr = QLabel("Scan Profile Editor")
         right_hdr = self._right_hdr
-        right_hdr.setStyleSheet(f"color:#ccc; font-size:{FONT['heading']}pt; font-weight:600;")
+        right_hdr.setStyleSheet(f"color:{PALETTE['text']}; font-size:{FONT['heading']}pt; font-weight:600;")
         right_lay.addWidget(right_hdr)
 
         # Identity
@@ -452,7 +452,7 @@ class RecipeTab(QWidget):
         self._notes_edit = QTextEdit()
         self._notes_edit.setFixedHeight(70)
         self._notes_edit.setStyleSheet(
-            f"background:#111; color:#ccc; font-size:{FONT['label']}pt; border:none;")
+            f"background:{PALETTE['bg']}; color:{PALETTE['text']}; font-size:{FONT['label']}pt; border:none;")
         notes_lay.addWidget(self._notes_edit)
         right_lay.addWidget(notes_box)
 
@@ -461,9 +461,9 @@ class RecipeTab(QWidget):
         self._lock_banner.setAlignment(Qt.AlignCenter)
         self._lock_banner.setFixedHeight(26)
         self._lock_banner.setStyleSheet(
-            f"background:{PALETTE.get('accent','#00d4aa')}22; "
-            f"color:{PALETTE.get('accent','#00d4aa')}; "
-            "border:1px solid #00d4aa55; border-radius:4px; "
+            f"background:{PALETTE['accent']}22; "
+            f"color:{PALETTE['accent']}; "
+            f"border:1px solid {PALETTE['accent']}55; border-radius:4px; "
             f"font-size:{FONT.get('sublabel', 9)}pt; font-weight:600;")
         self._lock_banner.setVisible(False)
         right_lay.addWidget(self._lock_banner)
@@ -503,11 +503,11 @@ class RecipeTab(QWidget):
     @staticmethod
     def _box_style() -> str:
         P = PALETTE
-        sur = P.get("surface",  "#1a1d28")
-        bdr = P.get("border",   "#2e3245")
-        dim = P.get("textDim",  "#8892aa")
-        txt = P.get("text",     "#dde3f2")
-        su2 = P.get("surface2", "#20232e")
+        sur = P['surface']
+        bdr = P['border']
+        dim = P['textDim']
+        txt = P['text']
+        su2 = P['surface2']
         return (
             f"QGroupBox {{ color:{dim}; font-size:{FONT['label']}pt; "
             f"border:1px solid {bdr}; border-radius:4px; margin-top:6px; }} "
@@ -519,12 +519,12 @@ class RecipeTab(QWidget):
 
     def _apply_styles(self) -> None:
         P   = PALETTE
-        su2 = P.get("surface2", "#20232e")
-        sur = P.get("surface",  "#1a1d28")
-        bdr = P.get("border",   "#2e3245")
-        txt = P.get("text",     "#dde3f2")
-        dim = P.get("textDim",  "#8892aa")
-        acc = P.get("accent",   "#00d4aa")
+        su2 = P['surface2']
+        sur = P['surface']
+        bdr = P['border']
+        txt = P['text']
+        dim = P['textDim']
+        acc = P.get("accent",   PALETTE['accent'])
         hdr_qss = f"color:{txt}; font-size:{FONT['heading']}pt; font-weight:600;"
         if hasattr(self, "_list_hdr"):
             self._list_hdr.setStyleSheet(hdr_qss)
@@ -534,8 +534,8 @@ class RecipeTab(QWidget):
             self._list.setStyleSheet(f"""
                 QListWidget {{ background:{su2}; color:{txt}; border:1px solid {bdr};
                               font-size:{FONT['label']}pt; font-family:{MONO_FONT}; }}
-                QListWidget::item:selected {{ background:{P.get('info','#0d3a52')}; color:{P.get('bg','#12151f')}; }}
-                QListWidget::item:hover    {{ background:{P.get('surfaceHover','#262a38')}; }}
+                QListWidget::item:selected {{ background:{P['info']}; color:{P['bg']}; }}
+                QListWidget::item:hover    {{ background:{P['surfaceHover']}; }}
             """)
         box_qss = self._box_style()
         from PyQt5.QtWidgets import QGroupBox
@@ -581,11 +581,11 @@ class RecipeTab(QWidget):
         for recipe in self._store.list():
             item = QListWidgetItem(recipe.label)
             item.setData(Qt.UserRole, recipe)
-            item.setForeground(QColor("#ccc"))
+            item.setForeground(QColor(PALETTE['text']))
             self._list.addItem(item)
         if self._list.count() == 0:
             placeholder = QListWidgetItem("No scan profiles yet — click New")
-            placeholder.setForeground(QColor("#555"))
+            placeholder.setForeground(QColor(PALETTE['textSub']))
             placeholder.setFlags(Qt.NoItemFlags)
             self._list.addItem(placeholder)
 
@@ -755,7 +755,7 @@ class RecipeTab(QWidget):
         dlg = QDialog(self)
         dlg.setWindowTitle("Load Preset")
         dlg.setMinimumSize(500, 340)
-        dlg.setStyleSheet("background:#1a1a1a; color:#ccc;")
+        dlg.setStyleSheet(f"background:{PALETTE['surface']}; color:{PALETTE['text']};")
 
         lay = QVBoxLayout(dlg)
         lay.setSpacing(8)
@@ -764,15 +764,15 @@ class RecipeTab(QWidget):
             "Choose a preset to load into the Recipe Editor.\n"
             "Rename and save it to create your own scan profile."
         )
-        hdr.setStyleSheet(f"color:#aaa; font-size:{FONT['sublabel']}pt;")
+        hdr.setStyleSheet(f"color:{PALETTE['textDim']}; font-size:{FONT['sublabel']}pt;")
         lay.addWidget(hdr)
 
         lst = QListWidget()
         lst.setStyleSheet(f"""
-            QListWidget {{ background:#141414; color:#ccc; border:1px solid #2a2a2a;
+            QListWidget {{ background:{PALETTE['bg']}; color:{PALETTE['text']}; border:1px solid {PALETTE['border']};
                           font-size:{FONT['label']}pt; font-family:{MONO_FONT}; }}
-            QListWidget::item:selected {{ background:#0d3a52; color:#fff; }}
-            QListWidget::item:hover    {{ background:#1a2a2a; }}
+            QListWidget::item:selected {{ background:{PALETTE['accentDim']}; color:{PALETTE['textOnAccent']}; }}
+            QListWidget::item:hover    {{ background:{PALETTE['surfaceHover']}; }}
         """)
         for preset in PRESETS:
             item = QListWidgetItem(preset.label)
@@ -784,7 +784,7 @@ class RecipeTab(QWidget):
 
         desc_lbl = QLabel(PRESETS[0].description if PRESETS else "")
         desc_lbl.setStyleSheet(
-            f"color:#888; font-size:{FONT['sublabel']}pt; font-style:italic; padding:4px 0;")
+            f"color:{PALETTE['textDim']}; font-size:{FONT['sublabel']}pt; font-style:italic; padding:4px 0;")
         desc_lbl.setWordWrap(True)
         lay.addWidget(desc_lbl)
 
@@ -802,7 +802,7 @@ class RecipeTab(QWidget):
         load_btn   = QPushButton("Load")
         load_btn.setFixedHeight(28)
         load_btn.setStyleSheet(
-            "background:#006b40; color:#fff; font-weight:600; border-radius:3px;")
+            f"background:{PALETTE['accent']}; color:{PALETTE['textOnAccent']}; font-weight:600; border-radius:3px;")
         cancel_btn = QPushButton("Cancel")
         cancel_btn.setFixedHeight(28)
         btn_row.addStretch(1)
@@ -887,8 +887,8 @@ class _RecipeDiffDialog(QDialog):
         self.setWindowTitle("Compare Scan Profiles")
         self.resize(700, 520)
         self.setStyleSheet(
-            f"background:{PALETTE.get('bg', '#1a1a1a')}; "
-            f"color:{PALETTE.get('text', '#cccccc')};"
+            f"background:{PALETTE['bg']}; "
+            f"color:{PALETTE['text']};"
         )
 
         self._recipes = recipes
@@ -902,16 +902,16 @@ class _RecipeDiffDialog(QDialog):
         sel_row.setSpacing(6)
 
         combo_style = (
-            f"QComboBox {{ background:{PALETTE.get('surface', '#222')}; "
-            f"color:{PALETTE.get('text', '#ccc')}; "
-            f"border:1px solid {PALETTE.get('border', '#333')}; "
+            f"QComboBox {{ background:{PALETTE['surface']}; "
+            f"color:{PALETTE['text']}; "
+            f"border:1px solid {PALETTE['border']}; "
             f"border-radius:3px; padding:2px 6px; "
             f"font-size:{FONT.get('label', 10)}pt; }}"
             f"QComboBox::drop-down {{ border:none; }}"
             f"QComboBox QAbstractItemView {{ "
-            f"background:{PALETTE.get('surface', '#222')}; "
-            f"color:{PALETTE.get('text', '#ccc')}; "
-            f"selection-background-color:{PALETTE.get('accent', '#00d4aa')}22; }}"
+            f"background:{PALETTE['surface']}; "
+            f"color:{PALETTE['text']}; "
+            f"selection-background-color:{PALETTE['accent']}22; }}"
         )
 
         self._combo_left  = QComboBox()
@@ -926,10 +926,10 @@ class _RecipeDiffDialog(QDialog):
             self._combo_right.setCurrentIndex(1)
 
         self._cmp_btn = QPushButton("Compare")
-        set_btn_icon(self._cmp_btn, "fa5s.exchange-alt", "#00d4aa")
+        set_btn_icon(self._cmp_btn, "fa5s.exchange-alt", PALETTE['accent'])
         self._cmp_btn.setFixedHeight(28)
         self._cmp_btn.setStyleSheet(
-            "background:#006b40; color:#fff; font-weight:600; "
+            f"background:{PALETTE['accent']}; color:{PALETTE['textOnAccent']}; font-weight:600; "
             "border-radius:3px; padding:0 10px;"
         )
         self._cmp_btn.clicked.connect(self._rebuild_diff)
@@ -945,8 +945,8 @@ class _RecipeDiffDialog(QDialog):
         self._scroll = QScrollArea()
         self._scroll.setWidgetResizable(True)
         self._scroll.setStyleSheet(
-            f"QScrollArea {{ border:1px solid {PALETTE.get('border', '#2a2a2a')}; "
-            f"border-radius:4px; background:{PALETTE.get('bg', '#1a1a1a')}; }}"
+            f"QScrollArea {{ border:1px solid {PALETTE['border']}; "
+            f"border-radius:4px; background:{PALETTE['bg']}; }}"
         )
         root.addWidget(self._scroll, 1)
 
@@ -975,7 +975,7 @@ class _RecipeDiffDialog(QDialog):
 
         container = QWidget()
         container.setStyleSheet(
-            f"background:{PALETTE.get('bg', '#1a1a1a')};"
+            f"background:{PALETTE['bg']};"
         )
         form = QFormLayout(container)
         form.setContentsMargins(12, 10, 12, 10)
@@ -999,14 +999,14 @@ class _RecipeDiffDialog(QDialog):
             row_lbl = QLabel(key)
             row_lbl.setFont(label_font_bold if not same else label_font_normal)
             row_lbl.setStyleSheet(
-                f"color:{PALETTE.get('text', '#ccc') if same else '#ffffff'};"
+                f"color:{PALETTE['text'] if same else PALETTE['textOnAccent']};"
             )
 
             # Value widget
             if same:
                 val_lbl = QLabel(lv)
                 val_lbl.setStyleSheet(
-                    f"color:{PALETTE.get('textDim', '#777')}; "
+                    f"color:{PALETTE['textDim']}; "
                     f"font-size:{FONT.get('label', 10)}pt;"
                 )
                 form.addRow(row_lbl, val_lbl)
@@ -1019,16 +1019,16 @@ class _RecipeDiffDialog(QDialog):
 
                 left_lbl = QLabel(lv)
                 left_lbl.setStyleSheet(
-                    f"color:#ffb300; font-size:{FONT.get('label', 10)}pt; font-weight:600;"
+                    f"color:{PALETTE['warning']}; font-size:{FONT.get('label', 10)}pt; font-weight:600;"
                 )
                 arrow_lbl = QLabel("\u2192")
                 arrow_lbl.setStyleSheet(
-                    f"color:{PALETTE.get('textDim', '#555')}; "
+                    f"color:{PALETTE['textDim']}; "
                     f"font-size:{FONT.get('label', 10)}pt;"
                 )
                 right_lbl = QLabel(rv)
                 right_lbl.setStyleSheet(
-                    f"color:{PALETTE.get('accent', '#00d4aa')}; "
+                    f"color:{PALETTE['accent']}; "
                     f"font-size:{FONT.get('label', 10)}pt; font-weight:600;"
                 )
 
@@ -1044,14 +1044,14 @@ class _RecipeDiffDialog(QDialog):
     def _show_message(self, text: str):
         container = QWidget()
         container.setStyleSheet(
-            f"background:{PALETTE.get('bg', '#1a1a1a')};"
+            f"background:{PALETTE['bg']};"
         )
         lay = QVBoxLayout(container)
         lay.setAlignment(Qt.AlignCenter)
         msg = QLabel(text)
         msg.setAlignment(Qt.AlignCenter)
         msg.setStyleSheet(
-            f"color:{PALETTE.get('textDim', '#777')}; "
+            f"color:{PALETTE['textDim']}; "
             f"font-size:{FONT.get('label', 10)}pt; font-style:italic;"
         )
         lay.addWidget(msg)

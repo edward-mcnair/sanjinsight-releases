@@ -54,7 +54,7 @@ def _hline() -> QFrame:
     f = QFrame()
     f.setFrameShape(QFrame.HLine)
     f.setFrameShadow(QFrame.Sunken)
-    f.setStyleSheet(f"color: {PALETTE.get('border', '#2e3245')};")
+    f.setStyleSheet(f"color: {PALETTE['border']};")
     return f
 
 
@@ -73,7 +73,7 @@ def _stat_widget(label: str, value: str = "—") -> tuple:
     val.setAlignment(Qt.AlignCenter)
     val.setStyleSheet(
         f"font-family:{MONO_FONT}; font-size:17pt; "
-        f"color:{PALETTE.get('accent', '#00d4aa')};")
+        f"color:{PALETTE['accent']};")
 
     vl.addWidget(lbl)
     vl.addWidget(val)
@@ -130,8 +130,8 @@ class EmissivityCalTab(QWidget):
         # Title row
         title = QLabel("Emissivity Calibration  (IR Camera)")
         title.setStyleSheet(
-            f"font-size:{FONT.get('heading', 13)}pt; "
-            f"font-weight:600; color:{PALETTE.get('text', '#dde3f2')};")
+            f"font-size:{FONT['heading']}pt; "
+            f"font-weight:600; color:{PALETTE['text']};")
         root.addWidget(title)
 
         root.addWidget(_hline())
@@ -194,7 +194,7 @@ class EmissivityCalTab(QWidget):
         self._remove_btn.clicked.connect(self._remove_selected)
 
         self._capture_btn = QPushButton("Capture from camera")
-        set_btn_icon(self._capture_btn, "fa5s.crosshairs", "#00d4aa")
+        set_btn_icon(self._capture_btn, "fa5s.crosshairs", PALETTE['accent'])
         self._capture_btn.setFixedHeight(28)
         self._capture_btn.setEnabled(False)
         self._capture_btn.setToolTip(
@@ -236,8 +236,8 @@ class EmissivityCalTab(QWidget):
         # Residuals label
         self._resid_lbl = QLabel("")
         self._resid_lbl.setStyleSheet(
-            f"font-family:{MONO_FONT}; font-size:{FONT.get('label',11)}pt; "
-            f"color:{PALETTE.get('textDim', '#8892aa')}; padding-left:4px;")
+            f"font-family:{MONO_FONT}; font-size:{FONT['label']}pt; "
+            f"color:{PALETTE['textDim']}; padding-left:4px;")
         self._resid_lbl.setWordWrap(True)
         fit_outer.addWidget(self._resid_lbl)
 
@@ -246,13 +246,13 @@ class EmissivityCalTab(QWidget):
         btn_row.setSpacing(8)
 
         self._fit_btn = QPushButton("◉  Fit")
-        set_btn_icon(self._fit_btn, "fa5s.chart-line", "#00d4aa")
+        set_btn_icon(self._fit_btn, "fa5s.chart-line", PALETTE['accent'])
         self._fit_btn.setObjectName("primary")
         self._fit_btn.setFixedHeight(32)
         self._fit_btn.clicked.connect(self._run_fit)
 
         self._apply_btn = QPushButton("Apply to Session")
-        set_btn_icon(self._apply_btn, "fa5s.check", "#00d4aa")
+        set_btn_icon(self._apply_btn, "fa5s.check", PALETTE['accent'])
         self._apply_btn.setFixedHeight(32)
         self._apply_btn.setEnabled(False)
         self._apply_btn.clicked.connect(self._apply_to_session)
@@ -279,8 +279,8 @@ class EmissivityCalTab(QWidget):
         # ── Status bar ────────────────────────────────────────────────────
         self._status_lbl = QLabel("Add at least 2 reference points to fit.")
         self._status_lbl.setStyleSheet(
-            f"font-size:{FONT.get('label', 11)}pt; "
-            f"color:{PALETTE.get('textDim', '#8892aa')}; "
+            f"font-size:{FONT['label']}pt; "
+            f"color:{PALETTE['textDim']}; "
             f"padding:4px 2px;")
         root.addWidget(self._status_lbl)
         root.addStretch()
@@ -327,10 +327,10 @@ class EmissivityCalTab(QWidget):
         P = PALETTE
         self.setStyleSheet(f"""
             QGroupBox {{
-                font-size: {FONT.get('label', 11)}pt;
+                font-size: {FONT['label']}pt;
                 font-weight: 600;
-                color: {P.get('textDim', '#8892aa')};
-                border: 1px solid {P.get('border', '#2e3245')};
+                color: {P['textDim']};
+                border: 1px solid {P['border']};
                 border-radius: 4px;
                 margin-top: 8px;
                 padding-top: 6px;
@@ -341,30 +341,30 @@ class EmissivityCalTab(QWidget):
                 padding: 0 4px;
             }}
             QTableWidget {{
-                background: {P.get('surface2', '#20232e')};
-                alternate-background-color: {P.get('surface', '#1a1d28')};
-                color: {P.get('text', '#dde3f2')};
-                gridline-color: {P.get('border', '#2e3245')};
-                border: 1px solid {P.get('border', '#2e3245')};
-                font-size: {FONT.get('label', 11)}pt;
+                background: {P['surface2']};
+                alternate-background-color: {P['surface']};
+                color: {P['text']};
+                gridline-color: {P['border']};
+                border: 1px solid {P['border']};
+                font-size: {FONT['label']}pt;
             }}
             QTableWidget QHeaderView::section {{
-                background: {P.get('surface3', '#282b38')};
-                color: {P.get('textDim', '#8892aa')};
+                background: {P['surface3']};
+                color: {P['textDim']};
                 border: none;
-                border-bottom: 1px solid {P.get('border', '#2e3245')};
+                border-bottom: 1px solid {P['border']};
                 padding: 3px 6px;
-                font-size: {FONT.get('label', 11)}pt;
+                font-size: {FONT['label']}pt;
             }}
             QTableWidget::item:selected {{
-                background: {P.get('accentDim', '#00d4aa33')};
-                color: {P.get('text', '#dde3f2')};
+                background: {P['accentDim']};
+                color: {P['text']};
             }}
         """)
         # Update status line and resid colours in case theme changed
         self._status_lbl.setStyleSheet(
-            f"font-size:{FONT.get('label', 11)}pt; "
-            f"color:{PALETTE.get('textDim', '#8892aa')}; padding:4px 2px;")
+            f"font-size:{FONT['label']}pt; "
+            f"color:{PALETTE['textDim']}; padding:4px 2px;")
 
     # ── Calibration point management ──────────────────────────────────────── #
 
@@ -485,9 +485,9 @@ class EmissivityCalTab(QWidget):
 
         # Colour R² by quality
         r2_color = (
-            PALETTE.get("success",  "#34c759") if result.r_squared >= 0.995 else
-            PALETTE.get("warning",  "#ffb300") if result.r_squared >= 0.98  else
-            PALETTE.get("danger",   "#ff4444")
+            PALETTE["success"] if result.r_squared >= 0.995 else
+            PALETTE["warning"] if result.r_squared >= 0.98  else
+            PALETTE["danger"]
         )
         self._r2_val.setStyleSheet(
             f"font-family:{MONO_FONT}; font-size:17pt; color:{r2_color};")
@@ -516,7 +516,7 @@ class EmissivityCalTab(QWidget):
             val.setText("—")
             val.setStyleSheet(
                 f"font-family:{MONO_FONT}; font-size:17pt; "
-                f"color:{PALETTE.get('accent', '#00d4aa')};")
+                f"color:{PALETTE['accent']};")
         self._resid_lbl.setText("")
         n = self._cal.n_points
         if n >= 2:
@@ -574,9 +574,8 @@ class EmissivityCalTab(QWidget):
     # ── Status helper ─────────────────────────────────────────────────────── #
 
     def _set_status(self, message: str, ok: bool = True) -> None:
-        color = (PALETTE.get("success",  "#34c759") if ok
-                 else PALETTE.get("danger", "#ff4444"))
+        color = PALETTE["success"] if ok else PALETTE["danger"]
         self._status_lbl.setStyleSheet(
-            f"font-size:{FONT.get('label', 11)}pt; "
+            f"font-size:{FONT['label']}pt; "
             f"color:{color}; padding:4px 2px;")
         self._status_lbl.setText(message)

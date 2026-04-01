@@ -83,9 +83,10 @@ class TimingDiagramTab(QWidget):
 
         # ── Left panel: controls (scrollable) ─────────────────────────────────
         left = QWidget()
+        self._left_panel = left
         left.setStyleSheet(
-            f"background:{PALETTE.get('surface2','#181b28')};"
-            f"border-right:1px solid {PALETTE.get('border','#2e3245')};"
+            f".QWidget {{ background:{PALETTE['surface2']};"
+            f"border-right:1px solid {PALETTE['border']}; }}"
         )
         llay = QVBoxLayout(left)
         llay.setContentsMargins(12, 14, 12, 14)
@@ -143,7 +144,7 @@ class TimingDiagramTab(QWidget):
                       "Pulsed RF: transistor pulsed S-params")
         info.setWordWrap(True)
         info.setStyleSheet(
-            f"font-size:{FONT['caption']}pt; color:{PALETTE.get('textDim','#8892aa')};"
+            f"font-size:{FONT['caption']}pt; color:{PALETTE['textDim']};"
             "background:transparent;")
         lay.addWidget(info)
         return grp
@@ -157,7 +158,7 @@ class TimingDiagramTab(QWidget):
         def _row(label_text, widget, row):
             lbl = QLabel(label_text)
             lbl.setStyleSheet(
-                f"font-size:{FONT['sublabel']}pt; color:{PALETTE.get('textDim','#8892aa')};"
+                f"font-size:{FONT['sublabel']}pt; color:{PALETTE['textDim']};"
                 "background:transparent;")
             grid.addWidget(lbl,    row, 0)
             grid.addWidget(widget, row, 1)
@@ -210,7 +211,7 @@ class TimingDiagramTab(QWidget):
         self._rf_duty_spin.valueChanged.connect(self._on_param_changed)
         self._rf_duty_lbl = QLabel("RF duty")
         self._rf_duty_lbl.setStyleSheet(
-            f"font-size:{FONT['sublabel']}pt; color:{PALETTE.get('textDim','#8892aa')};"
+            f"font-size:{FONT['sublabel']}pt; color:{PALETTE['textDim']};"
             "background:transparent;")
         grid.addWidget(self._rf_duty_lbl,  5, 0)
         grid.addWidget(self._rf_duty_spin, 5, 1)
@@ -226,7 +227,7 @@ class TimingDiagramTab(QWidget):
         def _lbl(text):
             l = QLabel(text)
             l.setStyleSheet(
-                f"font-size:{FONT['sublabel']}pt; color:{PALETTE.get('textDim','#8892aa')};"
+                f"font-size:{FONT['sublabel']}pt; color:{PALETTE['textDim']};"
                 "background:transparent;")
             return l
 
@@ -282,7 +283,7 @@ class TimingDiagramTab(QWidget):
         self._sync_status_lbl = QLabel("")
         self._sync_status_lbl.setWordWrap(True)
         self._sync_status_lbl.setStyleSheet(
-            f"font-size:{FONT['caption']}pt; color:{PALETTE.get('textDim','#8892aa')};"
+            f"font-size:{FONT['caption']}pt; color:{PALETTE['textDim']};"
             "background:transparent;")
         lay.addWidget(self._sync_status_lbl)
 
@@ -419,12 +420,12 @@ class TimingDiagramTab(QWidget):
 
     def _apply_styles(self):
         P = PALETTE
-        surface2 = P.get("surface2", "#181b28")
-        surface  = P.get("surface",  "#1a1d28")
-        border   = P.get("border",   "#2e3245")
-        text     = P.get("text",     "#dde3f2")
-        textDim  = P.get("textDim",  "#8892aa")
-        accent   = P.get("accent",   "#00d4aa")
+        surface2 = P["surface2"]
+        surface  = P["surface"]
+        border   = P["border"]
+        text     = P["text"]
+        textDim  = P["textDim"]
+        accent   = P["accent"]
 
         # Left panel
         self.setStyleSheet(f"""
@@ -463,9 +464,14 @@ class TimingDiagramTab(QWidget):
                 padding: 4px 12px;
                 font-size: {FONT['body']}pt;
             }}
-            QPushButton:hover  {{ background: {P.get('surfaceHover','#262a38')}; }}
+            QPushButton:hover  {{ background: {P['surfaceHover']}; }}
             QPushButton:pressed {{ background: {surface2}; }}
         """)
 
+        if hasattr(self, "_left_panel"):
+            self._left_panel.setStyleSheet(
+                f".QWidget {{ background: {surface2};"
+                f"border-right: 1px solid {border}; }}"
+            )
         if hasattr(self, "_diagram"):
             self._diagram._apply_styles()

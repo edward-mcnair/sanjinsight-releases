@@ -190,11 +190,11 @@ class CameraContextBar(QWidget):
         dot, name = entry
 
         if ok is True:
-            color = "#00d4aa"
+            color = PALETTE['stateConnected']
         elif ok is False:
-            color = "#ff4444"
+            color = PALETTE['stateError']
         else:
-            color = "#ff9900"   # amber = connecting
+            color = PALETTE['stateConnecting']   # amber = connecting
 
         dot.setStyleSheet(
             f"color:{color}; font-size:9pt; background:transparent;")
@@ -239,7 +239,7 @@ class CameraContextBar(QWidget):
     def _update_mode_badge(self, cam_type: str) -> None:
         is_ir  = (cam_type == "ir")
         label  = "IR LOCK-IN" if is_ir else "THERMOREFLECTANCE"
-        color  = PALETTE.get("warning", "#ffb300") if is_ir else PALETTE.get("accent", "#00d4aa")
+        color  = PALETTE['warning'] if is_ir else PALETTE['accent']
         self._mode_lbl.setText(label)
         self._mode_lbl.setStyleSheet(
             f"color:{color}; font-family:{MONO_FONT}; "
@@ -247,16 +247,16 @@ class CameraContextBar(QWidget):
             f"letter-spacing:1px; background:transparent; padding:0 4px;")
 
     def _apply_periph_name_style(self) -> None:
-        txt = PALETTE.get("textDim", "#999999")
+        txt = PALETTE['textDim']
         for _, name in self._periph_widgets.values():
             name.setStyleSheet(
                 f"color:{txt}; font-size:{FONT.get('caption', 8)}pt; "
                 f"font-weight:600; background:transparent;")
 
     def _apply_styles(self) -> None:
-        bg  = PALETTE.get("surface",  "#2d2d2d")
-        bdr = PALETTE.get("border",   "#484848")
-        txt = PALETTE.get("textDim",  "#999999")
+        bg  = PALETTE['surface']
+        bdr = PALETTE['border']
+        txt = PALETTE['textDim']
 
         self.setStyleSheet(
             f"CameraContextBar {{ background:{bg}; "

@@ -66,29 +66,28 @@ def _pw_strength(password: str) -> tuple[int, str]:
     return score, labels[score]
 
 
-_STRENGTH_COLORS = {
-    1: "#ff4466",
-    2: "#ffaa44",
-    3: "#4e73df",
-    4: "#00d4aa",
-}
+def _strength_color(score: int) -> str:
+    """Return PALETTE-driven color for password strength score."""
+    return {
+        1: PALETTE['danger'],
+        2: PALETTE['warning'],
+        3: PALETTE['cta'],
+        4: PALETTE['accent'],
+    }.get(score, PALETTE['danger'])
 
 
 # ── Shared visual helpers ──────────────────────────────────────────────────────
 
-_H1_SS    = "font-size:22pt; font-weight:700; color:#ffffff;"
-_H2_SS    = f"font-size:{FONT.get('body', 11)}pt; color:#aaaaaa; line-height:1.6;"
-_BODY_SS  = f"font-size:{FONT.get('body', 11)}pt; color:#cccccc;"
-_LABEL_SS = f"font-size:{FONT.get('label', 10)}pt; color:#888888;"
-_BG       = "#0f1120"
-_SURFACE  = "#181b2e"
-_BORDER   = "#2a3249"
+def _H1_SS():   return f"font-size:22pt; font-weight:700; color:{PALETTE['text']};"
+def _H2_SS():   return f"font-size:{FONT.get('bodyf', 11)}pt; color:{PALETTE['textDim']}; line-height:1.6;"
+def _BODY_SS(): return f"font-size:{FONT.get('bodyf', 11)}pt; color:{PALETTE['text']};"
+def _LABEL_SS(): return f"font-size:{FONT.get('labelf', 10)}pt; color:{PALETTE['textDim']};"
 
 
 def _hline() -> QFrame:
     f = QFrame()
     f.setFrameShape(QFrame.HLine)
-    f.setStyleSheet(f"color:{_BORDER};")
+    f.setStyleSheet(f"color:{PALETTE['border']};")
     return f
 
 
@@ -97,7 +96,8 @@ def _hline() -> QFrame:
 class _PageWelcome(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setStyleSheet(f"background:{_BG};")
+        P = PALETTE
+        self.setStyleSheet(f"background:{P['bg']};")
 
         # Outer layout wraps a scroll area so the page works at any dialog height
         outer = QVBoxLayout(self)
@@ -108,13 +108,13 @@ class _PageWelcome(QWidget):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setStyleSheet(
-            f"QScrollArea {{ background:{_BG}; border:none; }}"
-            f"QScrollBar:vertical {{ width:6px; background:{_BG}; }}"
-            f"QScrollBar::handle:vertical {{ background:#2a3249; border-radius:3px; }}")
+            f"QScrollArea {{ background:{P['bg']}; border:none; }}"
+            f"QScrollBar:vertical {{ width:6px; background:{P['bg']}; }}"
+            f"QScrollBar::handle:vertical {{ background:{P['border']}; border-radius:3px; }}")
         outer.addWidget(scroll)
 
         content = QWidget()
-        content.setStyleSheet(f"background:{_BG};")
+        content.setStyleSheet(f"background:{P['bg']};")
         lay = QVBoxLayout(content)
         lay.setContentsMargins(48, 36, 48, 28)
         lay.setSpacing(10)
@@ -122,24 +122,24 @@ class _PageWelcome(QWidget):
 
         # ── Headline ─────────────────────────────────────────────────────────
         h1 = QLabel("First Launch — Administrator Setup")
-        h1.setStyleSheet(_H1_SS)
+        h1.setStyleSheet(_H1_SS())
         lay.addWidget(h1)
 
         h2 = QLabel(
             "No user accounts exist yet.  You are about to create the "
             "<b>administrator account</b> — the top-level account that controls "
             "user management, scan profile approvals, and system security.")
-        h2.setStyleSheet(_H2_SS)
+        h2.setStyleSheet(_H2_SS())
         h2.setWordWrap(True)
         lay.addWidget(h2)
 
         lay.addWidget(_hline())
 
         # ── Admin account card ────────────────────────────────────────────────
-        acc = PALETTE.get("accent", "#00d4aa")
+        acc = P["accent"]
         admin_card = QFrame()
         admin_card.setStyleSheet(
-            f"QFrame {{ background:#0d2220; border:1px solid {acc}44; "
+            f"QFrame {{ background:{P['readyBg']}; border:1px solid {acc}44; "
             f"border-left:3px solid {acc}; border-radius:6px; }}")
         ac_lay = QVBoxLayout(admin_card)
         ac_lay.setContentsMargins(14, 12, 14, 12)
@@ -156,7 +156,7 @@ class _PageWelcome(QWidget):
             "user type but has access to everything.  There is only one admin account "
             "per installation.")
         admin_desc.setStyleSheet(
-            f"font-size:{FONT.get('sublabel', 9)}pt; color:#aaaaaa; background:transparent;")
+            f"font-size:{FONT.get('sublabel', 9)}pt; color:{P['textDim']}; background:transparent;")
         admin_desc.setWordWrap(True)
         ac_lay.addWidget(admin_desc)
 
@@ -177,7 +177,7 @@ class _PageWelcome(QWidget):
             row.addWidget(chk)
             lbl = QLabel(item)
             lbl.setStyleSheet(
-                f"font-size:{FONT.get('sublabel', 9)}pt; color:#cccccc; background:transparent;")
+                f"font-size:{FONT.get('sublabel', 9)}pt; color:{P['text']}; background:transparent;")
             row.addWidget(lbl, 1)
             ac_lay.addLayout(row)
 
@@ -187,21 +187,21 @@ class _PageWelcome(QWidget):
         # ── User role overview ────────────────────────────────────────────────
         roles_hdr = QLabel("User roles you will create")
         roles_hdr.setStyleSheet(
-            f"font-size:{FONT.get('body', 11)}pt; font-weight:700; color:#dddddd;")
+            f"font-size:{FONT.get('body', 11)}pt; font-weight:700; color:{P['text']};")
         lay.addWidget(roles_hdr)
 
         roles_sub = QLabel(
             "After creating your admin account you can add users from Settings.  "
             "Each user is assigned one of these three roles:")
         roles_sub.setStyleSheet(
-            f"font-size:{FONT.get('sublabel', 9)}pt; color:#888888;")
+            f"font-size:{FONT.get('sublabel', 9)}pt; color:{P['textDim']};")
         roles_sub.setWordWrap(True)
         lay.addWidget(roles_sub)
 
         lay.addWidget(self._role_card(
             "Technician",
             "Runs approved QA scans and views PASS / FAIL verdicts.",
-            "#5b8ff9",
+            P["cta"],
             can=[
                 "Run scan profiles approved by the admin",
                 "View scan results and PASS/FAIL verdict",
@@ -216,7 +216,7 @@ class _PageWelcome(QWidget):
         lay.addWidget(self._role_card(
             "Failure Analyst",
             "Diagnoses device failures using the full instrument interface.",
-            "#00d4aa",
+            P["accent"],
             can=[
                 "Full access to all acquisition and analysis tabs",
                 "Create and edit scan profiles (requires admin approval to deploy)",
@@ -231,7 +231,7 @@ class _PageWelcome(QWidget):
         lay.addWidget(self._role_card(
             "Researcher",
             "Explores experimental parameters and publishes results.",
-            "#ffaa44",
+            P["warning"],
             can=[
                 "Full access to all acquisition and analysis tabs",
                 "Create and edit scan profiles (requires admin approval to deploy)",
@@ -250,8 +250,8 @@ class _PageWelcome(QWidget):
             "▶  After setup: open Settings → Security to add users and, optionally, "
             "enable login enforcement so users must authenticate on each launch.")
         next_steps.setStyleSheet(
-            f"font-size:{FONT.get('sublabel', 9)}pt; color:#777777; "
-            f"background:{_SURFACE}; border:1px solid {_BORDER}; border-radius:5px; "
+            f"font-size:{FONT.get('sublabel', 9)}pt; color:{P['textDim']}; "
+            f"background:{P['surface']}; border:1px solid {P['border']}; border-radius:5px; "
             "padding:10px;")
         next_steps.setWordWrap(True)
         lay.addWidget(next_steps)
@@ -261,9 +261,10 @@ class _PageWelcome(QWidget):
     @staticmethod
     def _role_card(title: str, desc: str, color: str,
                    can: list, cannot: list, interface: str) -> QFrame:
+        P = PALETTE
         card = QFrame()
         card.setStyleSheet(
-            f"QFrame {{ background:#131628; border:1px solid #1e2440; "
+            f"QFrame {{ background:{P['surface']}; border:1px solid {P['border']}; "
             f"border-left:3px solid {color}; border-radius:6px; }}")
         c_lay = QVBoxLayout(card)
         c_lay.setContentsMargins(14, 10, 14, 10)
@@ -280,10 +281,6 @@ class _PageWelcome(QWidget):
 
         badge = QLabel(interface)
         badge.setStyleSheet(
-            f"font-size:{FONT.get('caption', 8)}pt; color:{color}88; "
-            f"background:{color}18; border:1px solid {color}33; border-radius:3px; "
-            "padding:1px 6px; background:transparent;")
-        badge.setStyleSheet(
             f"font-size:{FONT.get('caption', 8)}pt; color:{color}; "
             f"background:{color}18; border:1px solid {color}44; border-radius:3px; "
             "padding:1px 6px;")
@@ -293,7 +290,7 @@ class _PageWelcome(QWidget):
 
         d = QLabel(desc)
         d.setStyleSheet(
-            f"font-size:{FONT.get('sublabel', 9)}pt; color:#888888; background:transparent;")
+            f"font-size:{FONT.get('sublabel', 9)}pt; color:{P['textDim']}; background:transparent;")
         d.setWordWrap(True)
         c_lay.addWidget(d)
 
@@ -308,11 +305,11 @@ class _PageWelcome(QWidget):
             row.setSpacing(6)
             chk = QLabel("✓")
             chk.setStyleSheet(
-                f"color:#00aa77; font-size:{FONT.get('sublabel', 9)}pt; background:transparent;")
+                f"color:{P['accent']}; font-size:{FONT.get('sublabel', 9)}pt; background:transparent;")
             chk.setFixedWidth(14)
             lbl = QLabel(item)
             lbl.setStyleSheet(
-                f"font-size:{FONT.get('sublabel', 9)}pt; color:#aaaaaa; background:transparent;")
+                f"font-size:{FONT.get('sublabel', 9)}pt; color:{P['textDim']}; background:transparent;")
             lbl.setWordWrap(True)
             row.addWidget(chk)
             row.addWidget(lbl, 1)
@@ -326,11 +323,11 @@ class _PageWelcome(QWidget):
             row.setSpacing(6)
             chk = QLabel("✗")
             chk.setStyleSheet(
-                f"color:#884444; font-size:{FONT.get('sublabel', 9)}pt; background:transparent;")
+                f"color:{P['danger']}; font-size:{FONT.get('sublabel', 9)}pt; background:transparent;")
             chk.setFixedWidth(14)
             lbl = QLabel(item)
             lbl.setStyleSheet(
-                f"font-size:{FONT.get('sublabel', 9)}pt; color:#666666; background:transparent;")
+                f"font-size:{FONT.get('sublabel', 9)}pt; color:{P['textSub']}; background:transparent;")
             lbl.setWordWrap(True)
             row.addWidget(chk)
             row.addWidget(lbl, 1)
@@ -349,19 +346,19 @@ class _PageWelcome(QWidget):
 class _PageCreateAdmin(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setStyleSheet(f"background:{_BG};")
+        self.setStyleSheet(f"background:{PALETTE['bg']};")
         lay = QVBoxLayout(self)
         lay.setContentsMargins(48, 36, 48, 24)
         lay.setSpacing(10)
 
         h1 = QLabel("Create Administrator Account")
-        h1.setStyleSheet(_H1_SS)
+        h1.setStyleSheet(_H1_SS())
         lay.addWidget(h1)
 
         h2 = QLabel(
             "This account will have full access to all settings and user management. "
             "You can add more users from Settings after setup.")
-        h2.setStyleSheet(_H2_SS)
+        h2.setStyleSheet(_H2_SS())
         h2.setWordWrap(True)
         lay.addWidget(h2)
 
@@ -407,13 +404,13 @@ class _PageCreateAdmin(QWidget):
         self._strength_bar.setFixedHeight(5)
         self._strength_bar.setTextVisible(False)
         self._strength_bar.setStyleSheet(
-            "QProgressBar { background:#1a1e30; border:none; border-radius:2px; }"
-            "QProgressBar::chunk { background:#ff4466; border-radius:2px; }")
+            f"QProgressBar {{ background:{PALETTE['surface']}; border:none; border-radius:2px; }}"
+            f"QProgressBar::chunk {{ background:{PALETTE['danger']}; border-radius:2px; }}")
         self._strength_lbl = QLabel("")
         self._strength_lbl.setFixedWidth(60)
         self._strength_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self._strength_lbl.setStyleSheet(
-            f"font-size:{FONT.get('caption', 8)}pt; color:#888888;")
+            f"font-size:{FONT.get('captionf', 8)}pt; color:{PALETTE['textDim']};")
         strength_row.addWidget(self._strength_bar)
         strength_row.addSpacing(8)
         strength_row.addWidget(self._strength_lbl)
@@ -433,7 +430,7 @@ class _PageCreateAdmin(QWidget):
         # Error message
         self._error_lbl = QLabel("")
         self._error_lbl.setStyleSheet(
-            f"color:{PALETTE.get('danger', '#ff4466')}; "
+            f"color:{PALETTE['danger']}; "
             f"font-size:{FONT.get('sublabel', 9)}pt;")
         lay.addWidget(self._error_lbl)
 
@@ -444,15 +441,15 @@ class _PageCreateAdmin(QWidget):
 
     def _field_label(self, text: str) -> QLabel:
         lbl = QLabel(text)
-        lbl.setStyleSheet(_LABEL_SS)
+        lbl.setStyleSheet(_LABEL_SS())
         return lbl
 
     def _update_strength(self, text: str) -> None:
         score, label = _pw_strength(text)
         self._strength_bar.setValue(score)
-        color = _STRENGTH_COLORS.get(score, "#ff4466")
+        color = _strength_color(score)
         self._strength_bar.setStyleSheet(
-            "QProgressBar { background:#1a1e30; border:none; border-radius:2px; }"
+            f"QProgressBar {{ background:{PALETTE['surface']}; border:none; border-radius:2px; }}"
             f"QProgressBar::chunk {{ background:{color}; border-radius:2px; }}")
         self._strength_lbl.setText(label)
         self._strength_lbl.setStyleSheet(
@@ -522,7 +519,7 @@ class AdminSetupWizard(QDialog):
         self.setWindowFlags(
             Qt.Dialog | Qt.WindowTitleHint | Qt.CustomizeWindowHint)
         self.setModal(True)
-        self.setStyleSheet(f"QDialog {{ background:{_BG}; }}")
+        self.setStyleSheet(f"QDialog {{ background:{PALETTE['bg']}; }}")
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -540,14 +537,14 @@ class AdminSetupWizard(QDialog):
         footer_frame = QFrame()
         footer_frame.setFixedHeight(68)
         footer_frame.setStyleSheet(
-            f"background:{_SURFACE}; border-top:1px solid {_BORDER};")
+            f"background:{PALETTE['surface']}; border-top:1px solid {PALETTE['border']};")
         footer_lay = QHBoxLayout(footer_frame)
         footer_lay.setContentsMargins(40, 12, 40, 12)
 
         # Step indicator (1 / 2)
         self._step_lbl = QLabel("Step 1 of 2")
         self._step_lbl.setStyleSheet(
-            f"font-size:{FONT.get('sublabel', 9)}pt; color:#555555;")
+            f"font-size:{FONT.get('sublabelf', 9)}pt; color:{PALETTE['textSub']};")
         footer_lay.addWidget(self._step_lbl)
         footer_lay.addStretch(1)
 

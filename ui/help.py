@@ -619,11 +619,11 @@ class HelpPopover(QWidget):
     """
 
     @property
-    def _ACCENT(self): return PALETTE.get('accent',  '#00d4aa')
+    def _ACCENT(self): return PALETTE['accent']
     @property
-    def _BG(self):     return PALETTE.get('surface', '#2d2d2d')
+    def _BG(self):     return PALETTE['surface']
     @property
-    def _BORDER(self): return PALETTE.get('border',  '#484848')
+    def _BORDER(self): return PALETTE['border']
 
     def __init__(self, topic_id: str, anchor: QWidget):
         super().__init__(
@@ -682,14 +682,14 @@ class HelpPopover(QWidget):
             f"font-size:{FONT['heading']}pt; font-weight:bold;")
         title = QLabel(content["title"])
         title.setStyleSheet(
-            scaled_qss(f"font-size:15pt; font-weight:bold; color:{PALETTE.get('text','#ebebeb')}; background:transparent;"))
+            scaled_qss(f"font-size:15pt; font-weight:bold; color:{PALETTE['text']}; background:transparent;"))
         title.setWordWrap(True)
 
         close_btn = QPushButton("✕")
         close_btn.setFixedSize(20, 20)
         close_btn.setStyleSheet(
-            f"QPushButton{{background:transparent; color:{PALETTE.get('textDim','#999999')}; border:none; "
-            f"font-size:{FONT['heading']}pt;}} QPushButton:hover{{color:{PALETTE.get('text','#ebebeb')};}}")
+            f"QPushButton{{background:transparent; color:{PALETTE['textDim']}; border:none; "
+            f"font-size:{FONT['heading']}pt;}} QPushButton:hover{{color:{PALETTE['text']};}}")
         close_btn.clicked.connect(self.close)
 
         hdr.addWidget(icon)
@@ -708,12 +708,12 @@ class HelpPopover(QWidget):
             h = QLabel(heading.upper())
             h.setStyleSheet(
                 f"font-size:{FONT['sublabel']}pt; letter-spacing:1.5px; "
-                f"color:{self._ACCENT if accent else PALETTE.get('textSub','#6a6a6a')}; background:transparent;")
+                f"color:{self._ACCENT if accent else PALETTE['textSub']}; background:transparent;")
             b = QLabel(body)
             b.setWordWrap(True)
             b.setStyleSheet(
                 f"font-size:{FONT['label']}pt; background:transparent; "
-                f"color:{PALETTE.get('text','#ebebeb') if accent else PALETTE.get('textDim','#999999')};")
+                f"color:{PALETTE['text'] if accent else PALETTE['textDim']};")
             sl.addWidget(h)
             sl.addWidget(b)
             return sl
@@ -730,12 +730,12 @@ class HelpPopover(QWidget):
             warn_row = QHBoxLayout()
             warn_row.setSpacing(8)
             warn_icon = QLabel("⚠")
-            warn_icon.setStyleSheet(f"color:#ffb300; font-size:{FONT['heading']}pt;")
+            warn_icon.setStyleSheet(f"color:{PALETTE['warning']}; font-size:{FONT['heading']}pt;")
             warn_icon.setFixedWidth(16)
             warn_text = QLabel(content["warning"])
             warn_text.setWordWrap(True)
             warn_text.setStyleSheet(
-                f"font-size:{FONT['label']}pt; color:#cc9900; font-style:italic;")
+                f"font-size:{FONT['label']}pt; color:{PALETTE['warning']}; font-style:italic;")
             warn_row.addWidget(warn_icon, 0, Qt.AlignTop)
             warn_row.addWidget(warn_text, 1)
             cl.addLayout(warn_row)
@@ -743,7 +743,7 @@ class HelpPopover(QWidget):
         if content.get("docs"):
             docs_lbl = QLabel(f"User Guide: {content['docs']}")
             docs_lbl.setStyleSheet(
-                f"font-size:{FONT['label']}pt; color:{PALETTE.get('textDim','#999999')}; font-style:italic; background:transparent;")
+                f"font-size:{FONT['label']}pt; color:{PALETTE['textDim']}; font-style:italic; background:transparent;")
             cl.addWidget(docs_lbl)
 
         outer.addWidget(card)
@@ -810,9 +810,9 @@ class HelpButton(QPushButton):
         self.clicked.connect(self._show_help)
 
     def _apply_styles(self):
-        acc  = PALETTE.get('accent',   '#00d4aa')
-        surf = PALETTE.get('surface2', '#3d3d3d')
-        bdr  = PALETTE.get('border',   '#484848')
+        acc  = PALETTE['accent']
+        surf = PALETTE['surface2']
+        bdr  = PALETTE['border']
         self.setStyleSheet(f"""
             QPushButton {{
                 background:{surf};

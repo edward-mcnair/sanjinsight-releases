@@ -41,16 +41,15 @@ log = logging.getLogger(__name__)
 
 # ── Verdict badge colours ─────────────────────────────────────────────────────
 
-_BADGE = {
-    "PASS":    {"text": "PASS",   "fg": "#00d4aa", "bg": "#0a2e28"},
-    "FAIL":    {"text": "FAIL",   "fg": "#ff4466", "bg": "#2a0810"},
-    "WARNING": {"text": "REVIEW", "fg": "#ffaa44", "bg": "#2e1e08"},
-}
-_BADGE_DEFAULT = {"text": "?", "fg": "#888888", "bg": "#1a1a1a"}
-
-_PANEL_BG  = "#0f1120"
-_CARD_BG   = "#181b2e"
-_CARD_BDR  = "#2a3249"
+def _badge_cfg(verdict: str) -> dict:
+    """Return badge config from PALETTE."""
+    P = PALETTE
+    _map = {
+        "PASS":    {"text": "PASS",   "fg": P["success"],  "bg": P["readyBg"]},
+        "FAIL":    {"text": "FAIL",   "fg": P["danger"],   "bg": P["errorBg"]},
+        "WARNING": {"text": "REVIEW", "fg": P["warning"],  "bg": P["warnBg"]},
+    }
+    return _map.get(verdict, {"text": "?", "fg": P["textDim"], "bg": P["surface"]})
 
 
 class _ResultCard(QFrame):
@@ -64,9 +63,10 @@ class _ResultCard(QFrame):
         self._recipe_label = recipe_label
         self._timestamp   = timestamp
 
+        P = PALETTE
         self.setStyleSheet(
-            f"QFrame {{ background:{_CARD_BG}; border:1px solid {_CARD_BDR}; "
-            "border-radius:6px; }}")
+            f"QFrame {{ background:{P['surface']}; border:1px solid {P['border']}; "
+            f"border-radius:6px; }}")
         self.setFixedHeight(68)
 
         lay = QHBoxLayout(self)
@@ -74,7 +74,7 @@ class _ResultCard(QFrame):
         lay.setSpacing(10)
 
         # ── Badge ──────────────────────────────────────────────────────────
-        cfg = _BADGE.get(verdict, _BADGE_DEFAULT)
+        cfg = _badge_cfg(verdict)
         badge = QLabel(cfg["text"])
         badge.setFixedWidth(52)
         badge.setAlignment(Qt.AlignCenter)
@@ -92,7 +92,7 @@ class _ResultCard(QFrame):
         part_lbl = QLabel(part_id or "—")
         part_lbl.setStyleSheet(
             f"font-size:{FONT.get('body', 11)}pt; font-weight:700; "
-            f"color:{PALETTE.get('text','#ebebeb')}; background:transparent;")
+            f"color:{PALETTE['text']}; background:transparent;")
         txt.addWidget(part_lbl)
 
         meta_lbl = QLabel(
@@ -100,7 +100,7 @@ class _ResultCard(QFrame):
             f"{datetime.fromtimestamp(timestamp).strftime('%H:%M:%S')}")
         meta_lbl.setStyleSheet(
             f"font-size:{FONT.get('caption', 8)}pt; "
-            f"color:{PALETTE.get('textDim','#999')}; background:transparent;")
+            f"color:{PALETTE['textDim']}; background:transparent;")
         txt.addWidget(meta_lbl)
         lay.addLayout(txt, 1)
 
@@ -127,40 +127,27 @@ class ShiftLogPanel(QWidget):
         self.setMinimumWidth(200)
         self.setMaximumWidth(300)
         self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
-        self.setStyleSheet(f"background:{_PANEL_BG};")
 
         root = QVBoxLayout(self)
         root.setContentsMargins(10, 12, 10, 10)
         root.setSpacing(8)
 
         # ── Header ─────────────────────────────────────────────────────────
-        hdr = QLabel("Shift Log")
-        hdr.setStyleSheet(
-            f"font-size:{FONT.get('body', 11)}pt; font-weight:700; "
-            f"color:{PALETTE.get('text','#ebebeb')}; background:transparent;")
-        root.addWidget(hdr)
+        self._hdr = QLabel("Shift Log")
+        root.addWidget(self._hdr)
 
         # ── Running totals ─────────────────────────────────────────────────
         self._totals_lbl = QLabel("0 scans")
-        self._totals_lbl.setStyleSheet(
-            f"font-size:{FONT.get('sublabel', 9)}pt; "
-            f"color:{PALETTE.get('textDim','#999')}; background:transparent;")
         root.addWidget(self._totals_lbl)
 
-        sep = QFrame()
-        sep.setFrameShape(QFrame.HLine)
-        sep.setStyleSheet(f"color:{_CARD_BDR};")
-        root.addWidget(sep)
+        self._sep = QFrame()
+        self._sep.setFrameShape(QFrame.HLine)
+        root.addWidget(self._sep)
 
         # ── Scroll area ────────────────────────────────────────────────────
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setStyleSheet(
-            "QScrollArea { border:none; background:transparent; }"
-            f"QScrollBar:vertical {{ background:{_PANEL_BG}; width:6px; border:none; }}"
-            "QScrollBar::handle:vertical { background:#333; border-radius:3px; }"
-            "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height:0; }")
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
         self._cards_widget = QWidget()
         self._cards_widget.setStyleSheet("background:transparent;")
@@ -169,24 +156,18 @@ class ShiftLogPanel(QWidget):
         self._cards_lay.setSpacing(6)
         self._cards_lay.addStretch(1)
 
-        scroll.setWidget(self._cards_widget)
-        root.addWidget(scroll, 1)
+        self._scroll.setWidget(self._cards_widget)
+        root.addWidget(self._scroll, 1)
 
         # ── Export button ──────────────────────────────────────────────────
         self._export_btn = QPushButton("Export CSV")
         self._export_btn.setFixedHeight(30)
-        self._export_btn.setStyleSheet(
-            f"QPushButton {{ background:{PALETTE.get('surface2','#333')}; "
-            f"color:{PALETTE.get('textDim','#999')}; "
-            f"border:1px solid {PALETTE.get('border','#484848')}; border-radius:4px; "
-            f"font-size:{FONT.get('sublabel', 9)}pt; }}"
-            f"QPushButton:hover {{ background:{PALETTE.get('surfaceHover','#404040')}; "
-            f"color:{PALETTE.get('text','#ebebeb')}; }}"
-            "QPushButton:disabled { color:#444; border-color:#333; }")
         self._export_btn.setEnabled(False)
         root.addWidget(self._export_btn)
 
         self._export_btn.clicked.connect(self._export_csv)
+
+        self._apply_styles()
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -252,5 +233,26 @@ class ShiftLogPanel(QWidget):
             log.error("ShiftLogPanel: CSV export failed: %s", exc)
 
     def _apply_styles(self) -> None:
-        """Re-apply theme when app theme changes."""
-        pass   # panel uses fixed dark palette matching OperatorShell
+        """Re-apply PALETTE-driven styles."""
+        P = PALETTE
+        self.setStyleSheet(f"background:{P['bg']};")
+        self._hdr.setStyleSheet(
+            f"font-size:{FONT.get('body', 11)}pt; font-weight:700; "
+            f"color:{P['text']}; background:transparent;")
+        self._totals_lbl.setStyleSheet(
+            f"font-size:{FONT.get('sublabel', 9)}pt; "
+            f"color:{P['textDim']}; background:transparent;")
+        self._sep.setStyleSheet(f"color:{P['border']};")
+        self._scroll.setStyleSheet(
+            "QScrollArea { border:none; background:transparent; }"
+            f"QScrollBar:vertical {{ background:{P['bg']}; width:6px; border:none; }}"
+            f"QScrollBar::handle:vertical {{ background:{P['border2']}; border-radius:3px; }}"
+            "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height:0; }")
+        self._export_btn.setStyleSheet(
+            f"QPushButton {{ background:{P['surface2']}; "
+            f"color:{P['textDim']}; "
+            f"border:1px solid {P['border']}; border-radius:4px; "
+            f"font-size:{FONT.get('sublabel', 9)}pt; }}"
+            f"QPushButton:hover {{ background:{P['surfaceHover']}; "
+            f"color:{P['text']}; }}"
+            f"QPushButton:disabled {{ color:{P['textSub']}; border-color:{P['border2']}; }}")

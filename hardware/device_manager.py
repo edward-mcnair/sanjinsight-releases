@@ -58,14 +58,41 @@ class DeviceState(Enum):
     DISCONNECTING = auto()
 
 
-STATE_COLORS = {
-    DeviceState.ABSENT:        "#333333",
-    DeviceState.DISCOVERED:    "#4488ff",
-    DeviceState.CONNECTING:    "#ffaa00",
-    DeviceState.CONNECTED:     "#00d4aa",
-    DeviceState.ERROR:         "#ff3b3b",
-    DeviceState.DISCONNECTING: "#ffaa00",
+_STATE_PALETTE_KEYS = {
+    DeviceState.ABSENT:        "stateAbsent",
+    DeviceState.DISCOVERED:    "stateDiscovered",
+    DeviceState.CONNECTING:    "stateConnecting",
+    DeviceState.CONNECTED:     "stateConnected",
+    DeviceState.ERROR:         "stateError",
+    DeviceState.DISCONNECTING: "stateConnecting",
 }
+
+
+def _get_state_color(state) -> str:
+    """Return the theme-aware colour for a device state."""
+    from ui.theme import PALETTE
+    key = _STATE_PALETTE_KEYS.get(state, "textDim")
+    return PALETTE.get(key, "#888888")
+
+
+# Legacy dict kept for backward compat — refreshes from PALETTE on each access.
+class _StateColorDict(dict):
+    def _refresh(self):
+        from ui.theme import PALETTE
+        self.clear()
+        for st, pk in _STATE_PALETTE_KEYS.items():
+            self[st] = PALETTE.get(pk, "#888888")
+
+    def __getitem__(self, key):
+        self._refresh()
+        return super().__getitem__(key)
+
+    def get(self, key, default=None):
+        self._refresh()
+        return super().get(key, default)
+
+
+STATE_COLORS = _StateColorDict()
 
 STATE_LABELS = {
     DeviceState.ABSENT:        "Not found",
@@ -135,7 +162,7 @@ class DeviceEntry:
 
     @property
     def status_color(self) -> str:
-        return STATE_COLORS.get(self.state, "#555")
+        return _get_state_color(self.state)
 
     @property
     def status_label(self) -> str:

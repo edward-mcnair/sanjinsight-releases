@@ -104,10 +104,10 @@ class DieGrid(QWidget):
     def paintEvent(self, e):
         p  = QPainter(self)
         W, H = self.width(), self.height()
-        p.fillRect(0, 0, W, H, QColor(13, 13, 13))
+        p.fillRect(0, 0, W, H, QColor(PALETTE['canvas']))
 
         if self._n_cols < 1 or self._n_rows < 1:
-            p.setPen(QColor(60, 60, 60))
+            p.setPen(QColor(PALETTE['canvasText']))
             p.setFont(mono_font(11))
             p.drawText(self.rect(), Qt.AlignCenter,
                        "No wafer map\n(MAPSIZE? returned 0)")
@@ -121,19 +121,20 @@ class DieGrid(QWidget):
                 is_hover = (col == self._hover_col and row == self._hover_row)
 
                 if is_cur:
-                    p.fillRect(r, QColor(0, 180, 140))
+                    p.fillRect(r, QColor(PALETTE['accent']))
                 elif is_hover:
-                    p.fillRect(r, QColor(40, 60, 55))
+                    c = QColor(PALETTE['accent']); c.setAlpha(40)
+                    p.fillRect(r, c)
                 else:
-                    p.fillRect(r, QColor(22, 22, 22))
+                    p.fillRect(r, QColor(PALETTE['surface2']))
 
-                p.setPen(QPen(QColor(40, 40, 40), 1))
+                p.setPen(QPen(QColor(PALETTE['border2']), 1))
                 p.drawRect(r)
 
                 # Show (col,row) label only if cells are large enough
                 if r.width() >= 22 and r.height() >= 14:
-                    p.setPen(QColor(80, 80, 80) if not is_cur
-                             else QColor(0, 0, 0))
+                    p.setPen(QColor(PALETTE['canvasText']) if not is_cur
+                             else QColor(PALETTE['bg']))
                     p.setFont(mono_font(7))
                     p.drawText(r, Qt.AlignCenter, f"{col},{row}")
 
@@ -153,6 +154,10 @@ class DieGrid(QWidget):
         self._hover_row = -1
         self.update()
         self.setCursor(Qt.ArrowCursor)
+
+    def _apply_styles(self):
+        """Re-apply PALETTE-driven colours on theme switch."""
+        self.update()
 
     def mousePressEvent(self, e):
         if e.button() == Qt.LeftButton:
@@ -212,17 +217,17 @@ class ProberTab(QWidget):
         self._prog.setTextVisible(False)
         self._prog.setVisible(False)
         self._prog.setStyleSheet(
-            "QProgressBar { background:#1a1a1a; border:none; margin:0; }"
-            "QProgressBar::chunk { background:#00d4aa; }")
+            f"QProgressBar {{ background:{PALETTE['surface']}; border:none; margin:0; }}"
+            f"QProgressBar::chunk {{ background:{PALETTE['accent']}; }}")
         root.addWidget(self._prog)
 
         # ── Position readouts ─────────────────────────────────────────
         pos_box = QGroupBox("Chuck Position")
         pl = QHBoxLayout(pos_box)
-        self._x_w  = self._readout("X (µm)", "—", PALETTE["accent"])
-        self._y_w  = self._readout("Y (µm)", "—", PALETTE["warning"])
-        self._z_w  = self._readout("Z (µm)", "—", PALETTE["info"])
-        self._st_w = self._readout("Status",  "—", "#555")
+        self._x_w  = self._readout("X (µm)", "—", PALETTE['accent'])
+        self._y_w  = self._readout("Y (µm)", "—", PALETTE['warning'])
+        self._z_w  = self._readout("Z (µm)", "—", PALETTE['info'])
+        self._st_w = self._readout("Status",  "—", PALETTE['textDim'])
         for w in [self._x_w, self._y_w, self._z_w, self._st_w]:
             pl.addWidget(w)
         root.addWidget(pos_box)
@@ -277,7 +282,7 @@ class ProberTab(QWidget):
         nl = QHBoxLayout(needle_box)
 
         self._contact_btn = QPushButton("Contact")
-        set_btn_icon(self._contact_btn, "fa5s.arrow-down", "#00d4aa")
+        set_btn_icon(self._contact_btn, "fa5s.arrow-down", PALETTE['accent'])
         self._contact_btn.setObjectName("primary")
         self._contact_btn.setFixedHeight(34)
         self._contact_btn.setToolTip(
@@ -331,7 +336,7 @@ class ProberTab(QWidget):
         self._home_btn.setFixedHeight(32)
         self._home_btn.clicked.connect(self._home)
         self._stop_btn = QPushButton("Stop")
-        set_btn_icon(self._stop_btn, "fa5s.stop", "#ff6666")
+        set_btn_icon(self._stop_btn, "fa5s.stop", PALETTE['danger'])
         self._stop_btn.setObjectName("danger")
         self._stop_btn.setFixedHeight(32)
         self._stop_btn.clicked.connect(self._stop)
@@ -371,18 +376,18 @@ class ProberTab(QWidget):
         lay.setAlignment(Qt.AlignCenter)
         lay.setSpacing(16)
 
-        icon_lbl = make_icon_label(IC.LINK_OFF, color="#555555", size=64)
+        icon_lbl = make_icon_label(IC.LINK_OFF, color=PALETTE['textSub'], size=64)
         icon_lbl.setAlignment(Qt.AlignCenter)
 
         title_lbl = QLabel(f"{title} Not Connected")
         title_lbl.setAlignment(Qt.AlignCenter)
         title_lbl.setStyleSheet(
-            f"font-size: {FONT['readoutSm']}pt; font-weight: bold; color: #888;")
+            f"font-size: {FONT['readoutSm']}pt; font-weight: bold; color: {PALETTE['textDim']};")
 
         tip_lbl = QLabel(tip)
         tip_lbl.setAlignment(Qt.AlignCenter)
         tip_lbl.setWordWrap(True)
-        tip_lbl.setStyleSheet(f"font-size: {FONT['label']}pt; color: #555;")
+        tip_lbl.setStyleSheet(f"font-size: {FONT['label']}pt; color: {PALETTE['textDim']};")
         tip_lbl.setMaximumWidth(400)
 
         btn = QPushButton("Open Device Manager")
@@ -390,11 +395,11 @@ class ProberTab(QWidget):
         btn.setFixedHeight(36)
         btn.setStyleSheet(f"""
             QPushButton {{
-                background: {PALETTE.get('surface','#2d2d2d')}; color: #00d4aa;
-                border: 1px solid #00d4aa66; border-radius: 5px;
+                background: {PALETTE['surface']}; color: {PALETTE['accent']};
+                border: 1px solid {PALETTE['accentDim']}; border-radius: 5px;
                 font-size: {FONT['label']}pt; font-weight: 600;
             }}
-            QPushButton:hover {{ background: {PALETTE.get('surface2','#3d3d3d')}; }}
+            QPushButton:hover {{ background: {PALETTE['surface2']}; }}
         """)
         btn.clicked.connect(self.open_device_manager)
 
@@ -453,9 +458,9 @@ class ProberTab(QWidget):
         moving = getattr(prober, '_moving', False)
         homed  = getattr(prober, '_homed', False)
         status = "MOVING" if moving else ("HOMED" if homed else "IDLE")
-        color  = (PALETTE["warning"] if moving
-                  else PALETTE["success"] if homed
-                  else PALETTE["textDim"])
+        color  = (PALETTE['warning'] if moving
+                  else PALETTE['success'] if homed
+                  else PALETTE['textDim'])
         self._st_w._val.setText(status)
         self._st_w._val.setStyleSheet(
             f"font-family:{MONO_FONT}; font-size:{FONT['readoutSm']}pt; "
@@ -571,6 +576,15 @@ class ProberTab(QWidget):
     # ---------------------------------------------------------------- #
     #  Widget helpers                                                   #
     # ---------------------------------------------------------------- #
+
+    def _apply_styles(self):
+        """Re-apply PALETTE-driven colours on theme switch."""
+        self._die_grid._apply_styles()
+        self._prog.setStyleSheet(
+            f"QProgressBar {{ background:{PALETTE['surface']}; border:none; margin:0; }}"
+            f"QProgressBar::chunk {{ background:{PALETTE['accent']}; }}")
+        set_btn_icon(self._contact_btn, "fa5s.arrow-down", PALETTE['accent'])
+        set_btn_icon(self._stop_btn, "fa5s.stop", PALETTE['danger'])
 
     def _readout(self, label: str, initial: str, color: str) -> QWidget:
         """Return a labelled readout widget (label over value)."""

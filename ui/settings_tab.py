@@ -36,20 +36,20 @@ from ui.theme import FONT, PALETTE, scaled_qss
 log = logging.getLogger(__name__)
 
 # ── Style constants ───────────────────────────────────────────────────────────
-_BG      = lambda: PALETTE.get('bg',      '#242424')
-_BG2     = lambda: PALETTE.get('surface', '#2d2d2d')
-_BORDER  = lambda: PALETTE.get('border',  '#484848')
-_TEXT    = lambda: PALETTE.get('text',    '#ebebeb')
-_MUTED   = lambda: PALETTE.get('textSub', '#6a6a6a')
-_ACCENT  = lambda: PALETTE.get("accent",      "#00d4aa")
-_ACCENT_H= lambda: PALETTE.get("accentHover", "#00e8bb")
-_GREEN   = "#00d4aa"
-_AMBER   = "#f5a623"
-_DANGER  = "#ff5555"
+_BG      = lambda: PALETTE['bg']
+_BG2     = lambda: PALETTE['surface']
+_BORDER  = lambda: PALETTE['border']
+_TEXT    = lambda: PALETTE['text']
+_MUTED   = lambda: PALETTE['textSub']
+_ACCENT  = lambda: PALETTE['accent']
+_ACCENT_H= lambda: PALETTE['accentHover']
+_GREEN   = lambda: PALETTE['accent']
+_AMBER   = lambda: PALETTE['warning']
+_DANGER  = lambda: PALETTE['danger']
 
 def _BTN_PRIMARY(): return f"""
     QPushButton {{
-        background:{_ACCENT()}; color:#fff; border:none;
+        background:{_ACCENT()}; color:{PALETTE['textOnAccent']}; border:none;
         border-radius:5px; padding:7px 18px; font-size:{FONT["label"]}pt; font-weight:600;
     }}
     QPushButton:hover   {{ background:{_ACCENT_H()}; }}
@@ -408,7 +408,7 @@ class SettingsTab(QWidget):
         row = QHBoxLayout()
         theme_lbl = QLabel("Theme")
         theme_lbl.setStyleSheet(
-            f"font-size:{FONT['body']}pt; color:{PALETTE.get('text', '#dde3f2')};")
+            f"font-size:{FONT['body']}pt; color:{PALETTE['text']};")
         row.addWidget(theme_lbl)
         row.addStretch()
 
@@ -452,7 +452,7 @@ class SettingsTab(QWidget):
         ws_row = QHBoxLayout()
         ws_lbl = QLabel("Workspace")
         ws_lbl.setStyleSheet(
-            f"font-size:{FONT['body']}pt; color:{PALETTE.get('text', '#dde3f2')};")
+            f"font-size:{FONT['body']}pt; color:{PALETTE['text']};")
         ws_row.addWidget(ws_lbl)
         ws_row.addStretch()
 
@@ -489,7 +489,7 @@ class SettingsTab(QWidget):
         # Descriptor label below the segmented control
         self._ws_desc_lbl = QLabel(MODE_DESCRIPTORS.get(current_ws, ""))
         self._ws_desc_lbl.setStyleSheet(
-            f"font-size:{FONT['caption']}pt; color:{PALETTE.get('textDim', '#8892aa')}; "
+            f"font-size:{FONT['caption']}pt; color:{PALETTE['textDim']}; "
             "font-style: italic;")
         self._ws_desc_lbl.setWordWrap(True)
         desc_row = QHBoxLayout()
@@ -510,13 +510,13 @@ class SettingsTab(QWidget):
         """Re-apply segmented Auto/Dark/Light control styling with current PALETTE."""
         base = (
             f"QPushButton {{"
-            f" background:{PALETTE.get('surface2', '#20232e')};"
-            f" color:{PALETTE.get('textDim', '#8892aa')};"
-            f" border:1px solid {PALETTE.get('border', '#2e3245')};"
+            f" background:{PALETTE['surface2']};"
+            f" color:{PALETTE['textDim']};"
+            f" border:1px solid {PALETTE['border']};"
             f" padding:5px 0; font-size:{FONT['label']}pt;"
             f"}}"
             f"QPushButton:checked {{"
-            f" background:{_ACCENT()}; color:#fff; border-color:{_ACCENT()};"
+            f" background:{_ACCENT()}; color:{PALETTE['textOnAccent']}; border-color:{_ACCENT()};"
             f"}}"
         )
         self._auto_btn.setStyleSheet(
@@ -530,13 +530,13 @@ class SettingsTab(QWidget):
         """Re-apply segmented Guided/Standard/Expert styling with current PALETTE."""
         base = (
             f"QPushButton {{"
-            f" background:{PALETTE.get('surface2', '#20232e')};"
-            f" color:{PALETTE.get('textDim', '#8892aa')};"
-            f" border:1px solid {PALETTE.get('border', '#2e3245')};"
+            f" background:{PALETTE['surface2']};"
+            f" color:{PALETTE['textDim']};"
+            f" border:1px solid {PALETTE['border']};"
             f" padding:5px 0; font-size:{FONT['label']}pt;"
             f"}}"
             f"QPushButton:checked {{"
-            f" background:{_ACCENT()}; color:#fff; border-color:{_ACCENT()};"
+            f" background:{_ACCENT()}; color:{PALETTE['textOnAccent']}; border-color:{_ACCENT()};"
             f"}}"
         )
         self._guided_btn.setStyleSheet(
@@ -734,7 +734,7 @@ class SettingsTab(QWidget):
             is_active = (name == active)
             dot = QLabel("●" if is_active else "○")
             dot.setStyleSheet(
-                f"color:{_GREEN if is_active else _MUTED()}; "
+                f"color:{_GREEN() if is_active else _MUTED()}; "
                 f"font-size:{FONT['sublabel']}pt;")
             dot.setFixedWidth(14)
             lbl = QLabel(name)
@@ -747,7 +747,7 @@ class SettingsTab(QWidget):
             rm_btn.setStyleSheet(
                 f"QPushButton {{ background:transparent; color:{_MUTED()}; border:none; "
                 f"font-size:{FONT['label']}pt; }}"
-                f"QPushButton:hover {{ color:#ff5555; }}")
+                f"QPushButton:hover {{ color:{PALETTE['danger']}; }}")
             rm_btn.clicked.connect(lambda _, n=name: self._on_lab_remove_operator(n))
             row_lay.addWidget(dot)
             row_lay.addWidget(lbl, 1)
@@ -925,11 +925,11 @@ class SettingsTab(QWidget):
         # AI Assistant group widgets
         if hasattr(self, "_ai_privacy_frame"):
             self._ai_privacy_frame.setStyleSheet(
-                f"QFrame {{ background:{_BG2()}; border:1px solid {_GREEN}55; "
+                f"QFrame {{ background:{_BG2()}; border:1px solid {_GREEN()}55; "
                 f"border-radius:5px; }}")
         if hasattr(self, "_ai_no_llama_frame"):
             self._ai_no_llama_frame.setStyleSheet(
-                f"QFrame {{ background:{_BG2()}; border:1px solid {_AMBER}55; "
+                f"QFrame {{ background:{_BG2()}; border:1px solid {_AMBER()}55; "
                 f"border-radius:5px; }}")
         if hasattr(self, "_ai_hw_frame"):
             self._ai_hw_frame.setStyleSheet(
@@ -947,7 +947,7 @@ class SettingsTab(QWidget):
             self._ai_progress_bar.setStyleSheet(
                 f"QProgressBar {{ background:{_BG2()}; border:1px solid {_BORDER()}; "
                 f"border-radius:4px; font-size:{FONT['caption']}pt; color:{_TEXT()}; }}"
-                f"QProgressBar::chunk {{ background:{_GREEN}; border-radius:3px; }}")
+                f"QProgressBar::chunk {{ background:{_GREEN()}; border-radius:3px; }}")
         if hasattr(self, "_ai_path_edit"):
             self._ai_path_edit.setStyleSheet(
                 f"QLineEdit {{ background:{_BG2()}; color:{_TEXT()}; "
@@ -1000,7 +1000,7 @@ class SettingsTab(QWidget):
         col.addWidget(self._version_name_lbl)
 
         ver_lbl = QLabel(f"Version {version_string()}  ·  Built {BUILD_DATE}")
-        ver_lbl.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_GREEN};")
+        ver_lbl.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_GREEN()};")
         col.addWidget(ver_lbl)
 
         lay.addLayout(col, 1)
@@ -1191,7 +1191,7 @@ class SettingsTab(QWidget):
         self._ai_privacy_frame = QFrame()
         privacy_frame = self._ai_privacy_frame
         privacy_frame.setStyleSheet(
-            f"QFrame {{ background:{_BG2()}; border:1px solid {_GREEN}55; "
+            f"QFrame {{ background:{_BG2()}; border:1px solid {_GREEN()}55; "
             f"border-radius:5px; }}"
         )
         pf_lay = QHBoxLayout(privacy_frame)
@@ -1224,7 +1224,7 @@ class SettingsTab(QWidget):
             "services, or the internet under any circumstances."
         )
         privacy_text.setWordWrap(True)
-        privacy_text.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_GREEN}; border:none;")
+        privacy_text.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_GREEN()}; border:none;")
         pf_lay.addWidget(privacy_text, 1)
         lay.addWidget(privacy_frame)
 
@@ -1237,7 +1237,7 @@ class SettingsTab(QWidget):
             self._ai_no_llama_frame = QFrame()
             nf = self._ai_no_llama_frame
             nf.setStyleSheet(
-                f"QFrame {{ background:{_BG2()}; border:1px solid {_AMBER}55; "
+                f"QFrame {{ background:{_BG2()}; border:1px solid {_AMBER()}55; "
                 f"border-radius:5px; }}")
             nf_lay = QVBoxLayout(nf)
             nf_lay.setContentsMargins(12, 10, 12, 10)
@@ -1245,7 +1245,7 @@ class SettingsTab(QWidget):
             nf_title = QLabel("Local AI runtime not installed")
             nf_title.setStyleSheet(
                 f"font-size:{FONT['label']}pt; font-weight:bold; "
-                f"color:{_AMBER}; border:none;")
+                f"color:{_AMBER()}; border:none;")
             nf_lay.addWidget(nf_title)
             nf_body = QLabel(
                 "The <b>llama-cpp-python</b> package is required for local "
@@ -1351,7 +1351,7 @@ class SettingsTab(QWidget):
         dl_lay.addWidget(self._ai_model_desc_lbl)
 
         self._ai_rec_reason_lbl = _body(_hw.rec_reason)
-        self._ai_rec_reason_lbl.setStyleSheet(f"font-size:{FONT['caption']}pt; color:{_GREEN};")
+        self._ai_rec_reason_lbl.setStyleSheet(f"font-size:{FONT['caption']}pt; color:{_GREEN()};")
         dl_lay.addWidget(self._ai_rec_reason_lbl)
 
         # Auto-fill GPU layers with hardware recommendation
@@ -1383,7 +1383,7 @@ class SettingsTab(QWidget):
         self._ai_progress_bar.setStyleSheet(
             f"QProgressBar {{ background:{_BG2()}; border:1px solid {_BORDER()}; "
             f"border-radius:4px; font-size:{FONT['caption']}pt; color:{_TEXT()}; }}"
-            f"QProgressBar::chunk {{ background:{_GREEN}; border-radius:3px; }}"
+            f"QProgressBar::chunk {{ background:{_GREEN()}; border-radius:3px; }}"
         )
         dl_lay.addWidget(self._ai_progress_bar)
 
@@ -1539,7 +1539,7 @@ class SettingsTab(QWidget):
 
         qs_always_lbl = QLabel(
             "✓  Quickstart Guide — always included in every AI response.")
-        qs_always_lbl.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_GREEN};")
+        qs_always_lbl.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_GREEN()};")
         lay.addWidget(qs_always_lbl)
 
         n_manual_sections = len(_load_sections())
@@ -1551,7 +1551,7 @@ class SettingsTab(QWidget):
             rag_lbl = QLabel(
                 "⚠  User Manual not found — docs/ directory missing or not bundled.")
         rag_lbl.setStyleSheet(
-            f"font-size:{FONT['sublabel']}pt; color:{_GREEN if n_manual_sections else _AMBER};")
+            f"font-size:{FONT['sublabel']}pt; color:{_GREEN() if n_manual_sections else _AMBER()};")
         lay.addWidget(rag_lbl)
 
         qs_note_lbl = QLabel(
@@ -1567,7 +1567,7 @@ class SettingsTab(QWidget):
             self._ai_path_edit.setText(existing)
             cfg_mod.set_pref("ai.model_path", existing)
             self._ai_status_lbl.setText("Model found — click Load Model to enable")
-            self._ai_status_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_GREEN};")
+            self._ai_status_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_GREEN()};")
 
         self._update_ai_controls()
         return g
@@ -1633,14 +1633,14 @@ class SettingsTab(QWidget):
         # ── Privacy notice ────────────────────────────────────────────────
         warn_frame = QFrame()
         warn_frame.setStyleSheet(
-            f"QFrame {{ background:{_BG2()}; border:1px solid {_AMBER}55; "
+            f"QFrame {{ background:{_BG2()}; border:1px solid {_AMBER()}55; "
             f"border-radius:5px; }}"
         )
         wf_lay = QHBoxLayout(warn_frame)
         wf_lay.setContentsMargins(10, 8, 10, 8)
         wf_lay.setSpacing(10)
         warn_icon = QLabel("⚠")
-        warn_icon.setStyleSheet(f"font-size:{FONT['heading']}pt; color:{_AMBER}; border:none;")
+        warn_icon.setStyleSheet(f"font-size:{FONT['heading']}pt; color:{_AMBER()}; border:none;")
         warn_icon.setFixedWidth(22)
         wf_lay.addWidget(warn_icon)
         warn_text = QLabel(
@@ -1648,7 +1648,7 @@ class SettingsTab(QWidget):
             "Do not use Cloud AI if your work is confidential or export-controlled."
         )
         warn_text.setWordWrap(True)
-        warn_text.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_AMBER}; border:none;")
+        warn_text.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_AMBER()}; border:none;")
         wf_lay.addWidget(warn_text, 1)
         lay.addWidget(warn_frame)
 
@@ -1766,14 +1766,14 @@ class SettingsTab(QWidget):
         # ── Install Ollama box (hidden when already installed) ────────────
         self._ollama_install_box = QFrame()
         self._ollama_install_box.setStyleSheet(
-            f"background:{_BG2()}; border:1px solid #f5a62355; border-radius:6px;")
+            f"background:{_BG2()}; border:1px solid {PALETTE['warning']}55; border-radius:6px;")
         ib = QVBoxLayout(self._ollama_install_box)
         ib.setContentsMargins(14, 12, 14, 12)
         ib.setSpacing(8)
 
         install_notice = QLabel("Ollama is not installed on this machine.")
         install_notice.setStyleSheet(
-            f"font-size:{FONT['label']}pt; font-weight:600; color:{_AMBER};")
+            f"font-size:{FONT['label']}pt; font-weight:600; color:{_AMBER()};")
         ib.addWidget(install_notice)
 
         install_hint = QLabel(
@@ -1828,13 +1828,13 @@ class SettingsTab(QWidget):
         # ── Pull model box (shown when installed but no models yet) ───────
         self._ollama_pull_box = QFrame()
         self._ollama_pull_box.setStyleSheet(
-            f"background:{_BG2()}; border:1px solid #00d4aa55; border-radius:6px;")
+            f"background:{_BG2()}; border:1px solid {PALETTE['accent']}55; border-radius:6px;")
         pb2 = QVBoxLayout(self._ollama_pull_box)
         pb2.setContentsMargins(14, 12, 14, 12)
         pb2.setSpacing(8)
 
         pull_notice = QLabel("✓  Ollama installed.  Download a model to get started:")
-        pull_notice.setStyleSheet(f"font-size:{FONT['label']}pt; font-weight:600; color:{_GREEN};")
+        pull_notice.setStyleSheet(f"font-size:{FONT['label']}pt; font-weight:600; color:{_GREEN()};")
         pb2.addWidget(pull_notice)
 
         pull_hint = QLabel(
@@ -1955,7 +1955,7 @@ class SettingsTab(QWidget):
             self._ollama_status_lbl.setText(
                 "⊗  Ollama is not installed — use the Install button above")
             self._ollama_status_lbl.setStyleSheet(
-                f"font-size:{FONT['label']}pt; color:{_AMBER};")
+                f"font-size:{FONT['label']}pt; color:{_AMBER()};")
             return
 
         # ── 2. Is the Ollama server running? ──────────────────────────────
@@ -1968,7 +1968,7 @@ class SettingsTab(QWidget):
                     "⊗  Ollama installed but not running — "
                     "launch the Ollama app, then click  ⟳ Check Again")
                 self._ollama_status_lbl.setStyleSheet(
-                    f"font-size:{FONT['label']}pt; color:{_DANGER};")
+                    f"font-size:{FONT['label']}pt; color:{_DANGER()};")
             return
 
         # ── 3. Any models pulled? ──────────────────────────────────────────
@@ -1984,7 +1984,7 @@ class SettingsTab(QWidget):
             self._ollama_status_lbl.setText(
                 "⚠  No models pulled yet — use the Pull Model section above")
             self._ollama_status_lbl.setStyleSheet(
-                f"font-size:{FONT['label']}pt; color:{_AMBER};")
+                f"font-size:{FONT['label']}pt; color:{_AMBER()};")
             self._ollama_model_combo.blockSignals(False)
             return
 
@@ -2007,7 +2007,7 @@ class SettingsTab(QWidget):
         self._ollama_status_lbl.setText(
             f"✓  Ollama ready — {len(models)} model(s) — click Connect")
         self._ollama_status_lbl.setStyleSheet(
-            f"font-size:{FONT['label']}pt; color:{_GREEN};")
+            f"font-size:{FONT['label']}pt; color:{_GREEN()};")
 
         self._ollama_model_combo.blockSignals(False)
 
@@ -2045,12 +2045,12 @@ class SettingsTab(QWidget):
             self._ollama_connect_btn.setEnabled(False)
         elif status == "ready":
             self._ollama_status_lbl.setText("●  Connected")
-            self._ollama_status_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_GREEN};")
+            self._ollama_status_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_GREEN()};")
             self._ollama_connect_btn.setText("Disconnect")
             self._ollama_connect_btn.setEnabled(True)
         elif status == "error":
             self._ollama_status_lbl.setText(f"⊗  {message}" if message else "⊗  Error")
-            self._ollama_status_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_DANGER};")
+            self._ollama_status_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_DANGER()};")
             self._ollama_connect_btn.setText("Connect")
             self._ollama_connect_btn.setEnabled(True)
         else:   # "off"
@@ -2130,7 +2130,7 @@ class SettingsTab(QWidget):
             self._ollama_install_msg.setText(
                 "Download cancelled." if _cancelled else msg)
             self._ollama_install_msg.setStyleSheet(
-                f"font-size:{FONT['sublabel']}pt; color:{_MUTED if _cancelled else (_GREEN if ok else _DANGER)};")
+                f"font-size:{FONT['sublabel']}pt; color:{_MUTED() if _cancelled else (_GREEN() if ok else _DANGER())};")
         if hasattr(self, "_ollama_install_btn"):
             self._ollama_install_btn.setEnabled(True)
             if ok:
@@ -2190,7 +2190,7 @@ class SettingsTab(QWidget):
             self._ollama_pull_msg.setText(
                 "Pull cancelled." if _cancelled else msg)
             self._ollama_pull_msg.setStyleSheet(
-                f"font-size:{FONT['sublabel']}pt; color:{_MUTED if _cancelled else (_GREEN if ok else _DANGER)};")
+                f"font-size:{FONT['sublabel']}pt; color:{_MUTED() if _cancelled else (_GREEN() if ok else _DANGER())};")
         if ok:
             # Re-detect — pull box will hide and model combo will populate
             QTimer.singleShot(500, lambda: self._ollama_refresh_models(silent=False))
@@ -2286,12 +2286,12 @@ class SettingsTab(QWidget):
         if not hasattr(self, "_cloud_status_lbl"):
             return
         _colors = {
-            "off":      _MUTED,
-            "loading":  _AMBER,
-            "ready":    _GREEN,
-            "error":    "#ff5555",
+            "off":      _MUTED(),
+            "loading":  _AMBER(),
+            "ready":    _GREEN(),
+            "error":    PALETTE['danger'],
         }
-        color = _colors.get(status, _MUTED)
+        color = _colors.get(status, _MUTED())
         if not message:
             _msgs = {
                 "off":     "○  Not connected",
@@ -2327,7 +2327,7 @@ class SettingsTab(QWidget):
         sr_lay.setSpacing(10)
 
         self._lic_status_icon  = QLabel("○")
-        self._lic_status_icon.setStyleSheet(f"font-size:{FONT['heading']}pt; color:{_AMBER};")
+        self._lic_status_icon.setStyleSheet(f"font-size:{FONT['heading']}pt; color:{_AMBER()};")
         self._lic_status_label = QLabel("Loading…")
         self._lic_status_label.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_TEXT()};")
 
@@ -2363,18 +2363,18 @@ class SettingsTab(QWidget):
 
         if info is None or info.tier == LicenseTier.UNLICENSED:
             self._lic_status_icon.setText("○")
-            self._lic_status_icon.setStyleSheet(f"font-size:{FONT['heading']}pt; color:{_AMBER};")
+            self._lic_status_icon.setStyleSheet(f"font-size:{FONT['heading']}pt; color:{_AMBER()};")
             self._lic_status_label.setText("Unlicensed — demo mode only")
-            self._lic_status_label.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_AMBER};")
+            self._lic_status_label.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_AMBER()};")
             self._lic_detail_label.setText(
                 "Activate a license key to enable full hardware access.")
         else:
             days = info.days_until_expiry
             if days is not None and days <= 30:
-                icon_color = _AMBER
+                icon_color = _AMBER()
                 status_text = f"Active — expires in {days} day{'s' if days != 1 else ''}"
             else:
-                icon_color = _GREEN
+                icon_color = _GREEN()
                 status_text = "Active"
 
             self._lic_status_icon.setText("●")
@@ -2476,11 +2476,11 @@ class SettingsTab(QWidget):
             # Type badge
             _type_colors = {
                 "hardware_panel": _ACCENT(),
-                "analysis_view": "#5b7ff5",
-                "tool_panel": _AMBER,
+                "analysis_view": PALETTE['systemIndigo'],
+                "tool_panel": _AMBER(),
                 "drawer_tab": _MUTED(),
                 "hardware_driver": _ACCENT(),
-                "analysis_pipeline": "#5b7ff5",
+                "analysis_pipeline": PALETTE['systemIndigo'],
             }
             badge_color = _type_colors.get(m.plugin_type, _MUTED())
             type_label = m.plugin_type.replace("_", " ").title()
@@ -2572,7 +2572,7 @@ class SettingsTab(QWidget):
         """Called by MainWindow after a manual check completes."""
         self._check_result.setText(message)
         self._check_result.setStyleSheet(
-            f"font-size:{FONT['label']}pt; color:{color or _MUTED};")
+            f"font-size:{FONT['label']}pt; color:{color or _MUTED()};")
         self._check_btn.setEnabled(True)
 
     def set_update_status(self, message: str, color: str = None):
@@ -2600,12 +2600,12 @@ class SettingsTab(QWidget):
         path = self._ai_path_edit.text().strip()
         if not path:
             self._ai_status_lbl.setText("No model file selected")
-            self._ai_status_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:#ff5555;")
+            self._ai_status_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{PALETTE['danger']};")
             return
         n_gpu = self._ai_gpu_slider.value()
         self._ai_apply_btn.setEnabled(False)
         self._ai_status_lbl.setText("Loading…")
-        self._ai_status_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:#ffaa44;")
+        self._ai_status_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{PALETTE['warning']};")
         self.ai_enable_requested.emit(path, n_gpu)
 
     def set_ai_status(self, status: str) -> None:
@@ -2613,14 +2613,14 @@ class SettingsTab(QWidget):
         if not hasattr(self, "_ai_status_lbl"):
             return
         _msgs = {
-            "off":      ("Off", _MUTED),
-            "loading":  ("Loading model…", "#ffaa44"),
-            "ready":    ("Ready", _GREEN),
-            "thinking": ("Thinking…", "#8888ff"),
+            "off":      ("Off", _MUTED()),
+            "loading":  ("Loading model…", PALETTE['warning']),
+            "ready":    ("Ready", _GREEN()),
+            "thinking": ("Thinking…", PALETTE['systemIndigo']),
             "error":    ("Local model failed — scroll down to use Ollama instead ↓",
-                         "#ff8800"),
+                         PALETTE['warning']),
         }
-        msg, color = _msgs.get(status, (status, _MUTED))
+        msg, color = _msgs.get(status, (status, _MUTED()))
         self._ai_status_lbl.setText(msg)
         self._ai_status_lbl.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{color};")
         if hasattr(self, "_ai_apply_btn"):
@@ -2670,13 +2670,13 @@ class SettingsTab(QWidget):
 
         if val == 0:
             text  = "CPU only — no GPU required"
-            color = _MUTED
+            color = _MUTED()
         elif val >= n_layers:
             text  = f"Full GPU — all {n_layers} layers  ·  ~{vram_gb:.1f} GB VRAM"
-            color = _GREEN
+            color = _GREEN()
         else:
             text  = f"{val} / {n_layers} layers on GPU  ·  ~{vram_gb:.1f} GB VRAM"
-            color = _AMBER
+            color = _AMBER()
 
         self._ai_gpu_label.setText(text)
         self._ai_gpu_label.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{color};")
@@ -2730,10 +2730,10 @@ class SettingsTab(QWidget):
         self._ai_download_btn.setEnabled(True)
         self._ai_download_btn.setText("Re-download Model")
         self._ai_dl_status_lbl.setText("Download complete — model is ready")
-        self._ai_dl_status_lbl.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_GREEN};")
+        self._ai_dl_status_lbl.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_GREEN()};")
         self._ai_path_edit.setText(path)
         self._ai_status_lbl.setText("Model ready — click Load Model")
-        self._ai_status_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_GREEN};")
+        self._ai_status_lbl.setStyleSheet(f"font-size:{FONT['label']}pt; color:{_GREEN()};")
 
     def set_download_failed(self, msg: str) -> None:
         """Called by MainWindow when model download fails or is cancelled."""
@@ -2748,7 +2748,7 @@ class SettingsTab(QWidget):
             self._ai_dl_status_lbl.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_MUTED()};")
         else:
             self._ai_dl_status_lbl.setText(f"Download failed: {msg}")
-            self._ai_dl_status_lbl.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:#ff5555;")
+            self._ai_dl_status_lbl.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{PALETTE['danger']};")
 
     def _update_ai_controls(self):
         enabled = self._ai_enable_chk.isChecked()

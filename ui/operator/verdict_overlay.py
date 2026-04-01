@@ -66,8 +66,8 @@ _VERDICT_CFG = {
 }
 _DEFAULT_CFG = {"glyph": "?", "label": "UNKNOWN", "key": "info"}
 
-_CARD_BG  = "#141728"
-_CARD_BDR = "#2a3249"
+
+# Module-level constants removed — use PALETTE directly.
 
 
 def _hex_at_opacity(hex_color: str, opacity: float) -> str:
@@ -120,7 +120,7 @@ class VerdictOverlay(QDialog):
 
         verdict     = getattr(result, "verdict", "UNKNOWN")
         cfg         = _VERDICT_CFG.get(verdict, _DEFAULT_CFG)
-        accent_hex  = PALETTE.get(cfg["key"], "#888888")
+        accent_hex  = PALETTE[cfg["key"]]
         bg_rgba     = _hex_at_opacity(accent_hex, 0.12)
 
         root = QVBoxLayout(self)
@@ -141,8 +141,8 @@ class VerdictOverlay(QDialog):
         card = QFrame()
         card.setFixedSize(620, 480)
         card.setStyleSheet(
-            f"QFrame {{ background:{_CARD_BG}; "
-            f"border:1px solid {_CARD_BDR}; border-radius:16px; }}")
+            f"QFrame {{ background:{PALETTE['surface']}; "
+            f"border:1px solid {PALETTE['border']}; border-radius:16px; }}")
 
         card_lay = QVBoxLayout(card)
         card_lay.setContentsMargins(52, 44, 52, 40)
@@ -161,7 +161,7 @@ class VerdictOverlay(QDialog):
         part_lbl = QLabel(f"Part:  {part_id}")
         part_lbl.setAlignment(Qt.AlignCenter)
         part_lbl.setStyleSheet(
-            f"font-size:{FONT.get('h3', 13)}pt; color:#aaaaaa; "
+            f"font-size:{FONT['h3']}pt; color:{PALETTE['textDim']}; "
             "background:transparent;")
         card_lay.addWidget(part_lbl)
         card_lay.addSpacing(24)
@@ -200,7 +200,7 @@ class VerdictOverlay(QDialog):
         vsep = QFrame()
         vsep.setFrameShape(QFrame.VLine)
         vsep.setFixedWidth(1)
-        vsep.setStyleSheet(f"color:{_CARD_BDR};")
+        vsep.setStyleSheet(f"color:{PALETTE['border']};")
         metrics_lay.addWidget(vsep)
 
         # Column 2
@@ -268,7 +268,7 @@ class VerdictOverlay(QDialog):
         return (
             f"QPushButton {{ background:{color}22; color:{color}; "
             f"border:1px solid {color}; border-radius:6px; "
-            f"font-size:{FONT.get('body', 11)}pt; font-weight:700; "
+            f"font-size:{FONT['body']}pt; font-weight:700; "
             "padding:0 20px; }"
             f"QPushButton:hover {{ background:{color}44; }}"
             f"QPushButton:pressed {{ background:{color}66; }}"
@@ -278,12 +278,12 @@ class VerdictOverlay(QDialog):
     def _btn_secondary_qss() -> str:
         P = PALETTE
         return (
-            f"QPushButton {{ background:{P.get('surface2','#333')}; "
-            f"color:{P.get('textDim','#999')}; "
-            f"border:1px solid {P.get('border','#484848')}; border-radius:6px; "
-            f"font-size:{FONT.get('body', 11)}pt; padding:0 20px; }}"
-            f"QPushButton:hover {{ background:{P.get('surfaceHover','#404040')}; "
-            f"color:{P.get('text','#ebebeb')}; }}"
+            f"QPushButton {{ background:{P['surface2']}; "
+            f"color:{P['textDim']}; "
+            f"border:1px solid {P['border']}; border-radius:6px; "
+            f"font-size:{FONT['body']}pt; padding:0 20px; }}"
+            f"QPushButton:hover {{ background:{P['surfaceHover']}; "
+            f"color:{P['text']}; }}"
         )
 
     @staticmethod
@@ -291,9 +291,9 @@ class VerdictOverlay(QDialog):
         P = PALETTE
         return (
             f"QPushButton {{ background:transparent; "
-            f"color:{P.get('textDim','#777')}; border:none; "
-            f"font-size:{FONT.get('sublabel', 9)}pt; padding:0 12px; }}"
-            f"QPushButton:hover {{ color:{P.get('text','#ebebeb')}; "
+            f"color:{P['textDim']}; border:none; "
+            f"font-size:{FONT['sublabel']}pt; padding:0 12px; }}"
+            f"QPushButton:hover {{ color:{P['text']}; "
             f"text-decoration:underline; }}"
         )
 
@@ -301,7 +301,7 @@ class VerdictOverlay(QDialog):
     def _hline() -> QFrame:
         f = QFrame()
         f.setFrameShape(QFrame.HLine)
-        f.setStyleSheet(f"color:{_CARD_BDR};")
+        f.setStyleSheet(f"color:{PALETTE['border']};")
         return f
 
     @staticmethod
@@ -316,7 +316,7 @@ class VerdictOverlay(QDialog):
 
         lbl = QLabel(label)
         lbl.setStyleSheet(
-            f"font-size:{FONT.get('sublabel', 9)}pt; color:#666666; "
+            f"font-size:{FONT['sublabel']}pt; color:{PALETTE['textSub']}; "
             "background:transparent;")
         lay.addWidget(lbl)
 
@@ -325,14 +325,14 @@ class VerdictOverlay(QDialog):
 
         val_lbl = QLabel(value)
         val_lbl.setStyleSheet(
-            f"font-size:{FONT.get('h3', 13)}pt; font-weight:700; "
+            f"font-size:{FONT['h3']}pt; font-weight:700; "
             f"color:{accent}; background:transparent;")
         val_row.addWidget(val_lbl)
 
         if sub:
             sub_lbl = QLabel(sub)
             sub_lbl.setStyleSheet(
-                f"font-size:{FONT.get('sublabel', 9)}pt; color:#555555; "
+                f"font-size:{FONT['sublabel']}pt; color:{PALETTE['textSub']}; "
                 "background:transparent;")
             val_row.addWidget(sub_lbl)
 
