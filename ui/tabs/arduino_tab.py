@@ -265,7 +265,7 @@ class ArduinoTab(QWidget):
             if btn:
                 btn.setText("HIGH" if checked else "LOW")
                 btn.setStyleSheet(
-                    f"background: {PALETTE['pass']}; color: #000;"
+                    f"background: {PALETTE['success']}; color: #000;"
                     if checked else "")
         except Exception as exc:
             log.warning("GPIO set_pin(%d) failed: %s", pin, exc)
@@ -352,6 +352,6 @@ class ArduinoTab(QWidget):
                 padding: 4px 8px;
             }}
             QPushButton:hover {{
-                background: {PALETTE['hover']};
+                background: {PALETTE['surfaceHover']};
             }}
         """))
