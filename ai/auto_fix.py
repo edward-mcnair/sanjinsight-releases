@@ -183,7 +183,7 @@ _FIXES: Dict[str, FixAction] = {
         auto=True, description="Start FPGA modulation"),
     "T1_duty_cycle": FixAction(
         rule_id="T1_duty_cycle", label="Auto-Fix",
-        auto=True, description="Reduce duty cycle to 50%"),
+        auto=True, description="Reduce duty cycle to 45%"),
     # Manual-only fixes (navigate to the relevant panel)
     "R1_cam_connected": FixAction(
         rule_id="R1_cam_connected", label="Open Device Manager",

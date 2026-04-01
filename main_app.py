@@ -4024,6 +4024,7 @@ class MainWindow(QMainWindow):
         # Create and show the dialog
         dlg = AdvisorDialog(parent=self)
         dlg.proceed_clicked.connect(self._on_advisor_proceed)
+        dlg.cancel_requested.connect(self._on_advisor_cancelled)
         dlg.show_thinking()
         dlg.show()
 
@@ -4074,6 +4075,19 @@ class MainWindow(QMainWindow):
         dlg.show_result(result)
         log.info("AI Advisor: %d conflicts, %d suggestions (%.1fs)",
                  len(result.conflicts), len(result.suggestions), elapsed)
+
+    def _on_advisor_cancelled(self) -> None:
+        """User clicked Cancel while advisor was thinking — cancel inference."""
+        self._advisor_active = False
+        try:
+            self._ai_service.response_token.disconnect(self._on_advisor_token)
+            self._ai_service.response_complete.disconnect(self._on_advisor_complete)
+            self._ai_service.ai_error.disconnect(self._on_advisor_error)
+        except TypeError:
+            pass
+        self._ai_service.cancel()
+        self._advisor_dlg = None
+        log.info("AI Advisor cancelled by user")
 
     def _on_advisor_error(self, msg: str) -> None:
         """Handle advisor inference error."""

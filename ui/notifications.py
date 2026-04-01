@@ -754,9 +754,17 @@ class ToastManager(QObject):
 
         The bottom offset accounts for the status bar and the bottom
         drawer toggle bar so toasts never overlap fixed UI chrome.
+        The right offset accounts for the AI panel dock (when visible)
+        so toasts don't float over the chat area.
         """
         win_rect = self._window.rect()
-        right  = win_rect.right()  - self.MARGIN
+
+        # Compute right clearance: account for AI panel dock
+        right_clearance = self.MARGIN
+        ai_dock = getattr(self._window, '_ai_dock', None)
+        if ai_dock and ai_dock.isVisible():
+            right_clearance += ai_dock.width()
+        right = win_rect.right() - right_clearance
 
         # Compute bottom clearance: status bar + drawer toggle bar
         bottom_clearance = self.MARGIN

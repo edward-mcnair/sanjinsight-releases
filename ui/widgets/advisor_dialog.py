@@ -38,7 +38,8 @@ class AdvisorDialog(QDialog):
         representing all fixes the user accepted.
     """
 
-    proceed_clicked = pyqtSignal(list)
+    proceed_clicked  = pyqtSignal(list)
+    cancel_requested = pyqtSignal()   # emitted when user cancels during thinking
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -46,6 +47,7 @@ class AdvisorDialog(QDialog):
         self.setMinimumWidth(460)
         self.setMaximumWidth(560)
         self.setMinimumHeight(300)
+        self._is_thinking = False
 
         self._fixes: list[dict] = []
 
@@ -120,7 +122,7 @@ class AdvisorDialog(QDialog):
             f"border:1px solid {bdr}; border-radius:5px; "
             f"font-size:{FONT['label']}pt; padding:7px 20px; }}"
             f"QPushButton:hover {{ color:{text}; border-color:{acc}44; }}")
-        self._cancel_btn.clicked.connect(self.reject)
+        self._cancel_btn.clicked.connect(self._on_cancel)
         btn_row.addWidget(self._cancel_btn)
 
         self._proceed_btn = QPushButton("Proceed")
@@ -144,8 +146,10 @@ class AdvisorDialog(QDialog):
 
     def show_thinking(self) -> None:
         """Show the thinking state while AI is analysing."""
+        self._is_thinking = True
         self._thinking_lbl.setVisible(True)
         self._proceed_btn.setEnabled(False)
+        self._cancel_btn.setEnabled(True)
         self._status_lbl.setText("Analysing profile vs instrument state…")
 
     def show_result(self, result) -> None:
@@ -156,6 +160,7 @@ class AdvisorDialog(QDialog):
         ----------
         result : ai.advisor.AdvisorResult
         """
+        self._is_thinking = False
         self._thinking_lbl.setVisible(False)
 
         # Clear previous content (keep thinking_lbl reference)
@@ -247,6 +252,7 @@ class AdvisorDialog(QDialog):
 
     def show_error(self, msg: str) -> None:
         """Show an error state in the dialog."""
+        self._is_thinking = False
         self._thinking_lbl.setVisible(False)
         self._status_lbl.setText(f"Advisor error: {msg}")
         self._status_lbl.setStyleSheet(
@@ -319,6 +325,12 @@ class AdvisorDialog(QDialog):
 
         card_lay.addLayout(text_col, 1)
         return card
+
+    def _on_cancel(self) -> None:
+        """Cancel inference if still thinking, then close."""
+        if self._is_thinking:
+            self.cancel_requested.emit()
+        self.reject()
 
     def _on_proceed(self) -> None:
         """Emit fixes and close."""
