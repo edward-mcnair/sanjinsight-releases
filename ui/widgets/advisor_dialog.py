@@ -176,6 +176,17 @@ class AdvisorDialog(QDialog):
         sub  = PALETTE['textSub']
         bdr  = PALETTE['border']
 
+        # ── Summary (cloud models provide a physics-based assessment) ──
+        if result.summary:
+            summary_lbl = QLabel(result.summary)
+            summary_lbl.setWordWrap(True)
+            summary_lbl.setStyleSheet(
+                f"font-size:{FONT['label']}pt; color:{PALETTE['text']}; "
+                f"background:{PALETTE['surface']}; "
+                f"border:1px solid {PALETTE['accent']}33; border-radius:4px; "
+                f"padding:8px 10px;")
+            self._content_lay.addWidget(summary_lbl)
+
         # ── Conflicts ──
         if result.conflicts:
             n = len(result.conflicts)

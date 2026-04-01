@@ -46,6 +46,7 @@ class AdvisorResult:
     """Parsed result from the AI advisor analysis."""
     conflicts: list[Conflict] = field(default_factory=list)
     suggestions: list[Suggestion] = field(default_factory=list)
+    summary: str = ""         # overall assessment (cloud models only)
     ready: bool = True
     raw_text: str = ""        # full AI response for fallback display
     parse_ok: bool = False    # True if JSON was parsed successfully
@@ -57,22 +58,48 @@ class AdvisorResult:
 # only instrument-analysis capability, so we use a focused ~150-token prompt
 # to minimise prefill time on local models.
 
-def _build_advisor_system() -> str:
-    """Compact system prompt: role + domain knowledge, no nav map or guide."""
+def _build_advisor_system(cloud: bool = False) -> str:
+    """
+    Build the advisor system prompt.
+
+    Parameters
+    ----------
+    cloud : bool
+        When True (cloud provider like Claude/ChatGPT), uses a richer
+        prompt that requests explanations alongside the JSON — cloud
+        models handle the extra output with negligible latency cost.
+        When False (local model), requests JSON only to minimise
+        prefill and generation time.
+    """
     from ai.instrument_knowledge import AI_DOMAIN_KNOWLEDGE
-    return (
-        "You are an instrument configuration advisor for a thermoreflectance "
-        "microscope. Compare the selected material profile against the current "
+
+    role = (
+        "You are an expert instrument configuration advisor for a "
+        "thermoreflectance microscope (Microsanj SanjINSIGHT). "
+        "Compare the selected material profile against the current "
         "instrument state and identify conflicts or mismatches. "
         "Valid adjustable parameters: exposure_us, gain_db, stimulus_freq_hz, "
         "stimulus_duty, tec_setpoint_c, n_frames. "
-        "Respond with ONLY a JSON object — no prose, no markdown headings. "
-        + AI_DOMAIN_KNOWLEDGE
     )
 
-# Maximum tokens for the advisor response.  A typical structured JSON
-# response is 100–300 tokens; 512 gives headroom without wasting time.
-ADVISOR_MAX_TOKENS: int = 512
+    if cloud:
+        role += (
+            "For each conflict, explain WHY it matters in terms of "
+            "measurement physics (lock-in timing, SNR, thermal settling, "
+            "saturation risk, etc.) so the user can make an informed decision. "
+            "Include a 'summary' field with a 1-2 sentence overall assessment. "
+        )
+    else:
+        role += "Respond with ONLY a JSON object — no prose, no markdown headings. "
+
+    return role + AI_DOMAIN_KNOWLEDGE
+
+
+# Maximum tokens for the advisor response.
+# Local: compact JSON is 100–300 tokens; 512 gives headroom.
+# Cloud: richer explanations need more room; 1024 is comfortable.
+ADVISOR_MAX_TOKENS_LOCAL: int = 512
+ADVISOR_MAX_TOKENS_CLOUD: int = 1024
 
 
 # ── Prompt builder ───────────────────────────────────────────────────────────
@@ -81,7 +108,7 @@ def build_advisor_prompt(
     profile_summary: dict,
     instrument_state: str,
     diagnostics_summary: str,
-    system_prompt: str = "",
+    cloud: bool = False,
 ) -> list[dict]:
     """
     Build the messages list for the advisor analysis.
@@ -94,29 +121,63 @@ def build_advisor_prompt(
         JSON from ContextBuilder.build().
     diagnostics_summary : str
         Human-readable summary of current diagnostic issues.
-    system_prompt : str
-        Ignored — kept for API compatibility.  The advisor uses its own
-        compact system prompt to minimise inference time.
+    cloud : bool
+        True when using a cloud provider (Claude/ChatGPT).  Produces a
+        richer prompt that asks for explanations alongside the JSON.
     """
-    profile_json = json.dumps(profile_summary, separators=(",", ":"), default=str)
+    profile_json = json.dumps(
+        profile_summary,
+        separators=(",", ":") if not cloud else (", ", ": "),
+        default=str,
+    )
 
     user_content = (
+        f"Instrument state:\n{instrument_state}\n\n"
+        f"Selected profile:\n{profile_json}\n\n"
+    ) if cloud else (
         f"State:{instrument_state}\n"
         f"Profile:{profile_json}\n"
     )
-    if diagnostics_summary:
-        user_content += f"Issues:\n{diagnostics_summary}\n"
 
-    user_content += (
-        "\nRespond with ONLY this JSON:\n"
-        '{"conflicts":[{"issue":"...","param":"...","value":N,"unit":"..."}],'
-        '"suggestions":[{"param":"...","value":N,"unit":"...","reason":"..."}],'
-        '"ready":true}\n'
-        "ready=false if acquisition would fail without fixes. Be concise."
-    )
+    if diagnostics_summary:
+        user_content += (
+            f"Current diagnostic issues:\n{diagnostics_summary}\n\n"
+            if cloud else f"Issues:\n{diagnostics_summary}\n"
+        )
+
+    if cloud:
+        user_content += (
+            "Analyse this profile against the instrument state. "
+            "Respond with a JSON object in this format:\n"
+            "```json\n"
+            "{\n"
+            '  "summary": "1-2 sentence overall assessment",\n'
+            '  "conflicts": [\n'
+            '    {"issue": "what is wrong and WHY it matters physically",\n'
+            '     "param": "setting_name", "value": suggested_value, "unit": "unit"}\n'
+            "  ],\n"
+            '  "suggestions": [\n'
+            '    {"param": "setting_name", "value": suggested_value,\n'
+            '     "unit": "unit", "reason": "physics-based explanation"}\n'
+            "  ],\n"
+            '  "ready": true\n'
+            "}\n"
+            "```\n"
+            "Set ready=false if acquisition would produce poor results. "
+            "Explain each conflict in terms of measurement physics "
+            "(lock-in timing, SNR impact, thermal settling, saturation, etc.)."
+        )
+    else:
+        user_content += (
+            "\nRespond with ONLY this JSON:\n"
+            '{"conflicts":[{"issue":"...","param":"...","value":N,"unit":"..."}],'
+            '"suggestions":[{"param":"...","value":N,"unit":"...","reason":"..."}],'
+            '"ready":true}\n'
+            "ready=false if acquisition would fail without fixes. Be concise."
+        )
 
     return [
-        {"role": "system", "content": _build_advisor_system()},
+        {"role": "system", "content": _build_advisor_system(cloud=cloud)},
         {"role": "user",   "content": user_content},
     ]
 
@@ -172,6 +233,7 @@ def parse_advice(raw_text: str) -> AdvisorResult:
 
     result.parse_ok = True
     result.ready = data.get("ready", True)
+    result.summary = data.get("summary", "")
 
     for c in data.get("conflicts", []):
         if isinstance(c, dict):
