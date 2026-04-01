@@ -62,6 +62,7 @@ class ApplicationState:
         self._tecs: List = []    # List[TecDriver]
         self._tec_guards: List = []   # List[ThermalGuard | None]
         self._ldd      = None    # LddDriver            | None
+        self._gpio     = None    # ArduinoDriver        | None — GPIO / LED selector
 
         # ── Acquisition objects ─────────────────────────────────────
         self._pipeline = None    # AcquisitionPipeline | None
@@ -260,6 +261,16 @@ class ApplicationState:
         with self._lock:
             self._ldd = value
 
+    @property
+    def gpio(self):
+        """Arduino GPIO / LED wavelength selector driver."""
+        return self._gpio
+
+    @gpio.setter
+    def gpio(self, value):
+        with self._lock:
+            self._gpio = value
+
     def set_tec_guard(self, index: int, guard) -> None:
         """Register a ThermalGuard for the given TEC index."""
         with self._lock:
@@ -375,6 +386,13 @@ class ApplicationState:
             raise RuntimeError("Laser diode driver not connected.")
         return d
 
+    def require_gpio(self):
+        """Return Arduino GPIO driver or raise RuntimeError if not connected."""
+        g = self._gpio
+        if g is None:
+            raise RuntimeError("Arduino GPIO controller not connected.")
+        return g
+
     def snapshot(self) -> dict:
         """Return a dict snapshot of all driver references (for logging/debugging)."""
         with self._lock:
@@ -386,6 +404,7 @@ class ApplicationState:
                 "fpga":     type(self._fpga).__name__     if self._fpga     else None,
                 "bias":     type(self._bias).__name__     if self._bias     else None,
                 "ldd":      type(self._ldd).__name__      if self._ldd      else None,
+                "gpio":     type(self._gpio).__name__     if self._gpio     else None,
                 "stage":    type(self._stage).__name__    if self._stage    else None,
                 "prober":   type(self._prober).__name__   if self._prober   else None,
                 "turret":   type(self._turret).__name__   if self._turret   else None,

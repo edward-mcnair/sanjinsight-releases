@@ -40,6 +40,7 @@ DTYPE_PROBER  = "prober"   # probe-station chuck stage
 DTYPE_TURRET  = "turret"   # motorized objective turret
 DTYPE_BIAS    = "bias"
 DTYPE_LDD     = "ldd"      # laser diode driver / LED illumination controller
+DTYPE_GPIO    = "gpio"     # Arduino Nano GPIO / LED wavelength selector
 DTYPE_UNKNOWN = "unknown"
 
 CONN_SERIAL   = "serial"
@@ -686,6 +687,48 @@ DEVICE_REGISTRY: dict[str, DeviceDescriptor] = {
                          "and autofocus search range automatically.",
         notes          = "Arduino must have the LINX turret sketch loaded. "
                          "Changing objectives requires autofocus re-run.",
+    ),
+
+    # ---------------------------------------------------------------- #
+    #  Arduino GPIO / LED Controllers                                  #
+    # ---------------------------------------------------------------- #
+
+    "arduino_nano_ch340": DeviceDescriptor(
+        uid            = "arduino_nano_ch340",
+        display_name   = "Arduino Nano (CH340)",
+        manufacturer   = "Generic / Microsanj",
+        device_type    = DTYPE_GPIO,
+        connection_type= CONN_SERIAL,
+        driver_module  = "hardware.arduino.nano_driver",
+        driver_version = "builtin",
+        hot_loadable   = True,
+        usb_vid        = 0x1A86,   # QinHeng Electronics (CH340)
+        usb_pid        = 0x7523,   # CH340 USB-serial
+        serial_patterns= ["CH340", "ch340", "Arduino Nano"],
+        default_baud   = 115200,
+        description    = "Arduino Nano (ATmega328P) with CH340 USB-serial chip. "
+                         "Used as LED wavelength selector and general-purpose I/O "
+                         "controller for Microsanj thermoreflectance systems.",
+        notes          = "Flash firmware/arduino_nano/sanjinsight_io.ino via Arduino IDE. "
+                         "Pins D2–D5: LED channel select. D6–D13: general GPIO. "
+                         "A0–A7: analog inputs (10-bit ADC).",
+    ),
+
+    "arduino_nano_ftdi": DeviceDescriptor(
+        uid            = "arduino_nano_ftdi",
+        display_name   = "Arduino Nano (FTDI)",
+        manufacturer   = "Arduino / Microsanj",
+        device_type    = DTYPE_GPIO,
+        connection_type= CONN_SERIAL,
+        driver_module  = "hardware.arduino.nano_driver",
+        driver_version = "builtin",
+        hot_loadable   = True,
+        usb_vid        = 0x0403,   # FTDI
+        usb_pid        = 0x6001,   # FT232R
+        serial_patterns= ["Arduino Nano", "FT232"],
+        default_baud   = 115200,
+        description    = "Arduino Nano (ATmega328P) with FTDI FT232R USB-serial. "
+                         "Original Arduino Nano revision; same firmware as CH340 variant.",
     ),
 }
 

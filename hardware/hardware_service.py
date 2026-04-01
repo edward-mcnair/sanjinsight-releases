@@ -315,6 +315,17 @@ class HardwareService(QObject):
         self._stage_svc._launch(self._stage_svc._run_demo_stage,
                                 args=(_sim_stage,), name="hw.stage")
 
+        # Simulated Arduino GPIO / LED selector (lightweight — no child service)
+        try:
+            from hardware.arduino.simulated import SimulatedArduino
+            gpio = SimulatedArduino({"driver": "simulated"})
+            gpio.connect()
+            app_state.gpio = gpio
+            self.device_connected.emit("gpio", True)
+            self.startup_status.emit("gpio", True, "Simulated")
+        except Exception as exc:
+            log.debug("Demo GPIO init failed: %s", exc, exc_info=True)
+
     def shutdown(self) -> None:
         """
         Deterministic shutdown:
@@ -355,6 +366,15 @@ class HardwareService(QObject):
         self._safe_close("bias",   lambda d: d.disconnect())
         self._safe_close("fpga",   lambda d: (d.stop(), d.close()))
         self._safe_close("camera", lambda d: (d.stop(), d.close()))
+
+        # Close GPIO (Arduino) if connected
+        try:
+            gpio = app_state.gpio
+            if gpio is not None and gpio.is_connected:
+                gpio.disconnect()
+                app_state.gpio = None
+        except Exception:
+            log.debug("GPIO shutdown failed", exc_info=True)
 
         log.info("HardwareService: shutdown complete")
 

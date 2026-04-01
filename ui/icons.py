@@ -178,6 +178,7 @@ NAV_ICONS: dict[str, str] = {
     "Autofocus":   IC.AUTOFOCUS,
     "Profiles":    IC.PROFILES,
     "Recipes":     IC.RECIPES,
+    "Arduino":     IC.CHIP,
     "Data":        IC.DATA,
     "Console":     IC.CONSOLE,
     "Log":         IC.LOG,

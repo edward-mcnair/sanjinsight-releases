@@ -309,6 +309,7 @@ from ui.tabs.wavelength_tab        import WavelengthTab
 from ui.tabs.emissivity_cal_tab    import EmissivityCalTab
 from ui.tabs.timing_diagram_tab    import TimingDiagramTab
 from ui.tabs.focus_stage_tab       import FocusStageTab
+from ui.tabs.arduino_tab           import ArduinoTab
 from ui.tabs.modality_section      import ModalitySection
 from ui.tabs.acquisition_settings_section import AcquisitionSettingsSection
 from ui.tabs.signal_check_section  import SignalCheckSection
@@ -599,6 +600,8 @@ class MainWindow(QMainWindow):
         self._wavelength_tab   = WavelengthTab()               # ← monochromator control
         self._emissivity_tab   = EmissivityCalTab()             # ← IR emissivity cal
         self._timing_tab       = TimingDiagramTab()             # ← timing waveform viewer
+        self._arduino_tab      = ArduinoTab()                    # ← Arduino GPIO / LED selector
+        self._arduino_tab.open_device_manager.connect(self._open_device_manager)
 
         # ── Merged tabs ──────────────────────────────────────────────────
         # Each merged tab wraps multiple individual tabs into one sidebar entry.
@@ -730,6 +733,7 @@ class MainWindow(QMainWindow):
             NI("Camera",  _I["Camera"],  self._camera_ctrl_tab),
             NI("Stage",   _I["Stage"],   self._stage_tab),
             NI("Prober",  _I["Prober"],  self._prober_tab),
+            NI("Arduino", _I["Arduino"], self._arduino_tab),
         ])
 
         # SYSTEM
@@ -1709,6 +1713,16 @@ class MainWindow(QMainWindow):
         elif "bias" in key:
             self._bias_tab.set_bias_driver(app_state.bias if ok else None)
 
+        # Arduino GPIO / LED selector connect/disconnect
+        if "gpio" in key:
+            try:
+                if ok:
+                    self._arduino_tab.on_device_connected()
+                else:
+                    self._arduino_tab.on_device_disconnected()
+            except Exception:
+                log.debug("Arduino tab hotplug refresh failed", exc_info=True)
+
         # Refresh Modality section immediately when any camera connects
         # (regardless of demo mode) so the combo populates without waiting
         # for the 10-second _on_startup_done timer.
@@ -1754,6 +1768,7 @@ class MainWindow(QMainWindow):
             ("fpga",      self._fpga_tab,               lambda: app_state.fpga is not None),
             ("bias",      self._bias_tab,               lambda: app_state.bias is not None),
             ("tec",       self._temp_tab,               lambda: len(app_state.tecs) > 0),
+            ("gpio",      self._arduino_tab,             lambda: app_state.gpio is not None),
             # New phase-aware sections (camera-dependent)
             ("camera",    self._modality_section,       _cam_test),
             ("camera",    self._acq_settings_section,   _cam_test),

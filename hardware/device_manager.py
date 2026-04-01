@@ -41,7 +41,7 @@ _CAMERA_CONNECT_TIMEOUT_S: float = 30.0
 from .device_registry import (DeviceDescriptor, DEVICE_REGISTRY,
                                 DTYPE_CAMERA, DTYPE_TEC, DTYPE_FPGA,
                                 DTYPE_STAGE, DTYPE_PROBER, DTYPE_TURRET,
-                                DTYPE_BIAS, DTYPE_LDD)
+                                DTYPE_BIAS, DTYPE_LDD, DTYPE_GPIO)
 from .device_scanner  import ScanReport
 
 
@@ -732,6 +732,9 @@ class DeviceManager:
         elif dtype == DTYPE_LDD:
             from hardware.ldd.factory import create_ldd
             return create_ldd(cfg)
+        elif dtype == DTYPE_GPIO:
+            from hardware.arduino.factory import create_arduino
+            return create_arduino(cfg)
         else:
             # Unknown type — try a hot-loaded custom driver from
             # ~/.microsanj/drivers/<module>.py before giving up.
@@ -776,6 +779,9 @@ class DeviceManager:
             "amcad_bilt":               "amcad_bilt",
             # Laser diode driver
             "meerstetter_ldd1121":      "meerstetter_ldd1121",
+            # Arduino GPIO / LED selector
+            "arduino_nano_ch340":       "nano",
+            "arduino_nano_ftdi":        "nano",
         }
         return KEY_MAP.get(desc.uid, desc.uid)
 
@@ -819,6 +825,7 @@ class DeviceManager:
                 "turret": app_state.turret,
                 "active_objective": app_state.active_objective,
                 "ldd":    app_state.ldd,
+                "gpio":   app_state.gpio,
             }
 
             try:
@@ -875,6 +882,8 @@ class DeviceManager:
                     app_state.add_tec(driver_obj)
                 elif dtype == DTYPE_LDD:
                     app_state.ldd = driver_obj
+                elif dtype == DTYPE_GPIO:
+                    app_state.gpio = driver_obj
             except Exception:
                 # Restore snapshot to avoid partial app_state mutation
                 log.warning("[%s] _inject_into_app failed — rolling back app_state",
@@ -930,6 +939,8 @@ class DeviceManager:
                                       if t is not driver_obj]
             elif dtype == DTYPE_LDD:
                 app_state.ldd = None
+            elif dtype == DTYPE_GPIO:
+                app_state.gpio = None
         except Exception:
             log.warning("[%s] _eject_from_app failed — app_state may still "
                         "hold a stale reference", uid, exc_info=True)

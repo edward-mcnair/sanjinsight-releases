@@ -209,6 +209,28 @@ class ContextBuilder:
             log.debug("ContextBuilder.build: TECs section failed", exc_info=True)
             _incomplete.append("tecs")
 
+        # Arduino GPIO / LED wavelength selector
+        try:
+            gpio = app_state.gpio
+            if gpio is not None:
+                gpio_data: dict = {"connected": True}
+                st = gpio.get_status()
+                gpio_data["active_led"] = st.active_led
+                gpio_data["firmware"] = st.firmware_version
+                channels = gpio.channels
+                if channels:
+                    gpio_data["led_channels"] = [
+                        {"nm": ch.wavelength_nm, "label": ch.label}
+                        for ch in channels
+                    ]
+                data["gpio"] = gpio_data
+            else:
+                data["gpio"] = {"connected": False}
+        except Exception:
+            log.debug("ContextBuilder.build: GPIO section failed", exc_info=True)
+            data["gpio"] = {"connected": False}
+            _incomplete.append("gpio")
+
         # Active acquisition modality — always include so the AI adapts to
         # the measurement technique (TR, IR, or future modalities)
         try:
