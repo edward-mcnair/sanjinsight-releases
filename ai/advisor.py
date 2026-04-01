@@ -5,8 +5,12 @@ Proactive AI Advisor — analyses profile vs instrument state for conflicts.
 
 When the user selects a camera + profile, the advisor asks the AI to
 identify conflicts (e.g. exposure too high for the lock-in frequency)
-and suggest corrective settings.  Requires FULL tier because reliable
-structured JSON output is needed.
+and suggest corrective settings.
+
+The advisor is **modality-aware**: it adapts its physics reasoning to
+the active measurement technique (thermoreflectance, IR thermal imaging,
+or future camera plugins).  New modalities are supported by adding an
+entry to ``_MODALITY_CONTEXT``.
 
 The advisor prompt requests a JSON response; ``parse_advice()`` extracts
 it with graceful fallback if the model returns prose instead of JSON.
@@ -52,42 +56,93 @@ class AdvisorResult:
     parse_ok: bool = False    # True if JSON was parsed successfully
 
 
-# ── Advisor system prompt (compact — no guides, nav map, or domain corpus) ───
+# ── Modality-specific context ────────────────────────────────────────────────
 #
-# The full system prompt used for chat is ~3 000 tokens.  The advisor needs
-# only instrument-analysis capability, so we use a focused ~150-token prompt
-# to minimise prefill time on local models.
+# Each measurement modality has distinct physics.  The advisor adapts its
+# reasoning by injecting the relevant context.  To support a new camera /
+# modality plugin, add an entry here — no other advisor code needs changing.
 
-def _build_advisor_system(cloud: bool = False) -> str:
+_MODALITY_CONTEXT: dict[str, dict] = {
+    "thermoreflectance": {
+        "instrument": "thermoreflectance microscope",
+        "physics": (
+            "lock-in timing, SNR, thermal settling, saturation risk, "
+            "reflectance coefficient (C_T), LED wavelength matching"
+        ),
+        "adjustable": (
+            "exposure_us, gain_db, stimulus_freq_hz, stimulus_duty, "
+            "tec_setpoint_c, n_frames"
+        ),
+    },
+    "ir_lockin": {
+        "instrument": "IR thermal imaging microscope",
+        "physics": (
+            "emissivity, NUC/FFC calibration freshness, thermal range, "
+            "integration time, stimulus frequency, DUT self-heating"
+        ),
+        "adjustable": (
+            "exposure_us, stimulus_freq_hz, stimulus_duty, "
+            "tec_setpoint_c, n_frames"
+        ),
+    },
+}
+
+# Fallback for unknown / future modalities — generic enough to be useful
+_DEFAULT_MODALITY = {
+    "instrument": "thermal measurement system",
+    "physics": (
+        "thermal settling, signal-to-noise ratio, exposure, "
+        "stimulus timing, saturation risk"
+    ),
+    "adjustable": (
+        "exposure_us, gain_db, stimulus_freq_hz, stimulus_duty, "
+        "tec_setpoint_c, n_frames"
+    ),
+}
+
+
+def _modality_info(modality: str) -> dict:
+    """Return modality context dict, falling back to generic defaults."""
+    return _MODALITY_CONTEXT.get(modality, _DEFAULT_MODALITY)
+
+
+# ── Advisor system prompt ────────────────────────────────────────────────────
+
+def _build_advisor_system(cloud: bool = False,
+                          modality: str = "thermoreflectance") -> str:
     """
-    Build the advisor system prompt.
+    Build the advisor system prompt, adapted to the active modality.
 
     Parameters
     ----------
     cloud : bool
-        When True (cloud provider like Claude/ChatGPT), uses a richer
-        prompt that requests explanations alongside the JSON — cloud
-        models handle the extra output with negligible latency cost.
-        When False (local model), requests JSON only to minimise
+        When True (cloud provider), requests physics explanations alongside
+        JSON.  When False (local model), requests JSON only to minimise
         prefill and generation time.
+    modality : str
+        Active measurement modality (``"thermoreflectance"``, ``"ir_lockin"``,
+        or any future modality string).  Controls the physics context and
+        adjustable parameter list so the AI reasons correctly for the
+        measurement technique in use.
     """
     from ai.instrument_knowledge import AI_DOMAIN_KNOWLEDGE
 
+    info = _modality_info(modality)
+
     role = (
-        "You are an expert instrument configuration advisor for a "
-        "thermoreflectance microscope (Microsanj SanjINSIGHT). "
-        "Compare the selected material profile against the current "
-        "instrument state and identify conflicts or mismatches. "
-        "Valid adjustable parameters: exposure_us, gain_db, stimulus_freq_hz, "
-        "stimulus_duty, tec_setpoint_c, n_frames. "
+        f"You are an expert instrument configuration advisor for a "
+        f"{info['instrument']} (Microsanj SanjINSIGHT). "
+        f"Compare the selected material profile against the current "
+        f"instrument state and identify conflicts or mismatches. "
+        f"Valid adjustable parameters: {info['adjustable']}. "
     )
 
     if cloud:
         role += (
-            "For each conflict, explain WHY it matters in terms of "
-            "measurement physics (lock-in timing, SNR, thermal settling, "
-            "saturation risk, etc.) so the user can make an informed decision. "
-            "Include a 'summary' field with a 1-2 sentence overall assessment. "
+            f"For each conflict, explain WHY it matters in terms of "
+            f"measurement physics ({info['physics']}) "
+            f"so the user can make an informed decision. "
+            f"Include a 'summary' field with a 1-2 sentence overall assessment. "
         )
     else:
         role += "Respond with ONLY a JSON object — no prose, no markdown headings. "
@@ -109,6 +164,7 @@ def build_advisor_prompt(
     instrument_state: str,
     diagnostics_summary: str,
     cloud: bool = False,
+    modality: str = "thermoreflectance",
 ) -> list[dict]:
     """
     Build the messages list for the advisor analysis.
@@ -124,6 +180,9 @@ def build_advisor_prompt(
     cloud : bool
         True when using a cloud provider (Claude/ChatGPT).  Produces a
         richer prompt that asks for explanations alongside the JSON.
+    modality : str
+        Active measurement modality — passed to the system prompt builder
+        so the AI adapts its physics reasoning.
     """
     profile_json = json.dumps(
         profile_summary,
@@ -177,22 +236,31 @@ def build_advisor_prompt(
         )
 
     return [
-        {"role": "system", "content": _build_advisor_system(cloud=cloud)},
+        {"role": "system", "content": _build_advisor_system(
+            cloud=cloud, modality=modality)},
         {"role": "user",   "content": user_content},
     ]
 
 
-def profile_to_summary(profile) -> dict:
+def profile_to_summary(profile, camera_type: str = "tr") -> dict:
     """Extract key profile fields into a compact dict for the prompt.
+
+    Parameters
+    ----------
+    profile
+        MaterialProfile (or any object with the expected attributes).
+    camera_type : str
+        Active camera type (``"tr"``, ``"ir"``, etc.).  Included so the
+        AI knows which camera is in use regardless of profile modality.
 
     Omits None values to reduce token count.
     """
-    raw = {
+    raw: dict = {
         "name":              getattr(profile, "name", "?"),
         "material":          getattr(profile, "material", "?"),
         "modality":          getattr(profile, "modality", "any"),
+        "camera_type":       camera_type,
         "exposure_us":       getattr(profile, "exposure_us", None),
-        "gain_db":           getattr(profile, "gain_db", None),
         "n_frames":          getattr(profile, "n_frames", None),
         "stimulus_freq_hz":  getattr(profile, "stimulus_freq_hz", None),
         "stimulus_duty":     getattr(profile, "stimulus_duty", None),
@@ -200,9 +268,12 @@ def profile_to_summary(profile) -> dict:
         "tec_setpoint_c":    getattr(profile, "tec_setpoint_c", None),
         "bias_enabled":      getattr(profile, "bias_enabled", False),
         "bias_voltage_v":    getattr(profile, "bias_voltage_v", None),
-        "ct_value":          getattr(profile, "ct_value", None),
-        "wavelength_nm":     getattr(profile, "wavelength_nm", None),
     }
+    # TR-specific fields (irrelevant for IR cameras)
+    if camera_type == "tr" or getattr(profile, "modality", "") == "tr":
+        raw["gain_db"]       = getattr(profile, "gain_db", None)
+        raw["ct_value"]      = getattr(profile, "ct_value", None)
+        raw["wavelength_nm"] = getattr(profile, "wavelength_nm", None)
     return {k: v for k, v in raw.items() if v is not None}
 
 

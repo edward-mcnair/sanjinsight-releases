@@ -24,8 +24,10 @@ import logging.handlers
 import os
 from pathlib import Path
 
-_LOG_DIR  = Path.home() / ".microsanj" / "logs"
-_LOG_FILE = _LOG_DIR / "sanjinsight.log"
+_LOG_DIR      = Path.home() / ".microsanj" / "logs"
+_LOG_FILE     = _LOG_DIR / "sanjinsight.log"
+_SESSION_LOG  = _LOG_DIR / "session.log"
+_CLEAN_EXIT   = _LOG_DIR / ".clean_exit"
 
 _FMT = logging.Formatter(
     fmt     = "%(asctime)s [%(levelname)-8s] %(name)s: %(message)s",
@@ -88,3 +90,73 @@ def setup(level: str = "INFO") -> None:
 def log_path() -> Path:
     """Return the current log file path (for display in Settings / About)."""
     return _LOG_FILE
+
+
+def session_log_path() -> Path:
+    """Return the session log path (user-visible messages, one per launch)."""
+    return _SESSION_LOG
+
+
+# ── Session log file (mirrors LogTab to disk) ────────────────────────────
+
+_session_fh = None
+
+
+def open_session_log() -> None:
+    """Open (truncate) the session log for this launch and clear the exit marker.
+
+    Called once at startup, before the MainWindow is created.
+    """
+    global _session_fh
+    try:
+        _LOG_DIR.mkdir(parents=True, exist_ok=True)
+        # Remove the clean-exit marker so a crash leaves it absent
+        _CLEAN_EXIT.unlink(missing_ok=True)
+        _session_fh = open(_SESSION_LOG, "w", encoding="utf-8", buffering=1)
+        import time
+        _session_fh.write(
+            f"=== SanjINSIGHT session started {time.strftime('%Y-%m-%d %H:%M:%S')} ===\n")
+    except OSError:
+        _session_fh = None
+
+
+def write_session(line: str) -> None:
+    """Append a line to the session log (no-op if file not open)."""
+    if _session_fh is not None:
+        try:
+            _session_fh.write(line + "\n")
+        except OSError:
+            pass
+
+
+def mark_clean_exit() -> None:
+    """Write the clean-exit marker.  Called from MainWindow.closeEvent()."""
+    global _session_fh
+    try:
+        if _session_fh is not None:
+            import time
+            _session_fh.write(
+                f"=== Clean shutdown {time.strftime('%Y-%m-%d %H:%M:%S')} ===\n")
+            _session_fh.close()
+            _session_fh = None
+        _CLEAN_EXIT.write_text("ok", encoding="utf-8")
+    except OSError:
+        pass
+
+
+def previous_crash_log() -> str | None:
+    """If the previous session crashed, return the session log contents.
+
+    Returns None if the last exit was clean or no session log exists.
+    """
+    try:
+        if _CLEAN_EXIT.exists():
+            return None  # previous exit was clean
+        if not _SESSION_LOG.exists():
+            return None  # no previous session
+        text = _SESSION_LOG.read_text(encoding="utf-8", errors="replace")
+        if not text.strip():
+            return None
+        return text
+    except OSError:
+        return None

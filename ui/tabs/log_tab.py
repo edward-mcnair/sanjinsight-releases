@@ -66,3 +66,15 @@ class LogTab(QWidget):
         self._log.append(f"<span style='color:{tscol}'>[{ts}]</span>  {msg}")
         self._log.verticalScrollBar().setValue(
             self._log.verticalScrollBar().maximum())
+
+        # Persist to session log on disk (survives crashes)
+        try:
+            from logging_config import write_session
+            # Strip HTML tags for the plain-text file
+            write_session(f"[{ts}] {msg}"
+                          .replace("<br>", "\n")
+                          .replace("&amp;", "&")
+                          .replace("&lt;", "<")
+                          .replace("&gt;", ">"))
+        except Exception:
+            pass

@@ -52,17 +52,34 @@ class ContextBuilder:
         # the LLM knows the context may be incomplete.
         _incomplete: list = []
 
-        # Camera
+        # Camera — adapts to active camera type (TR, IR, or future plugins)
         try:
+            cam_type = getattr(app_state, "active_camera_type", "tr")
             cam = app_state.cam
             if cam is not None:
-                data["cam"] = {
+                cam_data: dict = {
                     "connected": True,
-                    "exposure_us": getattr(cam, "exposure_us", None),
-                    "gain_db": getattr(cam, "gain_db", None),
+                    "type": cam_type,
                 }
+                # Include driver-reported camera_type if available
+                driver_type = getattr(cam, "camera_type", None)
+                if driver_type:
+                    cam_data["driver_type"] = driver_type
+                # Common attributes (present on most camera drivers)
+                for attr in ("exposure_us", "gain_db", "fps"):
+                    val = getattr(cam, attr, None)
+                    if val is not None:
+                        cam_data[attr] = val
+                # Camera info (resolution, bit depth, model)
+                info = getattr(cam, "info", None)
+                if info is not None:
+                    for attr in ("width", "height", "bit_depth", "model"):
+                        val = getattr(info, attr, None)
+                        if val is not None:
+                            cam_data[attr] = val
+                data["cam"] = cam_data
             else:
-                data["cam"] = {"connected": False}
+                data["cam"] = {"connected": False, "type": cam_type}
         except Exception:
             log.debug("ContextBuilder.build: camera section failed", exc_info=True)
             data["cam"] = {"connected": False}
@@ -192,10 +209,11 @@ class ContextBuilder:
             log.debug("ContextBuilder.build: TECs section failed", exc_info=True)
             _incomplete.append("tecs")
 
-        # Active acquisition modality (omit default 'thermoreflectance' to save tokens)
+        # Active acquisition modality — always include so the AI adapts to
+        # the measurement technique (TR, IR, or future modalities)
         try:
             modality = app_state.active_modality
-            if modality and modality != "thermoreflectance":
+            if modality:
                 data["modality"] = modality
         except Exception:
             log.debug("ContextBuilder.build: modality section failed", exc_info=True)

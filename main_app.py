@@ -2870,7 +2870,7 @@ class MainWindow(QMainWindow):
             f"C_T = {profile.ct_value:.3e} K⁻¹",
             8000)
 
-        # 19. Proactive AI Advisor (FULL tier only)
+        # 19. Proactive AI Advisor
         self._maybe_launch_advisor(profile)
 
         # 20. Auto-exposure (runs on background thread, updates UI on complete)
@@ -3163,6 +3163,87 @@ class MainWindow(QMainWindow):
         self._log_tab.append(f"ERROR: {msg}")
         self._status.showMessage(f"Error: {msg}", 8000)
         self._toasts.show_error(msg)
+        self._maybe_auto_diagnose(msg)
+
+    def _maybe_auto_diagnose(self, error_msg: str) -> None:
+        """Auto-trigger AI diagnosis when a hardware error occurs.
+
+        The request is queued rather than fired immediately so that:
+        - The advisor (higher priority) is never blocked by auto-diagnosis.
+        - Rapid-fire errors during profile apply or camera switch don't
+          flood the AI with requests.
+        - The queue is drained after a short delay, giving transient
+          operations time to settle.
+        """
+        if not hasattr(self, "_diag_queue"):
+            self._diag_queue: list[str] = []
+        self._diag_queue.append(error_msg)
+        # Drain after 3 s — long enough for profile-apply + advisor launch
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(3000, self._drain_auto_diagnose)
+
+    def _drain_auto_diagnose(self) -> None:
+        """Process queued auto-diagnosis if the AI is free."""
+        queue = getattr(self, "_diag_queue", [])
+        if not queue:
+            return
+        # Take the most recent error only (earlier ones are likely related)
+        error_msg = queue[-1]
+        queue.clear()
+
+        # Yield to advisor — never interrupt it
+        if getattr(self, "_advisor_active", False):
+            return
+        if self._ai_service.status != "ready":
+            return
+        if not self._ai_service.can("diagnose"):
+            return
+        # Throttle: max once per 30 seconds
+        import time
+        now = time.monotonic()
+        if now - getattr(self, "_last_auto_diagnose", 0.0) < 30.0:
+            return
+        self._last_auto_diagnose = now
+
+        # Route auto-diagnosis to the log panel only — no AI dock pop-up.
+        self._log_tab.append(f"AI diagnosing error: {error_msg}")
+        self._diag_active = True  # separate flag from advisor
+
+        def _on_diag_token(tok: str) -> None:
+            pass  # accumulate silently — full text arrives in complete
+
+        def _on_diag_done(text: str, _elapsed: float) -> None:
+            self._diag_active = False
+            try:
+                self._ai_service.response_token.disconnect(_on_diag_token)
+                self._ai_service.response_complete.disconnect(_on_diag_done)
+                self._ai_service.ai_error.disconnect(_on_diag_err)
+            except TypeError:
+                pass
+            self._ai_service._set_status("ready")
+            summary = text.strip()[:300]
+            if summary:
+                self._log_tab.append(f"AI diagnosis: {summary}")
+
+        def _on_diag_err(msg: str) -> None:
+            self._diag_active = False
+            try:
+                self._ai_service.response_token.disconnect(_on_diag_token)
+                self._ai_service.response_complete.disconnect(_on_diag_done)
+                self._ai_service.ai_error.disconnect(_on_diag_err)
+            except TypeError:
+                pass
+            self._ai_service._set_status("ready")
+
+        self._ai_service.response_token.connect(_on_diag_token)
+        self._ai_service.response_complete.connect(_on_diag_done)
+        self._ai_service.ai_error.connect(_on_diag_err)
+
+        # Use ask() which goes through _run() — but suppress the AI panel
+        # via the _diag_active flag in the normal token/complete handlers
+        self._ai_service.ask(
+            f"A hardware error just occurred: \"{error_msg}\". "
+            f"Briefly: likely cause and fix?")
 
     # ── TEC alarm handlers ────────────────────────────────────────────
 
@@ -3966,43 +4047,127 @@ class MainWindow(QMainWindow):
                 self._settings_tab.set_cloud_ai_status(status)
         if status == "ready":
             self._status.showMessage("AI Assistant ready", 3000)
+            # If a profile is already active, auto-launch the advisor now
+            # (covers the case where user selected a profile before AI loaded)
+            active_prof = getattr(app_state, "active_profile", None)
+            if active_prof is not None:
+                self._maybe_launch_advisor(active_prof)
         elif status == "error":
             self._status.showMessage("AI Assistant error — see AI panel", 5000)
 
+    def _ai_panel_suppressed(self) -> bool:
+        """True when AI output should NOT go to the chat panel."""
+        return (getattr(self, "_advisor_active", False)
+                or getattr(self, "_diag_active", False))
+
     def _on_ai_token(self, token: str) -> None:
-        """Guard: suppress chat panel tokens while advisor is active."""
-        if not getattr(self, "_advisor_active", False):
+        """Guard: suppress chat panel tokens while advisor/diagnosis active."""
+        if not self._ai_panel_suppressed():
             self._ai_panel.on_token(token)
 
     def _on_ai_response_complete(self, text: str, elapsed: float) -> None:
-        """Guard: suppress chat panel response while advisor is active."""
-        if not getattr(self, "_advisor_active", False):
+        """Guard: suppress chat panel response while advisor/diagnosis active."""
+        if not self._ai_panel_suppressed():
             self._ai_panel.on_response_complete(text, elapsed)
 
     def _on_ai_error(self, msg: str) -> None:
-        """Guard: suppress chat panel error while advisor is active."""
-        if not getattr(self, "_advisor_active", False):
+        """Guard: suppress chat panel error while advisor/diagnosis active."""
+        if not self._ai_panel_suppressed():
             self._ai_panel.on_error(msg)
 
     # ── Proactive AI Advisor ─────────────────────────────────────────────
 
     def _maybe_launch_advisor(self, profile) -> None:
-        """Launch the AI advisor if FULL tier and model is ready."""
-        # Skip if advisor is already active (e.g. quick profile switch)
+        """Launch the AI advisor after profile selection.
+
+        Works for any camera type (TR, IR, future plugins) by passing
+        the active modality to the prompt builder so the AI adapts its
+        physics reasoning to the measurement technique.
+        """
+        _prof_name = getattr(profile, "name", "?")
+
+        # ── Pre-flight guards ──
         if getattr(self, "_advisor_active", False):
+            # Previous advisor still running — cancel it so the new
+            # profile's advisor can take over
+            log.info("Advisor: cancelling previous advisor for new profile")
+            self._on_advisor_cancelled()
+
+        ai_status = self._ai_service.status
+        if ai_status == "thinking":
+            # AI is busy (auto-diagnosis, chat, etc.) — the advisor
+            # takes priority: cancel and retry after the runner is free
+            log.info("Advisor: pre-empting AI (was %r) for profile advisor",
+                     ai_status)
+            self._ai_service.cancel()
+            self._ai_service._set_status("ready")
+            # Defer launch to let the cancelled worker thread finish
+            self._pending_advisor_profile = profile
+            from PyQt5.QtCore import QTimer
+            QTimer.singleShot(200, self._retry_launch_advisor)
             return
-        if self._ai_service.status != "ready":
+        elif ai_status not in ("ready",):
+            # AI is off, loading, or in error — can't launch now.
+            # When AI becomes ready, _on_ai_status will auto-launch.
+            if ai_status == "off":
+                log.debug("Advisor deferred: AI not loaded yet — will "
+                          "auto-launch when AI becomes ready")
             return
+
         if not self._ai_service.can("proactive_advisor"):
             return
 
+        try:
+            self._launch_advisor(profile)
+        except Exception as exc:
+            log.error("AI Advisor failed to launch: %s", exc, exc_info=True)
+            self._toasts.show_error(f"AI Advisor: {exc}")
+            self._log_tab.append(f"AI Advisor error: {exc}")
+            # Ensure flag is reset so next attempt isn't blocked
+            self._advisor_active = False
+
+    def _retry_launch_advisor(self) -> None:
+        """Retry advisor launch after a cancelled inference has drained."""
+        profile = getattr(self, "_pending_advisor_profile", None)
+        if profile is None:
+            return
+        self._pending_advisor_profile = None
+
+        # Check if the runner is still busy (cancel not yet drained)
+        runner = (self._ai_service._remote_runner
+                  if (self._ai_service._active_backend == "remote"
+                      and self._ai_service._remote_runner is not None)
+                  else self._ai_service._runner)
+        if getattr(runner, "_busy", False):
+            # Still draining — retry again shortly
+            from PyQt5.QtCore import QTimer
+            self._pending_advisor_profile = profile
+            QTimer.singleShot(200, self._retry_launch_advisor)
+            return
+
+        self._ai_service._set_status("ready")
+        if not self._ai_service.can("proactive_advisor"):
+            return
+        try:
+            self._launch_advisor(profile)
+        except Exception as exc:
+            log.error("AI Advisor failed to launch: %s", exc, exc_info=True)
+            self._toasts.show_error(f"AI Advisor: {exc}")
+            self._advisor_active = False
+
+    def _launch_advisor(self, profile) -> None:
+        """Internal: build prompt, create dialog, fire inference."""
         from ai.advisor import (build_advisor_prompt, profile_to_summary,
                                 ADVISOR_MAX_TOKENS_LOCAL, ADVISOR_MAX_TOKENS_CLOUD)
         from ui.widgets.advisor_dialog import AdvisorDialog
 
+        # Determine camera type and modality for prompt adaptation
+        camera_type = getattr(app_state, "active_camera_type", "tr")
+        modality    = getattr(app_state, "active_modality", "thermoreflectance")
+
         # Build the analysis prompt
         ctx_json    = self._ai_service._ctx.build()
-        profile_sum = profile_to_summary(profile)
+        profile_sum = profile_to_summary(profile, camera_type=camera_type)
 
         # Gather diagnostic issues (if engine is available)
         diag_text = ""
@@ -4022,7 +4187,8 @@ class MainWindow(QMainWindow):
                     and getattr(self._ai_service._remote_runner, "_provider", "")
                     != "ollama")
         messages = build_advisor_prompt(
-            profile_sum, ctx_json, diag_text, cloud=is_cloud)
+            profile_sum, ctx_json, diag_text,
+            cloud=is_cloud, modality=modality)
 
         # Create and show the dialog
         dlg = AdvisorDialog(parent=self)
@@ -4031,10 +4197,17 @@ class MainWindow(QMainWindow):
         dlg.show_thinking()
         dlg.show()
 
+        # Determine token budget before storing state
+        max_tok = ADVISOR_MAX_TOKENS_CLOUD if is_cloud else ADVISOR_MAX_TOKENS_LOCAL
+
         # Store ref so streaming callbacks can reach the dialog
         self._advisor_dlg = dlg
         self._advisor_text = []
         self._advisor_active = True  # suppress normal chat panel tokens
+        self._advisor_retried = False  # track whether we already retried
+        self._advisor_messages = messages  # keep for retry
+        self._advisor_max_tok = max_tok
+        self._advisor_is_cloud = is_cloud
 
         # Connect to streaming signals temporarily
         self._ai_service.response_token.connect(self._on_advisor_token)
@@ -4042,14 +4215,20 @@ class MainWindow(QMainWindow):
         self._ai_service.ai_error.connect(self._on_advisor_error)
 
         # Fire the inference (bypasses the normal _run to avoid history injection)
-        max_tok = ADVISOR_MAX_TOKENS_CLOUD if is_cloud else ADVISOR_MAX_TOKENS_LOCAL
         if (self._ai_service._active_backend == "remote"
                 and self._ai_service._remote_runner is not None):
-            self._ai_service._remote_runner.infer(messages, max_tokens=max_tok)
+            self._ai_service._remote_runner.infer(
+                messages, max_tokens=max_tok, temperature=0.0)
         else:
-            self._ai_service._runner.infer(messages, max_tokens=max_tok)
+            self._ai_service._runner.infer(
+                messages, max_tokens=max_tok, temperature=0.0)
 
         self._ai_service._set_status("thinking")
+        self._log_tab.append(
+            f"AI Advisor analysing profile: {getattr(profile, 'name', '?')}")
+        log.info("AI Advisor launched for %s profile %r (camera=%s, modality=%s)",
+                 camera_type.upper(), getattr(profile, "name", "?"),
+                 camera_type, modality)
 
     def _on_advisor_token(self, token: str) -> None:
         """Accumulate tokens during advisor analysis."""
@@ -4058,6 +4237,33 @@ class MainWindow(QMainWindow):
 
     def _on_advisor_complete(self, text: str, elapsed: float) -> None:
         """Parse advisor response and show results in the dialog."""
+        from ai.advisor import parse_advice
+
+        result = parse_advice(text)
+
+        # Retry once with a stricter nudge if JSON parsing failed
+        if (not result.parse_ok
+                and not getattr(self, "_advisor_retried", True)):
+            self._advisor_retried = True
+            self._advisor_text = []
+            log.info("AI Advisor: JSON parse failed — retrying with nudge")
+
+            # Append a correction message and re-fire
+            msgs = list(getattr(self, "_advisor_messages", []))
+            msgs.append({"role": "assistant", "content": text})
+            msgs.append({"role": "user", "content":
+                         "That was not valid JSON. Respond with ONLY a JSON "
+                         "object — no prose, no markdown. Start with {"})
+            max_tok = getattr(self, "_advisor_max_tok", 512)
+            if (self._ai_service._active_backend == "remote"
+                    and self._ai_service._remote_runner is not None):
+                self._ai_service._remote_runner.infer(
+                    msgs, max_tokens=max_tok, temperature=0.0)
+            else:
+                self._ai_service._runner.infer(
+                    msgs, max_tokens=max_tok, temperature=0.0)
+            return
+
         self._advisor_active = False
         # Disconnect temporary signal connections
         try:
@@ -4073,11 +4279,29 @@ class MainWindow(QMainWindow):
         if dlg is None:
             return
 
-        from ai.advisor import parse_advice
-        result = parse_advice(text)
         dlg.show_result(result)
-        log.info("AI Advisor: %d conflicts, %d suggestions (%.1fs)",
-                 len(result.conflicts), len(result.suggestions), elapsed)
+        log.info("AI Advisor: %d conflicts, %d suggestions (%.1fs, parse_ok=%s)",
+                 len(result.conflicts), len(result.suggestions),
+                 elapsed, result.parse_ok)
+
+        # Log advisor findings to the session log tab
+        if result.parse_ok:
+            parts = []
+            for c in result.conflicts:
+                parts.append(f"  ⚠ {c.issue}")
+            for s in result.suggestions:
+                reason = s.reason or f"set {s.param} to {s.value} {s.unit}"
+                parts.append(f"  → {reason}")
+            if parts:
+                self._log_tab.append(
+                    f"AI Advisor: {len(result.conflicts)} conflicts, "
+                    f"{len(result.suggestions)} suggestions")
+                for p in parts:
+                    self._log_tab.append(p)
+            else:
+                self._log_tab.append("AI Advisor: no issues found")
+        else:
+            self._log_tab.append("AI Advisor: returned text (JSON parse failed)")
 
     def _on_advisor_cancelled(self) -> None:
         """User clicked Cancel while advisor was thinking — cancel inference."""
@@ -4331,6 +4555,14 @@ class MainWindow(QMainWindow):
             log.warning(f"Thread pool shutdown: {e}")
 
         log.info("Shutdown complete")
+
+        # Mark clean exit so next launch knows we didn't crash
+        try:
+            from logging_config import mark_clean_exit
+            mark_clean_exit()
+        except Exception:
+            pass
+
         event.accept()
         super().closeEvent(event)
 
@@ -4420,6 +4652,10 @@ if __name__ == "__main__":
     _debug_mode = "--debug" in _sys.argv or "--verbose" in _sys.argv
     _log_level  = "DEBUG" if _debug_mode else _cfg_boot.get("logging").get("level", "INFO")
     _lc.setup(level=_log_level)
+    _lc.open_session_log()
+
+    # ── Check for previous crash (before QApplication — dialog comes later) ──
+    _prev_crash_log = _lc.previous_crash_log()
 
     # ── Global exception hook — prevents PyQt5 abort() on slot errors ──
     # PyQt5 ≥ 5.15 calls qFatal() → abort() when a Python exception
@@ -4930,6 +5166,52 @@ if __name__ == "__main__":
     window.show()
     window._load_license()           # validate stored license key
     window._start_update_checker()   # background check, non-blocking
+
+    # ── Show crash recovery dialog if previous session didn't exit cleanly ──
+    if _prev_crash_log:
+        def _show_crash_dialog():
+            from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QTextEdit, \
+                QPushButton, QHBoxLayout, QSizePolicy
+            from ui.theme import PALETTE, MONO_FONT, FONT
+
+            dlg = QDialog(window)
+            dlg.setWindowTitle("SanjINSIGHT — Previous Session")
+            dlg.setMinimumSize(600, 400)
+            lay = QVBoxLayout(dlg)
+
+            lbl = QLabel("The previous session did not shut down cleanly.\n"
+                         "The session log may help diagnose what happened:")
+            lbl.setStyleSheet(f"color: {PALETTE['warning']}; "
+                              f"font-size: {FONT['heading']}pt; "
+                              f"font-weight: bold;")
+            lay.addWidget(lbl)
+
+            txt = QTextEdit()
+            txt.setReadOnly(True)
+            txt.setPlainText(_prev_crash_log)
+            txt.setStyleSheet(
+                f"background: {PALETTE['bg']}; color: {PALETTE['textDim']}; "
+                f"font-family: {MONO_FONT}; font-size: {FONT['body']}pt; "
+                f"border: 1px solid {PALETTE['border']};")
+            lay.addWidget(txt)
+
+            btn_row = QHBoxLayout()
+            btn_row.addStretch()
+
+            copy_btn = QPushButton("Copy to Clipboard")
+            copy_btn.clicked.connect(
+                lambda: QApplication.clipboard().setText(_prev_crash_log))
+            btn_row.addWidget(copy_btn)
+
+            ok_btn = QPushButton("OK")
+            ok_btn.setDefault(True)
+            ok_btn.clicked.connect(dlg.accept)
+            btn_row.addWidget(ok_btn)
+            lay.addLayout(btn_row)
+
+            dlg.exec_()
+
+        QTimer.singleShot(800, _show_crash_dialog)
 
     # Show the first-run license prompt after the window has settled.
     # QTimer.singleShot ensures the event loop is running and all startup
