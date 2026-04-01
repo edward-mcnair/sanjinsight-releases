@@ -57,14 +57,18 @@ class AdvisorResult:
 # only instrument-analysis capability, so we use a focused ~150-token prompt
 # to minimise prefill time on local models.
 
-_ADVISOR_SYSTEM = (
-    "You are an instrument configuration advisor for a thermoreflectance "
-    "microscope. Compare the selected material profile against the current "
-    "instrument state and identify conflicts or mismatches. "
-    "Valid adjustable parameters: exposure_us, gain_db, stimulus_freq_hz, "
-    "stimulus_duty, tec_setpoint_c, n_frames. "
-    "Respond with ONLY a JSON object — no prose, no markdown headings."
-)
+def _build_advisor_system() -> str:
+    """Compact system prompt: role + domain knowledge, no nav map or guide."""
+    from ai.instrument_knowledge import AI_DOMAIN_KNOWLEDGE
+    return (
+        "You are an instrument configuration advisor for a thermoreflectance "
+        "microscope. Compare the selected material profile against the current "
+        "instrument state and identify conflicts or mismatches. "
+        "Valid adjustable parameters: exposure_us, gain_db, stimulus_freq_hz, "
+        "stimulus_duty, tec_setpoint_c, n_frames. "
+        "Respond with ONLY a JSON object — no prose, no markdown headings. "
+        + AI_DOMAIN_KNOWLEDGE
+    )
 
 # Maximum tokens for the advisor response.  A typical structured JSON
 # response is 100–300 tokens; 512 gives headroom without wasting time.
@@ -112,7 +116,7 @@ def build_advisor_prompt(
     )
 
     return [
-        {"role": "system", "content": _ADVISOR_SYSTEM},
+        {"role": "system", "content": _build_advisor_system()},
         {"role": "user",   "content": user_content},
     ]
 
