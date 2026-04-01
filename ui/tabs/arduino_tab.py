@@ -172,7 +172,7 @@ class ArduinoTab(QWidget):
 
         icon_lbl = QLabel()
         from ui.icons import make_icon_label
-        icon_lbl = make_icon_label(IC.CHIP, 48, PALETTE['textDim'])
+        icon_lbl = make_icon_label(IC.FPGA, 48, PALETTE['textDim'])
         v.addWidget(icon_lbl, alignment=Qt.AlignCenter)
 
         title = QLabel("Arduino Nano")
