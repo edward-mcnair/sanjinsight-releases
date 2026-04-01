@@ -195,7 +195,7 @@ class ArduinoTab(QWidget):
         v.addWidget(hint)
 
         btn = QPushButton("Open Device Manager")
-        set_btn_icon(btn, IC.COG)
+        set_btn_icon(btn, IC.SETTINGS)
         btn.setFixedWidth(200)
         btn.clicked.connect(self.open_device_manager.emit)
         v.addWidget(btn, alignment=Qt.AlignCenter)
