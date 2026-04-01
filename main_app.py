@@ -3993,7 +3993,7 @@ class MainWindow(QMainWindow):
         if not self._ai_service.can("proactive_advisor"):
             return
 
-        from ai.advisor import build_advisor_prompt, profile_to_summary
+        from ai.advisor import build_advisor_prompt, profile_to_summary, ADVISOR_MAX_TOKENS
         from ui.widgets.advisor_dialog import AdvisorDialog
 
         # Build the analysis prompt
@@ -4036,9 +4036,9 @@ class MainWindow(QMainWindow):
         # Fire the inference (bypasses the normal _run to avoid history injection)
         if (self._ai_service._active_backend == "remote"
                 and self._ai_service._remote_runner is not None):
-            self._ai_service._remote_runner.infer(messages, max_tokens=1024)
+            self._ai_service._remote_runner.infer(messages, max_tokens=ADVISOR_MAX_TOKENS)
         else:
-            self._ai_service._runner.infer(messages, max_tokens=1024)
+            self._ai_service._runner.infer(messages, max_tokens=ADVISOR_MAX_TOKENS)
 
         self._ai_service._set_status("thinking")
 

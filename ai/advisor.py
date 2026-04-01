@@ -51,13 +51,33 @@ class AdvisorResult:
     parse_ok: bool = False    # True if JSON was parsed successfully
 
 
+# ── Advisor system prompt (compact — no guides, nav map, or domain corpus) ───
+#
+# The full system prompt used for chat is ~3 000 tokens.  The advisor needs
+# only instrument-analysis capability, so we use a focused ~150-token prompt
+# to minimise prefill time on local models.
+
+_ADVISOR_SYSTEM = (
+    "You are an instrument configuration advisor for a thermoreflectance "
+    "microscope. Compare the selected material profile against the current "
+    "instrument state and identify conflicts or mismatches. "
+    "Valid adjustable parameters: exposure_us, gain_db, stimulus_freq_hz, "
+    "stimulus_duty, tec_setpoint_c, n_frames. "
+    "Respond with ONLY a JSON object — no prose, no markdown headings."
+)
+
+# Maximum tokens for the advisor response.  A typical structured JSON
+# response is 100–300 tokens; 512 gives headroom without wasting time.
+ADVISOR_MAX_TOKENS: int = 512
+
+
 # ── Prompt builder ───────────────────────────────────────────────────────────
 
 def build_advisor_prompt(
     profile_summary: dict,
     instrument_state: str,
     diagnostics_summary: str,
-    system_prompt: str,
+    system_prompt: str = "",
 ) -> list[dict]:
     """
     Build the messages list for the advisor analysis.
@@ -71,49 +91,38 @@ def build_advisor_prompt(
     diagnostics_summary : str
         Human-readable summary of current diagnostic issues.
     system_prompt : str
-        The active system prompt (persona + domain knowledge).
+        Ignored — kept for API compatibility.  The advisor uses its own
+        compact system prompt to minimise inference time.
     """
-    profile_json = json.dumps(profile_summary, indent=2, default=str)
+    profile_json = json.dumps(profile_summary, separators=(",", ":"), default=str)
 
     user_content = (
-        f"Instrument state:\n{instrument_state}\n\n"
-        f"Selected profile:\n{profile_json}\n\n"
+        f"State:{instrument_state}\n"
+        f"Profile:{profile_json}\n"
     )
     if diagnostics_summary:
-        user_content += f"Current diagnostic issues:\n{diagnostics_summary}\n\n"
+        user_content += f"Issues:\n{diagnostics_summary}\n"
 
     user_content += (
-        "Analyse the selected profile against the current instrument state. "
-        "Identify any conflicts where the instrument's current settings "
-        "don't match what the profile requires, and suggest fixes.\n\n"
-        "Respond with ONLY a JSON object in this exact format:\n"
-        "```json\n"
-        "{\n"
-        '  "conflicts": [\n'
-        '    {"issue": "description", "param": "setting_name", '
-        '"value": suggested_value, "unit": "unit"}\n'
-        "  ],\n"
-        '  "suggestions": [\n'
-        '    {"param": "setting_name", "value": suggested_value, '
-        '"unit": "unit", "reason": "why"}\n'
-        "  ],\n"
-        '  "ready": true\n'
-        "}\n"
-        "```\n\n"
-        "Set ready=true if the instrument can proceed as-is (conflicts are "
-        "warnings only). Set ready=false if acquisition would produce poor "
-        "results without fixes. Keep the response concise."
+        "\nRespond with ONLY this JSON:\n"
+        '{"conflicts":[{"issue":"...","param":"...","value":N,"unit":"..."}],'
+        '"suggestions":[{"param":"...","value":N,"unit":"...","reason":"..."}],'
+        '"ready":true}\n'
+        "ready=false if acquisition would fail without fixes. Be concise."
     )
 
     return [
-        {"role": "system", "content": system_prompt},
+        {"role": "system", "content": _ADVISOR_SYSTEM},
         {"role": "user",   "content": user_content},
     ]
 
 
 def profile_to_summary(profile) -> dict:
-    """Extract key profile fields into a flat dict for the prompt."""
-    return {
+    """Extract key profile fields into a compact dict for the prompt.
+
+    Omits None values to reduce token count.
+    """
+    raw = {
         "name":              getattr(profile, "name", "?"),
         "material":          getattr(profile, "material", "?"),
         "modality":          getattr(profile, "modality", "any"),
@@ -128,9 +137,8 @@ def profile_to_summary(profile) -> dict:
         "bias_voltage_v":    getattr(profile, "bias_voltage_v", None),
         "ct_value":          getattr(profile, "ct_value", None),
         "wavelength_nm":     getattr(profile, "wavelength_nm", None),
-        "snr_threshold_db":  getattr(profile, "snr_threshold_db", None),
-        "roi_strategy":      getattr(profile, "roi_strategy", None),
     }
+    return {k: v for k, v in raw.items() if v is not None}
 
 
 # ── Response parser ──────────────────────────────────────────────────────────
