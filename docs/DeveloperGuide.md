@@ -1077,17 +1077,66 @@ Multi-backend AI service. The active backend is selected in Settings:
 | Backend | Module | Requirements |
 |---|---|---|
 | Local LLM | `model_runner.py` (llama-cpp-python) | Downloaded model file |
-| Claude API | `remote_runner.py` | User's Anthropic API key |
-| ChatGPT API | `remote_runner.py` | User's OpenAI API key |
+| Ollama | `remote_runner.py` (provider="ollama") | Ollama installed locally |
+| Claude API | `remote_runner.py` (provider="anthropic") | User's Anthropic API key |
+| ChatGPT API | `remote_runner.py` (provider="openai") | User's OpenAI API key |
 
 **Context injected with every prompt:**
-1. Quickstart Guide (always, ~2,500 tokens)
-2. User Manual sections matched to the active tab (RAG, up to ~8,000 tokens)
-3. Instrument knowledge (hardware limits, CTR table, ~80 tokens)
+1. Quickstart Guide (always, ~2,500 tokens — STANDARD/FULL tier only)
+2. User Manual sections matched to the active tab (RAG, up to ~8,000 tokens — FULL tier only)
+3. Instrument knowledge (`ai/instrument_knowledge.py` — hardware limits, CTR table, system specs, ~80 tokens)
 4. Live metrics snapshot (SNR, saturation, temperature)
 5. Active material profile (C_T, wavelength)
+6. Active modality and camera type
 
-### 7.2 Diagnostic Engine (`ai/diagnostic_engine.py`)
+### 7.2 AI Capability Tiers (`ai/tier.py`)
+
+Features are gated by `AITier`, an IntEnum determined by model size and backend:
+
+| Tier | Value | Trigger |
+|---|---|---|
+| `NONE` | 0 | No model loaded |
+| `BASIC` | 1 | Small local model (< 4B parameters) |
+| `STANDARD` | 2 | Medium local model, or Ollama backend |
+| `FULL` | 3 | Cloud providers (Claude, ChatGPT) |
+
+**Feature gating** via `AIService.can(feature_name)`:
+
+| Feature | Required tier | Description |
+|---|---|---|
+| `chat` | BASIC | Free-form chat |
+| `explain_tab` | BASIC | Tab explanation |
+| `diagnose` | STANDARD | Manual diagnose |
+| `proactive_advisor` | STANDARD | Profile conflict advisor |
+| `session_report` | FULL | Post-acquisition quality report |
+| `manual_rag` | FULL | User Manual retrieval |
+
+Each tier has a token budget (`budget_for(tier)`) controlling history depth, context inclusion, and max tokens per response.
+
+### 7.3 Proactive AI Advisor (`ai/advisor.py`)
+
+The advisor fires automatically after every profile selection. It bypasses the normal `_run()` pipeline (no history injection) and calls `infer()` directly on the active runner.
+
+**Key components:**
+- `_MODALITY_CONTEXT` — Registry mapping modality strings to physics context. Add an entry here to support a new camera/modality plugin.
+- `_build_advisor_system(cloud, modality)` — Adapts the system prompt to the measurement technique.
+- `build_advisor_prompt(...)` — Builds the `[system, user]` message list with profile, instrument state, and diagnostic issues.
+- `profile_to_summary(profile, camera_type)` — Extracts key profile fields; gates C_T and wavelength to TR-only, but includes `gain_db` for all camera types.
+- `parse_advice(raw_text)` — Extracts JSON from the response (handles ```` ```json ``` ```` fences and bare JSON). Returns `AdvisorResult` with `parse_ok=False` for fallback display.
+
+**Retry on parse failure:** If JSON parsing fails, the advisor appends a correction message and re-fires once with `temperature=0.0`.
+
+**Race condition handling:** If the AI is already busy (e.g. auto-diagnosis), `_maybe_launch_advisor()` cancels the current inference, disconnects handlers, and retries with exponential polling (200ms, max 15 retries / 3s).
+
+### 7.4 Auto-Diagnosis
+
+Hardware errors (via `hw_service.log_message`) are queued and drained every 3 seconds by `_drain_auto_diagnose()`. The diagnosis:
+- Uses `infer()` directly (not `ask()`) to avoid polluting chat history
+- Stores signal handlers on `self` so they can be cleanly disconnected if the advisor preempts
+- Routes output to the log panel only (no chat panel, no toasts)
+- Is throttled to once per 30 seconds and yields to the advisor
+
+### 7.5 Diagnostic Engine (`ai/diagnostic_engine.py`)
 
 Runs continuously and grades the system A–D:
 
@@ -1110,9 +1159,29 @@ Runs continuously and grades the system A–D:
 
 To add a new rule, add a function to `diagnostic_rules.py` following the existing pattern and register it in `diagnostic_engine.py`.
 
-### 7.3 Manual RAG (`ai/manual_rag.py`)
+### 7.6 Context Builder (`ai/context_builder.py`)
 
-Loads `docs/UserManual.md`, splits it into sections, and retrieves relevant sections based on keyword overlap with the user's query and the active tab name. This keeps context token usage bounded while ensuring the AI has relevant documentation.
+Assembles a compact JSON snapshot of all instrument state (< 800 tokens). Includes:
+- Camera (type, driver type, exposure, gain, fps, resolution)
+- FPGA, Stage, Bias, LDD, TECs, Prober
+- Active modality and objective
+- System model specs (EZ500, NT220, PT410A)
+- Active material profile
+- Metrics snapshot and diagnostic rule results
+- Fallback `context_incomplete` flag if any section throws
+
+### 7.7 Manual RAG (`ai/manual_rag.py`)
+
+Loads `docs/UserManual.md`, splits it into sections, and retrieves relevant sections based on keyword overlap with the user's query and the active tab name. This keeps context token usage bounded while ensuring the AI has relevant documentation. Available at FULL tier only.
+
+### 7.8 Session Logging & Crash Recovery (`logging_config.py`)
+
+- `open_session_log()` — Truncates `~/.microsanj/logs/session.log` and deletes `.clean_exit` marker
+- `write_session(line)` — Appends to session log (line-buffered for crash resilience)
+- `mark_clean_exit()` — Called from `MainWindow.closeEvent()`; writes `.clean_exit` marker
+- `previous_crash_log()` — Returns session log contents if `.clean_exit` marker is absent
+
+**Startup order:** `previous_crash_log()` must be called *before* `open_session_log()` (which truncates the file). The crash dialog is shown via `QTimer.singleShot(800ms)` after the main window is visible.
 
 ---
 

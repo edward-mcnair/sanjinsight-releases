@@ -10,6 +10,30 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **AI capability tier system** — Automatic feature gating (NONE → BASIC → STANDARD → FULL) based on model size and backend. Tier badge in AI panel, info strip in Settings, upgrade nudge system for tier-gated features.
+- **Proactive AI Advisor** — Modal dialog analyses the selected material profile against live instrument state after every profile selection. Identifies conflicts (e.g. exposure too high for lock-in frequency) and suggests corrective settings with one-click "Apply fixes". Supports all camera modalities (TR, IR, future plugins).
+  - Modality-aware physics reasoning (thermoreflectance vs IR thermal imaging)
+  - Cloud models (Claude, ChatGPT) provide physics explanations; local models return compact JSON
+  - Auto-launches when AI model loads after a profile is already selected
+  - Retry with stricter JSON nudge on parse failure
+  - Advisor results logged to the session log panel (not toasts)
+  - Deduplicates fixes by parameter before applying
+- **Auto-diagnosis on hardware errors** — Hardware errors automatically trigger AI diagnosis routed to the log panel (uses `infer()` directly, no chat history pollution). Throttled to once per 30 seconds.
+- **Crash-resilient session logging** — `LogTab` messages are mirrored to `~/.microsanj/logs/session.log` (line-buffered). On unclean exit, the next launch shows a crash dialog with the previous session's log for diagnostics. HTML tags stripped via regex for the plain-text log file.
+- **Phase-aware sidebar** — Workspace modes (Auto / Manual), progressive disclosure, collapsible hardware section, phase tracker with hardware signal wiring, SanjINSIGHT branding in header bar
+- **Guided mode walkthrough** — Step-by-step banner with progress indicators, auto-advance, skip button, contextual hints, sidebar step indicators, Ctrl+1–9 section shortcuts
+- **Plugin architecture (API v1)** — Manifest-based plugin system with Developer license tier, settings UI, and documentation. Supports tool, camera, analysis, and export plugin types.
+- **Architecture restructure**:
+  - Device services (`hardware/services/`) — Proper QObject service classes replacing monolithic HardwareService
+  - Acquisition subpackages (`acquisition/processing/`, `calibration/`, `storage/`, `reporting/`) with backward-compat shims
+  - `MeasurementOrchestrator` state machine for formal measurement lifecycle management
+  - Workflow profiles (Failure Analysis vs Metrology) with configurable preflight strictness
+- **Guided mode phases 1–5** — Complete reporting pipeline, export presets, batch reports, session packaging, export history
+- **Profile picker** — Compact dropdown combo box filtered by camera modality, auto-exposure support, extended material profile library
+- **System status dropdown** — Connected Devices button with diagnostic health details
+- **MoreOptionsPanel** — Progressive disclosure in Analysis, Temperature, and Camera tabs
+- **Time estimation** — Added to five long-running processes (acquisition, calibration, scan, batch, export)
+- **TR vs IR control separation** — FFC controls gated on IR cameras, modality-appropriate controls across all panels
 - **10 performance/UX improvements**:
   - Camera preview sleep reduced (50ms to 10ms) for snappier live feed
   - Colormap cache in comparison tab avoids repeated lookups
@@ -31,12 +55,33 @@ Versioning follows [Semantic Versioning](https://semver.org/).
   - Feature branch CI triggers (`feature/**`)
   - Concurrency control to cancel stale CI runs
   - Test summary step for quick pass/fail visibility
-- **Test coverage**: 31 new tests covering all 10 improvement features
+- **Test coverage**: 31 new tests plus orchestrator, device services, and workflow test suites
+
+### Changed
+
+- AI Advisor feedback now routed to status bar + log panel instead of toast notifications
+- `gain_db` available in advisor profile summary for all camera types (not just TR)
+- `ContextBuilder` includes active camera type, driver type, and modality in instrument state JSON
+- Sidebar navigation reduced from 23 to 12 items (Manual mode); reorganized into ACQUIRE / ANALYZE / HARDWARE / LIBRARY groups
+- Full PALETTE conversion: eliminated all hardcoded hex colors across 40+ UI files for consistent theming
 
 ### Fixed
 
+- **AI Advisor infinite loop** — `_on_ai_status("ready")` guarded with `_advisor_launched_for` to prevent re-launch after advisor completes
+- **AI Advisor race condition** — Cancel + retry with max 15 attempts (3s cap) when pre-empting busy AI runner; advisor dialog properly closed on programmatic cancel
+- **Auto-diagnosis `_diag_active` stuck True** — Handlers stored on `self` and disconnected on preemption by advisor
+- **False crash dialog on every launch** — Fixed `open_session_log()` / `previous_crash_log()` call order (read crash log before truncating)
+- **Session log HTML stripping** — Now strips all HTML tags via regex and decodes additional entities (`&nbsp;`, `&quot;`, `&#39;`)
 - Theme switch crash: `_apply_styles()` on `AcquisitionSummaryOverlay` now accepts optional scorecard parameter
 - HTTP connection leak in Ollama client (`ai/remote_runner.py`)
+- 3 Windows 11 compatibility fixes (DPI scaling, font rendering, file path handling)
+- TypeError in live probe when ΔR/R array is 3D (RGB)
+- FFC button visibility on modality change across all panels
+- Guided banner Next button loop with robust advance logic
+- Signal Check SNR now uses temporal noise, not spatial variation
+- Profile cleared when modality filter removes it; header pill updates accordingly
+- Duty cycle auto-fix loop and download progress display
+- Startup crash with module-level `hw_service` and deferred device manager wiring
 
 ---
 

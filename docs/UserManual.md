@@ -349,11 +349,10 @@ Use **simulated** if no motorised stage is present.
 
 ### 3.9 Page 7 — AI Assistant
 
-This page configures the local language model used by the AI Assistant.
+This page configures the AI Assistant backend.
 
-- **Ollama** — The recommended backend. If Ollama is not detected, an install link is shown.
-- **Pull model** — Select a model from the combo and click **Pull** to download it into Ollama.
-- **Model list** — After pulling, the downloaded model appears in the list. Select it and click **Connect**.
+- **Ollama (recommended)** — If Ollama is detected, select a model from the combo and click **Pull** to download it. Once downloaded, select and click **Connect**. Larger models unlock more AI features (see Section 15.2 for tier details).
+- **Cloud API** — Enter an Anthropic (Claude) or OpenAI (ChatGPT) API key for FULL tier features including physics explanations in the Proactive Advisor.
 
 The AI Assistant works without a model — it falls back to rule-based diagnostics only. The model can also be set up later via **Settings → AI Assistant**.
 
@@ -1274,17 +1273,49 @@ The **Prober** panel appears in the Hardware group when a supported probe statio
 
 ## 15. AI Assistant
 
-### 13.1 Overview
+### 15.1 Overview
 
-The AI Assistant is a dockable panel that provides real-time instrument intelligence powered by a local language model running entirely on your PC (no internet connection required after setup).
+The AI Assistant is a dockable panel that provides real-time instrument intelligence. It supports three backends — a local language model (runs entirely on your PC, no internet required), or cloud providers (Claude API, ChatGPT API) for richer analysis.
 
 Key capabilities:
 - **Readiness grading** — Evaluates all diagnostic rules every few seconds and assigns a letter grade (A–D)
 - **Issue navigation** — Lists active problems with one-click "Fix it →" links to the relevant hardware panel
+- **Proactive Advisor** — Automatically analyses your selected material profile against live instrument state and suggests corrective settings
+- **Auto-diagnosis** — Hardware errors trigger automatic AI diagnosis (results appear in the log panel)
 - **Tab explanation** — Explains what the currently visible panel does and what to check given live instrument state
 - **Free-form chat** — Answers questions about instrument settings, measurement technique, and troubleshooting
 
-### 13.2 Grade System
+### 15.2 AI Capability Tiers
+
+The AI Assistant automatically determines which features are available based on the loaded model's size and backend:
+
+| Tier | Model size | Available features |
+|---|---|---|
+| **NONE** | No model loaded | Rule-based diagnostics only (no AI) |
+| **BASIC** | Small local models (< 4B params) | Chat, tab explanation |
+| **STANDARD** | Medium local models or Ollama | Chat, explain, diagnose, **Proactive Advisor** |
+| **FULL** | Cloud providers (Claude, ChatGPT) | All features + physics explanations, session reports, manual RAG |
+
+A tier badge is shown in the AI panel header. If a feature requires a higher tier, the panel shows an upgrade nudge with guidance on how to unlock it (e.g. switching to a larger model or connecting a cloud API key).
+
+### 15.3 Proactive AI Advisor
+
+After you select a material profile, the AI Advisor automatically analyses the profile settings against the current instrument state. A modal dialog appears showing:
+
+- **Conflicts** — Settings that conflict with the selected profile (e.g. "Exposure too high for lock-in frequency at 1 kHz — risking aliased signal")
+- **Suggestions** — Optional improvements for better measurement quality
+- **Summary** — A 1–2 sentence overall assessment (cloud models only)
+- **Ready status** — Whether acquisition would produce acceptable results
+
+Each conflict and suggestion includes the specific parameter and suggested value. Click **Apply N fixes & proceed** to apply all recommended changes at once, or **Cancel** to dismiss without changes.
+
+The advisor adapts its physics reasoning to the active measurement modality:
+- **Thermoreflectance** — Lock-in timing, SNR, thermal settling, saturation risk, reflectance coefficient (C_T), LED wavelength matching
+- **IR thermal imaging** — Emissivity, NUC/FFC calibration freshness, thermal range, integration time, DUT self-heating
+
+Advisor results are logged to the session log panel for reference. Applied changes are shown briefly in the status bar.
+
+### 15.4 Grade System
 
 The AI panel shows a large letter grade based on the current diagnostic rule results:
 
@@ -1297,21 +1328,21 @@ The AI panel shows a large letter grade based on the current diagnostic rule res
 
 The grade badge (36 pt, bold) is accompanied by a brief summary such as "Instrument ready" or "1 fail · 2 warn".
 
-### 13.3 Issue Rows
+### 15.5 Issue Rows
 
 Up to 5 active issues are listed below the grade badge. Each row shows:
 - **⊗** (red) for a fail, **⚠** (amber) for a warning
 - The rule's display name and observed value (e.g. "TEC 1 stable · Δ0.18°C")
 - Clicking the row navigates to the hint text for that rule
 
-### 13.4 Quick Actions
+### 15.6 Quick Actions
 
 | Button | Action |
 |---|---|
-| **Explain this tab** | Asks the AI to describe the currently visible panel and what to check given the live instrument state. Enabled only when a model is loaded. |
-| **Diagnose** | Asks the AI to review all active issues and suggest a concrete fix for each. |
+| **Explain this tab** | Asks the AI to describe the currently visible panel and what to check given the live instrument state. Requires BASIC tier or higher. |
+| **Diagnose** | Asks the AI to review all active issues and suggest a concrete fix for each. Requires STANDARD tier or higher. |
 
-### 13.5 Free-Form Chat
+### 15.7 Free-Form Chat
 
 Type any question in the chat box and press **Ask** (or Enter). Example questions:
 - "What LED wavelength should I use for GaAs?"
@@ -1324,18 +1355,32 @@ The AI grounds every answer in the live JSON instrument state, so it can referen
 
 **Token rate** — Displayed below the response as "N tok/s · X.Xs". On a typical desktop CPU this is 15–50 tokens/second depending on model size.
 
-### 13.6 AI Model Setup
+### 15.8 AI Model Setup
 
-The AI Assistant requires a local language model (~2–5 GB). On first use, the response area shows installation instructions.
+The AI Assistant supports three backends:
 
-To download the model:
-1. Open **Settings** (Ctrl+,) → **AI Assistant** tab.
-2. Click **Download Model**. Progress is shown in the Settings panel.
-3. Once complete, the AI Assistant panel activates automatically.
+**Local model (Ollama — recommended):**
+1. Install [Ollama](https://ollama.com) if not already installed.
+2. Open **Settings** (Ctrl+,) → **AI Assistant** tab.
+3. Select a model from the list and click **Pull** to download it.
+4. Once complete, the AI Assistant panel activates automatically.
 
-The model is stored locally and never sends data to any external server.
+**Cloud providers (Claude API / ChatGPT API):**
+1. Open **Settings** (Ctrl+,) → **AI Assistant** → **Cloud** section.
+2. Enter your API key (Anthropic or OpenAI).
+3. Select a model and click **Connect**.
 
-### 13.7 Readiness Widget (Acquire Tab)
+Cloud providers unlock FULL tier features including physics explanations in the advisor, session quality reports, and manual RAG.
+
+### 15.9 Auto-Diagnosis
+
+When a hardware error occurs (e.g. TEC alarm, camera disconnect, FPGA timeout), the AI automatically diagnoses the likely cause and suggests a fix. The diagnosis appears in the **Log** panel — not as a popup or toast — so it doesn't interrupt your workflow. Auto-diagnosis is throttled to once per 30 seconds and yields priority to the Proactive Advisor.
+
+### 15.10 Crash Recovery
+
+SanjINSIGHT mirrors all log messages to a session log file on disk (`~/.microsanj/logs/session.log`). If the application exits unexpectedly (crash, power loss, forced quit), the next launch detects the unclean exit and offers to show the previous session's log for diagnostic purposes.
+
+### 15.11 Readiness Widget (Acquire Tab)
 
 A compact readiness banner appears at the top of the Acquire tab independently of the AI Assistant panel. It provides the same pass/fail assessment as the AI grade system in a minimal form factor optimised for the acquisition workflow:
 
