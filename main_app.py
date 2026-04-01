@@ -1004,6 +1004,8 @@ class MainWindow(QMainWindow):
         self._ai_panel.cancel_requested.connect(self._ai_service.cancel)
         self._ai_panel.export_requested.connect(self._ai_service.export_history)
         self._ai_panel.support_requested.connect(self._open_support_dialog)
+        self._ai_panel.upgrade_nudge.connect(
+            lambda msg: self._toasts.show_info(msg, auto_dismiss_ms=8000))
         self._ai_service.history_exported.connect(self._on_history_exported)
 
         # Auto-fix: wire the AI panel's fix button callback

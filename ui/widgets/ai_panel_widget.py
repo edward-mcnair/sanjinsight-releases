@@ -123,9 +123,11 @@ class AIPanelWidget(QWidget):
     cancel_requested   = pyqtSignal()    # user clicked "Stop" — cancel inference
     export_requested   = pyqtSignal(str) # user chose an export path (file path)
     support_requested  = pyqtSignal()    # user clicked "Get Support"
+    upgrade_nudge      = pyqtSignal(str) # emitted with a human-readable upgrade message
 
     def __init__(self, llama_installed: bool = True, parent=None):
         super().__init__(parent)
+        self._current_tier = 0  # AITier.NONE — updated by on_tier_changed
         self.setMinimumWidth(300)
         self.setMaximumWidth(420)
         self.setStyleSheet(f"background:{_BG()}; color:{_TEXT()};")
@@ -451,6 +453,7 @@ class AIPanelWidget(QWidget):
         """Update the tier badge and gate UI features by capability level."""
         from ai.capability_tier import AITier, tier_display_name, tier_description, can
 
+        self._current_tier = tier_value
         tier = AITier(tier_value)
         name = tier_display_name(tier)
         desc = tier_description(tier)
@@ -482,6 +485,23 @@ class AIPanelWidget(QWidget):
             self._explain_btn.setVisible(can(tier, "explain_tab"))
         if hasattr(self, "_diagnose_btn"):
             self._diagnose_btn.setVisible(can(tier, "diagnose"))
+
+    def check_feature(self, feature: str) -> bool:
+        """
+        Return True if *feature* is available at the current tier.
+
+        If not, emits ``upgrade_nudge`` with a human-readable message
+        explaining how to upgrade.  Call this before triggering any
+        tier-gated action from the UI.
+        """
+        from ai.capability_tier import AITier, can, upgrade_message
+        tier = AITier(self._current_tier)
+        if can(tier, feature):
+            return True
+        msg = upgrade_message(feature, tier)
+        if msg:
+            self.upgrade_nudge.emit(msg)
+        return False
 
     def on_token(self, token: str) -> None:
         """Append a streaming token to the display."""

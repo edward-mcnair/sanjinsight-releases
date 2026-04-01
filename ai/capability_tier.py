@@ -248,3 +248,38 @@ def tier_description(tier: AITier) -> str:
         AITier.STANDARD: "Adds session reports, quickstart guide, richer context.",
         AITier.FULL:     "Full AI: proactive advisor, voice commands, automation.",
     }.get(tier, "")
+
+
+def upgrade_message(feature: str, current_tier: AITier) -> str:
+    """
+    Return a user-facing message explaining why *feature* is unavailable
+    and how to upgrade.  Returns ``""`` if the feature is already available.
+    """
+    min_tier = _FEATURE_GATES.get(feature)
+    if min_tier is None or current_tier >= min_tier:
+        return ""
+
+    _feature_labels = {
+        "session_report":      "Session Reports",
+        "manual_rag":          "Manual Search",
+        "quickstart_guide":    "Quickstart Guide",
+        "proactive_advisor":   "AI Advisor",
+        "structured_response": "Smart Suggestions",
+        "voice_commands":      "Voice Commands",
+        "ai_acquisition":      "AI-Assisted Acquisition",
+        "batch_insights":      "Batch Insights",
+        "explain_diagnostics": "Diagnostic Insights",
+    }
+    label = _feature_labels.get(feature, feature)
+    target = tier_display_name(min_tier)
+
+    if min_tier == AITier.FULL:
+        how = ("Upgrade to Qwen 2.5 — 14B (8.8 GB) or connect a cloud "
+               "provider (Claude / ChatGPT) in Settings → AI.")
+    elif min_tier == AITier.STANDARD:
+        how = ("Upgrade to Qwen 2.5 — 7B (4.5 GB) or larger in "
+               "Settings → AI → Local Model.")
+    else:
+        how = "Enable an AI model in Settings → AI."
+
+    return f"{label} requires {target} tier.  {how}"
