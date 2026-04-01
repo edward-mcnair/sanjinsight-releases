@@ -20,6 +20,7 @@ from PyQt5.QtWidgets import (
     QFrame, QScrollArea, QWidget, QSizePolicy,
 )
 from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtGui import QCursor
 
 from ui.theme import PALETTE, FONT, MONO_FONT
 from ui.icons import set_btn_icon
@@ -117,11 +118,13 @@ class AdvisorDialog(QDialog):
         btn_row.addStretch()
 
         self._cancel_btn = QPushButton("Cancel")
+        self._cancel_btn.setCursor(QCursor(Qt.PointingHandCursor))
         self._cancel_btn.setStyleSheet(
-            f"QPushButton {{ background:{sur2}; color:{sub}; "
+            f"QPushButton {{ background:{sur2}; color:{text}; "
             f"border:1px solid {bdr}; border-radius:5px; "
-            f"font-size:{FONT['label']}pt; padding:7px 20px; }}"
-            f"QPushButton:hover {{ color:{text}; border-color:{acc}44; }}")
+            f"font-size:{FONT['label']}pt; font-weight:600; padding:7px 20px; }}"
+            f"QPushButton:hover {{ background:{PALETTE['danger']}18; "
+            f"color:{PALETTE['danger']}; border-color:{PALETTE['danger']}66; }}")
         self._cancel_btn.clicked.connect(self._on_cancel)
         btn_row.addWidget(self._cancel_btn)
 
