@@ -85,6 +85,22 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.5.0-beta.2] — 2026-04-01
+
+### Added
+
+- **Arduino Nano driver** — Full driver stack for ATmega328P as a general-purpose I/O controller: LED wavelength selector (4 channels: 470/530/590/625 nm), digital GPIO (D6–D13), and 10-bit ADC (A0–A7). Includes base ABC, serial driver (CH340/FTDI auto-detect), simulated driver for demo mode, factory, device registry entries (`DTYPE_GPIO`), app_state slot, device manager wiring, and AI context builder integration.
+- **Arduino UI tab** — New sidebar entry under HARDWARE with LED radio selector, GPIO toggle buttons, ADC readout with voltage conversion, controller status polling, and empty-state placeholder with Device Manager link.
+- **Arduino firmware sketch** (`firmware/arduino_nano/sanjinsight_io.ino`) — Line-based ASCII serial protocol: `LED`, `PIN`, `READ`, `ADC`, `STATUS`, `IDENT` commands. Ready to flash via Arduino IDE.
+
+### Fixed
+
+- **IC.CHIP AttributeError** — Arduino nav icon referenced non-existent `IC.CHIP`; changed to `mdi.integrated-circuit-chip`.
+- **IC.COG AttributeError** — Arduino tab empty-state button referenced non-existent `IC.COG`; changed to `IC.SETTINGS`.
+- **PALETTE key errors** — Arduino tab used non-existent `hover` and `pass` keys; corrected to `surfaceHover` and `success`.
+
+---
+
 ## [1.5.0-beta.1] — 2026-03-25
 
 ### Added
