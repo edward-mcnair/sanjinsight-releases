@@ -3988,6 +3988,9 @@ class MainWindow(QMainWindow):
 
     def _maybe_launch_advisor(self, profile) -> None:
         """Launch the AI advisor if FULL tier and model is ready."""
+        # Skip if advisor is already active (e.g. quick profile switch)
+        if getattr(self, "_advisor_active", False):
+            return
         if self._ai_service.status != "ready":
             return
         if not self._ai_service.can("proactive_advisor"):

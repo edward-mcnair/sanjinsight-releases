@@ -206,8 +206,10 @@ _FEATURE_GATES: dict[str, AITier] = {
     "manual_rag":          AITier.STANDARD,
     "quickstart_guide":    AITier.STANDARD,
 
+    # STANDARD tier (structured output)
+    "proactive_advisor":   AITier.STANDARD,
+
     # FULL tier (interactive automation)
-    "proactive_advisor":   AITier.FULL,
     "structured_response": AITier.FULL,
     "voice_commands":      AITier.FULL,
     "ai_acquisition":      AITier.FULL,
@@ -245,8 +247,8 @@ def tier_description(tier: AITier) -> str:
     return {
         AITier.NONE:     "No AI model loaded.",
         AITier.BASIC:    "Text Q&A, tab explanations, issue diagnosis.",
-        AITier.STANDARD: "Adds session reports, quickstart guide, richer context.",
-        AITier.FULL:     "Full AI: proactive advisor, voice commands, automation.",
+        AITier.STANDARD: "Adds session reports, quickstart guide, AI advisor.",
+        AITier.FULL:     "Full AI: voice commands, smart suggestions, automation.",
     }.get(tier, "")
 
 
