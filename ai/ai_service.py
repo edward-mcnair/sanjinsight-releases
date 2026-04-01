@@ -18,8 +18,9 @@ Status states
 
 Conversation history
 --------------------
-  A rolling window of _MAX_HISTORY_TURNS exchange pairs (user + assistant)
-  is prepended to every request so the model can answer follow-up questions.
+  A rolling window of exchange pairs (user + assistant) is prepended to
+  every request so the model can answer follow-up questions.  The window
+  depth is controlled by the active tier's token budget (see capability_tier.py).
   History is cleared when disable() is called or clear_history() is invoked.
   A threading.Lock guards the list so accidental concurrent access (e.g. a
   queued Qt signal arriving during a direct call) cannot corrupt it.
@@ -32,7 +33,7 @@ import logging
 import threading
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Protocol, runtime_checkable
 
 from PyQt5.QtCore import QObject, pyqtSignal
 
@@ -44,8 +45,54 @@ from ai import prompt_templates as tmpl
 from ai import manual_rag
 from ai.personas import PERSONAS, DEFAULT_PERSONA_ID
 from ai.model_catalog import MODEL_CATALOG
+from ai.capability_tier import (
+    AITier, tier_for_catalog_model, tier_for_ollama_model,
+    budget_for, can,
+)
 
 log = logging.getLogger(__name__)
+
+
+# ── Runner signal contract ───────────────────────────────────────────────────
+#
+# Both ModelRunner (GGUF/llama-cpp) and RemoteRunner (cloud providers) follow
+# this contract by emitting identical Qt signals.  AIService connects to
+# whichever runner is active and does not need to know the backend type.
+#
+# Any future runner (e.g. a PyTorch backend) must emit these same signals.
+
+@runtime_checkable
+class RunnerProtocol(Protocol):
+    """Structural type for AI inference runners.
+
+    Signals
+    -------
+    load_complete()                 Backend is loaded / connected and ready.
+    load_failed(str)                Load or connection failed (human message).
+    token_ready(str)                One streamed token during inference.
+    response_complete(str, float)   Full response text + elapsed seconds.
+    error(str)                      Inference-time error (human message).
+
+    Methods
+    -------
+    infer(messages, max_tokens, temperature)
+        Start streaming inference in a daemon thread.
+    cancel()
+        Request cancellation; worker emits response_complete with partial text.
+    """
+
+    # -- signals (pyqtSignal instances on the class) --
+    load_complete:     pyqtSignal
+    load_failed:       pyqtSignal
+    token_ready:       pyqtSignal
+    response_complete: pyqtSignal
+    error:             pyqtSignal
+
+    # -- required methods --
+    def infer(self, messages: list[dict],
+              max_tokens: int = ...,
+              temperature: float = ...) -> None: ...
+    def cancel(self) -> None: ...
 
 
 def _n_ctx_for_model(model_path: str) -> int:
@@ -77,14 +124,12 @@ class AIService(QObject):
     """
 
     status_changed    = pyqtSignal(str)
+    tier_changed      = pyqtSignal(int)   # emits AITier value
     response_token    = pyqtSignal(str)
     response_complete = pyqtSignal(str, float)
     ai_error          = pyqtSignal(str)
     history_cleared   = pyqtSignal()
     history_exported  = pyqtSignal(str)   # emitted with the export file path
-
-    # Rolling window: keep the last N user+assistant exchange pairs
-    _MAX_HISTORY_TURNS = 6
 
     def __init__(self, parent: Optional[QObject] = None):
         super().__init__(parent)
@@ -93,6 +138,7 @@ class AIService(QObject):
         self._active_backend = "local"   # "local" | "remote"
         self._ctx            = ContextBuilder()
         self._status         = "off"
+        self._tier           = AITier.NONE
         self._history: list[dict] = []   # alternating user / assistant messages
         self._history_lock   = threading.Lock()
         self._n_ctx:  int = tmpl.DEFAULT_N_CTX  # updated in enable() from catalog
@@ -115,6 +161,17 @@ class AIService(QObject):
     @property
     def llama_available(self) -> bool:
         return llama_available()
+
+    @property
+    def tier(self) -> AITier:
+        """Current AI capability tier (NONE when disabled)."""
+        if self._status == "off":
+            return AITier.NONE
+        return self._tier
+
+    def can(self, feature: str) -> bool:
+        """Check whether the current tier supports *feature*."""
+        return can(self._tier, feature)
 
     def set_metrics(self, metrics) -> None:
         """Inject MetricsService so the context builder can include quality data."""
@@ -141,6 +198,7 @@ class AIService(QObject):
         if self._status in ("loading", "thinking"):
             return
         self._n_ctx = _n_ctx_for_model(model_path)
+        self._set_tier(tier_for_catalog_model(model_path))
         self._set_status("loading")
         self._runner.load(model_path, n_gpu_layers=n_gpu_layers,
                           n_ctx=self._n_ctx)
@@ -172,6 +230,12 @@ class AIService(QObject):
         # Cloud models have large context — always include full system prompt
         self._n_ctx = 100_000
 
+        # Ollama models are classified by parameter count; cloud is always FULL
+        if provider == "ollama":
+            self._set_tier(tier_for_ollama_model(model_id))
+        else:
+            self._set_tier(AITier.FULL)
+
         self._set_status("loading")
         runner.connect(provider, api_key, model_id)
 
@@ -184,6 +248,7 @@ class AIService(QObject):
         self._active_backend = "local"
         with self._history_lock:
             self._history.clear()
+        self._set_tier(AITier.NONE)
         self._set_status("off")
 
     def cancel(self) -> None:
@@ -264,21 +329,24 @@ class AIService(QObject):
         """Ask the AI to explain the current active tab."""
         tab        = self._ctx._active_tab
         sp         = self._active_system_prompt()
-        manual_ctx = manual_rag.retrieve(f"{tab} panel settings controls")
+        manual_ctx = (manual_rag.retrieve(f"{tab} panel settings controls")
+                      if self.can("manual_rag") else "")
         self._run(tmpl.explain_tab(tab, self._ctx.build(), sp, manual_ctx))
 
     def diagnose(self) -> None:
         """Ask the AI to diagnose the current instrument state."""
         tab        = self._ctx._active_tab
         sp         = self._active_system_prompt()
-        manual_ctx = manual_rag.retrieve(
+        manual_ctx = (manual_rag.retrieve(
             f"{tab} troubleshooting problems issues fixes")
+            if self.can("manual_rag") else "")
         self._run(tmpl.diagnose(self._ctx.build(), sp, manual_ctx))
 
     def ask(self, question: str) -> None:
         """Send a free-form question with instrument context and manual RAG."""
         sp         = self._active_system_prompt()
-        manual_ctx = manual_rag.retrieve(question)
+        manual_ctx = (manual_rag.retrieve(question)
+                      if self.can("manual_rag") else "")
         self._run(tmpl.free_ask(question, self._ctx.build(), sp, manual_ctx))
 
     def session_report(self, result_data: dict) -> None:
@@ -287,12 +355,16 @@ class AIService(QObject):
 
         result_data is a dict of acquisition metrics plus pre-acquisition grade
         and issue snapshot — see prompt_templates.session_report() for keys.
-        Silently skips if the model is not ready.
+        Silently skips if the model is not ready or tier is too low.
         """
         if self._status != "ready":
             log.debug(
                 "AIService.session_report skipped — not ready (status=%s)",
                 self._status)
+            return
+        if not self.can("session_report"):
+            log.debug("AIService.session_report skipped — tier %s too low",
+                      self._tier.name)
             return
         sp         = self._active_system_prompt()
         manual_ctx = manual_rag.retrieve(
@@ -319,13 +391,16 @@ class AIService(QObject):
         The workspace mode prefix is prepended so the AI adapts its tone
         and proactivity to the user's experience level.
 
-        The Quickstart Guide is only embedded when the model's n_ctx is
-        large enough (>= 8 192); smaller models receive domain knowledge
-        and UI nav only, preserving headroom for context and responses.
+        The Quickstart Guide is included based on the tier's token budget
+        (STANDARD and FULL include it; BASIC does not).  The n_ctx value
+        is still passed to build_system_prompt for the underlying size check.
         """
         pid     = cfg_mod.get_pref("ai.persona", DEFAULT_PERSONA_ID)
         persona = PERSONAS.get(pid, PERSONAS[DEFAULT_PERSONA_ID])
-        base    = tmpl.build_system_prompt(persona.system_prompt, self._n_ctx)
+        bud     = budget_for(self._tier)
+        # If the tier budget says no guide, pass a small n_ctx to suppress it
+        effective_n_ctx = self._n_ctx if bud["include_guide"] else 0
+        base    = tmpl.build_system_prompt(persona.system_prompt, effective_n_ctx)
 
         mode = getattr(self, "_workspace_mode", "standard")
         prefix = self._MODE_PROMPT_PREFIX.get(mode, "")
@@ -343,16 +418,22 @@ class AIService(QObject):
 
         messages must be [system_msg, user_msg].  History is spliced between
         them so the model sees: system → past turns → new user message.
+        The number of history turns is controlled by the current tier's
+        token budget.
         """
         if self._status != "ready":
             self.ai_error.emit(
                 f"AI assistant is not ready (status: {self._status})")
             return
 
+        # Use tier-based history depth
+        bud = budget_for(self._tier)
+        max_turns = bud["max_history_turns"]
+
         # Splice history between system prompt and new user message
         system_msg = messages[0]
         user_msg   = messages[-1]
-        max_msgs   = self._MAX_HISTORY_TURNS * 2          # pairs → messages
+        max_msgs   = max_turns * 2                        # pairs → messages
         with self._history_lock:
             trimmed = self._history[-max_msgs:] if self._history else []
         full_msgs  = [system_msg] + trimmed + [user_msg]
@@ -362,15 +443,22 @@ class AIService(QObject):
             self._history.append(user_msg)
             # Keep only the messages that will ever be used in context; trimming here
             # prevents unbounded memory growth over long sessions.
-            max_stored = self._MAX_HISTORY_TURNS * 2
+            max_stored = max_turns * 2
             if len(self._history) > max_stored:
                 del self._history[:-max_stored]
 
         self._set_status("thinking")
+        max_tok = bud["max_tokens_reply"]
         if self._active_backend == "remote" and self._remote_runner is not None:
-            self._remote_runner.infer(full_msgs)
+            self._remote_runner.infer(full_msgs, max_tokens=max_tok)
         else:
-            self._runner.infer(full_msgs)
+            self._runner.infer(full_msgs, max_tokens=max_tok)
+
+    def _set_tier(self, tier: AITier) -> None:
+        if tier != self._tier:
+            self._tier = tier
+            self.tier_changed.emit(int(tier))
+            log.info("AIService tier → %s (%s)", tier.name, tier.value)
 
     def _set_status(self, status: str) -> None:
         if status != self._status:
@@ -393,9 +481,10 @@ class AIService(QObject):
     def _on_response_complete(self, text: str, elapsed: float) -> None:
         # Record the assistant turn so follow-up questions have context
         if text.strip():
+            max_turns = budget_for(self._tier)["max_history_turns"]
             with self._history_lock:
                 self._history.append({"role": "assistant", "content": text})
-                max_stored = self._MAX_HISTORY_TURNS * 2
+                max_stored = max_turns * 2
                 if len(self._history) > max_stored:
                     del self._history[:-max_stored]
         self._set_status("ready")

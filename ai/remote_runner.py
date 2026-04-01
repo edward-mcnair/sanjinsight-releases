@@ -3,7 +3,8 @@ ai/remote_runner.py
 
 RemoteRunner — QObject wrapper for remote AI providers.
 
-Same signal interface as ModelRunner so AIService can swap backends transparently.
+Same signal interface as ModelRunner (see RunnerProtocol in ai_service.py)
+so AIService can swap backends transparently.
 
 Providers
 ---------
@@ -27,9 +28,17 @@ import logging
 import ssl
 import threading
 import time
-from typing import Optional
+from typing import Callable, Optional
 
 from PyQt5.QtCore import QObject, pyqtSignal
+
+# Re-export Ollama utilities so existing  from ai.remote_runner import …
+# statements continue to work without changes.
+from ai.ollama import (                                     # noqa: F401
+    OLLAMA_HOST, OLLAMA_PORT,
+    get_ollama_models, is_ollama_running,
+    is_ollama_installed, ollama_exe_path, ollama_download_url,
+)
 
 log = logging.getLogger(__name__)
 
@@ -61,117 +70,6 @@ _ANTHROPIC_HOST = "api.anthropic.com"
 _OPENAI_HOST    = "api.openai.com"
 _ANTHROPIC_VER  = "2023-06-01"
 
-# ── Ollama constants ──────────────────────────────────────────────────────────
-
-_OLLAMA_HOST = "localhost"
-_OLLAMA_PORT = 11434
-
-
-def get_ollama_models(timeout: float = 3.0) -> list[dict]:
-    """
-    Query the running Ollama server for installed models.
-
-    Returns a list of dicts with keys  "id"  and  "name", e.g.::
-
-        [{"id": "llama3:8b", "name": "llama3:8b  (4.7 GB)"},
-         {"id": "mistral",   "name": "mistral  (4.1 GB)"}]
-
-    Returns an empty list if Ollama is not running or reachable.
-    """
-    conn = None
-    try:
-        conn = http.client.HTTPConnection(_OLLAMA_HOST, _OLLAMA_PORT, timeout=timeout)
-        conn.request("GET", "/api/tags")
-        resp = conn.getresponse()
-        if resp.status != 200:
-            return []
-        data = json.loads(resp.read())
-        models = []
-        for m in data.get("models", []):
-            mid  = m.get("name", "")
-            size = m.get("size", 0)
-            size_str = f"  ({size / 1e9:.1f} GB)" if size else ""
-            models.append({"id": mid, "name": f"{mid}{size_str}"})
-        return models
-    except Exception:
-        return []
-    finally:
-        if conn is not None:
-            conn.close()
-
-
-def is_ollama_running(timeout: float = 2.0) -> bool:
-    """Return True if an Ollama server is reachable on localhost:11434."""
-    conn = None
-    try:
-        conn = http.client.HTTPConnection(_OLLAMA_HOST, _OLLAMA_PORT, timeout=timeout)
-        conn.request("GET", "/api/tags")
-        resp = conn.getresponse()
-        return resp.status == 200
-    except Exception:
-        return False
-    finally:
-        if conn is not None:
-            conn.close()
-
-
-def is_ollama_installed() -> bool:
-    """
-    Return True if the Ollama binary exists on this machine.
-
-    Does NOT require the Ollama server to be running — just checks whether
-    the executable is present.  Checks the system PATH first, then
-    platform-specific default install locations.
-    """
-    import os
-    import sys
-    import shutil
-    if shutil.which("ollama"):
-        return True
-    if sys.platform == "win32":
-        local = os.environ.get("LOCALAPPDATA", "")
-        return os.path.isfile(
-            os.path.join(local, "Programs", "Ollama", "ollama.exe"))
-    if sys.platform == "darwin":
-        return os.path.exists("/Applications/Ollama.app")
-    return False
-
-
-def ollama_exe_path() -> str:
-    """
-    Return the absolute path to the Ollama executable, or ``""`` if not found.
-
-    Used by pull/run operations so they work even when Ollama's install
-    directory is not on the system PATH (common on Windows right after install).
-    """
-    import os
-    import sys
-    import shutil
-    found = shutil.which("ollama")
-    if found:
-        return found
-    if sys.platform == "win32":
-        local = os.environ.get("LOCALAPPDATA", "")
-        candidate = os.path.join(local, "Programs", "Ollama", "ollama.exe")
-        if os.path.isfile(candidate):
-            return candidate
-    if sys.platform == "darwin":
-        candidate = "/usr/local/bin/ollama"
-        if os.path.isfile(candidate):
-            return candidate
-    return ""
-
-
-def ollama_download_url() -> str:
-    """Return the direct installer/download URL for Ollama on the current OS."""
-    import sys
-    if sys.platform == "win32":
-        return "https://ollama.com/download/OllamaSetup.exe"
-    if sys.platform == "darwin":
-        return "https://ollama.com/download/Ollama-darwin.zip"
-    return "https://ollama.com/install.sh"
-
-
 _CONNECT_TIMEOUT = 30   # seconds — connection + validation timeout
 _STREAM_TIMEOUT  = 120  # seconds — long timeout for streaming responses
 
@@ -194,14 +92,33 @@ def _ssl_ctx() -> ssl.SSLContext:
     return ctx
 
 
+# ── SSE token extraction helpers ─────────────────────────────────────────────
+# Each provider returns SSE with different JSON shapes.  These callables
+# extract the text token from one parsed SSE data object, returning "" if
+# the object contains no content token.
+
+def _extract_anthropic(obj: dict) -> str:
+    """Anthropic: ``content_block_delta`` events carry text in ``delta.text``."""
+    if obj.get("type") == "content_block_delta":
+        return obj.get("delta", {}).get("text", "")
+    return ""
+
+
+def _extract_openai(obj: dict) -> str:
+    """OpenAI / Ollama: ``choices[0].delta.content``."""
+    return (obj.get("choices", [{}])[0]
+               .get("delta", {})
+               .get("content", ""))
+
+
 # ── RemoteRunner ──────────────────────────────────────────────────────────────
 
 class RemoteRunner(QObject):
     """
     Validates and uses a cloud AI provider API key.
 
-    Signals (identical to ModelRunner)
-    -----------------------------------
+    Signals (identical to ModelRunner — see RunnerProtocol)
+    -------------------------------------------------------
     load_complete              connection verified, ready for inference
     load_failed(str)           bad key / network error
     token_ready(str)           one streaming token
@@ -264,9 +181,8 @@ class RemoteRunner(QObject):
         """
         Request cancellation of the current streaming inference.
 
-        Sets a threading.Event that all three streaming methods (_stream_anthropic,
-        _stream_openai, _stream_ollama) check between SSE lines.  The worker
-        stops reading and emits response_complete() with partial text.
+        Sets a threading.Event checked between SSE lines by all streaming
+        methods.  The worker emits response_complete() with partial text.
         """
         self._cancel_event.set()
         log.debug("RemoteRunner: cancel requested (provider=%s)", self._provider)
@@ -279,7 +195,7 @@ class RemoteRunner(QObject):
         self._model_id = ""
 
     # ------------------------------------------------------------------ #
-    #  Internal validation                                                 #
+    #  Validation                                                          #
     # ------------------------------------------------------------------ #
 
     def _validate_worker(self) -> None:
@@ -316,7 +232,6 @@ class RemoteRunner(QObject):
         if status == 403:
             raise _AuthError("Anthropic API key lacks permission")
         if status not in (200, 201, 400):
-            # 400 = validation error (e.g. model not found), still means key is valid
             raise _AuthError(f"Anthropic API returned HTTP {status}")
 
     def _validate_openai(self) -> None:
@@ -332,14 +247,15 @@ class RemoteRunner(QObject):
     def _validate_ollama(self) -> None:
         """Check that the local Ollama server is running and has the selected model."""
         try:
-            conn = http.client.HTTPConnection(_OLLAMA_HOST, _OLLAMA_PORT, timeout=5)
+            conn = http.client.HTTPConnection(
+                OLLAMA_HOST, OLLAMA_PORT, timeout=5)
             conn.request("GET", "/api/tags")
             resp = conn.getresponse()
             body = resp.read()
             conn.close()
         except OSError as exc:
             raise _AuthError(
-                f"Cannot reach Ollama at localhost:{_OLLAMA_PORT}.\n"
+                f"Cannot reach Ollama at localhost:{OLLAMA_PORT}.\n"
                 "Make sure Ollama is installed and running.\n"
                 f"Details: {exc}") from exc
 
@@ -349,7 +265,8 @@ class RemoteRunner(QObject):
         if self._model_id:
             try:
                 data = json.loads(body)
-                installed = [m.get("name", "") for m in data.get("models", [])]
+                installed = [m.get("name", "")
+                             for m in data.get("models", [])]
                 if self._model_id not in installed:
                     raise _AuthError(
                         f"Ollama model '{self._model_id}' is not installed.\n"
@@ -362,7 +279,7 @@ class RemoteRunner(QObject):
                 pass   # can't parse tag list — server is alive, continue
 
     # ------------------------------------------------------------------ #
-    #  Internal inference                                                  #
+    #  Inference                                                           #
     # ------------------------------------------------------------------ #
 
     def _infer_worker(self, messages: list[dict],
@@ -387,11 +304,47 @@ class RemoteRunner(QObject):
         finally:
             self._busy = False
 
-    # ── Anthropic streaming ──────────────────────────────────────────────
+    # ── Shared SSE reader ───────────────────────────────────────────────
+
+    def _read_sse(self, resp, extract_token: Callable[[dict], str],
+                  label: str) -> str:
+        """
+        Read an SSE stream, emitting tokens via ``token_ready``.
+
+        Parameters
+        ----------
+        resp            Iterable HTTP response (line-by-line).
+        extract_token   Callable that pulls the text token from one parsed
+                        SSE JSON object.  Return ``""`` to skip the event.
+        label           Provider name for debug logging on cancel.
+
+        Returns the full concatenated response text.
+        """
+        full_text: list[str] = []
+        for raw_line in resp:
+            if self._cancel_event.is_set():
+                log.debug("RemoteRunner: %s stream cancelled", label)
+                break
+            line = raw_line.decode("utf-8", errors="replace").rstrip()
+            if not line.startswith("data: "):
+                continue
+            data = line[6:].strip()
+            if data == "[DONE]":
+                break
+            try:
+                obj = json.loads(data)
+            except json.JSONDecodeError:
+                continue
+            token = extract_token(obj)
+            if token:
+                full_text.append(token)
+                self.token_ready.emit(token)
+        return "".join(full_text)
+
+    # ── Per-provider streaming ──────────────────────────────────────────
 
     def _stream_anthropic(self, messages: list[dict],
                           max_tokens: int, temperature: float) -> str:
-        # Extract system prompt (first message if role==system)
         system = ""
         chat_messages = []
         for m in messages:
@@ -401,46 +354,23 @@ class RemoteRunner(QObject):
                 chat_messages.append(m)
 
         payload: dict = {
-            "model":      self._model_id,
-            "max_tokens": max_tokens,
+            "model":       self._model_id,
+            "max_tokens":  max_tokens,
             "temperature": temperature,
-            "messages":   chat_messages,
-            "stream":     True,
+            "messages":    chat_messages,
+            "stream":      True,
         }
         if system:
             payload["system"] = system
 
-        status, resp_obj = self._post_anthropic("/v1/messages", payload, stream=True)
+        status, resp = self._post_anthropic("/v1/messages", payload, stream=True)
         if status != 200:
-            self._close_stream(resp_obj)
+            self._close_stream(resp)
             raise RuntimeError(f"Anthropic API HTTP {status}")
-
-        full_text: list[str] = []
         try:
-            for line in resp_obj:
-                if self._cancel_event.is_set():
-                    log.debug("RemoteRunner: Anthropic stream cancelled")
-                    break
-                line = line.decode("utf-8", errors="replace").rstrip()
-                if not line.startswith("data: "):
-                    continue
-                data = line[6:]
-                if data == "[DONE]":
-                    break
-                try:
-                    obj = json.loads(data)
-                except json.JSONDecodeError:
-                    continue
-                if obj.get("type") == "content_block_delta":
-                    token = obj.get("delta", {}).get("text", "")
-                    if token:
-                        full_text.append(token)
-                        self.token_ready.emit(token)
+            return self._read_sse(resp, _extract_anthropic, "Anthropic")
         finally:
-            self._close_stream(resp_obj)
-        return "".join(full_text)
-
-    # ── OpenAI streaming ─────────────────────────────────────────────────
+            self._close_stream(resp)
 
     def _stream_openai(self, messages: list[dict],
                        max_tokens: int, temperature: float) -> str:
@@ -451,48 +381,19 @@ class RemoteRunner(QObject):
             "messages":    messages,
             "stream":      True,
         }
-        status, resp_obj = self._post_openai(
+        status, resp = self._post_openai(
             "/v1/chat/completions", payload, stream=True)
         if status != 200:
-            self._close_stream(resp_obj)
+            self._close_stream(resp)
             raise RuntimeError(f"OpenAI API HTTP {status}")
-
-        full_text: list[str] = []
         try:
-            for line in resp_obj:
-                if self._cancel_event.is_set():
-                    log.debug("RemoteRunner: OpenAI stream cancelled")
-                    break
-                line = line.decode("utf-8", errors="replace").rstrip()
-                if not line.startswith("data: "):
-                    continue
-                data = line[6:].strip()
-                if data == "[DONE]":
-                    break
-                try:
-                    obj = json.loads(data)
-                except json.JSONDecodeError:
-                    continue
-                token = (obj.get("choices", [{}])[0]
-                            .get("delta", {})
-                            .get("content", ""))
-                if token:
-                    full_text.append(token)
-                    self.token_ready.emit(token)
+            return self._read_sse(resp, _extract_openai, "OpenAI")
         finally:
-            self._close_stream(resp_obj)
-        return "".join(full_text)
-
-    # ── Ollama streaming (OpenAI-compatible, plain HTTP, localhost) ───────
+            self._close_stream(resp)
 
     def _stream_ollama(self, messages: list[dict],
                        max_tokens: int, temperature: float) -> str:
-        """
-        Stream a response from a local Ollama server.
-
-        Ollama exposes an OpenAI-compatible endpoint at
-        http://localhost:11434/v1/chat/completions  — no API key required.
-        """
+        """Stream from a local Ollama server (OpenAI-compatible endpoint)."""
         payload = {
             "model":       self._model_id,
             "max_tokens":  max_tokens,
@@ -504,49 +405,29 @@ class RemoteRunner(QObject):
         headers = {"content-type": "application/json"}
         try:
             conn = http.client.HTTPConnection(
-                _OLLAMA_HOST, _OLLAMA_PORT, timeout=120)
+                OLLAMA_HOST, OLLAMA_PORT, timeout=_STREAM_TIMEOUT)
             conn.request("POST", "/v1/chat/completions",
                          body=body, headers=headers)
             resp = conn.getresponse()
         except OSError as exc:
             raise RuntimeError(
-                f"Cannot reach Ollama at localhost:{_OLLAMA_PORT}: {exc}") from exc
+                f"Cannot reach Ollama at localhost:{OLLAMA_PORT}: {exc}"
+            ) from exc
 
         if resp.status != 200:
             conn.close()
             raise RuntimeError(f"Ollama HTTP {resp.status}")
-
-        full_text: list[str] = []
         try:
-            for line in resp:
-                if self._cancel_event.is_set():
-                    log.debug("RemoteRunner: Ollama stream cancelled")
-                    break
-                line = line.decode("utf-8", errors="replace").rstrip()
-                if not line.startswith("data: "):
-                    continue
-                data = line[6:].strip()
-                if data == "[DONE]":
-                    break
-                try:
-                    obj = json.loads(data)
-                except json.JSONDecodeError:
-                    continue
-                token = (obj.get("choices", [{}])[0]
-                            .get("delta", {})
-                            .get("content", ""))
-                if token:
-                    full_text.append(token)
-                    self.token_ready.emit(token)
+            return self._read_sse(resp, _extract_openai, "Ollama")
         finally:
             conn.close()
-        return "".join(full_text)
+
+    # ── HTTP helpers ─────────────────────────────────────────────────────
 
     @staticmethod
     def _close_stream(resp_obj) -> None:
         """Close the HTTP connection attached to a streaming response."""
         try:
-            # Drain any unread data to prevent broken pipe errors
             try:
                 resp_obj.read()
             except Exception:
@@ -556,8 +437,6 @@ class RemoteRunner(QObject):
                 conn.close()
         except Exception:
             pass
-
-    # ── HTTP helpers ─────────────────────────────────────────────────────
 
     def _post_anthropic(self, path: str, payload: dict,
                         stream: bool) -> tuple[int, object]:
@@ -573,7 +452,7 @@ class RemoteRunner(QObject):
         conn.request("POST", path, body=body, headers=headers)
         resp = conn.getresponse()
         if stream:
-            resp._conn_ref = conn  # attach so caller can close via _close_stream
+            resp._conn_ref = conn
             return resp.status, resp
         data = resp.read()
         conn.close()

@@ -24,6 +24,8 @@ To update the hashes after a new bartowski build is published:
 
 from __future__ import annotations
 
+from ai.capability_tier import AITier
+
 # Ordered small → large for UI display
 MODEL_ORDER: list[str] = [
     "qwen25_1b5_q4",
@@ -35,6 +37,7 @@ MODEL_ORDER: list[str] = [
 MODEL_CATALOG: dict[str, dict] = {
     "qwen25_1b5_q4": {
         "name":        "Qwen 2.5 — 1.5B  (Lightweight)",
+        "tier":        AITier.BASIC,
         "filename":    "Qwen2.5-1.5B-Instruct-Q4_K_M.gguf",
         "url": (
             "https://huggingface.co/bartowski/Qwen2.5-1.5B-Instruct-GGUF"
@@ -53,6 +56,7 @@ MODEL_CATALOG: dict[str, dict] = {
     },
     "phi35_mini_q4": {
         "name":        "Phi 3.5 Mini — 3.8B  (Balanced)",
+        "tier":        AITier.BASIC,
         "filename":    "Phi-3.5-mini-instruct-Q4_K_M.gguf",
         "url": (
             "https://huggingface.co/bartowski/Phi-3.5-mini-instruct-GGUF"
@@ -71,6 +75,7 @@ MODEL_CATALOG: dict[str, dict] = {
     },
     "qwen25_7b_q4": {
         "name":        "Qwen 2.5 — 7B  (High Quality)",
+        "tier":        AITier.STANDARD,
         "filename":    "Qwen2.5-7B-Instruct-Q4_K_M.gguf",
         "url": (
             "https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF"
@@ -88,6 +93,7 @@ MODEL_CATALOG: dict[str, dict] = {
     },
     "qwen25_14b_q4": {
         "name":        "Qwen 2.5 — 14B  (Best Quality)",
+        "tier":        AITier.FULL,
         "filename":    "Qwen2.5-14B-Instruct-Q4_K_M.gguf",
         "url": (
             "https://huggingface.co/bartowski/Qwen2.5-14B-Instruct-GGUF"
