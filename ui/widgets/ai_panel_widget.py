@@ -142,6 +142,14 @@ class AIPanelWidget(QWidget):
         self._title_lbl.setStyleSheet(f"font-size:{FONT['body']}pt; font-weight:700; color:{_TEXT()};")
         self._status_state = QLabel("off")
         self._status_state.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{_MUTED()};")
+
+        self._tier_badge = QLabel("")
+        self._tier_badge.setStyleSheet(
+            f"font-size:{FONT['caption']}pt; color:{_MUTED()}; "
+            f"background:{PALETTE['surface2']}; border:1px solid {_BORDER()}; "
+            f"border-radius:3px; padding:1px 5px;")
+        self._tier_badge.setVisible(False)
+
         self._close_btn = QPushButton("✕")
         self._close_btn.setFixedSize(22, 22)
         self._close_btn.setStyleSheet(
@@ -153,6 +161,8 @@ class AIPanelWidget(QWidget):
         hdr.addSpacing(4)
         hdr.addWidget(self._title_lbl)
         hdr.addStretch()
+        hdr.addWidget(self._tier_badge)
+        hdr.addSpacing(4)
         hdr.addWidget(self._status_state)
         hdr.addSpacing(6)
         hdr.addWidget(self._close_btn)
@@ -437,6 +447,42 @@ class AIPanelWidget(QWidget):
         if hasattr(self, "_export_btn"):
             self._export_btn.setEnabled(has_model)
 
+    def on_tier_changed(self, tier_value: int) -> None:
+        """Update the tier badge and gate UI features by capability level."""
+        from ai.capability_tier import AITier, tier_display_name, tier_description, can
+
+        tier = AITier(tier_value)
+        name = tier_display_name(tier)
+        desc = tier_description(tier)
+
+        if tier == AITier.NONE:
+            self._tier_badge.setVisible(False)
+            return
+
+        # Color by tier: muted → accent → green
+        _tier_colors = {
+            AITier.BASIC:    _MUTED(),
+            AITier.STANDARD: PALETTE['accent'],
+            AITier.FULL:     _GREEN(),
+        }
+        color = _tier_colors.get(tier, _MUTED())
+
+        self._tier_badge.setText(name)
+        self._tier_badge.setStyleSheet(
+            f"font-size:{FONT['caption']}pt; color:{color}; "
+            f"background:{PALETTE['surface2']}; border:1px solid {color}44; "
+            f"border-radius:3px; padding:1px 5px; font-weight:600;")
+        self._tier_badge.setToolTip(
+            f"AI Tier: {name}\n{desc}\n\n"
+            "Upgrade to a larger model or cloud provider for more features.")
+        self._tier_badge.setVisible(True)
+
+        # Gate quick-action buttons by tier
+        if hasattr(self, "_explain_btn"):
+            self._explain_btn.setVisible(can(tier, "explain_tab"))
+        if hasattr(self, "_diagnose_btn"):
+            self._diagnose_btn.setVisible(can(tier, "diagnose"))
+
     def on_token(self, token: str) -> None:
         """Append a streaming token to the display."""
         cursor = self._display.textCursor()
@@ -616,6 +662,12 @@ class AIPanelWidget(QWidget):
         self._close_btn.setStyleSheet(
             f"QPushButton {{ background:transparent; color:{_MUTED()}; border:none; font-size:{FONT['body']}pt; }}"
             f"QPushButton:hover {{ color:{_TEXT()}; }}")
+        # Tier badge — re-apply base style; color is set by on_tier_changed
+        if not self._tier_badge.isVisible():
+            self._tier_badge.setStyleSheet(
+                f"font-size:{FONT['caption']}pt; color:{_MUTED()}; "
+                f"background:{PALETTE['surface2']}; border:1px solid {_BORDER()}; "
+                f"border-radius:3px; padding:1px 5px;")
 
         # Evidence panel
         self._evidence_frame.setStyleSheet(
