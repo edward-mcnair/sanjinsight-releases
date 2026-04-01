@@ -2656,6 +2656,8 @@ class MainWindow(QMainWindow):
         Propagate all recommended settings to the relevant subsystems.
         """
         app_state.active_profile = profile
+        # Reset the auto-launch guard so _on_ai_status can fire for this profile
+        self._advisor_launched_for = None
 
         # 1. Update header indicator
         self._header.set_profile(profile)
@@ -3206,20 +3208,20 @@ class MainWindow(QMainWindow):
         self._last_auto_diagnose = now
 
         # Route auto-diagnosis to the log panel only — no AI dock pop-up.
+        # Uses infer() directly (not ask()) to avoid polluting chat history.
         self._log_tab.append(f"AI diagnosing error: {error_msg}")
         self._diag_active = True  # separate flag from advisor
 
+        # Disconnect any stale diagnosis handlers from a previous run
+        self._disconnect_diag_handlers()
+
+        # Store handlers on self so they can be disconnected on preemption
         def _on_diag_token(tok: str) -> None:
             pass  # accumulate silently — full text arrives in complete
 
         def _on_diag_done(text: str, _elapsed: float) -> None:
             self._diag_active = False
-            try:
-                self._ai_service.response_token.disconnect(_on_diag_token)
-                self._ai_service.response_complete.disconnect(_on_diag_done)
-                self._ai_service.ai_error.disconnect(_on_diag_err)
-            except TypeError:
-                pass
+            self._disconnect_diag_handlers()
             self._ai_service._set_status("ready")
             summary = text.strip()[:300]
             if summary:
@@ -3227,23 +3229,36 @@ class MainWindow(QMainWindow):
 
         def _on_diag_err(msg: str) -> None:
             self._diag_active = False
-            try:
-                self._ai_service.response_token.disconnect(_on_diag_token)
-                self._ai_service.response_complete.disconnect(_on_diag_done)
-                self._ai_service.ai_error.disconnect(_on_diag_err)
-            except TypeError:
-                pass
+            self._disconnect_diag_handlers()
             self._ai_service._set_status("ready")
+
+        self._diag_token_handler = _on_diag_token
+        self._diag_done_handler = _on_diag_done
+        self._diag_err_handler = _on_diag_err
 
         self._ai_service.response_token.connect(_on_diag_token)
         self._ai_service.response_complete.connect(_on_diag_done)
         self._ai_service.ai_error.connect(_on_diag_err)
 
-        # Use ask() which goes through _run() — but suppress the AI panel
-        # via the _diag_active flag in the normal token/complete handlers
-        self._ai_service.ask(
+        # Build a standalone diagnosis prompt (no history injection)
+        from ai import prompt_templates as tmpl
+        sp = self._ai_service._active_system_prompt()
+        ctx_json = self._ai_service._ctx.build()
+        messages = tmpl.diagnose(ctx_json, sp, "")
+        # Replace the user message with the specific error
+        messages[-1] = {"role": "user", "content":
             f"A hardware error just occurred: \"{error_msg}\". "
-            f"Briefly: likely cause and fix?")
+            f"Briefly: likely cause and fix?"}
+
+        # Fire inference directly — bypasses _run() so no history pollution
+        if (self._ai_service._active_backend == "remote"
+                and self._ai_service._remote_runner is not None):
+            self._ai_service._remote_runner.infer(
+                messages, max_tokens=256, temperature=0.3)
+        else:
+            self._ai_service._runner.infer(
+                messages, max_tokens=256, temperature=0.3)
+        self._ai_service._set_status("thinking")
 
     # ── TEC alarm handlers ────────────────────────────────────────────
 
@@ -4047,10 +4062,16 @@ class MainWindow(QMainWindow):
                 self._settings_tab.set_cloud_ai_status(status)
         if status == "ready":
             self._status.showMessage("AI Assistant ready", 3000)
-            # If a profile is already active, auto-launch the advisor now
-            # (covers the case where user selected a profile before AI loaded)
+            # If a profile is already active and advisor hasn't run for it,
+            # auto-launch now (covers "model loaded after profile selected").
+            # Guard prevents infinite loop: advisor completes → status="ready"
+            # → _on_ai_status → must NOT re-launch.
             active_prof = getattr(app_state, "active_profile", None)
-            if active_prof is not None:
+            if (active_prof is not None
+                    and not getattr(self, "_advisor_active", False)
+                    and getattr(self, "_advisor_launched_for", None)
+                    is not active_prof):
+                self._advisor_launched_for = active_prof
                 self._maybe_launch_advisor(active_prof)
         elif status == "error":
             self._status.showMessage("AI Assistant error — see AI panel", 5000)
@@ -4059,6 +4080,21 @@ class MainWindow(QMainWindow):
         """True when AI output should NOT go to the chat panel."""
         return (getattr(self, "_advisor_active", False)
                 or getattr(self, "_diag_active", False))
+
+    def _disconnect_diag_handlers(self) -> None:
+        """Safely disconnect auto-diagnosis signal handlers."""
+        for attr, signal in (
+            ("_diag_token_handler", self._ai_service.response_token),
+            ("_diag_done_handler",  self._ai_service.response_complete),
+            ("_diag_err_handler",   self._ai_service.ai_error),
+        ):
+            handler = getattr(self, attr, None)
+            if handler is not None:
+                try:
+                    signal.disconnect(handler)
+                except TypeError:
+                    pass
+                setattr(self, attr, None)
 
     def _on_ai_token(self, token: str) -> None:
         """Guard: suppress chat panel tokens while advisor/diagnosis active."""
@@ -4099,10 +4135,15 @@ class MainWindow(QMainWindow):
             # takes priority: cancel and retry after the runner is free
             log.info("Advisor: pre-empting AI (was %r) for profile advisor",
                      ai_status)
+            # Clean up any running auto-diagnosis so _diag_active doesn't stick
+            if getattr(self, "_diag_active", False):
+                self._diag_active = False
+                self._disconnect_diag_handlers()
             self._ai_service.cancel()
             self._ai_service._set_status("ready")
             # Defer launch to let the cancelled worker thread finish
             self._pending_advisor_profile = profile
+            self._advisor_retry_count = 0
             from PyQt5.QtCore import QTimer
             QTimer.singleShot(200, self._retry_launch_advisor)
             return
@@ -4121,8 +4162,8 @@ class MainWindow(QMainWindow):
             self._launch_advisor(profile)
         except Exception as exc:
             log.error("AI Advisor failed to launch: %s", exc, exc_info=True)
-            self._toasts.show_error(f"AI Advisor: {exc}")
-            self._log_tab.append(f"AI Advisor error: {exc}")
+            self._log_tab.append(f"AI Advisor error: {exc}", level="error")
+            self._status.showMessage("AI Advisor error — see log", 5000)
             # Ensure flag is reset so next attempt isn't blocked
             self._advisor_active = False
 
@@ -4131,7 +4172,15 @@ class MainWindow(QMainWindow):
         profile = getattr(self, "_pending_advisor_profile", None)
         if profile is None:
             return
-        self._pending_advisor_profile = None
+
+        # Max 15 retries (3 seconds) — give up if runner is hung
+        retry_count = getattr(self, "_advisor_retry_count", 0)
+        if retry_count >= 15:
+            log.warning("Advisor: gave up waiting for runner to drain after %d retries",
+                        retry_count)
+            self._pending_advisor_profile = None
+            self._advisor_active = False
+            return
 
         # Check if the runner is still busy (cancel not yet drained)
         runner = (self._ai_service._remote_runner
@@ -4141,9 +4190,11 @@ class MainWindow(QMainWindow):
         if getattr(runner, "_busy", False):
             # Still draining — retry again shortly
             from PyQt5.QtCore import QTimer
-            self._pending_advisor_profile = profile
+            self._advisor_retry_count = retry_count + 1
             QTimer.singleShot(200, self._retry_launch_advisor)
             return
+
+        self._pending_advisor_profile = None
 
         self._ai_service._set_status("ready")
         if not self._ai_service.can("proactive_advisor"):
@@ -4152,7 +4203,8 @@ class MainWindow(QMainWindow):
             self._launch_advisor(profile)
         except Exception as exc:
             log.error("AI Advisor failed to launch: %s", exc, exc_info=True)
-            self._toasts.show_error(f"AI Advisor: {exc}")
+            self._log_tab.append(f"AI Advisor error: {exc}", level="error")
+            self._status.showMessage("AI Advisor error — see log", 5000)
             self._advisor_active = False
 
     def _launch_advisor(self, profile) -> None:
@@ -4304,7 +4356,7 @@ class MainWindow(QMainWindow):
             self._log_tab.append("AI Advisor: returned text (JSON parse failed)")
 
     def _on_advisor_cancelled(self) -> None:
-        """User clicked Cancel while advisor was thinking — cancel inference."""
+        """Cancel advisor — called by user Cancel button or programmatic preemption."""
         self._advisor_active = False
         try:
             self._ai_service.response_token.disconnect(self._on_advisor_token)
@@ -4313,8 +4365,12 @@ class MainWindow(QMainWindow):
         except TypeError:
             pass
         self._ai_service.cancel()
+        # Close the dialog widget if still visible (programmatic cancel)
+        dlg = getattr(self, "_advisor_dlg", None)
+        if dlg is not None:
+            dlg.close()
         self._advisor_dlg = None
-        log.info("AI Advisor cancelled by user")
+        log.info("AI Advisor cancelled")
 
     def _on_advisor_error(self, msg: str) -> None:
         """Handle advisor inference error."""
@@ -4336,6 +4392,14 @@ class MainWindow(QMainWindow):
         """Apply the AI advisor's suggested fixes."""
         if not fixes:
             return
+
+        # Deduplicate by param — last value wins (suggestion overrides conflict)
+        seen: dict = {}
+        for fix in fixes:
+            p = fix.get("param", "")
+            if p:
+                seen[p] = fix
+        fixes = list(seen.values())
 
         applied = []
         for fix in fixes:
@@ -4371,12 +4435,13 @@ class MainWindow(QMainWindow):
                             param, value, exc)
 
         if applied:
-            summary = ", ".join(applied)
-            self._toasts.show_success(
-                f"AI Advisor applied: {summary}", auto_dismiss_ms=6000)
-            self._log_tab.append(f"AI Advisor applied: {summary}")
+            n = len(applied)
+            brief = f"AI Advisor applied {n} {'change' if n == 1 else 'changes'}"
+            self._status.showMessage(brief, 5000)
+            self._log_tab.append(
+                f"{brief}: {', '.join(applied)}")
         else:
-            self._toasts.show_info("AI Advisor: no changes applied")
+            self._status.showMessage("AI Advisor: no changes applied", 3000)
 
     # ── AI enable/disable ─────────────────────────────────────────────
 
@@ -4652,10 +4717,11 @@ if __name__ == "__main__":
     _debug_mode = "--debug" in _sys.argv or "--verbose" in _sys.argv
     _log_level  = "DEBUG" if _debug_mode else _cfg_boot.get("logging").get("level", "INFO")
     _lc.setup(level=_log_level)
-    _lc.open_session_log()
 
-    # ── Check for previous crash (before QApplication — dialog comes later) ──
+    # ── Check for previous crash BEFORE opening new session log ──────
+    # open_session_log() truncates session.log, so we must read first.
     _prev_crash_log = _lc.previous_crash_log()
+    _lc.open_session_log()
 
     # ── Global exception hook — prevents PyQt5 abort() on slot errors ──
     # PyQt5 ≥ 5.15 calls qFatal() → abort() when a Python exception

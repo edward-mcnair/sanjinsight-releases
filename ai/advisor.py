@@ -261,6 +261,7 @@ def profile_to_summary(profile, camera_type: str = "tr") -> dict:
         "modality":          getattr(profile, "modality", "any"),
         "camera_type":       camera_type,
         "exposure_us":       getattr(profile, "exposure_us", None),
+        "gain_db":           getattr(profile, "gain_db", None),
         "n_frames":          getattr(profile, "n_frames", None),
         "stimulus_freq_hz":  getattr(profile, "stimulus_freq_hz", None),
         "stimulus_duty":     getattr(profile, "stimulus_duty", None),
@@ -269,9 +270,8 @@ def profile_to_summary(profile, camera_type: str = "tr") -> dict:
         "bias_enabled":      getattr(profile, "bias_enabled", False),
         "bias_voltage_v":    getattr(profile, "bias_voltage_v", None),
     }
-    # TR-specific fields (irrelevant for IR cameras)
+    # TR-specific fields (C_T and wavelength are irrelevant for IR cameras)
     if camera_type == "tr" or getattr(profile, "modality", "") == "tr":
-        raw["gain_db"]       = getattr(profile, "gain_db", None)
         raw["ct_value"]      = getattr(profile, "ct_value", None)
         raw["wavelength_nm"] = getattr(profile, "wavelength_nm", None)
     return {k: v for k, v in raw.items() if v is not None}

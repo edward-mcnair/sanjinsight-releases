@@ -70,11 +70,16 @@ class LogTab(QWidget):
         # Persist to session log on disk (survives crashes)
         try:
             from logging_config import write_session
-            # Strip HTML tags for the plain-text file
-            write_session(f"[{ts}] {msg}"
-                          .replace("<br>", "\n")
-                          .replace("&amp;", "&")
-                          .replace("&lt;", "<")
-                          .replace("&gt;", ">"))
+            import re
+            # Strip HTML tags and decode entities for the plain-text file
+            plain = re.sub(r"<[^>]+>", "", f"[{ts}] {msg}")
+            plain = (plain
+                     .replace("&amp;", "&")
+                     .replace("&lt;", "<")
+                     .replace("&gt;", ">")
+                     .replace("&nbsp;", " ")
+                     .replace("&quot;", '"')
+                     .replace("&#39;", "'"))
+            write_session(plain)
         except Exception:
             pass
