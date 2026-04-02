@@ -46,9 +46,10 @@ class MeerstetterDriver(TecDriver):
 
     def __init__(self, cfg: dict):
         super().__init__(cfg)
-        self._port    = cfg.get("port",    "")
-        self._address = cfg.get("address", 2)
-        self._timeout = cfg.get("timeout", 2)
+        self._port     = cfg.get("port",     "")
+        self._address  = cfg.get("address",  2)
+        self._timeout  = cfg.get("timeout",  2)
+        self._baudrate = int(cfg.get("baudrate", 57600))
 
         # PID and current parameters — read from config with production defaults
         self._pid_kp             = float(cfg.get("pid_kp",              35.0))
@@ -78,34 +79,65 @@ class MeerstetterDriver(TecDriver):
         _connected_ok = False
         try:
             from mecom import MeCom
-            log.info("Meerstetter: opening %s (address=%d, timeout=%.1fs)",
-                     self._port, self._address, self._timeout)
+            log.info("Meerstetter: opening %s (baud=%d, address=%d, timeout=%.1fs)",
+                     self._port, self._baudrate, self._address, self._timeout)
             self._tec = MeCom(serialport=self._port,
+                              baudrate=self._baudrate,
                               timeout=self._timeout,
                               metype='TEC')
             # Try configured address first, then common defaults, then
             # broadcast (0) as a last resort.  Factory default for the
             # TEC-1089 is address 2; for LDD-1121 it is address 1.
+            #
+            # Two full passes: USB hubs (especially Thunderbolt docks) can
+            # add latency to the first serial transaction after opening the
+            # port.  A second pass catches devices that were slow to respond
+            # on the first attempt.
             _identified = False
             _addrs = [self._address]
             for _a in (2, 1, 0):
                 if _a not in _addrs:
                     _addrs.append(_a)
-            for _try_addr in _addrs:
-                try:
-                    dev_addr = self._tec.identify(address=_try_addr)
-                    log.info("Meerstetter TEC-1089 identified at MeCom "
-                             "address %s (queried %d) on %s",
-                             dev_addr, _try_addr, self._port)
-                    _identified = True
+            _last_err = None
+            for _pass_num in range(2):
+                for _try_addr in _addrs:
+                    try:
+                        dev_addr = self._tec.identify(address=_try_addr)
+                        log.info("Meerstetter TEC-1089 identified at MeCom "
+                                 "address %s (queried %d) on %s (pass %d)",
+                                 dev_addr, _try_addr, self._port, _pass_num + 1)
+                        _identified = True
+                        break
+                    except Exception as _id_err:
+                        _last_err = _id_err
+                        log.debug("identify(address=%d, pass=%d) failed: %s",
+                                  _try_addr, _pass_num + 1, _id_err)
+                if _identified:
                     break
-                except Exception as _id_err:
-                    log.debug("identify(address=%d) failed: %s",
-                              _try_addr, _id_err)
+                if _pass_num == 0:
+                    # Brief pause before retry — gives USB hub time to settle
+                    import time
+                    time.sleep(0.5)
+                    log.debug("Meerstetter: first pass failed, retrying...")
             if not _identified:
-                raise RuntimeError(
+                # Build a detailed diagnostic message
+                _diag = (
                     f"TEC did not respond to identify on {self._port} "
-                    f"(tried addresses {_addrs})")
+                    f"(tried addresses {_addrs}, 2 passes)\n\n"
+                    f"Last error: {_last_err}\n\n"
+                    "Troubleshooting:\n"
+                    "  1. Is the TEC-1089 powered on? (check front-panel LED)\n"
+                    "     The TEC needs its own DC power supply — USB alone\n"
+                    "     is not sufficient.\n"
+                    "  2. Is this the correct COM port? Unplug the TEC USB\n"
+                    "     cable and check which port disappears from Device\n"
+                    "     Manager → Ports.\n"
+                    "  3. If using a USB hub, try connecting directly to the\n"
+                    "     computer.\n"
+                    "  4. Verify the FTDI driver is installed (Device Manager\n"
+                    "     should show 'USB Serial Port', not 'Unknown Device')."
+                )
+                raise RuntimeError(_diag)
             self._connected = True
             _connected_ok = True
         except ImportError:

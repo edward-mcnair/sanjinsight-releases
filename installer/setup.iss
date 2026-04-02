@@ -133,26 +133,29 @@ Source: "..\dist\SanjINSIGHT\*"; DestDir: "{app}"; \
 ; build_installer.bat downloads this automatically from:
 ;   https://aka.ms/vs/17/release/vc_redist.x64.exe
 Source: "{#VCRedistSrc}"; DestDir: "{tmp}"; \
-  Flags: deleteafterinstall; Check: NeedsVCRedist
+  Flags: deleteafterinstall
 
 ; ── FTDI CDM driver (USB-to-serial for Meerstetter TEC / LDD) ───────────────
 ; FTDI permits redistribution of the CDM (Combined Driver Model) package.
 ; build_installer.bat downloads CDM_Setup.exe to installer\redist\ automatically.
+; Always bundled — installed unconditionally even if hardware is not present,
+; so devices plugged in later work immediately without re-running the installer.
 Source: "{#FTDISetupSrc}"; DestDir: "{tmp}"; \
-  Flags: deleteafterinstall skipifsourcedoesntexist; Check: NeedsFTDIDriver
+  Flags: deleteafterinstall skipifsourcedoesntexist
 
 ; ── CH340/CH341 driver (Arduino Nano, USB-serial adapters) ──────────────
 ; WCH permits free redistribution of their VCP driver.
 ; build_installer.bat downloads CH341SER.EXE to installer\redist\ automatically.
+; Always bundled — installed unconditionally.
 Source: "{#CH340SetupSrc}"; DestDir: "{tmp}"; \
-  Flags: deleteafterinstall skipifsourcedoesntexist; Check: NeedsCH340Driver
+  Flags: deleteafterinstall skipifsourcedoesntexist
 
 ; ── Basler pylon Runtime (USB3 Vision camera driver) ──────────────────────
 ; Basler permits royalty-free redistribution of the pylon Runtime.
 ; Only the USB camera kernel driver component is installed — pypylon bundles
-; the rest.
+; the rest.  Always bundled — installed unconditionally.
 Source: "{#PylonRuntimeSrc}"; DestDir: "{tmp}"; \
-  Flags: deleteafterinstall skipifsourcedoesntexist; Check: NeedsBaslerDriver
+  Flags: deleteafterinstall skipifsourcedoesntexist
 
 [Dirs]
 ; Ensure writable directories exist at install time so the app can write to them
@@ -175,44 +178,52 @@ Root: HKCU; Subkey: "Software\Microsanj\SanjINSIGHT"; \
   ValueType: string; ValueName: "InstallPath"; ValueData: "{app}"
 
 [Run]
-; ── Step 1: Visual C++ Runtime (silent, runs before app launches) ─────────────
+; ══════════════════════════════════════════════════════════════════════════════
+; ALL drivers are installed UNCONDITIONALLY — even if the hardware is not
+; currently connected.  This ensures devices plugged in later (or not powered
+; during install) work immediately without re-running the installer.
+;
+; Each driver installer is idempotent: re-running it when the driver is
+; already present is a harmless no-op (exits quickly with success).
+; ══════════════════════════════════════════════════════════════════════════════
+
+; ── Step 1: Visual C++ Runtime (silent) ──────────────────────────────────────
 ; /quiet         — no UI
 ; /norestart     — suppress any reboot prompt (installer handles this if needed)
+; Always runs — the VC++ installer itself detects if already present and
+; exits immediately with code 0 (no-op).
 Filename: "{tmp}\vc_redist.x64.exe"; \
   Parameters: "/quiet /norestart"; \
-  StatusMsg: "Installing Visual C++ 2022 Runtime (required by Qt5)…"; \
-  Flags: waituntilterminated runhidden; \
-  Check: NeedsVCRedist
+  StatusMsg: "Installing Visual C++ 2022 Runtime…"; \
+  Flags: waituntilterminated runhidden skipifdoesntexist
 
-; ── Step 2: FTDI VCP driver (silent, runs before app launches) ──────────────
+; ── Step 2: FTDI VCP driver (silent) ─────────────────────────────────────────
 ; /S              — NSIS silent mode (no UI)
-; FTDI CDM setup is an NSIS-based installer that supports /S for silent install.
+; Always runs — CDM_Setup detects existing install and exits cleanly.
 Filename: "{tmp}\CDM_Setup.exe"; \
   Parameters: "/S"; \
-  StatusMsg: "Installing FTDI USB-serial driver (required by Meerstetter TEC/LDD)…"; \
-  Flags: waituntilterminated runhidden; \
-  Check: NeedsFTDIDriver
+  StatusMsg: "Installing FTDI USB-serial driver…"; \
+  Flags: waituntilterminated runhidden skipifdoesntexist
 
-; ── Step 3: CH340 USB-serial driver (silent, runs before app launches) ──────
+; ── Step 3: CH340 USB-serial driver (silent) ─────────────────────────────────
 ; /S              — NSIS silent mode (no UI)
-; CH341SER.EXE from WCH supports /S for silent install.
+; Always runs — CH341SER detects existing install and exits cleanly.
 Filename: "{tmp}\CH341SER.EXE"; \
   Parameters: "/S"; \
-  StatusMsg: "Installing CH340 USB-serial driver (required by Arduino Nano)…"; \
-  Flags: waituntilterminated runhidden skipifdoesntexist; \
-  Check: NeedsCH340Driver
+  StatusMsg: "Installing CH340 USB-serial driver…"; \
+  Flags: waituntilterminated runhidden skipifdoesntexist
 
-; ── Step 4: Basler pylon USB3 Vision driver (silent, minimal) ───────────────
+; ── Step 4: Basler pylon USB3 Vision driver (silent, minimal) ────────────────
 ; /install=USB_Camera_Driver  — install ONLY the USB3 camera kernel driver
 ; /quiet                      — no UI at all
-; pypylon (bundled) provides the pylon C++ runtime and GenTL producers.
-; This step installs only the Windows-level driver that makes the camera
-; visible to the OS.  Without it, EnumerateDevices() returns empty.
+; Always runs — pylon Runtime detects existing components and skips them.
+; pypylon (bundled) provides the C++ runtime and GenTL transport producers.
+; This step installs only the Windows kernel driver that makes Basler
+; cameras visible to the OS.  Without it, EnumerateDevices() returns empty.
 Filename: "{tmp}\Basler_pylon_Runtime.exe"; \
   Parameters: "/install=USB_Camera_Driver /quiet"; \
   StatusMsg: "Installing Basler USB3 Vision camera driver…"; \
-  Flags: waituntilterminated runhidden skipifdoesntexist; \
-  Check: NeedsBaslerDriver
+  Flags: waituntilterminated runhidden skipifdoesntexist
 
 ; ── Step 5: Launch SanjINSIGHT (optional checkbox on Finish page) ────────────
 Filename: "{app}\{#AppExeName}"; \
@@ -220,147 +231,126 @@ Filename: "{app}\{#AppExeName}"; \
   Flags: nowait postinstall skipifsilent
 
 [Code]
-{ ── VC++ Redistributable detection ──────────────────────────────────────────
-  The VC++ 2015-2022 x64 runtime registers Installed=1 under:
-    HKLM\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64
-  Returns True when the runtime needs to be installed (key absent or Installed≠1).
-}
-function NeedsVCRedist(): Boolean;
+{ ══════════════════════════════════════════════════════════════════════════════
+  Driver detection functions are NO LONGER used as install gates.
+  All drivers are installed unconditionally (each installer is idempotent).
+  These functions are retained only for the post-install verification dialog.
+  ══════════════════════════════════════════════════════════════════════════════ }
+
+function HasVCRedist(): Boolean;
 var
   dwInstalled: Cardinal;
 begin
-  if RegQueryDWordValue(HKLM,
+  Result := RegQueryDWordValue(HKLM,
       'SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64',
-      'Installed', dwInstalled) then
-    Result := (dwInstalled <> 1)
-  else
-    Result := True;  { Registry key absent → runtime not installed }
+      'Installed', dwInstalled) and (dwInstalled = 1);
 end;
 
-{ ── FTDI VCP driver detection ──────────────────────────────────────────────
-  The FTDI VCP (Virtual COM Port) driver registers a kernel service named
-  FTSER2K.  If the service exists, the driver is already installed.
-  Returns True when the FTDI driver needs to be installed.
-}
-function NeedsFTDIDriver(): Boolean;
+function HasFTDIDriver(): Boolean;
 begin
-  { Skip if FTDI driver is already installed }
-  if RegKeyExists(HKLM, 'SYSTEM\CurrentControlSet\Services\FTSER2K') then
-  begin
-    Result := False;
-    Exit;
-  end;
-  { Skip if CDM_Setup.exe was not bundled (skipifsourcedoesntexist in [Files]) }
-  Result := FileExists(ExpandConstant('{tmp}\CDM_Setup.exe'));
+  Result := RegKeyExists(HKLM, 'SYSTEM\CurrentControlSet\Services\FTSER2K');
 end;
 
-{ ── CH340/CH341 VCP driver detection ─────────────────────────────────────────
-  The WCH CH340/CH341 USB-serial chip registers a kernel service named
-  CH341SER_A64 (64-bit) or a device class under USB\VID_1A86.
-  Returns True when the CH340 driver needs to be installed.
-}
-function NeedsCH340Driver(): Boolean;
+function HasCH340Driver(): Boolean;
 begin
-  { Skip if CH341 driver is already installed (64-bit service) }
-  if RegKeyExists(HKLM, 'SYSTEM\CurrentControlSet\Services\CH341SER_A64') then
-  begin
-    Result := False;
-    Exit;
-  end;
-  { Also check the older 32-bit service name }
-  if RegKeyExists(HKLM, 'SYSTEM\CurrentControlSet\Services\CH341SER') then
-  begin
-    Result := False;
-    Exit;
-  end;
-  { Skip if CH341SER.EXE was not bundled }
-  Result := FileExists(ExpandConstant('{tmp}\CH341SER.EXE'));
+  Result := RegKeyExists(HKLM, 'SYSTEM\CurrentControlSet\Services\CH341SER_A64')
+         or RegKeyExists(HKLM, 'SYSTEM\CurrentControlSet\Services\CH341SER');
 end;
 
-{ ── Basler USB3 Vision camera driver detection ────────────────────────────────
-  Basler cameras use vendor ID 0x2676.  The pylon USB3 camera driver registers
-  a service named "BvcUsbU3v" (Basler Virtual Camera USB3 Vision).
-  If neither the service nor a matching USB device class entry exists, the
-  driver is needed.  Returns True when the Basler driver should be installed.
-}
-function NeedsBaslerDriver(): Boolean;
+function HasBaslerDriver(): Boolean;
 begin
-  { Check for the Basler USB3 Vision camera driver service }
-  if RegKeyExists(HKLM, 'SYSTEM\CurrentControlSet\Services\BvcUsbU3v') then
-  begin
-    Result := False;
-    Exit;
-  end;
-  { Alternate service name used by older pylon versions }
-  if RegKeyExists(HKLM, 'SYSTEM\CurrentControlSet\Services\pylonusb') then
-  begin
-    Result := False;
-    Exit;
-  end;
-  { Check if pylon SDK is installed (it includes the driver) }
-  if RegKeyExists(HKLM, 'SOFTWARE\Basler\pylon') then
-  begin
-    Result := False;
-    Exit;
-  end;
-  { Only install if the redistributable was bundled }
-  Result := FileExists(ExpandConstant('{tmp}\Basler_pylon_Runtime.exe'));
+  Result := RegKeyExists(HKLM, 'SYSTEM\CurrentControlSet\Services\BvcUsbU3v')
+         or RegKeyExists(HKLM, 'SYSTEM\CurrentControlSet\Services\pylonusb')
+         or RegKeyExists(HKLM, 'SOFTWARE\Basler\pylon');
 end;
 
-{ ── Hardware SDK prerequisite guidance ───────────────────────────────────────
-  Called after installation completes.  Checks for optional hardware SDKs that
-  SanjINSIGHT can use but that cannot be bundled (vendor licensing terms).
-  Shows a single informational dialog listing any that are missing.
-  The user can dismiss it and install them later — everything inside the app
-  still works in simulated mode until the SDKs are present.
+{ ── Post-install verification and guidance ───────────────────────────────────
+  Called after installation completes.  Verifies that all bundled drivers
+  installed successfully and checks for optional SDKs (NI-VISA, NI-RIO)
+  that cannot be bundled due to vendor licensing.
 }
-procedure CheckHardwareSDKs();
+procedure PostInstallSummary();
 var
-  missing: String;
+  summary: String;
+  issues: String;
+  optional: String;
   niVisaKey, niRioKey: String;
-  dummy: String;
 begin
-  missing := '';
+  summary := '';
+  issues := '';
+  optional := '';
 
-  { NI-VISA — needed only for Keithley SMU and GPIB instruments.
-    Not required for cameras, TECs, stages, or Arduino. }
+  { ── Verify bundled driver installation ──────────────────────────────── }
+  if HasVCRedist() then
+    summary := summary + '  ✓  Visual C++ 2022 Runtime' + #13#10
+  else
+    issues := issues + '  ✗  Visual C++ Runtime — may not have installed correctly' + #13#10;
+
+  if HasFTDIDriver() then
+    summary := summary + '  ✓  FTDI USB-serial driver (Meerstetter TEC/LDD)' + #13#10
+  else
+    issues := issues + '  ✗  FTDI driver — re-run installer or install from ftdichip.com' + #13#10;
+
+  if HasCH340Driver() then
+    summary := summary + '  ✓  CH340 USB-serial driver (Arduino Nano)' + #13#10
+  else
+    issues := issues + '  ✗  CH340 driver — re-run installer or install from wch-ic.com' + #13#10;
+
+  if HasBaslerDriver() then
+    summary := summary + '  ✓  Basler USB3 Vision camera driver' + #13#10
+  else
+    issues := issues + '  ✗  Basler camera driver — re-run installer or install pylon Runtime' + #13#10;
+
+  { ── Check optional SDKs (cannot be bundled) ─────────────────────────── }
   niVisaKey := 'SOFTWARE\National Instruments\NI-VISA\CurrentVersion';
   if not RegKeyExists(HKLM, niVisaKey) and
      not RegKeyExists(HKLM64, niVisaKey) then
-    missing := missing +
-      '• NI-VISA (only needed for Keithley SMU / GPIB instruments)' + #13#10 +
-      '  https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html' + #13#10#13#10;
+    optional := optional +
+      '  •  NI-VISA (only needed for Keithley SMU / GPIB instruments)' + #13#10 +
+      '     https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html' + #13#10;
 
-  { NI-RIO — needed only for NI 9637 FPGA via PCIe.
-    Not required for BNC 745 or USB DAQ. }
   niRioKey := 'SOFTWARE\National Instruments\RIO';
   if not RegKeyExists(HKLM, niRioKey) and
      not RegKeyExists(HKLM64, niRioKey) then
-    missing := missing +
-      '• NI-RIO drivers (only needed for NI 9637 FPGA via PCIe)' + #13#10 +
-      '  https://www.ni.com/en/support/downloads/drivers/download.ni-rio.html' + #13#10#13#10;
+    optional := optional +
+      '  •  NI-RIO (only needed for NI 9637 FPGA via PCIe)' + #13#10 +
+      '     https://www.ni.com/en/support/downloads/drivers/download.ni-rio.html' + #13#10;
 
-  if missing <> '' then
-    MsgBox(
-      'SanjINSIGHT is installed and ready to run.' + #13#10#13#10 +
-      'All essential drivers (USB-serial, camera) have been installed.' + #13#10#13#10 +
-      'The following optional SDKs were not detected. ' +
-      'Install only if you have the matching hardware:' + #13#10#13#10 +
-      missing +
-      'You can also run  Settings → Hardware Setup  inside the app at any time ' +
-      'for step-by-step setup guidance.',
-      mbInformation, MB_OK)
+  { ── Build the final message ─────────────────────────────────────────── }
+  if issues = '' then
+  begin
+    if optional <> '' then
+      MsgBox(
+        'SanjINSIGHT is installed and ready!' + #13#10#13#10 +
+        'Drivers installed:' + #13#10 +
+        summary + #13#10 +
+        'Optional SDKs (install only if you have the hardware):' + #13#10 +
+        optional,
+        mbInformation, MB_OK)
+    else
+      MsgBox(
+        'SanjINSIGHT is installed and ready!' + #13#10#13#10 +
+        'All drivers installed:' + #13#10 +
+        summary,
+        mbInformation, MB_OK);
+  end
   else
+  begin
     MsgBox(
-      'SanjINSIGHT is installed and ready to run!' + #13#10#13#10 +
-      'All drivers have been installed. Launch the application and open ' +
-      'Device Manager to connect your hardware.',
-      mbInformation, MB_OK);
+      'SanjINSIGHT is installed.' + #13#10#13#10 +
+      'Drivers installed:' + #13#10 +
+      summary + #13#10 +
+      'Issues detected:' + #13#10 +
+      issues + #13#10 +
+      'The application will still launch, but affected hardware ' +
+      'may not connect until the drivers are installed.',
+      mbWarning, MB_OK);
+  end;
 end;
 
 { Called by Inno Setup after the main installation step completes. }
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then
-    CheckHardwareSDKs();
+    PostInstallSummary();
 end;
