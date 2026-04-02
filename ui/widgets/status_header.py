@@ -129,7 +129,7 @@ class _DevicesPopup(QWidget):
     # ── Data ─────────────────────────────────────────────────────────────
 
     def update_devices(self, devices: dict):
-        """Rebuild device rows from devices dict: key → {name, ok, tooltip, is_active}."""
+        """Rebuild device rows from devices dict."""
         # Clear old rows
         for i in reversed(range(self._rows_lay.count())):
             item = self._rows_lay.itemAt(i)
@@ -140,7 +140,8 @@ class _DevicesPopup(QWidget):
         for key, info in devices.items():
             row = self._make_row(
                 key, info["name"], info["ok"],
-                info.get("tooltip", ""), info.get("is_active", False))
+                info.get("tooltip", ""), info.get("is_active", False),
+                info.get("error_msg", ""), info.get("port", ""))
             self._rows_lay.addWidget(row)
             self._row_widgets[key] = row
 
@@ -151,13 +152,21 @@ class _DevicesPopup(QWidget):
         self.adjustSize()
 
     def _make_row(self, key: str, name: str, ok, tooltip: str,
-                  is_active: bool = False) -> QWidget:
+                  is_active: bool = False,
+                  error_msg: str = "", port: str = "") -> QWidget:
         row = QWidget()
         row.setCursor(Qt.PointingHandCursor)
-        row.setFixedHeight(34)
         row.setAttribute(Qt.WA_Hover)
 
-        lay = QHBoxLayout(row)
+        # Use a vertical layout so we can show error detail below the main row
+        outer = QVBoxLayout(row)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        # ── Main row (dot + name + status) ───────────────────────────────
+        main_w = QWidget()
+        main_w.setFixedHeight(34)
+        lay = QHBoxLayout(main_w)
         lay.setContentsMargins(14, 0, 14, 0)
         lay.setSpacing(10)
 
@@ -166,7 +175,7 @@ class _DevicesPopup(QWidget):
 
         if ok is True:
             dot_color  = PALETTE['stateConnected']
-            status_txt = "Connected"
+            status_txt = f"Connected" + (f"  ({port})" if port else "")
         elif ok is False:
             dot_color  = PALETTE['stateError']
             status_txt = "Error"
@@ -188,14 +197,28 @@ class _DevicesPopup(QWidget):
             lay.addWidget(status_lbl)
             row._status_lbl = status_lbl
 
-        row._dot_lbl  = dot
-        row._name_lbl = name_lbl
+        outer.addWidget(main_w)
+
+        # ── Error detail line (only shown for errors) ────────────────────
+        if ok is False and error_msg:
+            err_lbl = QLabel(error_msg[:120])
+            err_lbl.setContentsMargins(38, 0, 14, 6)
+            err_lbl.setWordWrap(True)
+            err_lbl.setStyleSheet(
+                f"color: {PALETTE.get('textDim', '#888')}; "
+                f"font-size: 11px;")
+            outer.addWidget(err_lbl)
+
+        row._dot_lbl   = dot
+        row._name_lbl  = name_lbl
         row._dot_color = dot_color
         row._key       = key
         row._is_active = is_active
 
         if tooltip:
             row.setToolTip(tooltip)
+        elif ok is False and error_msg:
+            row.setToolTip(error_msg)
 
         # Click: camera rows activate the camera; all rows close popup
         if key in _CAMERA_KEYS:
@@ -1137,13 +1160,32 @@ class ConnectedDevicesButton(QWidget):
 
     # ── Device state ─────────────────────────────────────────────────────
 
-    def set_device(self, key: str, name: str, ok, tooltip: str = ""):
-        """Register or update a device's connection status."""
+    def set_device(self, key: str, name: str, ok, tooltip: str = "",
+                   error_msg: str = "", port: str = ""):
+        """Register or update a device's connection status.
+
+        Parameters
+        ----------
+        key : str
+            Unique device key (e.g. "tec0", "camera0").
+        name : str
+            Human-readable device name.
+        ok : bool | None
+            True = connected, False = error, None = connecting.
+        tooltip : str
+            Tooltip text for the row.
+        error_msg : str
+            Error message to display below the status (shown on error).
+        port : str
+            Port/address info (e.g. "COM3", "USB").
+        """
         existing = self._devices.get(key, {})
         self._devices[key] = {
             "name":      name,
             "ok":        ok,
             "tooltip":   tooltip,
+            "error_msg": error_msg,
+            "port":      port,
             "is_active": existing.get("is_active", False),
         }
         self._refresh()

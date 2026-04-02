@@ -68,8 +68,13 @@ class MeerstetterDriver(TecDriver):
         self._api_lock  = threading.Lock()
 
     def connect(self) -> None:
-        # Acquire port lock first; release it on any failure (try/finally ensures
-        # the lock is released even on BaseException such as KeyboardInterrupt — L-5 fix).
+        # ── Auto-port detection ──────────────────────────────────────────
+        # If no port is configured, or the configured port doesn't respond,
+        # scan all FTDI serial ports for a Meerstetter device at the expected
+        # MeCom address.  This eliminates the #1 support issue: wrong COM port.
+        if not self._port:
+            log.info("Meerstetter: no port configured — running auto-detection…")
+            self._auto_detect_port()
         if not self._port:
             raise RuntimeError(
                 "No serial port configured for Meerstetter TEC.\n\n"
@@ -120,24 +125,52 @@ class MeerstetterDriver(TecDriver):
                     time.sleep(0.5)
                     log.debug("Meerstetter: first pass failed, retrying...")
             if not _identified:
-                # Build a detailed diagnostic message
-                _diag = (
-                    f"TEC did not respond to identify on {self._port} "
-                    f"(tried addresses {_addrs}, 2 passes)\n\n"
-                    f"Last error: {_last_err}\n\n"
-                    "Troubleshooting:\n"
-                    "  1. Is the TEC-1089 powered on? (check front-panel LED)\n"
-                    "     The TEC needs its own DC power supply — USB alone\n"
-                    "     is not sufficient.\n"
-                    "  2. Is this the correct COM port? Unplug the TEC USB\n"
-                    "     cable and check which port disappears from Device\n"
-                    "     Manager → Ports.\n"
-                    "  3. If using a USB hub, try connecting directly to the\n"
-                    "     computer.\n"
-                    "  4. Verify the FTDI driver is installed (Device Manager\n"
-                    "     should show 'USB Serial Port', not 'Unknown Device')."
-                )
-                raise RuntimeError(_diag)
+                # ── Fallback: scan other ports before giving up ──────────
+                log.info("Meerstetter: %s did not respond — scanning other ports…",
+                         self._port)
+                try:
+                    self._tec.stop()
+                except Exception:
+                    pass
+                self._tec = None
+                self._port_lock.release()
+                _connected_ok = False  # ensure lock release in finally
+
+                alt_port = self._auto_detect_port(exclude=[self._port])
+                if alt_port:
+                    # Retry on the newly discovered port
+                    log.info("Meerstetter: retrying on auto-detected port %s", alt_port)
+                    self._port = alt_port
+                    self._port_lock = PortLock(self._port)
+                    self._port_lock.acquire()
+                    self._tec = MeCom(serialport=self._port,
+                                      baudrate=self._baudrate,
+                                      timeout=self._timeout,
+                                      metype='TEC')
+                    dev_addr = self._tec.identify(address=self._address)
+                    log.info("Meerstetter TEC-1089 identified at address %s on %s "
+                             "(auto-detected)", dev_addr, self._port)
+                    _identified = True
+                else:
+                    # Build a detailed diagnostic message
+                    _diag = (
+                        f"TEC did not respond on {self._port} or any other port "
+                        f"(tried addresses {_addrs}, 2 passes, full port scan)\n\n"
+                        f"Last error: {_last_err}\n\n"
+                        "Troubleshooting:\n"
+                        "  1. Is the TEC-1089 powered on? (check front-panel LED)\n"
+                        "     The TEC needs its own DC power supply — USB alone\n"
+                        "     is not sufficient.\n"
+                        "  2. Is the USB cable connected? Check Device Manager →\n"
+                        "     Ports for an FTDI USB Serial Port.\n"
+                        "  3. If using a USB hub, try connecting directly to the\n"
+                        "     computer.\n"
+                        "  4. Verify the FTDI driver is installed (Device Manager\n"
+                        "     should show 'USB Serial Port', not 'Unknown Device').\n"
+                        "  5. Try unplugging and re-plugging the USB cable.\n\n"
+                        "Run tools/scan_hardware.py for detailed diagnostics."
+                    )
+                    raise RuntimeError(_diag)
             self._connected = True
             _connected_ok = True
         except ImportError:
@@ -283,6 +316,45 @@ class MeerstetterDriver(TecDriver):
             )
         except Exception as e:
             return TecStatus(error=str(e))
+
+    def _auto_detect_port(self, exclude: list[str] | None = None) -> str | None:
+        """Scan FTDI serial ports for a Meerstetter device at our address.
+
+        Returns the port path if found, or None.  Does NOT modify self._port
+        — the caller is responsible for updating.
+        """
+        try:
+            from hardware.protocol_prober import find_device_port, _MECOM_ADDRESS_MAP
+
+            # Determine our device UID from our address
+            device_uid = _MECOM_ADDRESS_MAP.get(self._address, "")
+            if not device_uid:
+                device_uid = "meerstetter_tec_1089"  # sensible default
+
+            found = find_device_port(
+                device_uid=device_uid,
+                baudrate=self._baudrate,
+                timeout=1.5,
+                progress_cb=lambda msg: log.info("AutoDetect: %s", msg),
+            )
+
+            if found and (not exclude or found not in exclude):
+                log.info("Meerstetter auto-detect: found %s on %s", device_uid, found)
+                # Persist the port change so the user doesn't hit this again
+                try:
+                    from hardware.smart_connect import _persist_port_change
+                    _persist_port_change(device_uid, found)
+                except Exception:
+                    log.debug("Auto-detect: could not persist port change",
+                              exc_info=True)
+                return found
+
+        except ImportError:
+            log.debug("Auto-detect: protocol_prober not available", exc_info=True)
+        except Exception:
+            log.debug("Auto-detect: scan failed", exc_info=True)
+
+        return None
 
     # temp_range() and stability_tolerance() are inherited from TecDriver base class,
     # which now correctly sources TEC_OBJECT_MIN_C (15 °C), TEC_OBJECT_MAX_C (130 °C),

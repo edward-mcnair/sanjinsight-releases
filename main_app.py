@@ -1965,6 +1965,56 @@ class MainWindow(QMainWindow):
         self._device_mgr_dlg.raise_()
         self._device_mgr_dlg.activateWindow()
 
+    def _rescan_hardware(self):
+        """Run a full hardware discovery scan and show results."""
+        from PyQt5.QtWidgets import QProgressDialog
+        from PyQt5.QtCore import Qt as _Qt
+
+        dlg = QProgressDialog(
+            "Scanning for hardware devices…", "Cancel", 0, 100, self)
+        dlg.setWindowTitle("Hardware Scan")
+        dlg.setWindowModality(_Qt.WindowModal)
+        dlg.setMinimumDuration(0)
+        dlg.setValue(0)
+        dlg.show()
+
+        try:
+            from hardware.discovery_engine import DiscoveryEngine
+            engine = DiscoveryEngine()
+            report = engine.discover(
+                progress_cb=lambda msg, pct: (
+                    dlg.setLabelText(msg),
+                    dlg.setValue(min(pct, 99)),
+                ),
+                use_cache=False,
+            )
+            dlg.setValue(100)
+            dlg.close()
+
+            # Build summary message
+            if report.resolved:
+                lines = ["Discovered devices:\n"]
+                for dev in report.resolved:
+                    conf = "confirmed" if "protocol" in dev.confidence else dev.confidence
+                    lines.append(f"  • {dev.display_name} on {dev.port} ({conf})")
+                if report.unresolved_ports:
+                    lines.append(f"\nUnresolved ports: {', '.join(report.unresolved_ports)}")
+                lines.append(f"\nScan took {report.scan_duration_s:.1f}s")
+                msg = "\n".join(lines)
+            else:
+                msg = ("No devices found.\n\n"
+                       "Ensure devices are powered on and connected via USB.")
+
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.information(self, "Hardware Scan Results", msg)
+
+        except Exception as exc:
+            dlg.close()
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.warning(
+                self, "Hardware Scan Failed",
+                f"Discovery engine error:\n{exc}")
+
     # ── Menu bar ──────────────────────────────────────────────────
 
     def _build_menu_bar(self):
@@ -2139,6 +2189,10 @@ class MainWindow(QMainWindow):
         act_device_mgr = view_menu.addAction("Device Manager…")
         act_device_mgr.setShortcut(QKeySequence("Ctrl+D"))
         act_device_mgr.triggered.connect(self._open_device_manager)
+
+        act_rescan = view_menu.addAction("Re-scan Hardware…")
+        act_rescan.setShortcut(QKeySequence("Ctrl+Shift+D"))
+        act_rescan.triggered.connect(self._rescan_hardware)
 
         # ── Help menu ────────────────────────────────────────────
         help_menu = mb.addMenu("Help")

@@ -82,6 +82,10 @@ class DeviceDescriptor:
     default_timeout: float = 2.0
     default_ip:      str   = ""
 
+    # Protocol-level identification (for resolving ambiguous VID/PID matches)
+    protocol_prober: Optional[str] = None   # prober key: "mecom", None = passive only
+    mecom_address:   Optional[int] = None   # expected MeCom address (2=TEC, 1=LDD)
+
     # Camera-specific (device_type == DTYPE_CAMERA only)
     # Default camera modality for this hardware model.  Per-installation
     # overrides are stored in config.yaml (hardware.camera.camera_type or
@@ -325,6 +329,8 @@ DEVICE_REGISTRY: dict[str, DeviceDescriptor] = {
         # intentionally NOT matched here — the same adapter chip is used by
         # hundreds of different devices and would cause false positives.
         # Users with non-FTDI cables must assign the COM port manually.
+        protocol_prober= "mecom",
+        mecom_address  = 2,        # factory default for TEC-1089
         default_baud   = 57600,
         description    = "Single-channel TEC controller with USB/serial interface. "
                          "Used for precise sample temperature control and calibration.",
@@ -343,6 +349,8 @@ DEVICE_REGISTRY: dict[str, DeviceDescriptor] = {
         usb_vid        = 0x0403,
         usb_pid        = 0x6010,
         serial_patterns= ["Meerstetter", "TEC-1123"],
+        protocol_prober= "mecom",
+        mecom_address  = 2,        # factory default for TEC-1123
         default_baud   = 57600,
         description    = "Dual-channel TEC controller. Supports independent control "
                          "of two thermoelectric modules simultaneously.",
@@ -576,6 +584,8 @@ DEVICE_REGISTRY: dict[str, DeviceDescriptor] = {
         usb_vid        = 0x0403,   # FTDI — same adapter as TEC-1089
         usb_pid        = 0x6001,
         serial_patterns= ["Meerstetter", "LDD-1121", "LDD1121"],
+        protocol_prober= "mecom",
+        mecom_address  = 1,        # factory default for LDD-1121
         default_baud   = 57600,
         description    = (
             "Meerstetter LDD-1121 laser diode / LED driver. "

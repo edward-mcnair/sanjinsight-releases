@@ -46,11 +46,34 @@ class TecService(BaseDeviceService):
 
     def _run_tec(self, key: str, cfg: dict):
         tec_key = "tec0" if "meerstetter" in key else "tec1"
+
+        # ── Smart port detection ─────────────────────────────────────────
+        # If no port is configured (or port is stale), auto-detect before
+        # creating the driver.  This updates cfg["port"] in-place so the
+        # factory gets the correct port.
+        if not cfg.get("port") and cfg.get("driver") == "meerstetter":
+            try:
+                from hardware.smart_connect import smart_connect_tec
+                port, addr = smart_connect_tec(
+                    cfg,
+                    progress_cb=lambda msg: self.log_message.emit(
+                        f"{key}: {msg}"),
+                )
+                self.log_message.emit(
+                    f"{key}: auto-detected on {port} (address {addr})")
+            except Exception as e:
+                self.error.emit(f"{key}: auto-detect failed — {e}")
+                log.debug("TecService: smart_connect_tec failed for %s",
+                          key, exc_info=True)
+                # Fall through — driver will try its own auto-detect in connect()
+
         try:
             tec = create_tec(cfg)
             self._connect_with_retry(tec.connect, label=key)
             idx = app_state.add_tec(tec)
-            self.log_message.emit(f"{key}: connected ({cfg.get('driver','?')})")
+            port_info = cfg.get('port', '?')
+            self.log_message.emit(f"{key}: connected on {port_info} "
+                                  f"({cfg.get('driver','?')})")
             self.device_connected.emit(tec_key, True)
             self.startup_status.emit(tec_key, True, cfg.get('driver', 'connected'))
         except Exception as e:

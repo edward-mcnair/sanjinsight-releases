@@ -144,6 +144,28 @@ class HardwareService(QObject):
         # Mirror device_connected Qt signal -> event bus timeline.
         self.device_connected.connect(self._on_device_connected_evt)
 
+        # -- Hot-plug monitor (USB device arrival/removal) ----------------
+        self._hotplug_monitor = None
+        self._hotplug_handler = None
+        try:
+            from hardware.hotplug_monitor import create_hotplug_monitor
+            from hardware.hotplug_handler import HotPlugHandler
+            self._hotplug_monitor = create_hotplug_monitor()
+            self._hotplug_handler = HotPlugHandler(parent=self)
+            self._hotplug_monitor.device_arrived.connect(
+                self._hotplug_handler.on_device_arrived)
+            self._hotplug_monitor.device_removed.connect(
+                self._hotplug_handler.on_device_removed)
+            # Forward toast messages so UI can display them
+            self._hotplug_handler.toast_message.connect(self.log_message)
+            self._hotplug_handler.device_reconnected.connect(
+                lambda uid: self.device_connected.emit(uid, True))
+            self._hotplug_handler.device_lost.connect(
+                lambda uid: self.device_connected.emit(uid, False))
+        except Exception:
+            log.debug("HardwareService: hot-plug monitor unavailable",
+                      exc_info=True)
+
     @pyqtSlot(str, bool)
     def _on_device_connected_evt(self, key: str, ok: bool) -> None:
         """Mirror device_connected signal into the event bus timeline."""
@@ -254,6 +276,15 @@ class HardwareService(QObject):
             if stage_cfg.get("enabled", False):
                 self._stage_svc._launch(self._stage_svc._run_stage,
                                         args=(stage_cfg,), name="hw.stage")
+
+        # Start hot-plug monitoring (USB device arrival/removal)
+        if self._hotplug_monitor is not None:
+            try:
+                self._hotplug_monitor.start()
+                log.info("HardwareService: hot-plug monitoring started")
+            except Exception:
+                log.debug("HardwareService: hot-plug monitor start failed",
+                          exc_info=True)
 
     def start_idle(self) -> None:
         """Restart just the camera grab loop without opening any driver from config.
@@ -375,6 +406,14 @@ class HardwareService(QObject):
                 app_state.gpio = None
         except Exception:
             log.debug("GPIO shutdown failed", exc_info=True)
+
+        # Stop hot-plug monitor
+        if self._hotplug_monitor is not None:
+            try:
+                self._hotplug_monitor.stop()
+            except Exception:
+                log.debug("HardwareService: hot-plug monitor stop failed",
+                          exc_info=True)
 
         log.info("HardwareService: shutdown complete")
 
