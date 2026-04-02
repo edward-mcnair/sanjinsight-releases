@@ -123,6 +123,10 @@ class IC:
     KEY           = "mdi.key-outline"
     # Hardware connection
     CONNECT       = "mdi.power-plug-outline"
+    DISCONNECT    = "mdi.power-plug-off-outline"
+    GLOBE         = "mdi.web"
+    CLIPBOARD     = "mdi.clipboard-text-outline"
+    DOWNLOAD      = "mdi.download"
     # Wavelength / spectroscopy
     WAVELENGTH    = "mdi.waves"
     MONOCHROMATOR = "mdi.ray-vertex"

@@ -112,10 +112,17 @@ class _QTextEditHandler(_logging.Handler):
     def __init__(self, text_edit):
         super().__init__()
         self._edit = text_edit
+        self._min_level = _logging.DEBUG   # filter threshold
         self.setFormatter(self._FMT)
+
+    def set_min_level(self, level: int):
+        """Set the minimum log level to display."""
+        self._min_level = level
 
     def emit(self, record):
         try:
+            if record.levelno < self._min_level:
+                return
             msg   = self.format(record)
             color = self._level_color(record.levelno)
             # Escape HTML characters so angle-brackets in log messages
@@ -277,7 +284,7 @@ class _DeviceListPanel(QWidget):
                 font-size: 8.5pt;
             }}
             QTreeWidget::item {{
-                height: 28px;
+                height: 34px;
                 padding: 0 2px;
                 border: none;
             }}
@@ -397,8 +404,11 @@ class _DeviceListPanel(QWidget):
                 cat.setFlags(Qt.ItemIsEnabled)      # no selection
                 hdr_font = QFont()
                 hdr_font.setPointSizeF(8.0)
+                hdr_font.setLetterSpacing(QFont.AbsoluteSpacing, 1.5)
                 cat.setFont(0, hdr_font)
                 cat.setForeground(0, QBrush(QColor(PALETTE['textSub'])))
+                # Tinted background for visual separation
+                cat.setBackground(0, QBrush(QColor(PALETTE['surface'])))
                 row_idx = self._tree.indexOfTopLevelItem(cat)
                 self._tree.setFirstColumnSpanned(
                     row_idx, QModelIndex(), True)
@@ -421,10 +431,11 @@ class _DeviceListPanel(QWidget):
         """Write a DeviceEntry's state into a tree item (no widget destroyed)."""
         item.setData(self._C_DOT, Qt.UserRole, entry.uid)
 
-        # ● dot — color reflects connection state
+        # ● dot — color reflects connection state; size scales for HiDPI
         item.setText(self._C_DOT, "●")
         dot_font = QFont()
-        dot_font.setPointSizeF(7.0)
+        _dot_pt = 9.0 if sys.platform == 'win32' else 7.0
+        dot_font.setPointSizeF(_dot_pt)
         item.setFont(self._C_DOT, dot_font)
         item.setForeground(self._C_DOT, QBrush(QColor(entry.status_color)))
 
@@ -433,8 +444,9 @@ class _DeviceListPanel(QWidget):
         item.setText(self._C_NAME, entry.display_name)
         item.setForeground(self._C_NAME, QBrush(QColor(name_color)))
 
-        # Address (truncated, monospace)
-        addr = entry.address or ""
+        # Address (truncated, monospace) — full address in tooltip
+        full_addr = entry.address or ""
+        addr = full_addr
         if len(addr) > 18:
             addr = "…" + addr[-16:]
         item.setText(self._C_ADDR, addr)
@@ -443,11 +455,13 @@ class _DeviceListPanel(QWidget):
             self._C_ADDR, Qt.AlignRight | Qt.AlignVCenter)
         addr_font = mono_font(7)
         item.setFont(self._C_ADDR, addr_font)
+        # Full address tooltip on the address column (especially useful when truncated)
+        item.setToolTip(self._C_ADDR, full_addr or "—")
 
         item.setToolTip(self._C_NAME,
             f"{entry.display_name}\n"
             f"State:   {entry.status_label}\n"
-            f"Address: {entry.address or '—'}")
+            f"Address: {full_addr or '—'}")
 
     # ── Interaction ───────────────────────────────────────────────── #
 
@@ -483,7 +497,7 @@ class _DeviceListPanel(QWidget):
         self._scanning         = True
         self._cancel_requested = False
         self._cancel_event.clear()
-        self._scan_btn.setText("✕  Cancel")
+        self._scan_btn.setText("Cancel")
         self._scan_btn.setStyleSheet(self._ss_cancel)
         self._scan_prog.setVisible(True)
         self._status.setText("Scanning for devices…")
@@ -717,8 +731,6 @@ class _DeviceProfilePanel(QWidget):
             ("Firmware",        entry.firmware_ver  or "—"),
             ("Driver",          entry.driver_ver or desc.driver_version),
         ]
-        if entry.error_msg:
-            rows.append(("Last Error", entry.error_msg))
 
         for r, (k, v) in enumerate(rows):
             kl = QLabel(k)
@@ -727,13 +739,74 @@ class _DeviceProfilePanel(QWidget):
             vl = QLabel(str(v))
             vl.setStyleSheet(
                 f"font-family:{MONO_FONT}; font-size:8.5pt; "
-                f"color:{PALETTE['danger'] if k == 'Last Error' else PALETTE['textSub']}; "
+                f"color:{PALETTE['textSub']}; "
                 f"word-break:break-all;")
             vl.setWordWrap(True)
             ig.addWidget(kl, r, 0)
             ig.addWidget(vl, r, 1)
 
         self._body_layout.addWidget(info)
+
+        # ---- Error banner (prominent, with copy button) ----
+        if entry.error_msg:
+            err_frame = QFrame()
+            err_frame.setStyleSheet(
+                f"QFrame {{ background:{PALETTE['danger']}11; "
+                f"border:1px solid {PALETTE['danger']}44; border-radius:6px; }}")
+            err_lay = QVBoxLayout(err_frame)
+            err_lay.setContentsMargins(12, 10, 12, 10)
+            err_lay.setSpacing(6)
+
+            err_header = QHBoxLayout()
+            err_title = QLabel("⚠  Last Error")
+            err_title.setStyleSheet(
+                f"font-size:9pt; font-weight:bold; color:{PALETTE['danger']}; border:none;")
+            err_copy = QPushButton("Copy")
+            err_copy.setFixedSize(52, 22)
+            err_copy.setCursor(Qt.PointingHandCursor)
+            err_copy.setStyleSheet(
+                f"QPushButton{{font-size:7.5pt; background:{PALETTE['surface']}; "
+                f"color:{PALETTE['textDim']}; border:1px solid {PALETTE['border']}; "
+                f"border-radius:3px; padding:0 6px;}}"
+                f"QPushButton:hover{{color:{PALETTE['text']};}}")
+            _err_text = entry.error_msg
+            err_copy.clicked.connect(
+                lambda: QApplication.clipboard().setText(_err_text))
+            err_header.addWidget(err_title, 1)
+            err_header.addWidget(err_copy)
+            err_lay.addLayout(err_header)
+
+            err_msg = QLabel(entry.error_msg)
+            err_msg.setWordWrap(True)
+            err_msg.setStyleSheet(
+                f"font-family:{MONO_FONT}; font-size:8.5pt; "
+                f"color:{PALETTE['text']}; border:none;")
+            # Collapse long errors with a "Show more" toggle
+            if len(entry.error_msg) > 200:
+                err_msg.setText(entry.error_msg[:180] + "…")
+                _expand_btn = QPushButton("Show full error")
+                _expand_btn.setFlat(True)
+                _expand_btn.setCursor(Qt.PointingHandCursor)
+                _expand_btn.setStyleSheet(
+                    f"color:{PALETTE['accent']}; font-size:8pt; "
+                    f"text-align:left; border:none; padding:0;")
+                _full = entry.error_msg
+                _short = entry.error_msg[:180] + "…"
+                def _toggle_err(msg_lbl=err_msg, btn=_expand_btn,
+                                full=_full, short=_short):
+                    if msg_lbl.text() == full:
+                        msg_lbl.setText(short)
+                        btn.setText("Show full error")
+                    else:
+                        msg_lbl.setText(full)
+                        btn.setText("Show less")
+                _expand_btn.clicked.connect(_toggle_err)
+                err_lay.addWidget(err_msg)
+                err_lay.addWidget(_expand_btn)
+            else:
+                err_lay.addWidget(err_msg)
+
+            self._body_layout.addWidget(err_frame)
 
         # ---- Connection parameters (editable) ----
         self._build_params(entry)
@@ -796,7 +869,8 @@ class _DeviceProfilePanel(QWidget):
             port_combo.setMinimumWidth(140)
             port_row_lay.addWidget(port_combo, 1)
 
-            refresh_btn = QPushButton("⟳")
+            refresh_btn = QPushButton()
+            set_btn_icon(refresh_btn, IC.REFRESH)
             refresh_btn.setFixedSize(26, 26)
             refresh_btn.setToolTip("Refresh port list")
             refresh_btn.setStyleSheet(
@@ -854,11 +928,12 @@ class _DeviceProfilePanel(QWidget):
 
             def _set_refresh_btn(scanning: bool):
                 try:
+                    _refresh_scanning[0] = scanning
                     if scanning:
-                        refresh_btn.setText("✕")
+                        set_btn_icon(refresh_btn, IC.CLOSE)
                         refresh_btn.setToolTip("Stop scanning")
                     else:
-                        refresh_btn.setText("⟳")
+                        set_btn_icon(refresh_btn, IC.REFRESH)
                         refresh_btn.setToolTip("Refresh port list")
                 except RuntimeError:
                     pass
@@ -1070,8 +1145,9 @@ class _DeviceProfilePanel(QWidget):
                 except Exception:
                     QTimer.singleShot(0, lambda: _set_refresh_btn(False))
 
+            _refresh_scanning = [False]
             def _on_refresh_clicked():
-                if refresh_btn.text() == "✕":
+                if _refresh_scanning[0]:
                     # Cancel in-progress scan
                     _scan_cancel.set()
                 else:
@@ -1252,7 +1328,8 @@ class _DeviceProfilePanel(QWidget):
                             "accessible\nand check whether the device is "
                             "sending data.")
 
-            test_btn = QPushButton("🔌  Test Port")
+            test_btn = QPushButton("Test Port")
+            set_btn_icon(test_btn, IC.CONNECT)
             test_btn.setFixedHeight(28)
             test_btn.setToolTip(_TEST_TIP)
 
@@ -1261,7 +1338,8 @@ class _DeviceProfilePanel(QWidget):
             # live QLabel once _build_params() has finished executing.
             def _restore_test_btn():
                 try:
-                    test_btn.setText("🔌  Test Port")
+                    test_btn.setText("Test Port")
+                    set_btn_icon(test_btn, IC.CONNECT)
                     test_btn.setToolTip(_TEST_TIP)
                     test_btn.clicked.disconnect()
                     test_btn.clicked.connect(_start_test)
@@ -1271,7 +1349,8 @@ class _DeviceProfilePanel(QWidget):
             def _start_test():
                 _test_cancel.clear()
                 try:
-                    test_btn.setText("✕  Cancel")
+                    test_btn.setText("Cancel")
+                    set_btn_icon(test_btn, IC.CLOSE)
                     test_btn.setToolTip("Stop the port test")
                     test_btn.clicked.disconnect()
                     test_btn.clicked.connect(_test_cancel.set)
@@ -1287,13 +1366,25 @@ class _DeviceProfilePanel(QWidget):
         btn_lay.addStretch()
         pg.addWidget(btn_w, r + 1, 0, 1, 2)
 
-        # ── Inline port-test result label (hidden until Test Port is clicked) ─
+        # ── Inline port-test result label (persists until params change) ───
         if _needs_port:
             _port_status_lbl = QLabel()
             _port_status_lbl.setWordWrap(True)
             _port_status_lbl.setVisible(False)
             _port_status_lbl.setStyleSheet(scaled_qss("font-size:8.5pt; padding:3px 0;"))
             pg.addWidget(_port_status_lbl, r + 2, 0, 1, 2)
+
+            # Clear stale test results when port or baud changes
+            def _clear_test_status(lbl=_port_status_lbl):
+                try:
+                    lbl.setVisible(False)
+                    lbl.setText("")
+                except RuntimeError:
+                    pass
+            port_combo.currentIndexChanged.connect(lambda _: _clear_test_status())
+            if ct == CONN_SERIAL and "baud" in self._param_widgets:
+                self._param_widgets["baud"].currentIndexChanged.connect(
+                    lambda _: _clear_test_status())
 
         self._body_layout.addWidget(params_box)
 
@@ -1518,7 +1609,8 @@ class _DeviceProfilePanel(QWidget):
         conn_btn.setEnabled(can_connect)
         conn_btn.clicked.connect(lambda: self._do_connect(entry.uid))
 
-        disc_btn = QPushButton("■  Disconnect")
+        disc_btn = QPushButton("Disconnect")
+        set_btn_icon(disc_btn, IC.DISCONNECT)
         disc_btn.setFixedHeight(32)
         disc_btn.setEnabled(can_disconnect)
         disc_btn.setStyleSheet(scaled_qss(
@@ -1539,7 +1631,7 @@ class _DeviceProfilePanel(QWidget):
     def _do_connect(self, uid: str):
         if self._conn_btn:
             self._conn_btn.setEnabled(False)
-            self._conn_btn.setText("Connecting…")
+            self._conn_btn.setText("⏳  Connecting…")
 
         # Ask the parent dialog to open the log panel so the user can see
         # "Connecting…" messages and any timeout/error output immediately.
@@ -1553,6 +1645,7 @@ class _DeviceProfilePanel(QWidget):
     def _do_disconnect(self, uid: str):
         if self._disc_btn:
             self._disc_btn.setEnabled(False)
+            self._disc_btn.setText("⏳  Disconnecting…")
 
         def _done(ok, msg):
             QTimer.singleShot(0, lambda: self.show_device(uid))
@@ -1580,7 +1673,8 @@ class _DriverCard(QFrame):
     def __init__(self, entry: RemoteDriverEntry, parent=None):
         super().__init__(parent)
         self._entry = entry
-        self.setFixedHeight(110)
+        self._expanded = False
+        self.setMinimumHeight(110)
         self.setStyleSheet(
             f"QFrame{{background:{PALETTE['bg']}; border:1px solid {PALETTE['border']};"
             f" border-radius:5px;}}")
@@ -1611,12 +1705,24 @@ class _DriverCard(QFrame):
         top.addWidget(ver_badge)
         lay.addLayout(top)
 
-        # Changelog
-        cl = QLabel(entry.changelog[:90] + "…"
-                    if len(entry.changelog) > 90 else entry.changelog)
-        cl.setStyleSheet(f"font-size:8.5pt; color:{PALETTE['textDim']};")
-        cl.setWordWrap(True)
-        lay.addWidget(cl)
+        # Changelog — expandable if longer than 90 chars
+        self._cl_short = (entry.changelog[:90] + "…"
+                          if len(entry.changelog) > 90 else entry.changelog)
+        self._cl_full = entry.changelog
+        self._cl_lbl = QLabel(self._cl_short)
+        self._cl_lbl.setStyleSheet(f"font-size:8.5pt; color:{PALETTE['textDim']};")
+        self._cl_lbl.setWordWrap(True)
+        lay.addWidget(self._cl_lbl)
+
+        if len(entry.changelog) > 90:
+            self._expand_btn = QPushButton("Show more")
+            self._expand_btn.setFlat(True)
+            self._expand_btn.setCursor(Qt.PointingHandCursor)
+            self._expand_btn.setStyleSheet(
+                f"color:{PALETTE['accent']}; font-size:7.5pt; "
+                f"text-align:left; border:none; padding:0;")
+            self._expand_btn.clicked.connect(self._toggle_changelog)
+            lay.addWidget(self._expand_btn)
 
         # Bottom row: hot-load indicator + install button
         bot = QHBoxLayout()
@@ -1628,14 +1734,14 @@ class _DriverCard(QFrame):
             f"color:{_hl_color};")
 
         if entry.already_current:
-            self._btn = QPushButton("✓  Up to date")
+            self._btn = QPushButton("Up to date")
             self._btn.setEnabled(False)
             self._btn.setStyleSheet(
                 f"QPushButton{{background:{PALETTE['bg']}; color:{PALETTE['textDim']}; "
                 f"border:1px solid {PALETTE['border']}; border-radius:3px; "
                 f"font-size:8.5pt; padding:2px 10px;}}")
         else:
-            self._btn = QPushButton("⬇  Install")
+            self._btn = QPushButton("Install")
             self._btn.setStyleSheet(f"""
                 QPushButton {{
                     background:{PALETTE['surface']}; color:{PALETTE['accent']};
@@ -1656,7 +1762,7 @@ class _DriverCard(QFrame):
     def set_installing(self):
         """Replace the Install button with a live ✕ Cancel button."""
         self._btn.setEnabled(True)
-        self._btn.setText("✕  Cancel")
+        self._btn.setText("Cancel")
         self._btn.setStyleSheet(f"""
             QPushButton {{
                 background:{PALETTE['surface']}; color:{PALETTE['danger']};
@@ -1674,7 +1780,7 @@ class _DriverCard(QFrame):
     def set_install_idle(self):
         """Restore the Install button after a user-cancelled install."""
         self._btn.setEnabled(True)
-        self._btn.setText("⬇  Install")
+        self._btn.setText("Install")
         self._btn.setStyleSheet(f"""
             QPushButton {{
                 background:{PALETTE['surface']}; color:{PALETTE['accent']};
@@ -1692,8 +1798,18 @@ class _DriverCard(QFrame):
         self._btn.clicked.connect(
             lambda: self.install_requested.emit(self._entry))
 
+    def _toggle_changelog(self):
+        """Expand or collapse the changelog text."""
+        self._expanded = not self._expanded
+        if self._expanded:
+            self._cl_lbl.setText(self._cl_full)
+            self._expand_btn.setText("Show less")
+        else:
+            self._cl_lbl.setText(self._cl_short)
+            self._expand_btn.setText("Show more")
+
     def set_done(self, hot_loaded: bool):
-        self._btn.setText("✓  Installed" +
+        self._btn.setText("Installed" +
                           (" (hot-loaded)" if hot_loaded else " (restart)"))
 
 
@@ -1742,7 +1858,8 @@ class _DriverStorePanel(QWidget):
         t.setStyleSheet(f"font-size:9.5pt; letter-spacing:2px; color:{PALETTE['textDim']};")
         self._hdr       = hdr
         self._hdr_title = t
-        self._refresh_btn = QPushButton("🌐  Check")
+        self._refresh_btn = QPushButton("Check")
+        set_btn_icon(self._refresh_btn, IC.GLOBE)
         self._refresh_btn.setFixedHeight(24)
         self._refresh_btn.setStyleSheet(self._ss_check)
         hl.addWidget(t, 1)
@@ -1827,7 +1944,7 @@ class _DriverStorePanel(QWidget):
         # ── Start ──────────────────────────────────────────────────────── #
         self._fetching = True
         self._fetch_cancel.clear()
-        self._refresh_btn.setText("✕  Cancel")
+        self._refresh_btn.setText("Cancel")
         self._refresh_btn.setStyleSheet(self._ss_cancel)
         self._prog.setVisible(True)
         self._status.setText("Connecting to Microsanj driver repository…")
@@ -1878,7 +1995,7 @@ class _DriverStorePanel(QWidget):
         self._fetching = False
         self._prog.setVisible(False)
         self._refresh_btn.setEnabled(True)
-        self._refresh_btn.setText("🌐  Check")
+        self._refresh_btn.setText("Check")
         self._refresh_btn.setStyleSheet(self._ss_check)
 
     def _on_fetch_cancelled(self):
@@ -1886,7 +2003,7 @@ class _DriverStorePanel(QWidget):
         self._fetching = False
         self._prog.setVisible(False)
         self._refresh_btn.setEnabled(True)
-        self._refresh_btn.setText("🌐  Check")
+        self._refresh_btn.setText("Check")
         self._refresh_btn.setStyleSheet(self._ss_check)
         self._status.setText("Check cancelled.")
 
@@ -1894,7 +2011,7 @@ class _DriverStorePanel(QWidget):
         self._fetching = False
         self._prog.setVisible(False)
         self._refresh_btn.setEnabled(True)
-        self._refresh_btn.setText("🌐  Check")
+        self._refresh_btn.setText("Check")
         self._refresh_btn.setStyleSheet(self._ss_check)
         self._status.setText(f"⚠  {err}")
         self._status.setStyleSheet(
@@ -2057,8 +2174,9 @@ class DeviceManagerDialog(QDialog):
         # Log toggle button — explicit stylesheet so the dialog-level rule
         # (which sets font-size:8.5pt and padding) doesn't cause overflow
         # on the fixed 72×28 footprint of this button.
-        self._log_btn = QPushButton("📋  Log")
-        self._log_btn.setFixedSize(72, 28)
+        self._log_btn = QPushButton("Log")
+        set_btn_icon(self._log_btn, IC.LOG)
+        self._log_btn.setFixedSize(76, 28)
         self._log_btn.setCheckable(True)
         self._log_btn.setStyleSheet(scaled_qss(
             f"QPushButton {{ font-size:8.5pt; padding:0 6px; }}"
@@ -2097,19 +2215,33 @@ class DeviceManagerDialog(QDialog):
         sep.setStyleSheet(f"color:{PALETTE['border']};")
         ll.addWidget(sep)
 
-        # Log toolbar: label + Copy button
+        # Log toolbar: label + level filter + Copy button
         log_toolbar = QWidget()
-        log_toolbar.setFixedHeight(26)
+        log_toolbar.setFixedHeight(28)
         log_toolbar.setStyleSheet(f"background:{PALETTE['bg']};")
         lt = QHBoxLayout(log_toolbar)
         lt.setContentsMargins(10, 0, 6, 0)
+        lt.setSpacing(6)
         log_lbl = QLabel("Startup Diagnostics — live log output")
         log_lbl.setStyleSheet(f"font-size:7.5pt; color:{PALETTE['textDim']}; font-style:italic;")
         lt.addWidget(log_lbl, 1)
+
+        # Log level filter
+        self._log_filter = QComboBox()
+        self._log_filter.setFixedHeight(20)
+        self._log_filter.addItems(["All", "Info+", "Warning+", "Error+"])
+        self._log_filter.setCurrentIndex(0)
+        self._log_filter.setStyleSheet(
+            f"QComboBox{{font-size:7pt; padding:0 4px; min-width:70px; "
+            f"background:{PALETTE['surface']}; color:{PALETTE['textDim']}; "
+            f"border:1px solid {PALETTE['surface2']}; border-radius:3px;}}")
+        self._log_filter.currentIndexChanged.connect(self._on_log_filter_changed)
+        lt.addWidget(self._log_filter)
+
         copy_btn = QPushButton("Copy")
-        copy_btn.setFixedSize(48, 18)
+        copy_btn.setFixedSize(52, 20)
         copy_btn.setStyleSheet(
-            f"QPushButton{{font-size:7pt; padding:0; background:{PALETTE['surface']}; "
+            f"QPushButton{{font-size:7.5pt; padding:0 4px; background:{PALETTE['surface']}; "
             f"color:{PALETTE['textSub']}; border:1px solid {PALETTE['surface2']}; border-radius:3px;}}"
             f"QPushButton:hover{{color:{PALETTE['textDim']}; border-color:{PALETTE['surface2']};}}")
         copy_btn.clicked.connect(self._copy_log)
@@ -2258,6 +2390,13 @@ class DeviceManagerDialog(QDialog):
                 root_logger.addHandler(self._log_handler)
         else:
             root_logger.removeHandler(self._log_handler)
+
+    def _on_log_filter_changed(self, index: int):
+        """Update the log handler's minimum level based on filter selection."""
+        import logging as _logging
+        _LEVELS = [_logging.DEBUG, _logging.INFO, _logging.WARNING, _logging.ERROR]
+        level = _LEVELS[index] if index < len(_LEVELS) else _logging.DEBUG
+        self._log_handler.set_min_level(level)
 
     def _copy_log(self):
         """Copy the full log panel text to the clipboard."""
