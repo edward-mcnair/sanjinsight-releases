@@ -5058,6 +5058,56 @@ if __name__ == "__main__":
     app = QApplication(_sys.argv)
     app.setStyle("Fusion")
 
+    # ── Single-instance guard ─────────────────────────────────────────────────
+    # Prevent multiple instances from fighting over COM ports and cameras.
+    # Uses QLocalServer/QLocalSocket: if a server with our key already exists,
+    # another instance is running — send it a "raise" message and exit.
+    from PyQt5.QtNetwork import QLocalServer, QLocalSocket
+    _INSTANCE_KEY = "SanjINSIGHT-SingleInstance-Lock"
+
+    _instance_socket = QLocalSocket()
+    _instance_socket.connectToServer(_INSTANCE_KEY)
+    if _instance_socket.waitForConnected(500):
+        # Another instance is running — ask it to raise its window
+        _instance_socket.write(b"raise")
+        _instance_socket.waitForBytesWritten(1000)
+        _instance_socket.disconnectFromServer()
+        log.info("Another instance is already running — activating it and exiting.")
+        _sys.exit(0)
+    _instance_socket.close()
+
+    # No other instance found — start our own server
+    _instance_server = QLocalServer()
+    # Clean up stale socket from a previous crash (Unix only; no-op on Windows)
+    QLocalServer.removeServer(_INSTANCE_KEY)
+    if not _instance_server.listen(_INSTANCE_KEY):
+        log.warning("Could not start single-instance server: %s",
+                     _instance_server.errorString())
+
+    def _on_instance_connection():
+        """Another instance asked us to come to the foreground."""
+        conn = _instance_server.nextPendingConnection()
+        if conn:
+            conn.waitForReadyRead(1000)
+            conn.close()
+        # Raise the main window
+        try:
+            _w = app.property("mainWindow")
+            if _w is not None:
+                _w.showNormal()
+                _w.activateWindow()
+                _w.raise_()
+                if _sys.platform == "win32":
+                    # On Windows, raise_() alone may not bring the window to
+                    # the front if it belongs to a different "foreground set".
+                    import ctypes
+                    ctypes.windll.user32.SetForegroundWindow(
+                        int(_w.winId()))
+        except Exception as _e:
+            log.debug("Failed to raise main window: %s", _e)
+
+    _instance_server.newConnection.connect(_on_instance_connection)
+
     # ── DPI-aware font scaling ────────────────────────────────────────────────
     # Must run AFTER QApplication so we can query the real screen logical DPI.
     # With AA_EnableHighDpiScaling, logicalDotsPerInch() returns the *logical*
@@ -5223,6 +5273,7 @@ if __name__ == "__main__":
             log.warning(f"First-run wizard error (non-fatal): {_fre}")
 
     window = MainWindow(auth=_auth, auth_session=_auth_session)
+    app.setProperty("mainWindow", window)  # for single-instance raise handler
     if _icon_path:
         window.setWindowIcon(_app_icon)   # title-bar / taskbar icon
 
