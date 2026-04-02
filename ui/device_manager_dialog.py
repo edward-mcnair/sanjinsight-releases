@@ -592,7 +592,7 @@ class _DeviceProfilePanel(QWidget):
         hl  = QHBoxLayout(hdr)
         hl.setContentsMargins(12, 0, 12, 0)
         t = QLabel("DEVICE PROFILE")
-        t.setStyleSheet(f"font-size:9.5pt; letter-spacing:2px; color:{PALETTE['textDim']};")
+        t.setStyleSheet(f"font-size:11pt; letter-spacing:2px; color:{PALETTE['textDim']};")
         self._hdr       = hdr
         self._hdr_title = t
         hl.addWidget(t)
@@ -652,7 +652,7 @@ class _DeviceProfilePanel(QWidget):
         bdr = P['border']
         dim = P['textDim']
         self._hdr.setStyleSheet(f"background:{bg}; border-bottom:1px solid {bdr};")
-        self._hdr_title.setStyleSheet(f"font-size:9.5pt; letter-spacing:2px; color:{dim};")
+        self._hdr_title.setStyleSheet(f"font-size:11pt; letter-spacing:2px; color:{dim};")
         self._scroll.setStyleSheet(f"QScrollArea{{border:none; background:{bg};}}")
         self._footer.setStyleSheet(
             f"background:{bg}; border-top:1px solid {bdr};")
@@ -660,7 +660,7 @@ class _DeviceProfilePanel(QWidget):
     def _show_placeholder(self):
         self._clear()
         lbl = QLabel("Select a device to view its profile.")
-        lbl.setStyleSheet(f"color:{PALETTE['textDim']}; font-size:8.5pt; font-style:italic;")
+        lbl.setStyleSheet(f"color:{PALETTE['textDim']}; font-size:10pt; font-style:italic;")
         lbl.setAlignment(Qt.AlignCenter)
         self._body_layout.addStretch()
         self._body_layout.addWidget(lbl)
@@ -699,7 +699,7 @@ class _DeviceProfilePanel(QWidget):
         badge.setStyleSheet(
             f"background:{entry.status_color}22; color:{entry.status_color};"
             f" border:1px solid {entry.status_color}44;"
-            f" border-radius:4px; font-size:8.5pt; padding:0 8px;")
+            f" border-radius:4px; font-size:9.5pt; padding:0 8px;")
         top.addWidget(name_lbl, 1)
         top.addWidget(badge)
         self._body_layout.addLayout(top)
@@ -708,7 +708,7 @@ class _DeviceProfilePanel(QWidget):
         if desc.description:
             desc_lbl = QLabel(desc.description)
             desc_lbl.setWordWrap(True)
-            desc_lbl.setStyleSheet(f"font-size:8.5pt; color:{PALETTE['textDim']};")
+            desc_lbl.setStyleSheet(f"font-size:10pt; color:{PALETTE['textDim']};")
             self._body_layout.addWidget(desc_lbl)
 
         sep = QFrame()
@@ -734,11 +734,11 @@ class _DeviceProfilePanel(QWidget):
 
         for r, (k, v) in enumerate(rows):
             kl = QLabel(k)
-            kl.setStyleSheet(f"font-size:8.5pt; color:{PALETTE['textDim']};")
-            kl.setFixedWidth(110)
+            kl.setStyleSheet(f"font-size:10pt; color:{PALETTE['textDim']};")
+            kl.setFixedWidth(120)
             vl = QLabel(str(v))
             vl.setStyleSheet(
-                f"font-family:{MONO_FONT}; font-size:8.5pt; "
+                f"font-family:{MONO_FONT}; font-size:10pt; "
                 f"color:{PALETTE['textSub']}; "
                 f"word-break:break-all;")
             vl.setWordWrap(True)
@@ -760,12 +760,12 @@ class _DeviceProfilePanel(QWidget):
             err_header = QHBoxLayout()
             err_title = QLabel("⚠  Last Error")
             err_title.setStyleSheet(
-                f"font-size:9pt; font-weight:bold; color:{PALETTE['danger']}; border:none;")
+                f"font-size:10pt; font-weight:bold; color:{PALETTE['danger']}; border:none;")
             err_copy = QPushButton("Copy")
             err_copy.setFixedSize(52, 22)
             err_copy.setCursor(Qt.PointingHandCursor)
             err_copy.setStyleSheet(
-                f"QPushButton{{font-size:7.5pt; background:{PALETTE['surface']}; "
+                f"QPushButton{{font-size:9pt; background:{PALETTE['surface']}; "
                 f"color:{PALETTE['textDim']}; border:1px solid {PALETTE['border']}; "
                 f"border-radius:3px; padding:0 6px;}}"
                 f"QPushButton:hover{{color:{PALETTE['text']};}}")
@@ -779,7 +779,7 @@ class _DeviceProfilePanel(QWidget):
             err_msg = QLabel(entry.error_msg)
             err_msg.setWordWrap(True)
             err_msg.setStyleSheet(
-                f"font-family:{MONO_FONT}; font-size:8.5pt; "
+                f"font-family:{MONO_FONT}; font-size:10pt; "
                 f"color:{PALETTE['text']}; border:none;")
             # Collapse long errors with a "Show more" toggle
             if len(entry.error_msg) > 200:
@@ -788,7 +788,7 @@ class _DeviceProfilePanel(QWidget):
                 _expand_btn.setFlat(True)
                 _expand_btn.setCursor(Qt.PointingHandCursor)
                 _expand_btn.setStyleSheet(
-                    f"color:{PALETTE['accent']}; font-size:8pt; "
+                    f"color:{PALETTE['accent']}; font-size:9.5pt; "
                     f"text-align:left; border:none; padding:0;")
                 _full = entry.error_msg
                 _short = entry.error_msg[:180] + "…"
@@ -821,13 +821,13 @@ class _DeviceProfilePanel(QWidget):
                 f'<a href="{desc.datasheet_url}" style="color:{_ds_color}66;">'
                 f'Datasheet / Documentation</a>')
             ds.setOpenExternalLinks(True)
-            ds.setStyleSheet("font-size:8.5pt;")
+            ds.setStyleSheet("font-size:10pt;")
             self._body_layout.addWidget(ds)
 
         if desc.notes:
             notes = QLabel(f"ⓘ  {desc.notes}")
             notes.setWordWrap(True)
-            notes.setStyleSheet(f"font-size:8.5pt; color:{PALETTE['textDim']}; font-style:italic;")
+            notes.setStyleSheet(f"font-size:10pt; color:{PALETTE['textDim']}; font-style:italic;")
             self._body_layout.addWidget(notes)
 
         self._body_layout.addStretch()
@@ -1236,7 +1236,7 @@ class _DeviceProfilePanel(QWidget):
                 f"  <span style='color:{PALETTE['textSub']}'>"
                 f"(detected from {desc.display_name})</span>")
             _det_lbl.setStyleSheet(
-                f"font-size:9pt; color:{_det_badge_color}; border:none;")
+                f"font-size:10pt; color:{_det_badge_color}; border:none;")
             _det_row.addWidget(_det_lbl, 1)
             ct_lay.addLayout(_det_row)
 
@@ -1258,7 +1258,7 @@ class _DeviceProfilePanel(QWidget):
             _override_btn.setFlat(True)
             _override_btn.setCursor(Qt.PointingHandCursor)
             _override_btn.setStyleSheet(
-                f"color:{PALETTE['accent']}; font-size:8.5pt; "
+                f"color:{PALETTE['accent']}; font-size:10pt; "
                 f"text-align:left; border:none; padding:0;")
 
             def _toggle_override(btn=_override_btn, w=_override_widget,
@@ -1361,7 +1361,7 @@ class _DeviceProfilePanel(QWidget):
                 _note_lbl = QLabel(_conn_note)
                 _note_lbl.setWordWrap(True)
                 _note_lbl.setStyleSheet(
-                    _pt(f"font-size:8pt; color:{PALETTE['textDim']}; font-style:italic; "
+                    _pt(f"font-size:9.5pt; color:{PALETTE['textDim']}; font-style:italic; "
                         f"padding:4px 6px; border-left:2px solid {PALETTE['border']};"))
                 pg.addWidget(_note_lbl, r, 0, 1, 2)
                 r += 1
@@ -1441,7 +1441,7 @@ class _DeviceProfilePanel(QWidget):
             _port_status_lbl = QLabel()
             _port_status_lbl.setWordWrap(True)
             _port_status_lbl.setVisible(False)
-            _port_status_lbl.setStyleSheet(scaled_qss("font-size:8.5pt; padding:3px 0;"))
+            _port_status_lbl.setStyleSheet(scaled_qss("font-size:10pt; padding:3px 0;"))
             pg.addWidget(_port_status_lbl, r + 2, 0, 1, 2)
 
             # Clear stale test results when port or baud changes
@@ -1685,7 +1685,7 @@ class _DeviceProfilePanel(QWidget):
         disc_btn.setEnabled(can_disconnect)
         disc_btn.setStyleSheet(scaled_qss(
             f"QPushButton{{background:{PALETTE['surface']}; color:{PALETTE['danger']}; "
-            f"border:1px solid {PALETTE['danger']}22; border-radius:4px; font-size:8.5pt;}}"
+            f"border:1px solid {PALETTE['danger']}22; border-radius:4px; font-size:10pt;}}"
             f"QPushButton:hover{{background:{PALETTE['surface']};}}"
             f"QPushButton:disabled{{color:{PALETTE['textSub']}; border-color:{PALETTE['border']}; background:{PALETTE['bg']};}}"))
         disc_btn.clicked.connect(lambda: self._do_disconnect(entry.uid))
@@ -1728,7 +1728,7 @@ class _DeviceProfilePanel(QWidget):
 
     def _sublabel(self, text: str) -> QLabel:
         l = QLabel(text)
-        l.setStyleSheet(f"font-size:8.5pt; color:{PALETTE['textDim']};")
+        l.setStyleSheet(f"font-size:10pt; color:{PALETTE['textDim']};")
         return l
 
 
@@ -1769,7 +1769,7 @@ class _DriverCard(QFrame):
         ver_badge.setStyleSheet(
             f"background:{ver_bg}; color:{ver_color}; "
             f"border:1px solid {ver_color}44; border-radius:3px; "
-            f"font-size:8.5pt; font-family:{MONO_FONT};"
+            f"font-size:10pt; font-family:{MONO_FONT};"
             f" padding:1px 6px;")
         top.addWidget(name, 1)
         top.addWidget(ver_badge)
@@ -1780,7 +1780,7 @@ class _DriverCard(QFrame):
                           if len(entry.changelog) > 90 else entry.changelog)
         self._cl_full = entry.changelog
         self._cl_lbl = QLabel(self._cl_short)
-        self._cl_lbl.setStyleSheet(f"font-size:8.5pt; color:{PALETTE['textDim']};")
+        self._cl_lbl.setStyleSheet(f"font-size:10pt; color:{PALETTE['textDim']};")
         self._cl_lbl.setWordWrap(True)
         lay.addWidget(self._cl_lbl)
 
@@ -1789,7 +1789,7 @@ class _DriverCard(QFrame):
             self._expand_btn.setFlat(True)
             self._expand_btn.setCursor(Qt.PointingHandCursor)
             self._expand_btn.setStyleSheet(
-                f"color:{PALETTE['accent']}; font-size:7.5pt; "
+                f"color:{PALETTE['accent']}; font-size:9pt; "
                 f"text-align:left; border:none; padding:0;")
             self._expand_btn.clicked.connect(self._toggle_changelog)
             lay.addWidget(self._expand_btn)
@@ -1800,7 +1800,7 @@ class _DriverCard(QFrame):
             "Hot-loadable" if entry.hot_loadable else "↻ Requires restart")
         _hl_color = f"{PALETTE['accent']}66" if entry.hot_loadable else PALETTE['textDim']
         hl_lbl.setStyleSheet(
-            f"font-size:8.5pt; "
+            f"font-size:10pt; "
             f"color:{_hl_color};")
 
         if entry.already_current:
@@ -1809,14 +1809,14 @@ class _DriverCard(QFrame):
             self._btn.setStyleSheet(
                 f"QPushButton{{background:{PALETTE['bg']}; color:{PALETTE['textDim']}; "
                 f"border:1px solid {PALETTE['border']}; border-radius:3px; "
-                f"font-size:8.5pt; padding:2px 10px;}}")
+                f"font-size:10pt; padding:2px 10px;}}")
         else:
             self._btn = QPushButton("Install")
             self._btn.setStyleSheet(f"""
                 QPushButton {{
                     background:{PALETTE['surface']}; color:{PALETTE['accent']};
                     border:1px solid {PALETTE['accentDim']}; border-radius:3px;
-                    font-size:8.5pt; padding:2px 10px;
+                    font-size:10pt; padding:2px 10px;
                 }}
                 QPushButton:hover {{ background:{PALETTE['surface2']}; }}
                 QPushButton:disabled {{ color:{PALETTE['textDim']}; border-color:{PALETTE['border']};
@@ -1837,7 +1837,7 @@ class _DriverCard(QFrame):
             QPushButton {{
                 background:{PALETTE['surface']}; color:{PALETTE['danger']};
                 border:1px solid {PALETTE['danger']}22; border-radius:3px;
-                font-size:8.5pt; padding:2px 10px;
+                font-size:10pt; padding:2px 10px;
             }}
             QPushButton:hover {{ background:{PALETTE['surface2']}; }}
         """)
@@ -1855,7 +1855,7 @@ class _DriverCard(QFrame):
             QPushButton {{
                 background:{PALETTE['surface']}; color:{PALETTE['accent']};
                 border:1px solid {PALETTE['accentDim']}; border-radius:3px;
-                font-size:8.5pt; padding:2px 10px;
+                font-size:10pt; padding:2px 10px;
             }}
             QPushButton:hover {{ background:{PALETTE['surface2']}; }}
             QPushButton:disabled {{ color:{PALETTE['textDim']}; border-color:{PALETTE['border']};
@@ -1899,7 +1899,7 @@ class _DriverStorePanel(QWidget):
             QPushButton {{
                 background:{PALETTE['bg']}; color:{PALETTE['info']};
                 border:1px solid {PALETTE['cta']}44; border-radius:3px;
-                font-size:8.5pt; padding:0 8px;
+                font-size:10pt; padding:0 8px;
             }}
             QPushButton:hover {{ background:{PALETTE['surface2']}; }}
             QPushButton:disabled {{ color:{PALETTE['textDim']}; border-color:{PALETTE['border']}; }}
@@ -1908,7 +1908,7 @@ class _DriverStorePanel(QWidget):
             QPushButton {{
                 background:{PALETTE['surface']}; color:{PALETTE['danger']};
                 border:1px solid {PALETTE['danger']}22; border-radius:3px;
-                font-size:8.5pt; padding:0 8px;
+                font-size:10pt; padding:0 8px;
             }}
             QPushButton:hover {{ background:{PALETTE['surface2']}; }}
             QPushButton:disabled {{ color:{PALETTE['textDim']}; border-color:{PALETTE['border']}; }}
@@ -1925,7 +1925,7 @@ class _DriverStorePanel(QWidget):
         hl  = QHBoxLayout(hdr)
         hl.setContentsMargins(12, 0, 8, 0)
         t = QLabel("DRIVER STORE")
-        t.setStyleSheet(f"font-size:9.5pt; letter-spacing:2px; color:{PALETTE['textDim']};")
+        t.setStyleSheet(f"font-size:11pt; letter-spacing:2px; color:{PALETTE['textDim']};")
         self._hdr       = hdr
         self._hdr_title = t
         self._refresh_btn = QPushButton("Check")
@@ -1939,7 +1939,7 @@ class _DriverStorePanel(QWidget):
         # Progress / status bar
         self._status = QLabel("Click 'Check' to fetch available driver updates.")
         self._status.setStyleSheet(
-            f"font-size:8.5pt; color:{PALETTE['textDim']}; padding:6px 12px; "
+            f"font-size:10pt; color:{PALETTE['textDim']}; padding:6px 12px; "
             f"background:{PALETTE['bg']}; border-bottom:1px solid {PALETTE['surface']};")
         self._status.setWordWrap(True)
         root.addWidget(self._status)
@@ -1978,10 +1978,10 @@ class _DriverStorePanel(QWidget):
         sur = P['surface']
         su2 = P['surface2']
         self._hdr.setStyleSheet(f"background:{bg}; border-bottom:1px solid {bdr};")
-        self._hdr_title.setStyleSheet(f"font-size:9.5pt; letter-spacing:2px; color:{dim};")
+        self._hdr_title.setStyleSheet(f"font-size:11pt; letter-spacing:2px; color:{dim};")
         self._scroll.setStyleSheet(f"QScrollArea{{border:none; background:{bg};}}")
         self._status.setStyleSheet(
-            f"font-size:8.5pt; color:{dim}; padding:6px 12px; "
+            f"font-size:10pt; color:{dim}; padding:6px 12px; "
             f"background:{bg}; border-bottom:1px solid {sur};")
         self._prog.setStyleSheet(
             f"QProgressBar {{ background:{bg}; border:none; margin:0; }}"
@@ -1989,13 +1989,13 @@ class _DriverStorePanel(QWidget):
         self._ss_check = _pt(
             f"QPushButton {{ background:{bg}; color:{PALETTE['cta']};"
             f" border:1px solid {PALETTE['cta']}44; border-radius:3px;"
-            f" font-size:8.5pt; padding:0 8px; }}"
+            f" font-size:10pt; padding:0 8px; }}"
             f"QPushButton:hover {{ background:{su2}; }}"
             f"QPushButton:disabled {{ color:{dim}; border-color:{bdr}; }}")
         self._ss_cancel = _pt(
             f"QPushButton {{ background:{sur}; color:{PALETTE['danger']};"
             f" border:1px solid {PALETTE['danger']}22; border-radius:3px;"
-            f" font-size:8.5pt; padding:0 8px; }}"
+            f" font-size:10pt; padding:0 8px; }}"
             f"QPushButton:hover {{ background:{su2}; }}"
             f"QPushButton:disabled {{ color:{dim}; border-color:{bdr}; }}")
         if not self._fetching:
@@ -2085,7 +2085,7 @@ class _DriverStorePanel(QWidget):
         self._refresh_btn.setStyleSheet(self._ss_check)
         self._status.setText(f"⚠  {err}")
         self._status.setStyleSheet(
-            f"font-size:8.5pt; color:{PALETTE['warning']}; padding:6px 12px; "
+            f"font-size:10pt; color:{PALETTE['warning']}; padding:6px 12px; "
             f"background:{PALETTE['bg']}; border-bottom:1px solid {PALETTE['surface']};")
 
     def _install_driver(self, entry: RemoteDriverEntry):
@@ -2188,7 +2188,7 @@ class DeviceManagerDialog(QDialog):
                 background:{PALETTE['bg']};
             }}
             QGroupBox {{
-                color:{PALETTE['textDim']}; font-size:9.5pt; letter-spacing:1px;
+                color:{PALETTE['textDim']}; font-size:11pt; letter-spacing:1px;
                 border:1px solid {PALETTE['border']}; border-radius:4px;
                 margin-top:10px; padding-top:10px;
             }}
@@ -2196,16 +2196,16 @@ class DeviceManagerDialog(QDialog):
                 subcontrol-origin:margin; left:8px;
                 padding:0 4px;
             }}
-            QLabel {{ color:{PALETTE['textDim']}; font-size:8.5pt; }}
+            QLabel {{ color:{PALETTE['textDim']}; font-size:10pt; }}
             QComboBox, QLineEdit, QSpinBox, QDoubleSpinBox {{
                 background:{PALETTE['surface']}; color:{PALETTE['text']};
                 border:1px solid {PALETTE['surface2']}; border-radius:3px;
-                padding:2px 6px; font-size:8.5pt;
+                padding:2px 6px; font-size:10pt;
             }}
             QPushButton {{
                 background:{PALETTE['surface']}; color:{PALETTE['textDim']};
                 border:1px solid {PALETTE['surface2']}; border-radius:4px;
-                padding:2px 8px; font-size:8.5pt;
+                padding:2px 8px; font-size:10pt;
             }}
             QPushButton:hover {{ background:{PALETTE['bg']}; color:{PALETTE['textDim']}; }}
             QPushButton[objectName="primary"] {{
@@ -2242,14 +2242,14 @@ class DeviceManagerDialog(QDialog):
         tl.addWidget(title_lbl, 1)
 
         # Log toggle button — explicit stylesheet so the dialog-level rule
-        # (which sets font-size:8.5pt and padding) doesn't cause overflow
+        # (which sets font-size:10pt and padding) doesn't cause overflow
         # on the fixed 72×28 footprint of this button.
         self._log_btn = QPushButton("Log")
         set_btn_icon(self._log_btn, IC.LOG)
         self._log_btn.setFixedSize(76, 28)
         self._log_btn.setCheckable(True)
         self._log_btn.setStyleSheet(scaled_qss(
-            f"QPushButton {{ font-size:8.5pt; padding:0 6px; }}"
+            f"QPushButton {{ font-size:10pt; padding:0 6px; }}"
             f"QPushButton:checked {{ background:{PALETTE['surface']}; color:{PALETTE['accent']}; "
             f"border-color:{PALETTE['accent']}44; }}"))
         self._log_btn.clicked.connect(self._toggle_log)
@@ -2293,7 +2293,7 @@ class DeviceManagerDialog(QDialog):
         lt.setContentsMargins(10, 0, 6, 0)
         lt.setSpacing(6)
         log_lbl = QLabel("Startup Diagnostics — live log output")
-        log_lbl.setStyleSheet(f"font-size:7.5pt; color:{PALETTE['textDim']}; font-style:italic;")
+        log_lbl.setStyleSheet(f"font-size:9pt; color:{PALETTE['textDim']}; font-style:italic;")
         lt.addWidget(log_lbl, 1)
 
         # Log level filter
@@ -2302,7 +2302,7 @@ class DeviceManagerDialog(QDialog):
         self._log_filter.addItems(["All", "Info+", "Warning+", "Error+"])
         self._log_filter.setCurrentIndex(0)
         self._log_filter.setStyleSheet(
-            f"QComboBox{{font-size:7pt; padding:0 4px; min-width:70px; "
+            f"QComboBox{{font-size:8.5pt; padding:0 4px; min-width:70px; "
             f"background:{PALETTE['surface']}; color:{PALETTE['textDim']}; "
             f"border:1px solid {PALETTE['surface2']}; border-radius:3px;}}")
         self._log_filter.currentIndexChanged.connect(self._on_log_filter_changed)
@@ -2311,7 +2311,7 @@ class DeviceManagerDialog(QDialog):
         copy_btn = QPushButton("Copy")
         copy_btn.setFixedSize(52, 20)
         copy_btn.setStyleSheet(
-            f"QPushButton{{font-size:7.5pt; padding:0 4px; background:{PALETTE['surface']}; "
+            f"QPushButton{{font-size:9pt; padding:0 4px; background:{PALETTE['surface']}; "
             f"color:{PALETTE['textSub']}; border:1px solid {PALETTE['surface2']}; border-radius:3px;}}"
             f"QPushButton:hover{{color:{PALETTE['textDim']}; border-color:{PALETTE['surface2']};}}")
         copy_btn.clicked.connect(self._copy_log)
@@ -2324,7 +2324,7 @@ class DeviceManagerDialog(QDialog):
         self._log_edit.setMaximumHeight(220)
         self._log_edit.setStyleSheet(scaled_qss(
             f"background:{PALETTE['bg']}; color:{PALETTE['textSub']}; font-family:{MONO_FONT}; "
-            f"font-size:8pt; border:none;"))
+            f"font-size:9.5pt; border:none;"))
         ll.addWidget(self._log_edit)
         root.addWidget(self._log_widget)
 
@@ -2379,16 +2379,16 @@ class DeviceManagerDialog(QDialog):
         txt = P['text']
         self.setStyleSheet(_pt(
             f"QDialog {{ background:{bg}; }}"
-            f"QGroupBox {{ color:{dim}; font-size:9.5pt; letter-spacing:1px;"
+            f"QGroupBox {{ color:{dim}; font-size:11pt; letter-spacing:1px;"
             f" border:1px solid {bdr}; border-radius:4px;"
             f" margin-top:10px; padding-top:10px; }}"
             f"QGroupBox::title {{ subcontrol-origin:margin; left:8px; padding:0 4px; }}"
-            f"QLabel {{ color:{dim}; font-size:8.5pt; }}"
+            f"QLabel {{ color:{dim}; font-size:10pt; }}"
             f"QComboBox, QLineEdit, QSpinBox, QDoubleSpinBox {{"
             f" background:{sur}; color:{txt}; border:1px solid {su2};"
-            f" border-radius:3px; padding:2px 6px; font-size:8.5pt; }}"
+            f" border-radius:3px; padding:2px 6px; font-size:10pt; }}"
             f"QPushButton {{ background:{sur}; color:{dim}; border:1px solid {su2};"
-            f" border-radius:4px; padding:2px 8px; font-size:8.5pt; }}"
+            f" border-radius:4px; padding:2px 8px; font-size:10pt; }}"
             f"QPushButton:hover {{ background:{bg}; color:{PALETTE['textDim']}; }}"
             f"QPushButton[objectName=\"primary\"] {{ background:{sur}; color:{PALETTE['accent']};"
             f" border:1px solid {PALETTE['accentDim']}; }}"
@@ -2400,7 +2400,7 @@ class DeviceManagerDialog(QDialog):
         self._title_lbl.setStyleSheet(
             f"font-size:{FONT['sublabel']}pt; font-weight:bold; color:{dim};")
         self._log_btn.setStyleSheet(scaled_qss(
-            f"QPushButton {{ font-size:8.5pt; padding:0 6px; }}"
+            f"QPushButton {{ font-size:10pt; padding:0 6px; }}"
             f"QPushButton:checked {{ background:{sur}; color:{PALETTE['accent']}; border-color:{PALETTE['accent']}44; }}"))
         self._splitter.setStyleSheet(
             f"QSplitter::handle {{ background:{bdr}; width:1px; }}")
