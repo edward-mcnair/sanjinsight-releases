@@ -45,6 +45,13 @@
 ; FTDI explicitly permits redistribution of CDM drivers.
 #define FTDISetupSrc "redist\CDM_Setup.exe"
 
+; ── CH340 USB-serial driver (Arduino Nano, many serial adapters) ──────────
+; Place CH341SER.EXE in installer\redist\ before building.
+; build_installer.bat downloads it automatically from WCH's site.
+; Many clone Arduino boards and USB-serial adapters use the CH340/CH341 chip.
+; WCH permits free redistribution of their VCP driver.
+#define CH340SetupSrc "redist\CH341SER.EXE"
+
 [Setup]
 ; {A1B2C3D4…} — unique GUID identifies this app for Windows Add/Remove Programs.
 ; Do NOT change this GUID — changing it breaks in-place upgrades.
@@ -118,6 +125,12 @@ Source: "{#VCRedistSrc}"; DestDir: "{tmp}"; \
 Source: "{#FTDISetupSrc}"; DestDir: "{tmp}"; \
   Flags: deleteafterinstall skipifsourcedoesntexist; Check: NeedsFTDIDriver
 
+; ── CH340/CH341 driver (Arduino Nano, USB-serial adapters) ──────────────
+; WCH permits free redistribution of their VCP driver.
+; build_installer.bat downloads CH341SER.EXE to installer\redist\ automatically.
+Source: "{#CH340SetupSrc}"; DestDir: "{tmp}"; \
+  Flags: deleteafterinstall skipifsourcedoesntexist; Check: NeedsCH340Driver
+
 [Dirs]
 ; Ensure writable directories exist at install time so the app can write to them
 ; without requesting elevation at runtime.
@@ -157,7 +170,16 @@ Filename: "{tmp}\CDM_Setup.exe"; \
   Flags: waituntilterminated runhidden; \
   Check: NeedsFTDIDriver
 
-; ── Step 3: Launch SanjINSIGHT (optional checkbox on Finish page) ────────────
+; ── Step 3: CH340 USB-serial driver (silent, runs before app launches) ──────
+; /S              — NSIS silent mode (no UI)
+; CH341SER.EXE from WCH supports /S for silent install.
+Filename: "{tmp}\CH341SER.EXE"; \
+  Parameters: "/S"; \
+  StatusMsg: "Installing CH340 USB-serial driver (required by Arduino Nano)…"; \
+  Flags: waituntilterminated runhidden skipifdoesntexist; \
+  Check: NeedsCH340Driver
+
+; ── Step 4: Launch SanjINSIGHT (optional checkbox on Finish page) ────────────
 Filename: "{app}\{#AppExeName}"; \
   Description: "{cm:LaunchProgram,{#AppName}}"; \
   Flags: nowait postinstall skipifsilent
@@ -197,6 +219,29 @@ begin
   Result := FileExists(ExpandConstant('{tmp}\CDM_Setup.exe'));
 end;
 
+{ ── CH340/CH341 VCP driver detection ─────────────────────────────────────────
+  The WCH CH340/CH341 USB-serial chip registers a kernel service named
+  CH341SER_A64 (64-bit) or a device class under USB\VID_1A86.
+  Returns True when the CH340 driver needs to be installed.
+}
+function NeedsCH340Driver(): Boolean;
+begin
+  { Skip if CH341 driver is already installed (64-bit service) }
+  if RegKeyExists(HKLM, 'SYSTEM\CurrentControlSet\Services\CH341SER_A64') then
+  begin
+    Result := False;
+    Exit;
+  end;
+  { Also check the older 32-bit service name }
+  if RegKeyExists(HKLM, 'SYSTEM\CurrentControlSet\Services\CH341SER') then
+  begin
+    Result := False;
+    Exit;
+  end;
+  { Skip if CH341SER.EXE was not bundled }
+  Result := FileExists(ExpandConstant('{tmp}\CH341SER.EXE'));
+end;
+
 { ── Hardware SDK prerequisite guidance ───────────────────────────────────────
   Called after installation completes.  Checks for optional hardware SDKs that
   SanjINSIGHT can use but that cannot be bundled (vendor licensing terms).
@@ -207,43 +252,44 @@ end;
 procedure CheckHardwareSDKs();
 var
   missing: String;
-  pylonKey, niVisaKey, niRioKey: String;
+  niVisaKey, niRioKey: String;
   dummy: String;
 begin
   missing := '';
 
-  { Basler pylon SDK — key written by the pylon installer }
-  pylonKey := 'SOFTWARE\Basler\pylon';
-  if not RegKeyExists(HKLM, pylonKey) then
-    missing := missing +
-      '• Basler pylon 8 SDK (USB3 Vision camera driver)' + #13#10 +
-      '  https://www.baslerweb.com/en-us/downloads/software-downloads/' + #13#10#13#10;
-
-  { NI-VISA — key written by the NI-VISA installer }
+  { NI-VISA — needed only for Keithley SMU and GPIB instruments.
+    Not required for cameras, TECs, stages, or Arduino. }
   niVisaKey := 'SOFTWARE\National Instruments\NI-VISA\CurrentVersion';
   if not RegKeyExists(HKLM, niVisaKey) and
      not RegKeyExists(HKLM64, niVisaKey) then
     missing := missing +
-      '• NI-VISA (Keithley/GPIB/USB instrument communication)' + #13#10 +
+      '• NI-VISA (only needed for Keithley SMU / GPIB instruments)' + #13#10 +
       '  https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html' + #13#10#13#10;
 
-  { NI-RIO — key written by the NI-RIO / NI-DAQmx installer }
+  { NI-RIO — needed only for NI 9637 FPGA via PCIe.
+    Not required for BNC 745 or USB DAQ. }
   niRioKey := 'SOFTWARE\National Instruments\RIO';
   if not RegKeyExists(HKLM, niRioKey) and
      not RegKeyExists(HKLM64, niRioKey) then
     missing := missing +
-      '• NI-RIO drivers (NI 9637 FPGA module)' + #13#10 +
+      '• NI-RIO drivers (only needed for NI 9637 FPGA via PCIe)' + #13#10 +
       '  https://www.ni.com/en/support/downloads/drivers/download.ni-rio.html' + #13#10#13#10;
 
   if missing <> '' then
     MsgBox(
       'SanjINSIGHT is installed and ready to run.' + #13#10#13#10 +
-      'The following optional hardware SDKs were not detected on this machine. ' +
-      'SanjINSIGHT will work in simulated mode without them. ' +
-      'Install only the SDKs for hardware you own:' + #13#10#13#10 +
+      'All essential drivers (USB-serial, camera) have been installed.' + #13#10#13#10 +
+      'The following optional SDKs were not detected. ' +
+      'Install only if you have the matching hardware:' + #13#10#13#10 +
       missing +
       'You can also run  Settings → Hardware Setup  inside the app at any time ' +
       'for step-by-step setup guidance.',
+      mbInformation, MB_OK)
+  else
+    MsgBox(
+      'SanjINSIGHT is installed and ready to run!' + #13#10#13#10 +
+      'All drivers have been installed. Launch the application and open ' +
+      'Device Manager to connect your hardware.',
       mbInformation, MB_OK);
 end;
 

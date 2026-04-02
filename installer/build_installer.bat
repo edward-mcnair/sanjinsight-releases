@@ -141,6 +141,35 @@ if not exist "%FTDI_EXE%" (
 )
 echo.
 
+:: ── Step 2c: Download CH340 USB-serial driver if not present ─────────────
+set CH340_EXE=%REDIST_DIR%\CH341SER.EXE
+
+if not exist "%CH340_EXE%" (
+    echo [2c/4] Downloading CH340 USB-serial driver ^(Arduino Nano / serial adapters^)...
+    if not exist "%REDIST_DIR%" mkdir "%REDIST_DIR%"
+    :: WCH CH341SER driver — supports CH340, CH341, CH340G, CH340C, CH340K, CH340E.
+    :: WCH permits free redistribution of their VCP drivers.
+    :: If this URL stops working, download manually from:
+    ::   https://www.wch-ic.com/downloads/CH341SER_EXE.html
+    :: Save the setup .exe as: installer\redist\CH341SER.EXE
+    powershell -NoProfile -Command ^
+      "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://www.wch-ic.com/downloads/file/65.html' -OutFile '%CH340_EXE%'" 2>&1
+    if errorlevel 1 (
+        echo.
+        echo WARNING: CH340 driver download failed.
+        echo          The installer will still build, but without the CH340 driver.
+        echo          To bundle it, download manually from:
+        echo            https://www.wch-ic.com/downloads/CH341SER_EXE.html
+        echo          Save the setup .exe as: installer\redist\CH341SER.EXE
+        echo.
+    ) else (
+        echo       Saved to: %CH340_EXE%
+    )
+) else (
+    echo [2c/4] CH341SER.EXE already present — skipping download.
+)
+echo.
+
 :: ── Step 3: Build the PyInstaller bundle ─────────────────────────────────────
 echo [3/4] Building application bundle...
 echo       (using: %PYTHON_EXE%)
