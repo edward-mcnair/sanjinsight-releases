@@ -32,6 +32,7 @@ installer/redist/*
 !installer/redist/pylon_USB_Camera_Driver.msi
 !installer/redist/USB_Transport_Layer_x64.msi
 !installer/redist/GenTL_Producer_USB_x64.msi
+!installer/redist/ni-rio-online-installer.exe
 
 # ── macOS ─────────────────────────────────────────────────────────────────────
 .DS_Store

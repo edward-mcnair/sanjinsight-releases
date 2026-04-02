@@ -186,6 +186,17 @@ def check_usb_serial_drivers():
           "           Install via the SanjINSIGHT installer or download the pylon\n"
           "           Runtime from: https://www.baslerweb.com/en/downloads/software-downloads/")
 
+    # NI R Series RIO driver (NI 9637 FPGA via PCIe)
+    ni_rio = (reg_key_exists(winreg.HKEY_LOCAL_MACHINE,
+                             r"SOFTWARE\National Instruments\RIO") or
+              reg_key_exists(winreg.HKEY_LOCAL_MACHINE,
+                             r"SOFTWARE\WOW6432Node\National Instruments\RIO"))
+    check("NI R Series RIO driver (NI 9637 FPGA)", ni_rio,
+          "Not installed — FPGA stimulus generation will not work.\n"
+          "           The installer bundles the NI-RIO online installer (requires internet).\n"
+          "           Manual download: https://www.ni.com/en/support/downloads/drivers/download.ni-r-series-multifunction-rio.html",
+          warn_only=True)
+
     # Check for DLL conflict (full Pylon SDK + pypylon)
     if basler_sdk:
         pylon_root = reg_read_str(winreg.HKEY_LOCAL_MACHINE,
@@ -232,14 +243,7 @@ def check_optional_sdks():
           "Not installed — only needed if you have Keithley or GPIB instruments",
           warn_only=True)
 
-    # NI-RIO (NI 9637 FPGA via PCIe only)
-    rio_key = r"SOFTWARE\National Instruments\RIO"
-    ni_rio = (reg_key_exists(winreg.HKEY_LOCAL_MACHINE, rio_key) or
-              reg_key_exists(winreg.HKEY_LOCAL_MACHINE,
-                             rio_key.replace("SOFTWARE", "SOFTWARE\\WOW6432Node")))
-    check("NI-RIO (NI 9637 FPGA via PCIe only)", ni_rio,
-          "Not installed — only needed if you have NI 9637 FPGA hardware",
-          warn_only=True)
+    # NI-RIO is now checked in check_usb_serial_drivers() as a bundled driver
 
 
 # ── Section: Camera (quick probe) ───────────────────────────────────────────

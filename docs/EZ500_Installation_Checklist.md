@@ -49,7 +49,8 @@ Microsanj, LLC | microsanj.com
   - [x] CH340/CH341 driver — required for Arduino Nano
   - [x] Basler USB3 Vision camera driver — from pylon Runtime Redistributable
   - [x] Basler pylon runtime — bundled inside pypylon (no separate install)
-- [ ] Note any post-install messages about optional SDKs
+  - [x] NI R Series RIO driver — required for NI 9637 FPGA (**requires internet**)
+- [ ] Note any post-install messages about optional SDKs (NI-VISA only)
 - [ ] **Reboot** after installation
 
 ---
@@ -125,20 +126,21 @@ After reboot, open Device Manager and verify:
 
 ---
 
-## Optional: NI-VISA and NI-RIO
+## Optional: NI-VISA
 
-These SDKs are **NOT bundled** in the installer due to vendor licensing.
-Install ONLY if the system has the corresponding hardware.
+NI-VISA is **NOT bundled** in the installer due to vendor licensing.
+Install ONLY if the system has Keithley SMU or GPIB instruments.
 
 ### NI-VISA (Keithley SMU / GPIB instruments only)
 - [ ] Download from: https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html
 - [ ] Install with default options
 - [ ] Reboot
 
-### NI-RIO (NI 9637 FPGA via PCIe only)
-- [ ] Download from: https://www.ni.com/en/support/downloads/drivers/download.ni-rio.html
-- [ ] Install with default options
-- [ ] Reboot
+> **Note:** NI-RIO (for the NI 9637 FPGA) is now bundled in the SanjINSIGHT
+> installer. It installs automatically but requires an internet connection
+> during installation (the online installer downloads ~200 MB from NI's servers).
+> If installation fails due to no internet, download manually from:
+> https://www.ni.com/en/support/downloads/drivers/download.ni-r-series-multifunction-rio.html
 
 ---
 

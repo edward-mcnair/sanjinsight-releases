@@ -73,9 +73,9 @@ thorlabs-apt-device>=0.3.0    # Thorlabs APT/Kinesis stage controllers (USB)
 # Basler camera SDK — self-contained wheel (bundles pylon runtime, no separate Basler SDK install needed)
 pypylon>=26.0.0               # Basler camera SDK (bundled in installer)
 #
-# NI FPGA — needs NI-RIO drivers:
-#   https://www.ni.com/en/support/downloads/drivers/download.ni-rio.html
-#   pip install nifpga
+# NI FPGA — needs NI R Series RIO driver (bundled in installer as online installer):
+#   https://www.ni.com/en/support/downloads/drivers/download.ni-r-series-multifunction-rio.html
+nifpga>=21.0.0                # NI FPGA interface (ctypes wrapper around NiFpga.dll)
 
 # ── Authentication ────────────────────────────────────────────────────────────
 bcrypt>=4.0.0                 # Password hashing (work factor 12) for user accounts

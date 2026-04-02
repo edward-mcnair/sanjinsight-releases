@@ -170,7 +170,28 @@ if not exist "%CH340_EXE%" (
 )
 echo.
 
-:: ── Step 2d: Check for Basler USB3 Vision driver MSIs ───────────────────────
+:: ── Step 2d: Check for NI R Series RIO online installer ─────────────────────
+:: This is a small (~9 MB) online installer that downloads the full driver
+:: from NI's servers during installation.  It cannot be auto-downloaded
+:: (NI's download page requires browser interaction).
+:: Download from: https://www.ni.com/en/support/downloads/drivers/download.ni-r-series-multifunction-rio.html
+:: Save as: installer\redist\ni-rio-online-installer.exe
+set NIRIO_EXE=%REDIST_DIR%\ni-rio-online-installer.exe
+
+if exist "%NIRIO_EXE%" (
+    echo [2d/4] NI R Series RIO online installer found — will be bundled.
+) else (
+    echo [2d/4] NI R Series RIO online installer not found.
+    echo.
+    echo        The installer will still build, but without the NI-RIO driver.
+    echo        To bundle it, download the online installer from:
+    echo          https://www.ni.com/en/support/downloads/drivers/download.ni-r-series-multifunction-rio.html
+    echo        Save as: installer\redist\ni-rio-online-installer.exe
+    echo.
+)
+echo.
+
+:: ── Step 2e: Check for Basler USB3 Vision driver MSIs ───────────────────────
 :: These MSIs are extracted from the Basler pylon Runtime Redistributable.
 :: See docs/EZ500_Installation_Checklist.md for extraction instructions.
 :: Total size: ~4 MB (vs 1.3 GB for the full Runtime installer).
@@ -184,9 +205,9 @@ if not exist "%PYLON_MSI2%" set PYLON_OK=0
 if not exist "%PYLON_MSI3%" set PYLON_OK=0
 
 if "%PYLON_OK%"=="1" (
-    echo [2d/4] Basler USB3 Vision driver MSIs found — will be bundled.
+    echo [2e/4] Basler USB3 Vision driver MSIs found — will be bundled.
 ) else (
-    echo [2d/4] Basler USB3 Vision driver MSIs not found.
+    echo [2e/4] Basler USB3 Vision driver MSIs not found.
     echo.
     echo        The installer will still build, but without the Basler camera driver.
     echo        To bundle them, place these files in installer\redist\:

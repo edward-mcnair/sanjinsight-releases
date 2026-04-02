@@ -69,6 +69,23 @@
 #define PylonUSBTransport  "redist\USB_Transport_Layer_x64.msi"
 #define PylonUSBGenTL      "redist\GenTL_Producer_USB_x64.msi"
 
+; ── NI R Series Multifunction RIO driver (NI 9637 FPGA via PCIe) ──────────
+; Online installer (~9 MB) for the NI R Series Multifunction RIO driver.
+; Requires internet during installation — the online installer downloads
+; ~200 MB of driver components from NI's servers.
+;
+; NI classifies the R Series driver as "Driver Interface Software" which
+; permits royalty-free redistribution under NI's standard EULA.
+; The nifpga Python package is a thin ctypes wrapper around NiFpga.dll
+; and only needs the driver runtime (not the full NI-RIO SDK).
+;
+; Download from:
+;   https://www.ni.com/en/support/downloads/drivers/download.ni-r-series-multifunction-rio.html
+; Save as: installer\redist\ni-rio-online-installer.exe
+;
+; Silent install: ni-rio-online-installer.exe /q /AcceptLicenses yes
+#define NIRIOSetupSrc "redist\ni-rio-online-installer.exe"
+
 [Setup]
 ; {A1B2C3D4…} — unique GUID identifies this app for Windows Add/Remove Programs.
 ; Do NOT change this GUID — changing it breaks in-place upgrades.
@@ -162,6 +179,13 @@ Source: "{#PylonUSBTransport}"; DestDir: "{tmp}"; \
 Source: "{#PylonUSBGenTL}"; DestDir: "{tmp}"; \
   Flags: deleteafterinstall skipifsourcedoesntexist
 
+; ── NI R Series RIO driver (online installer) ─────────────────────────────
+; Optional — only bundled if the file exists in installer\redist\.
+; Requires internet during installation (downloads ~200 MB from NI).
+; NI permits redistribution of driver installers.
+Source: "{#NIRIOSetupSrc}"; DestDir: "{tmp}"; \
+  Flags: deleteafterinstall skipifsourcedoesntexist
+
 [Dirs]
 ; Ensure writable directories exist at install time so the app can write to them
 ; without requesting elevation at runtime.
@@ -240,7 +264,18 @@ Filename: "msiexec.exe"; \
   StatusMsg: "Installing Basler USB3 Vision GenTL producer (3/3)…"; \
   Flags: waituntilterminated runhidden skipifdoesntexist
 
-; ── Step 5: Launch SanjINSIGHT (optional checkbox on Finish page) ────────────
+; ── Step 5: NI R Series RIO driver (online installer, silent) ────────────────
+; /q                — quiet mode (no UI)
+; /AcceptLicenses yes — accept the NI EULA automatically
+; NOTE: Requires internet — the online installer downloads driver components
+; from NI's servers (~200 MB).  If no internet is available, this step will
+; fail silently and NI-RIO can be installed manually later.
+Filename: "{tmp}\ni-rio-online-installer.exe"; \
+  Parameters: "/q /AcceptLicenses yes"; \
+  StatusMsg: "Installing NI R Series RIO driver (requires internet)…"; \
+  Flags: waituntilterminated runhidden skipifdoesntexist
+
+; ── Step 6: Launch SanjINSIGHT (optional checkbox on Finish page) ────────────
 Filename: "{app}\{#AppExeName}"; \
   Description: "{cm:LaunchProgram,{#AppName}}"; \
   Flags: nowait postinstall skipifsilent
@@ -279,17 +314,23 @@ begin
          or RegKeyExists(HKLM, 'SOFTWARE\Basler\pylon');
 end;
 
+function HasNIRIO(): Boolean;
+begin
+  Result := RegKeyExists(HKLM, 'SOFTWARE\National Instruments\RIO')
+         or RegKeyExists(HKLM64, 'SOFTWARE\National Instruments\RIO');
+end;
+
 { ── Post-install verification and guidance ───────────────────────────────────
   Called after installation completes.  Verifies that all bundled drivers
-  installed successfully and checks for optional SDKs (NI-VISA, NI-RIO)
-  that cannot be bundled due to vendor licensing.
+  installed successfully and checks for optional SDKs (NI-VISA) that
+  cannot be bundled due to vendor licensing.
 }
 procedure PostInstallSummary();
 var
   summary: String;
   issues: String;
   optional: String;
-  niVisaKey, niRioKey: String;
+  niVisaKey: String;
 begin
   summary := '';
   issues := '';
@@ -316,6 +357,13 @@ begin
   else
     issues := issues + '  ✗  Basler camera driver — re-run installer or install pylon Runtime' + #13#10;
 
+  { ── Verify NI-RIO (bundled as online installer) ─────────────────────── }
+  if HasNIRIO() then
+    summary := summary + '  ✓  NI R Series RIO driver (NI 9637 FPGA)' + #13#10
+  else
+    issues := issues + '  ✗  NI-RIO driver — may not have installed (requires internet)' + #13#10 +
+      '     Install manually: https://www.ni.com/en/support/downloads/drivers/download.ni-r-series-multifunction-rio.html' + #13#10;
+
   { ── Check optional SDKs (cannot be bundled) ─────────────────────────── }
   niVisaKey := 'SOFTWARE\National Instruments\NI-VISA\CurrentVersion';
   if not RegKeyExists(HKLM, niVisaKey) and
@@ -323,13 +371,6 @@ begin
     optional := optional +
       '  •  NI-VISA (only needed for Keithley SMU / GPIB instruments)' + #13#10 +
       '     https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html' + #13#10;
-
-  niRioKey := 'SOFTWARE\National Instruments\RIO';
-  if not RegKeyExists(HKLM, niRioKey) and
-     not RegKeyExists(HKLM64, niRioKey) then
-    optional := optional +
-      '  •  NI-RIO (only needed for NI 9637 FPGA via PCIe)' + #13#10 +
-      '     https://www.ni.com/en/support/downloads/drivers/download.ni-rio.html' + #13#10;
 
   { ── Build the final message ─────────────────────────────────────────── }
   if issues = '' then
