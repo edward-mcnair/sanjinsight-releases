@@ -207,7 +207,7 @@ class _DeviceListPanel(QWidget):
             QPushButton {{
                 background:{PALETTE['surface']}; color:{PALETTE['accent']};
                 border:1px solid {PALETTE['accentDim']}; border-radius:3px;
-                font-size:7.5pt; padding:0 8px;
+                font-size:9pt; padding:0 8px;
             }}
             QPushButton:hover    {{ background:{PALETTE['surface']}; }}
             QPushButton:disabled {{ color:{PALETTE['textDim']}; border-color:{PALETTE['border']}; }}
@@ -216,7 +216,7 @@ class _DeviceListPanel(QWidget):
             QPushButton {{
                 background:{PALETTE['surface']}; color:{PALETTE['danger']};
                 border:1px solid {PALETTE['danger']}22; border-radius:3px;
-                font-size:7.5pt; padding:0 8px;
+                font-size:9pt; padding:0 8px;
             }}
             QPushButton:hover    {{ background:{PALETTE['surface2']}; }}
             QPushButton:disabled {{ color:{PALETTE['textDim']}; border-color:{PALETTE['border']}; }}
@@ -234,7 +234,7 @@ class _DeviceListPanel(QWidget):
         hl.setContentsMargins(12, 0, 8, 0)
         title = QLabel("DEVICES")
         title.setStyleSheet(
-            f"font-size:8.5pt; letter-spacing:2px; color:{PALETTE['textDim']};")
+            f"font-size:10pt; letter-spacing:2px; color:{PALETTE['textDim']};")
         self._hdr       = hdr
         self._hdr_title = title
         self._scan_btn = QPushButton("Scan")
@@ -247,8 +247,8 @@ class _DeviceListPanel(QWidget):
             "Also scan the local subnet for Ethernet instruments.\n"
             "Slower (~3 s) — disable on corporate networks with IDS.")
         self._net_chk.setStyleSheet(
-            f"QCheckBox {{ color:{PALETTE['textDim']}; font-size:7.5pt; }} "
-            f"QCheckBox::indicator {{ width:12px; height:12px; }}")
+            f"QCheckBox {{ color:{PALETTE['textDim']}; font-size:9pt; }} "
+            f"QCheckBox::indicator {{ width:14px; height:14px; }}")
         hl.addWidget(title, 1)
         hl.addWidget(self._net_chk)
         hl.addWidget(self._scan_btn)
@@ -281,7 +281,7 @@ class _DeviceListPanel(QWidget):
                 background: {PALETTE['bg']};
                 border: none;
                 outline: none;
-                font-size: 8.5pt;
+                font-size: 10pt;
             }}
             QTreeWidget::item {{
                 height: 34px;
@@ -321,7 +321,7 @@ class _DeviceListPanel(QWidget):
         # ── Status bar ────────────────────────────────────────────── #
         self._status = QLabel("")
         self._status.setStyleSheet(
-            f"font-size:7.5pt; color:{PALETTE['textDim']}; padding:4px 12px;")
+            f"font-size:9pt; color:{PALETTE['textDim']}; padding:4px 12px;")
         self._status.setWordWrap(True)
         root.addWidget(self._status)
 
@@ -341,31 +341,31 @@ class _DeviceListPanel(QWidget):
         sur = P['surface']
         su2 = P['surface2']
         self._hdr.setStyleSheet(f"background:{bg}; border-bottom:1px solid {bdr};")
-        self._hdr_title.setStyleSheet(f"font-size:8.5pt; letter-spacing:2px; color:{dim};")
+        self._hdr_title.setStyleSheet(f"font-size:10pt; letter-spacing:2px; color:{dim};")
         self._net_chk.setStyleSheet(
-            f"QCheckBox {{ color:{dim}; font-size:7.5pt; }} "
-            f"QCheckBox::indicator {{ width:12px; height:12px; }}")
+            f"QCheckBox {{ color:{dim}; font-size:9pt; }} "
+            f"QCheckBox::indicator {{ width:14px; height:14px; }}")
         self._status.setStyleSheet(
-            f"font-size:7.5pt; color:{dim}; padding:4px 12px;")
+            f"font-size:9pt; color:{dim}; padding:4px 12px;")
         self._scan_prog.setStyleSheet(
             f"QProgressBar {{ background:{bg}; border:none; margin:0; }}"
             f"QProgressBar::chunk {{ background:{PALETTE['accent']}; }}")
         self._ss_scan = _pt(
             f"QPushButton {{ background:{sur}; color:{PALETTE['accent']};"
             f" border:1px solid {PALETTE['accentDim']}; border-radius:3px;"
-            f" font-size:7.5pt; padding:0 8px; }}"
+            f" font-size:9pt; padding:0 8px; }}"
             f"QPushButton:hover {{ background:{sur}; }}"
             f"QPushButton:disabled {{ color:{dim}; border-color:{bdr}; }}")
         self._ss_cancel = _pt(
             f"QPushButton {{ background:{sur}; color:{PALETTE['danger']};"
             f" border:1px solid {PALETTE['danger']}22; border-radius:3px;"
-            f" font-size:7.5pt; padding:0 8px; }}"
+            f" font-size:9pt; padding:0 8px; }}"
             f"QPushButton:hover {{ background:{su2}; }}"
             f"QPushButton:disabled {{ color:{dim}; border-color:{bdr}; }}")
         if not self._scanning:
             self._scan_btn.setStyleSheet(self._ss_scan)
         self._tree.setStyleSheet(_pt(
-            f"QTreeWidget {{ background:{bg}; border:none; outline:none; font-size:8.5pt; }}"
+            f"QTreeWidget {{ background:{bg}; border:none; outline:none; font-size:10pt; }}"
             f"QTreeWidget::item {{ height:28px; padding:0 2px; border:none; }}"
             f"QTreeWidget::item:selected {{ background:{sur}; border:none; }}"
             f"QTreeWidget::item:hover:!selected {{ background:{bg}; }}"
@@ -403,7 +403,7 @@ class _DeviceListPanel(QWidget):
                 cat.setText(0, TYPE_LABELS.get(dtype, dtype).upper())
                 cat.setFlags(Qt.ItemIsEnabled)      # no selection
                 hdr_font = QFont()
-                hdr_font.setPointSizeF(8.0)
+                hdr_font.setPointSizeF(9.0)
                 hdr_font.setLetterSpacing(QFont.AbsoluteSpacing, 1.5)
                 cat.setFont(0, hdr_font)
                 cat.setForeground(0, QBrush(QColor(PALETTE['textSub'])))
@@ -434,7 +434,7 @@ class _DeviceListPanel(QWidget):
         # ● dot — color reflects connection state; size scales for HiDPI
         item.setText(self._C_DOT, "●")
         dot_font = QFont()
-        _dot_pt = 9.0 if sys.platform == 'win32' else 7.0
+        _dot_pt = 9.0 if sys.platform == 'win32' else 8.0
         dot_font.setPointSizeF(_dot_pt)
         item.setFont(self._C_DOT, dot_font)
         item.setForeground(self._C_DOT, QBrush(QColor(entry.status_color)))
@@ -453,7 +453,7 @@ class _DeviceListPanel(QWidget):
         item.setForeground(self._C_ADDR, QBrush(QColor(PALETTE['textSub'])))
         item.setTextAlignment(
             self._C_ADDR, Qt.AlignRight | Qt.AlignVCenter)
-        addr_font = mono_font(7)
+        addr_font = mono_font(8)
         item.setFont(self._C_ADDR, addr_font)
         # Full address tooltip on the address column (especially useful when truncated)
         item.setToolTip(self._C_ADDR, full_addr or "—")
