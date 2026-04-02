@@ -31,6 +31,7 @@ class BaseDeviceService(QObject):
     error            = pyqtSignal(str)
     log_message      = pyqtSignal(str)
     startup_status   = pyqtSignal(str, bool, str)   # (key, ok, detail)
+    structured_error = pyqtSignal(object)           # DeviceError
 
     # -- Auto-reconnect policy (same defaults as HardwareService) ----------
     _MAX_CONSECUTIVE_ERRORS: int   = 3
@@ -124,6 +125,18 @@ class BaseDeviceService(QObject):
             self._stop_event.wait(timeout=delay)
             delay = min(delay * 1.5, self._RECONNECT_MAX_S)
         return False
+
+    def _classify_and_emit(self, exc: Exception, device_uid: str = "") -> 'DeviceError':
+        """Classify an exception and emit both structured_error and error signals.
+
+        Returns the :class:`DeviceError` so callers can use its ``message``
+        for the legacy ``startup_status`` detail string.
+        """
+        from hardware.error_taxonomy import classify_error
+        dev_err = classify_error(exc, device_uid=device_uid)
+        self.structured_error.emit(dev_err)
+        self.error.emit(dev_err.short_message)
+        return dev_err
 
     def _dispatch(self, fn, *args, **kwargs) -> None:
         """Execute fn(*args, **kwargs) on a daemon thread; emit error on failure."""

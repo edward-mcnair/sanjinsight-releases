@@ -465,6 +465,59 @@ def print_summary():
 # Main
 # ══════════════════════════════════════════════════════════════════════════════
 
+def scan_os_checks():
+    """Run OS-level diagnostic checks."""
+    print(f"\n{BOLD}OS Diagnostics{RESET}")
+
+    try:
+        from hardware.os_checks import run_os_checks
+    except ImportError:
+        print(f"  {WARN}  hardware.os_checks not available — skipping")
+        return
+
+    results = run_os_checks()
+    if not results:
+        print(f"  {INFO}  No OS checks applicable for this platform")
+        return
+
+    for r in results:
+        if r.passed:
+            print(f"  {PASS}  {r.display_name}: {r.message}")
+        else:
+            print(f"  {FAIL}  {r.display_name}: {r.message}")
+            if r.fix_suggestion:
+                for line in r.fix_suggestion.splitlines():
+                    print(f"         {line}")
+
+
+def scan_driver_status():
+    """Check installation status of all known driver families."""
+    print(f"\n{BOLD}Driver Status{RESET}")
+
+    try:
+        from hardware.driver_contract import check_all_drivers
+    except ImportError:
+        print(f"  {WARN}  hardware.driver_contract not available — skipping")
+        return
+
+    statuses = check_all_drivers()
+    if not statuses:
+        print(f"  {INFO}  No driver checks registered")
+        return
+
+    for s in statuses:
+        if not s.platform_ok:
+            print(f"  {WARN}  {s.summary}")
+        elif s.installed:
+            print(f"  {PASS}  {s.summary}")
+        else:
+            print(f"  {FAIL}  {s.summary}")
+            if s.install_command:
+                print(f"         Install: {s.install_command}")
+            if s.notes:
+                print(f"         Note: {s.notes}")
+
+
 def main():
     _enable_ansi()
 
@@ -474,19 +527,25 @@ def main():
     print(f"  Python {sys.version.split()[0]}")
     print(f"{'=' * 64}")
 
-    # Section 1: All serial ports
+    # Section 0: OS Diagnostics
+    scan_os_checks()
+
+    # Section 1: Driver Status
+    scan_driver_status()
+
+    # Section 2: All serial ports
     all_ports = scan_serial_ports()
 
-    # Section 2: FTDI ports
+    # Section 3: FTDI ports
     ftdi_ports = scan_ftdi_ports(all_ports)
 
-    # Section 3: MeCom probe
+    # Section 4: MeCom probe
     scan_mecom_devices(ftdi_ports)
 
-    # Section 4: Basler cameras
+    # Section 5: Basler cameras
     scan_basler_cameras()
 
-    # Section 5: Summary
+    # Section 6: Summary
     found = print_summary()
     sys.exit(0 if found else 1)
 

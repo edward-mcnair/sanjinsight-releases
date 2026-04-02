@@ -1015,6 +1015,14 @@ class MainWindow(QMainWindow):
         # Startup status → populate health panel with initial connect results
         hw_service.startup_status.connect(self._on_startup_device_status)
 
+        # Structured errors → health panel with actionable suggestions
+        if hasattr(hw_service, 'structured_error'):
+            hw_service.structured_error.connect(self._on_structured_error)
+
+        # Support bundle auto-trigger after repeated failures
+        if hasattr(hw_service, 'bundle_suggested'):
+            hw_service.bundle_suggested.connect(self._on_bundle_suggested)
+
         # Signal check section → phase tracker
         self._signal_check_section.signal_check_passed.connect(
             lambda: self._phase_tracker.mark(2, "signal_checked"))
@@ -1691,6 +1699,34 @@ class MainWindow(QMainWindow):
             )
         except Exception:
             log.debug("health panel startup update failed", exc_info=True)
+
+    def _on_structured_error(self, dev_err):
+        """Handle a structured DeviceError — update health panel with fix suggestion."""
+        try:
+            uid = getattr(dev_err, 'device_uid', '') or 'unknown'
+            msg = getattr(dev_err, 'suggested_fix', '') or getattr(dev_err, 'message', str(dev_err))
+            self._health_panel.update_device(
+                uid=uid,
+                state=STATE_ERROR,
+                error_msg=msg,
+            )
+        except Exception:
+            log.debug("structured error handler failed", exc_info=True)
+
+    def _on_bundle_suggested(self, device_uid: str, reason: str):
+        """Auto-trigger: suggest generating a support bundle after repeated failures."""
+        try:
+            from ui.notifications import show_toast
+            show_toast(
+                self,
+                f"Multiple failures for {device_uid}",
+                detail="Generate a support bundle to help diagnose the issue.",
+                action_text="Create Bundle",
+                action_callback=self._create_support_bundle,
+                duration=10000,
+            )
+        except Exception:
+            log.debug("bundle suggestion toast failed", exc_info=True)
 
     def _on_device_hotplug(self, key: str, ok: bool):
         """

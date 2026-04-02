@@ -116,9 +116,9 @@ class CameraService(BaseDeviceService):
             self.startup_status.emit(_cam_key, True, detail)
 
         except Exception as e:
-            self.error.emit(f"Camera ({cam_type.upper()}): {e}")
+            dev_err = self._classify_and_emit(e, _cam_key)
             self.device_connected.emit(_cam_key, False)
-            self.startup_status.emit(_cam_key, False, str(e)[:60])
+            self.startup_status.emit(_cam_key, False, dev_err.short_message)
             log.error("CameraService camera (%s) init: %s", cam_type, e, exc_info=True)
             return
 
@@ -234,7 +234,8 @@ class CameraService(BaseDeviceService):
             self.device_connected.emit("ir_camera", True)
             self.startup_status.emit("ir_camera", True, detail)
         except Exception as e:
-            self.startup_status.emit("ir_camera", False, str(e)[:60])
+            dev_err = self._classify_and_emit(e, "ir_camera")
+            self.startup_status.emit("ir_camera", False, dev_err.short_message)
             log.error("CameraService IR camera demo init: %s", e, exc_info=True)
 
     # ── Control surface ───────────────────────────────────────────────

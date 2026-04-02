@@ -77,9 +77,9 @@ class TecService(BaseDeviceService):
             self.device_connected.emit(tec_key, True)
             self.startup_status.emit(tec_key, True, cfg.get('driver', 'connected'))
         except Exception as e:
-            self.error.emit(f"{key}: {e}")
+            dev_err = self._classify_and_emit(e, tec_key)
             self.device_connected.emit(tec_key, False)
-            self.startup_status.emit(tec_key, False, str(e)[:60])
+            self.startup_status.emit(tec_key, False, dev_err.short_message)
             log.error(f"TecService TEC init ({key}): {e}")
             return
 
@@ -144,7 +144,8 @@ class TecService(BaseDeviceService):
             self.device_connected.emit(tec_key, True)
             self.startup_status.emit(tec_key, True, "Simulated")
         except Exception as e:
-            self.startup_status.emit(tec_key, False, str(e)[:60])
+            dev_err = self._classify_and_emit(e, tec_key)
+            self.startup_status.emit(tec_key, False, dev_err.short_message)
             return
 
         from hardware.thermal_guard import ThermalGuard

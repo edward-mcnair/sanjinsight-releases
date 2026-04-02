@@ -235,6 +235,14 @@ class ConnectionHealthPanel(QWidget):
         self._header.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         root.addWidget(self._header)
 
+        # OS warnings banner (hidden until populated)
+        self._os_warnings_frame = QFrame()
+        self._os_warnings_frame.setVisible(False)
+        self._os_warnings_layout = QVBoxLayout(self._os_warnings_frame)
+        self._os_warnings_layout.setContentsMargins(8, 6, 8, 6)
+        self._os_warnings_layout.setSpacing(4)
+        root.addWidget(self._os_warnings_frame)
+
         # Scroll area containing device rows
         self._scroll = QScrollArea()
         self._scroll.setWidgetResizable(True)
@@ -336,6 +344,54 @@ class ConnectionHealthPanel(QWidget):
             self._container_layout.removeWidget(row)
             row.deleteLater()
             log.debug("Removed health row for device %s", uid)
+
+    def set_os_warnings(self, checks: list) -> None:
+        """Show OS-level diagnostic warnings above the device rows.
+
+        Parameters
+        ----------
+        checks : list[OSCheckResult]
+            Results from ``hardware.os_checks.run_os_checks()``.
+            Only failed checks (``not passed``) are displayed.
+        """
+        # Clear existing warnings
+        while self._os_warnings_layout.count():
+            item = self._os_warnings_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        failed = [c for c in checks if not getattr(c, 'passed', True)]
+        self._os_warnings_frame.setVisible(bool(failed))
+
+        warning_color = PALETTE.get("warning", "#ffb300")
+        muted = PALETTE.get("muted", "#888888")
+        surface = PALETTE.get("surface", "#1e1e1e")
+        sm = FONT.get("sm", 10)
+
+        if failed:
+            self._os_warnings_frame.setStyleSheet(
+                f"background: {surface}; "
+                f"border: 1px solid {warning_color}; "
+                f"border-radius: 6px;"
+            )
+
+        for c in failed:
+            title = QLabel(f"⚠ {c.display_name}: {c.message}")
+            title.setWordWrap(True)
+            title.setStyleSheet(
+                f"color: {warning_color}; font-size: {sm}pt; "
+                f"font-weight: 600; border: none;"
+            )
+            self._os_warnings_layout.addWidget(title)
+
+            if getattr(c, 'fix_suggestion', ''):
+                fix = QLabel(c.fix_suggestion)
+                fix.setWordWrap(True)
+                fix.setStyleSheet(
+                    f"color: {muted}; font-size: {sm}pt; "
+                    f"padding-left: 20px; border: none;"
+                )
+                self._os_warnings_layout.addWidget(fix)
 
     def clear(self) -> None:
         """Remove all device rows."""

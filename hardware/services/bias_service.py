@@ -63,9 +63,9 @@ class BiasService(BaseDeviceService):
             self.device_connected.emit("bias", True)
             self.startup_status.emit("bias", True, cfg.get('driver', 'connected'))
         except Exception as e:
-            self.error.emit(f"Bias: {e}")
+            dev_err = self._classify_and_emit(e, "bias")
             self.device_connected.emit("bias", False)
-            self.startup_status.emit("bias", False, str(e)[:60])
+            self.startup_status.emit("bias", False, dev_err.short_message)
             log.error(f"BiasService bias init: {e}")
             return
 
@@ -115,7 +115,8 @@ class BiasService(BaseDeviceService):
             self.device_connected.emit("bias", True)
             self.startup_status.emit("bias", True, "Simulated")
         except Exception as e:
-            self.startup_status.emit("bias", False, str(e)[:60])
+            dev_err = self._classify_and_emit(e, "bias")
+            self.startup_status.emit("bias", False, dev_err.short_message)
             return
         while not self._stop_event.is_set():
             try:

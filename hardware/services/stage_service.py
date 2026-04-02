@@ -55,9 +55,9 @@ class StageService(BaseDeviceService):
             self.device_connected.emit("stage", True)
             self.startup_status.emit("stage", True, cfg.get('driver', 'connected'))
         except Exception as e:
-            self.error.emit(f"Stage: {e}")
+            dev_err = self._classify_and_emit(e, "stage")
             self.device_connected.emit("stage", False)
-            self.startup_status.emit("stage", False, str(e)[:60])
+            self.startup_status.emit("stage", False, dev_err.short_message)
             log.error(f"StageService stage init: {e}")
             return
 
@@ -108,7 +108,8 @@ class StageService(BaseDeviceService):
             self.device_connected.emit("stage", True)
             self.startup_status.emit("stage", True, "Simulated")
         except Exception as e:
-            self.startup_status.emit("stage", False, str(e)[:60])
+            dev_err = self._classify_and_emit(e, "stage")
+            self.startup_status.emit("stage", False, dev_err.short_message)
             return
         while not self._stop_event.is_set():
             try:

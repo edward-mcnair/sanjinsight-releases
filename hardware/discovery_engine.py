@@ -67,6 +67,7 @@ class DiscoveryReport:
     resolved: List[ResolvedDevice] = field(default_factory=list)
     unresolved_ports: List[str] = field(default_factory=list)
     errors: Dict[str, str] = field(default_factory=dict)
+    os_checks: List = field(default_factory=list)   # list[OSCheckResult]
     scan_duration_s: float = 0.0
 
     def find(self, device_uid: str) -> Optional[ResolvedDevice]:
@@ -116,6 +117,18 @@ class DiscoveryEngine:
             if progress_cb:
                 progress_cb(msg, pct)
             log.debug("Discovery: %s", msg)
+
+        # ── Step 0: OS-level diagnostic checks ────────────────────────────
+        _progress("Running OS diagnostics…", 5)
+        try:
+            from hardware.os_checks import run_os_checks
+            report.os_checks = run_os_checks()
+            failed = [c for c in report.os_checks if not c.passed]
+            if failed:
+                for c in failed:
+                    log.warning("OS check failed: %s — %s", c.display_name, c.message)
+        except Exception as exc:
+            log.debug("OS checks failed: %s", exc)
 
         # ── Step 1: Passive serial port scan ─────────────────────────────
         _progress("Scanning serial ports…", 10)

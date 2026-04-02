@@ -108,11 +108,21 @@ class HardwareService(QObject):
     tec_warning             = pyqtSignal(int, str, float, float) # (idx, msg, actual, limit)
     tec_alarm_clear         = pyqtSignal(int)                    # alarm/warning cleared
     emergency_stop_complete = pyqtSignal(str)                    # summary of what was stopped
+    structured_error        = pyqtSignal(object)                 # DeviceError from error_taxonomy
+    bundle_suggested        = pyqtSignal(str, str)               # (device_uid, reason)
 
     def __init__(self, parent=None):
         super().__init__(parent)
 
         self._stop_event = threading.Event()   # set to request all loops to exit
+
+        # -- Support bundle auto-trigger -----------------------------------
+        try:
+            from hardware.support_bundle import SupportBundleTrigger
+            self._bundle_trigger = SupportBundleTrigger(parent=self)
+            self._bundle_trigger.bundle_suggested.connect(self.bundle_suggested)
+        except Exception:
+            self._bundle_trigger = None
 
         # -- Create child device services ----------------------------------
         self._camera_svc = CameraService(self._stop_event, parent=self)
@@ -140,6 +150,12 @@ class HardwareService(QObject):
             svc.error.connect(self.error)
             svc.log_message.connect(self.log_message)
             svc.startup_status.connect(self.startup_status)
+            # Forward structured errors for taxonomy + support bundle
+            if hasattr(svc, 'structured_error'):
+                svc.structured_error.connect(self.structured_error)
+                if self._bundle_trigger is not None:
+                    svc.structured_error.connect(
+                        self._bundle_trigger.on_device_error)
 
         # Mirror device_connected Qt signal -> event bus timeline.
         self.device_connected.connect(self._on_device_connected_evt)

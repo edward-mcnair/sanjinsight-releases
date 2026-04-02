@@ -59,9 +59,9 @@ class FpgaService(BaseDeviceService):
             self.device_connected.emit("fpga", True)
             self.startup_status.emit("fpga", True, cfg.get('driver', 'connected'))
         except Exception as e:
-            self.error.emit(f"FPGA: {e}")
+            dev_err = self._classify_and_emit(e, "fpga")
             self.device_connected.emit("fpga", False)
-            self.startup_status.emit("fpga", False, str(e)[:60])
+            self.startup_status.emit("fpga", False, dev_err.short_message)
             log.error(f"FpgaService FPGA init: {e}")
             return
 
@@ -116,7 +116,8 @@ class FpgaService(BaseDeviceService):
             self.device_connected.emit("fpga", True)
             self.startup_status.emit("fpga", True, "Simulated")
         except Exception as e:
-            self.startup_status.emit("fpga", False, str(e)[:60])
+            dev_err = self._classify_and_emit(e, "fpga")
+            self.startup_status.emit("fpga", False, dev_err.short_message)
             return
         while not self._stop_event.is_set():
             try:
