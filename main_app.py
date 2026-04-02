@@ -342,6 +342,7 @@ from ui.tabs.signal_check_section  import SignalCheckSection
 from ui.workspace                  import get_manager as _get_ws_manager
 from ui.phase_tracker              import PhaseTracker
 from ui.widgets.bottom_drawer      import BottomDrawer, DrawerToggleBar
+from ui.widgets.connection_health_panel import ConnectionHealthPanel, STATE_CONNECTED, STATE_ERROR, STATE_ABSENT
 from ui.widgets.measurement_strip  import MeasurementReadoutStrip
 from ui.charts                     import dTSparklineWidget
 from ai.metrics_service          import MetricsService
@@ -655,8 +656,15 @@ class MainWindow(QMainWindow):
         self._focus_stage_tab.open_device_manager.connect(
             self._open_device_manager)
 
-        # ── Bottom drawer (Console + Log) ────────────────────────────────
+        # ── Bottom drawer (Console + Log + Devices) ─────────────────────
         self._bottom_drawer = BottomDrawer(self._console_tab, self._log_tab)
+
+        # Connection Health panel — "Devices" tab in the drawer
+        self._health_panel = ConnectionHealthPanel()
+        self._health_panel.rescan_requested.connect(self._rescan_hardware)
+        self._health_panel.reconnect_requested.connect(self._reconnect_device)
+        self._bottom_drawer.add_tab(self._health_panel, "Devices", "mdi.server")
+
         self._content_splitter.addWidget(adv_widget)          # index 0 — nav
         self._content_splitter.addWidget(self._bottom_drawer)
         self._content_splitter.setCollapsible(1, False)  # drag stops at minimum; use toggle bar to close
@@ -1003,6 +1011,9 @@ class MainWindow(QMainWindow):
 
         # Device hotplug → refresh HW indicators in acquisition tabs
         hw_service.device_connected.connect(self._on_device_hotplug)
+
+        # Startup status → populate health panel with initial connect results
+        hw_service.startup_status.connect(self._on_startup_device_status)
 
         # Signal check section → phase tracker
         self._signal_check_section.signal_check_passed.connect(
@@ -1659,6 +1670,28 @@ class MainWindow(QMainWindow):
         except Exception:
             log.debug("autoscan camera refresh failed", exc_info=True)
 
+    def _on_startup_device_status(self, key: str, ok: bool, detail: str):
+        """Populate the Connection Health panel during initial startup."""
+        try:
+            import time as _time
+            _DEVICE_DISPLAY = {
+                "tec0": "TEC-1089", "tec1": "ATEC-302",
+                "camera": "Camera", "tr_camera": "TR Camera",
+                "ir_camera": "IR Camera", "fpga": "FPGA",
+                "bias": "Bias Source", "stage": "Stage",
+            }
+            state = STATE_CONNECTED if ok else STATE_ERROR
+            err = "" if ok else detail
+            self._health_panel.update_device(
+                uid=key,
+                state=state,
+                display_name=_DEVICE_DISPLAY.get(key, key),
+                error_msg=err,
+                last_seen=_time.time() if ok else None,
+            )
+        except Exception:
+            log.debug("health panel startup update failed", exc_info=True)
+
     def _on_device_hotplug(self, key: str, ok: bool):
         """
         Called on the GUI thread whenever hw_service detects a device
@@ -1671,6 +1704,24 @@ class MainWindow(QMainWindow):
         Also toggles Tier-1 tab empty-state placeholders so controls are
         hidden when the owning device is absent (unless demo mode is active).
         """
+        # Update Connection Health panel in bottom drawer
+        try:
+            import time as _time
+            _DEVICE_DISPLAY = {
+                "tec0": "TEC-1089", "tec1": "ATEC-302",
+                "camera": "Camera", "tr_camera": "TR Camera",
+                "ir_camera": "IR Camera", "fpga": "FPGA",
+                "bias": "Bias Source", "stage": "Stage",
+            }
+            self._health_panel.update_device(
+                uid=key,
+                state=STATE_CONNECTED if ok else STATE_ERROR,
+                display_name=_DEVICE_DISPLAY.get(key, key),
+                last_seen=_time.time() if ok else None,
+            )
+        except Exception:
+            log.debug("health panel update failed", exc_info=True)
+
         try:
             self._movie_tab._refresh_hw()
             self._transient_tab._refresh_hw()
@@ -2014,6 +2065,28 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(
                 self, "Hardware Scan Failed",
                 f"Discovery engine error:\n{exc}")
+
+    def _reconnect_device(self, uid: str):
+        """Attempt to reconnect a single device from the health panel."""
+        from hardware.hardware_service import hw_service
+        from ui.widgets.connection_health_panel import STATE_CONNECTING
+        self._health_panel.update_device(uid=uid, state=STATE_CONNECTING,
+                                         display_name=uid)
+        self._toasts.show_info(f"Reconnecting {uid}…", auto_dismiss_ms=3000)
+        log.info("Manual reconnect requested for %s", uid)
+
+        # Emit a reconnect request — HardwareService handles the actual
+        # reconnect via its existing reconnect infrastructure.  If there is
+        # no dedicated reconnect slot yet, a re-scan is the safe fallback.
+        try:
+            if hasattr(hw_service, 'reconnect_device'):
+                hw_service.reconnect_device(uid)
+            else:
+                self._rescan_hardware()
+        except Exception as exc:
+            log.warning("Reconnect %s failed: %s", uid, exc)
+            self._health_panel.update_device(
+                uid=uid, state=STATE_ERROR, error_msg=str(exc)[:120])
 
     # ── Menu bar ──────────────────────────────────────────────────
 

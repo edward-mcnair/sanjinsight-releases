@@ -125,19 +125,43 @@ def _list_serial_ports() -> list[str]:
 
 class _ScanWorker(QThread):
     """
-    Runs DeviceScanner.scan() in a background thread so the wizard UI stays
-    responsive.
+    Runs DiscoveryEngine.discover() in a background thread so the wizard UI
+    stays responsive.  Falls back to the legacy DeviceScanner if the
+    DiscoveryEngine is not available.
 
     Signals
     -------
     status_update(str)    — emitted periodically with a progress message
-    completed(object)     — emitted once with a ScanReport (or None on failure)
+    completed(object)     — emitted once with a DiscoveryReport (or None on failure)
     """
 
     status_update = pyqtSignal(str)
-    completed     = pyqtSignal(object)   # ScanReport | None
+    completed     = pyqtSignal(object)   # DiscoveryReport | None
 
     def run(self):
+        # ── Try the new DiscoveryEngine first ────────────────────────────
+        try:
+            from hardware.discovery_engine import DiscoveryEngine
+        except Exception as e:
+            log.warning("_ScanWorker: cannot import DiscoveryEngine: %s — "
+                        "falling back to DeviceScanner", e)
+            self._run_legacy()
+            return
+
+        def on_progress(msg: str, pct: int):
+            self.status_update.emit(msg)
+
+        try:
+            engine = DiscoveryEngine()
+            report = engine.discover(progress_cb=on_progress, use_cache=True)
+            self.completed.emit(report)
+        except Exception as e:
+            log.warning("_ScanWorker: DiscoveryEngine raised: %s — "
+                        "falling back to DeviceScanner", e)
+            self._run_legacy()
+
+    def _run_legacy(self):
+        """Fall back to the old DeviceScanner if DiscoveryEngine fails."""
         try:
             from hardware.device_scanner import DeviceScanner
         except Exception as e:
@@ -695,28 +719,48 @@ class _PageTEC(_PageBase):
     def apply_scan(self, report) -> int:
         """
         Pre-fill TEC driver and COM port from scan results.
+        Accepts either a DiscoveryReport (new) or ScanReport (legacy).
         Returns the number of TEC devices successfully detected.
         """
-        try:
-            from hardware.device_registry import DTYPE_TEC
-            tec_devs = [d for d in report.devices
-                        if d.is_known and d.descriptor.device_type == DTYPE_TEC]
-        except Exception:
-            tec_devs = []
-
         meer_found = atec_found = False
-        for dev in tec_devs:
-            uid = dev.descriptor.uid
-            if uid.startswith("meerstetter") and not meer_found:
-                self._meer_driver.setCurrentText("meerstetter")
-                self._meer_port.set_detected(dev.address,
-                                             dev.descriptor.display_name)
-                meer_found = True
-            elif uid.startswith("atec") and not atec_found:
-                self._atec_driver.setCurrentText("atec")
-                self._atec_port.set_detected(dev.address,
-                                             dev.descriptor.display_name)
-                atec_found = True
+
+        # ── New path: DiscoveryReport from DiscoveryEngine ───────────────
+        if hasattr(report, "resolved"):
+            for dev in report.resolved:
+                uid = dev.device_uid
+                if "meerstetter" in uid and "tec" in uid and not meer_found:
+                    label = dev.display_name
+                    if dev.confidence == "protocol_confirmed":
+                        label += "  (protocol confirmed)"
+                    self._meer_driver.setCurrentText("meerstetter")
+                    self._meer_port.set_detected(dev.port, label)
+                    meer_found = True
+                elif uid.startswith("atec") and not atec_found:
+                    self._atec_driver.setCurrentText("atec")
+                    self._atec_port.set_detected(dev.port, dev.display_name)
+                    atec_found = True
+
+        # ── Legacy path: ScanReport from DeviceScanner ───────────────────
+        elif hasattr(report, "devices"):
+            try:
+                from hardware.device_registry import DTYPE_TEC
+                tec_devs = [d for d in report.devices
+                            if d.is_known and d.descriptor.device_type == DTYPE_TEC]
+            except Exception:
+                tec_devs = []
+
+            for dev in tec_devs:
+                uid = dev.descriptor.uid
+                if uid.startswith("meerstetter") and not meer_found:
+                    self._meer_driver.setCurrentText("meerstetter")
+                    self._meer_port.set_detected(dev.address,
+                                                 dev.descriptor.display_name)
+                    meer_found = True
+                elif uid.startswith("atec") and not atec_found:
+                    self._atec_driver.setCurrentText("atec")
+                    self._atec_port.set_detected(dev.address,
+                                                 dev.descriptor.display_name)
+                    atec_found = True
 
         if not meer_found:
             self._meer_port.set_not_detected()
@@ -999,8 +1043,58 @@ class _PageCamera(_PageBase):
     def apply_scan(self, report) -> int:
         """
         Pre-fill camera driver / serial # / NI camera name from scan results.
+        Accepts either a DiscoveryReport (new) or ScanReport (legacy).
         Returns 1 if a camera was detected, 0 otherwise.
         """
+        # ── New path: DiscoveryReport from DiscoveryEngine ───────────────
+        if hasattr(report, "resolved"):
+            cam_devs = [d for d in report.resolved
+                        if d.connection_type in ("usb", "camera")
+                        and ("camera" in d.device_uid or "basler" in d.device_uid
+                             or "flir" in d.device_uid)]
+            if not cam_devs:
+                self._detection_label.setText(
+                    "⚠  No camera detected — check USB/GigE connection and SDK installation.\n"
+                    "    Basler TR: install pylon 8 from baslerweb.com, then: pip install pypylon\n"
+                    "    Microsanj IR: install Spinnaker SDK from flir.com, then: pip install spinnaker_python")
+                self._detection_label.setStyleSheet(_SS_BADGE_WARN)
+                self._detection_label.setVisible(True)
+                return 0
+
+            cam = cam_devs[0]
+            if "basler" in cam.device_uid.lower():
+                self._set_driver_key("pypylon")
+                if cam.serial_number:
+                    self._serial.setText(cam.serial_number)
+                label = cam.display_name
+                if cam.serial_number:
+                    label += f"  (s/n {cam.serial_number})"
+            elif "flir" in cam.device_uid.lower():
+                self._set_driver_key("flir")
+                if cam.serial_number:
+                    self._serial.setText(cam.serial_number)
+                label = cam.display_name
+                if cam.serial_number:
+                    label += f"  (s/n {cam.serial_number})"
+            else:
+                label = cam.display_name or cam.port
+
+            if len(cam_devs) > 1:
+                others = []
+                for extra in cam_devs[1:]:
+                    extra_label = extra.display_name
+                    if extra.serial_number:
+                        extra_label += f" (s/n {extra.serial_number})"
+                    others.append(extra_label)
+                label += f"\n    Also found: {', '.join(others)}"
+
+            self._detection_label.setText(f"✓  Detected: {label}")
+            self._detection_label.setStyleSheet(_SS_BADGE_OK)
+            self._detection_label.setVisible(True)
+            self._update_hints(self._drv.currentData())
+            return len(cam_devs)
+
+        # ── Legacy path: ScanReport from DeviceScanner ───────────────────
         try:
             from hardware.device_registry import DTYPE_CAMERA, CONN_CAMERA
         except ImportError:
@@ -1029,8 +1123,6 @@ class _PageCamera(_PageBase):
             return 0
 
         # Use first detected camera to pre-fill the form.
-        # If more than one camera is found, list all of them in the badge
-        # so the user knows which serial number to enter for which slot.
         cam    = cam_devs[0]
         module = cam.descriptor.driver_module if cam.descriptor else ""
 
@@ -1054,7 +1146,6 @@ class _PageCamera(_PageBase):
 
         elif "ni_imaqdx" in module or "imaqdx" in cam.description.lower():
             self._set_driver_key("ni_imaqdx")
-            # For NI IMAQdx, the address field holds the NI MAX camera name
             if cam.address:
                 self._cam_name.setText(cam.address)
             label = cam.description
@@ -1062,7 +1153,6 @@ class _PageCamera(_PageBase):
         else:
             label = cam.description or cam.address
 
-        # If multiple cameras found, append a summary of the others
         if len(cam_devs) > 1:
             others = []
             for extra in cam_devs[1:]:
@@ -1155,8 +1245,30 @@ class _PageFPGA(_PageBase):
     def apply_scan(self, report) -> int:
         """
         Pre-fill FPGA driver and resource string from scan results.
+        Accepts either a DiscoveryReport (new) or ScanReport (legacy).
         Returns 1 if an FPGA was detected, 0 otherwise.
         """
+        # ── New path: DiscoveryReport ────────────────────────────────────
+        if hasattr(report, "resolved"):
+            fpga_devs = [d for d in report.resolved
+                         if "fpga" in d.device_uid or "ni9637" in d.device_uid]
+            if fpga_devs:
+                fpga = fpga_devs[0]
+                self._drv.setCurrentText("ni9637")
+                self._resource.setText(fpga.port)
+                self._detection_label.setText(
+                    f"✓  Detected: {fpga.display_name}  ({fpga.port})")
+                self._detection_label.setStyleSheet(_SS_BADGE_OK)
+                self._detection_label.setVisible(True)
+                return 1
+
+            self._detection_label.setText(
+                "⚠  NI FPGA not detected — check NI-RIO drivers and cRIO connection")
+            self._detection_label.setStyleSheet(_SS_BADGE_WARN)
+            self._detection_label.setVisible(True)
+            return 0
+
+        # ── Legacy path: ScanReport ──────────────────────────────────────
         try:
             from hardware.device_registry import DTYPE_FPGA
             fpga_devs = [d for d in report.devices
@@ -1413,7 +1525,28 @@ class _PageBias(_PageBase):
         return cfg
 
     def apply_scan(self, report) -> int:
-        """Pre-fill bias driver from scan results.  Returns 1 if found."""
+        """Pre-fill bias driver from scan results.  Returns 1 if found.
+        Accepts either a DiscoveryReport (new) or ScanReport (legacy)."""
+        # ── New path: DiscoveryReport ────────────────────────────────────
+        if hasattr(report, "resolved"):
+            bias_devs = [d for d in report.resolved
+                         if "keithley" in d.device_uid or "rigol" in d.device_uid
+                         or "bias" in d.device_uid or "smu" in d.device_uid]
+            if not bias_devs:
+                return 0
+            dev = bias_devs[0]
+            if "keithley" in dev.device_uid:
+                self._drv.setCurrentText("keithley")
+                self._addr.setText(dev.port)
+            elif "rigol" in dev.device_uid:
+                self._drv.setCurrentText("rigol_dp832")
+                self._host.setText(dev.port)
+            else:
+                self._drv.setCurrentText("visa_generic")
+                self._addr.setText(dev.port)
+            return 1
+
+        # ── Legacy path: ScanReport ──────────────────────────────────────
         try:
             from hardware.device_registry import DTYPE_BIAS
             bias_devs = [d for d in report.devices
@@ -1431,7 +1564,6 @@ class _PageBias(_PageBase):
             self._addr.setText(dev.address)
         elif "rigol" in (dev.descriptor.uid or ""):
             self._drv.setCurrentText("rigol_dp832")
-            # For Ethernet Rigol, address is an IP
             self._host.setText(dev.address)
         elif "visa" in drv:
             self._drv.setCurrentText("visa_generic")
@@ -1644,7 +1776,25 @@ class _PageStage(_PageBase):
         return cfg
 
     def apply_scan(self, report) -> int:
-        """Pre-fill stage driver from scan results.  Returns 1 if found."""
+        """Pre-fill stage driver from scan results.  Returns 1 if found.
+        Accepts either a DiscoveryReport (new) or ScanReport (legacy)."""
+        # ── New path: DiscoveryReport ────────────────────────────────────
+        if hasattr(report, "resolved"):
+            stage_devs = [d for d in report.resolved
+                          if "stage" in d.device_uid or "thorlabs" in d.device_uid]
+            if not stage_devs:
+                return 0
+            dev = stage_devs[0]
+            if "thorlabs" in dev.device_uid:
+                self._drv.setCurrentText("thorlabs")
+                if dev.serial_number:
+                    self._sn_x.setText(dev.serial_number)
+            else:
+                self._drv.setCurrentText("serial_stage")
+                self._port.setCurrentText(dev.port)
+            return 1
+
+        # ── Legacy path: ScanReport ──────────────────────────────────────
         try:
             from hardware.device_registry import DTYPE_STAGE
             stage_devs = [d for d in report.devices
@@ -1659,7 +1809,6 @@ class _PageStage(_PageBase):
         drv = getattr(dev.descriptor, "driver_module", "").rsplit(".", 1)[-1]
         if "thorlabs" in drv:
             self._drv.setCurrentText("thorlabs")
-            # Serial numbers are embedded in descriptor extras when scanned
             extras = getattr(dev.descriptor, "extras", {})
             if extras.get("serial_x"):
                 self._sn_x.setText(str(extras["serial_x"]))
@@ -2228,13 +2377,21 @@ class FirstRunWizard(QDialog):
             self._page_welcome.set_scan_done(0)
             return
         # Distribute results to each page; they update their own fields
-        self._page_tec.apply_scan(report)
-        self._page_camera.apply_scan(report)
-        self._page_fpga.apply_scan(report)
-        self._page_bias.apply_scan(report)
-        self._page_stage.apply_scan(report)
-        # Use known_only() for the welcome-page count
-        self._page_welcome.set_scan_done(len(report.known_only()))
+        count = 0
+        count += self._page_tec.apply_scan(report)
+        count += self._page_camera.apply_scan(report)
+        count += self._page_fpga.apply_scan(report)
+        count += self._page_bias.apply_scan(report)
+        count += self._page_stage.apply_scan(report)
+
+        # DiscoveryReport uses .resolved, legacy ScanReport uses .known_only()
+        if hasattr(report, "resolved"):
+            total = len(report.resolved) if report.resolved else count
+        elif hasattr(report, "known_only"):
+            total = len(report.known_only())
+        else:
+            total = count
+        self._page_welcome.set_scan_done(total)
 
     # ── Navigation ────────────────────────────────────────────────────
 
