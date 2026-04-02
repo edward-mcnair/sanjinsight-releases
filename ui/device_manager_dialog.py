@@ -800,7 +800,7 @@ class _DeviceProfilePanel(QWidget):
                     else:
                         msg_lbl.setText(full)
                         btn.setText("Show less")
-                _expand_btn.clicked.connect(_toggle_err)
+                _expand_btn.clicked.connect(lambda _checked: _toggle_err())
                 err_lay.addWidget(err_msg)
                 err_lay.addWidget(_expand_btn)
             else:
