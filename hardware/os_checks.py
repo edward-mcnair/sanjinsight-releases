@@ -208,7 +208,10 @@ def _check_linux_dialout_group() -> OSCheckResult:
     """Check if the current user is in the 'dialout' group (serial access)."""
     try:
         import grp
-        user = os.getlogin()
+        try:
+            user = os.getlogin()
+        except OSError:
+            user = os.environ.get("USER", os.environ.get("LOGNAME", "unknown"))
         try:
             dialout = grp.getgrnam("dialout")
             if user in dialout.gr_mem or os.getuid() == 0:
