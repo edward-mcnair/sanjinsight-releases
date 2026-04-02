@@ -26,7 +26,12 @@ dist/
 installer_output/
 # Redistributable binaries downloaded by build_installer.bat — large binaries,
 # not committed to the repo.  build_installer.bat re-downloads them automatically.
-installer/redist/
+# Ignore large redistributable binaries downloaded by build_installer.bat,
+# but track the small Basler driver MSIs (4 MB total) needed by CI builds.
+installer/redist/*
+!installer/redist/pylon_USB_Camera_Driver.msi
+!installer/redist/USB_Transport_Layer_x64.msi
+!installer/redist/GenTL_Producer_USB_x64.msi
 
 # ── macOS ─────────────────────────────────────────────────────────────────────
 .DS_Store

@@ -52,21 +52,22 @@
 ; WCH permits free redistribution of their VCP driver.
 #define CH340SetupSrc "redist\CH341SER.EXE"
 
-; ── Basler pylon Runtime (USB3 Vision camera driver) ─────────────────────
-; Place the Basler pylon Runtime Redistributable .exe in installer\redist\.
-; build_installer.bat provides download instructions (manual download required
-; due to Basler's download portal requiring acceptance of terms).
+; ── Basler USB3 Vision camera driver MSIs (extracted from pylon Runtime) ──
+; These three MSIs were extracted from the Basler pylon 26.03 Runtime
+; Redistributable.  Together they provide the Windows kernel-level USB3
+; Vision camera driver that makes Basler cameras visible to the OS.
+; Total: ~4 MB (vs 1.3 GB for the full Runtime installer).
 ;
-; We install ONLY the USB3 camera driver component — pypylon (bundled in the
-; PyInstaller package) already includes the pylon C++ runtime and GenTL
-; transport layer producers.  The missing piece is the Windows kernel-level
-; USB camera driver that makes Basler cameras visible to the OS.
+; pypylon (bundled in the PyInstaller package) already includes the pylon
+; C++ runtime.  These MSIs add only the missing kernel driver layer.
 ;
-; Basler's EULA explicitly permits royalty-free redistribution of the pylon
-; Runtime Redistributable.
+; Basler's EULA explicitly permits royalty-free redistribution of pylon
+; Runtime components.
 ;
-; Silent install: pylon_Runtime_x.x.x.exe /install=USB_Camera_Driver /quiet
-#define PylonRuntimeSrc "redist\Basler_pylon_Runtime.exe"
+; Silent install: msiexec /i <file>.msi /quiet /norestart
+#define PylonUSBDriverMsi  "redist\pylon_USB_Camera_Driver.msi"
+#define PylonUSBTransport  "redist\USB_Transport_Layer_x64.msi"
+#define PylonUSBGenTL      "redist\GenTL_Producer_USB_x64.msi"
 
 [Setup]
 ; {A1B2C3D4…} — unique GUID identifies this app for Windows Add/Remove Programs.
@@ -150,11 +151,15 @@ Source: "{#FTDISetupSrc}"; DestDir: "{tmp}"; \
 Source: "{#CH340SetupSrc}"; DestDir: "{tmp}"; \
   Flags: deleteafterinstall skipifsourcedoesntexist
 
-; ── Basler pylon Runtime (USB3 Vision camera driver) ──────────────────────
-; Basler permits royalty-free redistribution of the pylon Runtime.
-; Only the USB camera kernel driver component is installed — pypylon bundles
-; the rest.  Always bundled — installed unconditionally.
-Source: "{#PylonRuntimeSrc}"; DestDir: "{tmp}"; \
+; ── Basler USB3 Vision camera driver MSIs ─────────────────────────────────
+; Basler permits royalty-free redistribution of pylon Runtime components.
+; Three MSIs provide the complete USB3 Vision camera driver stack.
+; Always bundled — installed unconditionally.
+Source: "{#PylonUSBDriverMsi}"; DestDir: "{tmp}"; \
+  Flags: deleteafterinstall skipifsourcedoesntexist
+Source: "{#PylonUSBTransport}"; DestDir: "{tmp}"; \
+  Flags: deleteafterinstall skipifsourcedoesntexist
+Source: "{#PylonUSBGenTL}"; DestDir: "{tmp}"; \
   Flags: deleteafterinstall skipifsourcedoesntexist
 
 [Dirs]
@@ -213,16 +218,26 @@ Filename: "{tmp}\CH341SER.EXE"; \
   StatusMsg: "Installing CH340 USB-serial driver…"; \
   Flags: waituntilterminated runhidden skipifdoesntexist
 
-; ── Step 4: Basler pylon USB3 Vision driver (silent, minimal) ────────────────
-; /install=USB_Camera_Driver  — install ONLY the USB3 camera kernel driver
-; /quiet                      — no UI at all
-; Always runs — pylon Runtime detects existing components and skips them.
-; pypylon (bundled) provides the C++ runtime and GenTL transport producers.
-; This step installs only the Windows kernel driver that makes Basler
-; cameras visible to the OS.  Without it, EnumerateDevices() returns empty.
-Filename: "{tmp}\Basler_pylon_Runtime.exe"; \
-  Parameters: "/install=USB_Camera_Driver /quiet"; \
-  StatusMsg: "Installing Basler USB3 Vision camera driver…"; \
+; ── Step 4: Basler USB3 Vision camera driver (three MSIs, silent) ────────────
+; msiexec /i ... /quiet /norestart — standard Windows Installer silent mode.
+; These three MSIs together provide the complete USB3 Vision driver stack:
+;   (a) pylon_USB_Camera_Driver.msi  — kernel-level USB filter driver
+;   (b) USB_Transport_Layer_x64.msi  — USB3 Vision transport layer
+;   (c) GenTL_Producer_USB_x64.msi   — GenTL producer for USB cameras
+; Each msiexec call is idempotent (re-running is a no-op if already installed).
+Filename: "msiexec.exe"; \
+  Parameters: "/i ""{tmp}\pylon_USB_Camera_Driver.msi"" /quiet /norestart"; \
+  StatusMsg: "Installing Basler USB3 Vision camera driver (1/3)…"; \
+  Flags: waituntilterminated runhidden skipifdoesntexist
+
+Filename: "msiexec.exe"; \
+  Parameters: "/i ""{tmp}\USB_Transport_Layer_x64.msi"" /quiet /norestart"; \
+  StatusMsg: "Installing Basler USB3 Vision transport layer (2/3)…"; \
+  Flags: waituntilterminated runhidden skipifdoesntexist
+
+Filename: "msiexec.exe"; \
+  Parameters: "/i ""{tmp}\GenTL_Producer_USB_x64.msi"" /quiet /norestart"; \
+  StatusMsg: "Installing Basler USB3 Vision GenTL producer (3/3)…"; \
   Flags: waituntilterminated runhidden skipifdoesntexist
 
 ; ── Step 5: Launch SanjINSIGHT (optional checkbox on Finish page) ────────────

@@ -170,29 +170,36 @@ if not exist "%CH340_EXE%" (
 )
 echo.
 
-:: ── Step 2d: Check for Basler pylon Runtime Redistributable ─────────────────
-set PYLON_EXE=%REDIST_DIR%\Basler_pylon_Runtime.exe
+:: ── Step 2d: Check for Basler USB3 Vision driver MSIs ───────────────────────
+:: These MSIs are extracted from the Basler pylon Runtime Redistributable.
+:: See docs/EZ500_Installation_Checklist.md for extraction instructions.
+:: Total size: ~4 MB (vs 1.3 GB for the full Runtime installer).
+set PYLON_MSI1=%REDIST_DIR%\pylon_USB_Camera_Driver.msi
+set PYLON_MSI2=%REDIST_DIR%\USB_Transport_Layer_x64.msi
+set PYLON_MSI3=%REDIST_DIR%\GenTL_Producer_USB_x64.msi
 
-if not exist "%PYLON_EXE%" (
-    echo [2d/4] Basler pylon Runtime Redistributable not found.
-    echo.
-    echo        The Basler USB3 Vision camera driver must be downloaded manually
-    echo        ^(Basler's download portal requires acceptance of license terms^).
-    echo.
-    echo        Steps:
-    echo          1. Go to: https://www.baslerweb.com/en/downloads/software-downloads/
-    echo          2. Filter: Category = "pylon Camera Software Suite"
-    echo                     OS = "Windows"
-    echo          3. Download "pylon Runtime" ^(NOT the full Camera Software Suite^)
-    echo             Look for: Basler_pylon_x.x.x_Runtime_xxx.exe
-    echo          4. Rename to: Basler_pylon_Runtime.exe
-    echo          5. Place in: installer\redist\Basler_pylon_Runtime.exe
-    echo.
-    echo        The installer will still build without it, but the Basler camera
-    echo        driver will not be bundled — users must install it separately.
-    echo.
+set PYLON_OK=1
+if not exist "%PYLON_MSI1%" set PYLON_OK=0
+if not exist "%PYLON_MSI2%" set PYLON_OK=0
+if not exist "%PYLON_MSI3%" set PYLON_OK=0
+
+if "%PYLON_OK%"=="1" (
+    echo [2d/4] Basler USB3 Vision driver MSIs found — will be bundled.
 ) else (
-    echo [2d/4] Basler_pylon_Runtime.exe found — will be bundled.
+    echo [2d/4] Basler USB3 Vision driver MSIs not found.
+    echo.
+    echo        The installer will still build, but without the Basler camera driver.
+    echo        To bundle them, place these files in installer\redist\:
+    echo          - pylon_USB_Camera_Driver.msi
+    echo          - USB_Transport_Layer_x64.msi
+    echo          - GenTL_Producer_USB_x64.msi
+    echo.
+    echo        Extract from the pylon Runtime using bsdtar or 7-Zip:
+    echo          bsdtar -xf "pylon Runtime 26.03.exe" a20 a21 a36
+    echo          rename a20 pylon_USB_Camera_Driver.msi
+    echo          rename a21 USB_Transport_Layer_x64.msi
+    echo          rename a36 GenTL_Producer_USB_x64.msi
+    echo.
 )
 echo.
 
