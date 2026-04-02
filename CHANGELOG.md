@@ -85,6 +85,33 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.5.0-beta.3] — 2026-04-02
+
+### Added
+
+- **Single-instance guard** — Prevents multiple app launches fighting over COM ports and cameras. Uses QLocalServer/QLocalSocket (cross-platform); second launch activates the existing window and exits.
+- **Camera type auto-detection** — TR/IR type is now detected from the device registry based on camera model. Shows detected type prominently with model context; collapsible "Override" toggle for manual selection with "Reset to detected" to clear saved overrides.
+- **Error taxonomy** (`hardware/error_taxonomy.py`) — 10-category `DeviceError` classification (missing driver, permission denied, device busy, timeout, etc.) with actionable suggested fixes, replacing truncated `str(e)[:60]` error strings across all 5 device services.
+- **Support bundle auto-trigger** (`hardware/support_bundle.py`) — `SupportBundleTrigger` fires a toast notification after 3 consecutive failures for the same device, offering to generate a diagnostic zip bundle.
+- **OS-level diagnostics** (`hardware/os_checks.py`) — Platform-specific checks run during device discovery: USB selective suspend (Windows), COM port locks (Windows), camera permissions (macOS), dialout group membership (Linux), serial port health (all).
+- **Device state machine** (`hardware/device_state.py`) — Formal `DeviceState` enum with validated lifecycle transitions (DISCONNECTED → CONNECTING → CONNECTED → ERROR, etc.).
+- **Driver health contract** (`hardware/driver_contract.py`) — Runtime-checkable `DriverHealthCheck` protocol for driver detection, install guidance, and self-test.
+- 4 new MDI icon constants: `IC.DISCONNECT`, `IC.GLOBE`, `IC.CLIPBOARD`, `IC.DOWNLOAD`
+
+### Changed
+
+- **Device Manager font sizes** — All panels bumped for comfortable reading: labels/inputs/buttons 8.5→10pt, group box titles 9.5→11pt, section headers 9.5→11pt, left panel tree 10→11pt, row height 34→36px. Smallest remaining font is 8.5pt (log filter combo).
+- **Device Manager UX improvements** — Tinted category headers with letter spacing, persistent port test status indicator, prominent red-bordered error banner with copy button and show more/less toggle, "Connecting…"/"Disconnecting…" loading indicators, address column tooltips, expandable driver changelog cards, log level filter combo (All/Info+/Warning+/Error+), all emoji icons replaced with MDI equivalents.
+
+### Fixed
+
+- **Override button crash** — `clicked(bool)` signal passed a bool as the first positional argument, overriding the closure's `btn` default parameter. Fixed with lambda wrapper.
+- **Show More button crash** — Same `clicked(bool)` signal issue on error banner expand toggle.
+- **`os.getlogin()` OSError** — Fixed crash in non-interactive Linux sessions (Docker, SSH without PTY, systemd) with fallback to `$USER`/`$LOGNAME` environment variables.
+- **Camera type reverting after connection** — `device_manager.py` was unconditionally overwriting `camera_type` from device registry, ignoring user preferences saved in `device_params`. Now checks `config.get_pref()` first.
+
+---
+
 ## [1.5.0-beta.2] — 2026-04-01
 
 ### Added
