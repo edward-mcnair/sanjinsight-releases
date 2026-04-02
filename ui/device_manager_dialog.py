@@ -1284,7 +1284,7 @@ class _DeviceProfilePanel(QWidget):
                     w.setVisible(True)
                     btn.setText("Reset to detected")
 
-            _override_btn.clicked.connect(_toggle_override)
+            _override_btn.clicked.connect(lambda _checked: _toggle_override())
 
             _det_row.addWidget(_override_btn)
             ct_lay.addWidget(_override_widget)
