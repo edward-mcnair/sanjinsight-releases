@@ -1195,36 +1195,106 @@ class _DeviceProfilePanel(QWidget):
                 r += 1
 
         # ── Camera Type picker (cameras only) ───────────────────────────────────
+        # The device registry knows the correct type for each model (Basler → TR,
+        # FLIR Boson → IR).  Show the auto-detected type prominently and let the
+        # user override only if needed.
         if desc.device_type == DTYPE_CAMERA:
             from PyQt5.QtWidgets import QRadioButton
-            pg.addWidget(self._sublabel("Camera Type"), r, 0)
-            ct_widget = QWidget()
-            ct_lay    = QHBoxLayout(ct_widget)
-            ct_lay.setContentsMargins(0, 0, 0, 0)
-            ct_lay.setSpacing(12)
-            _tr_radio = QRadioButton("Thermoreflectance (TR)")
-            _ir_radio = QRadioButton("Infrared (IR)")
-            ct_lay.addWidget(_tr_radio)
-            ct_lay.addWidget(_ir_radio)
-            ct_lay.addStretch()
-            pg.addWidget(ct_widget, r, 1)
-            self._param_widgets["camera_type"] = (_tr_radio, _ir_radio)
-            r += 1
 
-            # Read current value: device_params pref → config → "tr"
-            _saved_ct = "tr"
+            _registry_ct = getattr(desc, "camera_type", "tr").lower()
+            _registry_label = ("Thermoreflectance (TR)" if _registry_ct == "tr"
+                               else "Infrared (IR)")
+
+            # Check if user has an explicit override saved
+            _saved_ct = ""
             try:
                 import config as _cfg_dm
                 _saved_ct = str(
                     _cfg_dm.get_pref(
-                        f"device_params.{entry.uid}.camera_type",
-                        _cfg_dm.get("hardware", {}).get("camera", {})
-                               .get("camera_type", "tr"),
-                    )
+                        f"device_params.{entry.uid}.camera_type", "")
                 ).lower()
             except Exception:
                 pass
-            if _saved_ct == "ir":
+
+            _effective_ct = _saved_ct if _saved_ct else _registry_ct
+            _is_overridden = bool(_saved_ct) and _saved_ct != _registry_ct
+
+            # Auto-detected label
+            pg.addWidget(self._sublabel("Camera Type"), r, 0)
+            ct_widget = QWidget()
+            ct_lay = QVBoxLayout(ct_widget)
+            ct_lay.setContentsMargins(0, 0, 0, 0)
+            ct_lay.setSpacing(6)
+
+            # Detected type badge
+            _det_row = QHBoxLayout()
+            _det_row.setSpacing(8)
+            _det_badge_color = (PALETTE['accent'] if _registry_ct == "tr"
+                                else PALETTE['warning'])
+            _det_lbl = QLabel(
+                f"<b>{_registry_label}</b>"
+                f"  <span style='color:{PALETTE['textSub']}'>"
+                f"(detected from {desc.display_name})</span>")
+            _det_lbl.setStyleSheet(
+                f"font-size:9pt; color:{_det_badge_color}; border:none;")
+            _det_row.addWidget(_det_lbl, 1)
+            ct_lay.addLayout(_det_row)
+
+            # Override controls (collapsed by default unless already overridden)
+            _override_widget = QWidget()
+            _override_lay = QHBoxLayout(_override_widget)
+            _override_lay.setContentsMargins(0, 0, 0, 0)
+            _override_lay.setSpacing(12)
+            _tr_radio = QRadioButton("Thermoreflectance (TR)")
+            _ir_radio = QRadioButton("Infrared (IR)")
+            _override_lay.addWidget(_tr_radio)
+            _override_lay.addWidget(_ir_radio)
+            _override_lay.addStretch()
+            _override_widget.setVisible(_is_overridden)
+
+            # "Override" toggle link
+            _override_btn = QPushButton(
+                "Reset to detected" if _is_overridden else "Override")
+            _override_btn.setFlat(True)
+            _override_btn.setCursor(Qt.PointingHandCursor)
+            _override_btn.setStyleSheet(
+                f"color:{PALETTE['accent']}; font-size:8.5pt; "
+                f"text-align:left; border:none; padding:0;")
+
+            def _toggle_override(btn=_override_btn, w=_override_widget,
+                                 tr=_tr_radio, ir=_ir_radio,
+                                 reg=_registry_ct, uid=entry.uid):
+                if w.isVisible():
+                    # Reset to detected — clear the saved override
+                    w.setVisible(False)
+                    btn.setText("Override")
+                    if reg == "ir":
+                        ir.setChecked(True)
+                    else:
+                        tr.setChecked(True)
+                    try:
+                        import config as _c
+                        saved = _c.get_pref(f"device_params.{uid}", {})
+                        saved.pop("camera_type", None)
+                        _c.set_pref(f"device_params.{uid}", saved)
+                    except Exception:
+                        pass
+                else:
+                    # Show override controls
+                    w.setVisible(True)
+                    btn.setText("Reset to detected")
+
+            _override_btn.clicked.connect(_toggle_override)
+
+            _det_row.addWidget(_override_btn)
+            ct_lay.addWidget(_override_widget)
+
+            pg.addWidget(ct_widget, r, 1)
+            self._param_widgets["camera_type"] = (_tr_radio, _ir_radio)
+            r += 1
+
+            # Set the radio to the effective value
+            if _effective_ct == "ir":
                 _ir_radio.setChecked(True)
             else:
                 _tr_radio.setChecked(True)

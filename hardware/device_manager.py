@@ -684,11 +684,18 @@ class DeviceManager:
         # from _load_custom_driver.
         if dtype == DTYPE_CAMERA:
             from hardware.cameras import create_camera
-            # Inject camera_type from the device registry so the driver's
-            # CameraInfo reports the correct modality (tr/ir).  Without
-            # this, all cameras default to "tr" in CameraInfo, and
-            # _inject_into_app routes them to the wrong app_state slot.
-            cfg["camera_type"] = getattr(desc, "camera_type", "tr")
+            # Camera modality (tr/ir): user preference > registry default.
+            # The device registry knows the correct type for each model
+            # (Basler → "tr", FLIR Boson → "ir"), but a user override
+            # saved in device_params takes priority.
+            _registry_type = getattr(desc, "camera_type", "tr")
+            try:
+                import config as _cfg
+                _user_type = _cfg.get_pref(
+                    f"device_params.{entry.uid}.camera_type", "")
+                cfg["camera_type"] = _user_type if _user_type else _registry_type
+            except Exception:
+                cfg["camera_type"] = _registry_type
             # Boson: serial control port = entry.address (set in Device Manager),
             # UVC video device index = entry.video_index.
             # Width/height injected from registry so Boson 640 gets correct geometry.
