@@ -41,6 +41,32 @@ import traceback as _tb_boot
 if _sys_boot.platform == "darwin":
     _os_boot.environ.setdefault("OPENCV_AVFOUNDATION_SKIP_AUTH", "1")
 
+# ── Basler pylon DLL isolation (Windows) ─────────────────────────────────────
+# pypylon ships its own pylon C++ runtime DLLs inside the wheel/bundle.
+# If the user also installs the full Basler Pylon SDK, its DLLs land in
+# the system PATH and get loaded INSTEAD of pypylon's bundled copies.
+# A version mismatch causes a hard native crash (access violation) — no
+# Python exception, no log, no error dialog; the process just vanishes.
+#
+# Fix: Remove any Basler Pylon SDK paths from the DLL search order BEFORE
+# pypylon is imported.  This ensures pypylon finds its own bundled DLLs.
+# The USB3 Vision camera *kernel driver* (installed by the pylon Runtime)
+# is unaffected — it operates at the OS level, not via DLL loading.
+if _sys_boot.platform == "win32":
+    _pylon_env_keys = ("PYLON_DEV_DIR", "PYLON_ROOT", "GENICAM_ROOT_V3_1",
+                       "GENICAM_ROOT_V3_2", "GENICAM_ROOT_V3_3",
+                       "GENICAM_ROOT")
+    for _k in _pylon_env_keys:
+        _os_boot.environ.pop(_k, None)
+
+    # Strip Basler/pylon directories from PATH so Windows DLL loader
+    # won't find the SDK copies before pypylon's bundled ones.
+    _path_parts = _os_boot.environ.get("PATH", "").split(_os_boot.pathsep)
+    _filtered = [p for p in _path_parts
+                 if "basler" not in p.lower() and "pylon" not in p.lower()]
+    if len(_filtered) != len(_path_parts):
+        _os_boot.environ["PATH"] = _os_boot.pathsep.join(_filtered)
+
 _BOOT_LOG_DIR  = _os_boot.path.join(_os_boot.path.expanduser("~"), ".microsanj", "logs")
 _BOOT_CRASH    = _os_boot.path.join(_BOOT_LOG_DIR, "startup_crash.txt")
 

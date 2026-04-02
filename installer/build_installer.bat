@@ -170,6 +170,32 @@ if not exist "%CH340_EXE%" (
 )
 echo.
 
+:: ── Step 2d: Check for Basler pylon Runtime Redistributable ─────────────────
+set PYLON_EXE=%REDIST_DIR%\Basler_pylon_Runtime.exe
+
+if not exist "%PYLON_EXE%" (
+    echo [2d/4] Basler pylon Runtime Redistributable not found.
+    echo.
+    echo        The Basler USB3 Vision camera driver must be downloaded manually
+    echo        ^(Basler's download portal requires acceptance of license terms^).
+    echo.
+    echo        Steps:
+    echo          1. Go to: https://www.baslerweb.com/en/downloads/software-downloads/
+    echo          2. Filter: Category = "pylon Camera Software Suite"
+    echo                     OS = "Windows"
+    echo          3. Download "pylon Runtime" ^(NOT the full Camera Software Suite^)
+    echo             Look for: Basler_pylon_x.x.x_Runtime_xxx.exe
+    echo          4. Rename to: Basler_pylon_Runtime.exe
+    echo          5. Place in: installer\redist\Basler_pylon_Runtime.exe
+    echo.
+    echo        The installer will still build without it, but the Basler camera
+    echo        driver will not be bundled — users must install it separately.
+    echo.
+) else (
+    echo [2d/4] Basler_pylon_Runtime.exe found — will be bundled.
+)
+echo.
+
 :: ── Step 3: Build the PyInstaller bundle ─────────────────────────────────────
 echo [3/4] Building application bundle...
 echo       (using: %PYTHON_EXE%)

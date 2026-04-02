@@ -173,6 +173,29 @@ def check_usb_serial_drivers():
           "Not installed — Arduino GPIO will not connect",
           warn_only=True)
 
+    # Basler USB3 Vision camera driver
+    basler_svc = reg_key_exists(winreg.HKEY_LOCAL_MACHINE,
+                                r"SYSTEM\CurrentControlSet\Services\BvcUsbU3v")
+    basler_old = reg_key_exists(winreg.HKEY_LOCAL_MACHINE,
+                                r"SYSTEM\CurrentControlSet\Services\pylonusb")
+    basler_sdk = reg_key_exists(winreg.HKEY_LOCAL_MACHINE,
+                                r"SOFTWARE\Basler\pylon")
+    basler_ok = basler_svc or basler_old or basler_sdk
+    check("Basler USB3 Vision camera driver", basler_ok,
+          "Not installed — Basler cameras will not be detected.\n"
+          "           Install via the SanjINSIGHT installer or download the pylon\n"
+          "           Runtime from: https://www.baslerweb.com/en/downloads/software-downloads/")
+
+    # Check for DLL conflict (full Pylon SDK + pypylon)
+    if basler_sdk:
+        pylon_root = reg_read_str(winreg.HKEY_LOCAL_MACHINE,
+                                  r"SOFTWARE\Basler\pylon", "InstallDir")
+        if pylon_root:
+            print(f"  {WARN}  Full Basler Pylon SDK detected at: {pylon_root}")
+            print(f"         SanjINSIGHT isolates its bundled pypylon DLLs from the")
+            print(f"         system SDK to prevent version conflicts.")
+            warnings.append("Full Basler Pylon SDK installed — DLL isolation active")
+
 
 # ── Section: COM Ports ──────────────────────────────────────────────────────
 def check_com_ports():

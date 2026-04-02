@@ -47,6 +47,7 @@ Microsanj, LLC | microsanj.com
   - [x] Visual C++ 2015-2022 Runtime (x64) — required by Qt5
   - [x] FTDI CDM driver — required for Meerstetter TEC/LDD
   - [x] CH340/CH341 driver — required for Arduino Nano
+  - [x] Basler USB3 Vision camera driver — from pylon Runtime Redistributable
   - [x] Basler pylon runtime — bundled inside pypylon (no separate install)
 - [ ] Note any post-install messages about optional SDKs
 - [ ] **Reboot** after installation
@@ -152,9 +153,13 @@ Install ONLY if the system has the corresponding hardware.
   install from: https://www.wch-ic.com/downloads/CH341SER_EXE.html
 
 ### Camera not detected
-→ Ensure it's on a USB **3.0** port (blue connector). USB 2.0 will not work.
-→ Run Windows Update — USB3 Vision drivers may be pending.
-→ Try a different USB 3.0 port.
+→ Ensure it's on a **direct USB 3.0 port** (blue connector) — NOT through a hub.
+→ USB 2.0 ports and bus-powered USB hubs will not work.
+→ Run Windows Update — USB3 host controller drivers may be pending.
+→ Try a different USB 3.0 port on the NUC.
+→ If the Basler Pylon Viewer was installed separately and SanjINSIGHT crashes,
+  uninstall the full Pylon SDK (keep drivers when prompted) — pypylon bundles
+  its own runtime and a version mismatch causes a silent crash.
 
 ### "Python was not found" error
 → This is a Windows App Execution Alias conflict. Go to:

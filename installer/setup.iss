@@ -52,6 +52,22 @@
 ; WCH permits free redistribution of their VCP driver.
 #define CH340SetupSrc "redist\CH341SER.EXE"
 
+; ── Basler pylon Runtime (USB3 Vision camera driver) ─────────────────────
+; Place the Basler pylon Runtime Redistributable .exe in installer\redist\.
+; build_installer.bat provides download instructions (manual download required
+; due to Basler's download portal requiring acceptance of terms).
+;
+; We install ONLY the USB3 camera driver component — pypylon (bundled in the
+; PyInstaller package) already includes the pylon C++ runtime and GenTL
+; transport layer producers.  The missing piece is the Windows kernel-level
+; USB camera driver that makes Basler cameras visible to the OS.
+;
+; Basler's EULA explicitly permits royalty-free redistribution of the pylon
+; Runtime Redistributable.
+;
+; Silent install: pylon_Runtime_x.x.x.exe /install=USB_Camera_Driver /quiet
+#define PylonRuntimeSrc "redist\Basler_pylon_Runtime.exe"
+
 [Setup]
 ; {A1B2C3D4…} — unique GUID identifies this app for Windows Add/Remove Programs.
 ; Do NOT change this GUID — changing it breaks in-place upgrades.
@@ -131,6 +147,13 @@ Source: "{#FTDISetupSrc}"; DestDir: "{tmp}"; \
 Source: "{#CH340SetupSrc}"; DestDir: "{tmp}"; \
   Flags: deleteafterinstall skipifsourcedoesntexist; Check: NeedsCH340Driver
 
+; ── Basler pylon Runtime (USB3 Vision camera driver) ──────────────────────
+; Basler permits royalty-free redistribution of the pylon Runtime.
+; Only the USB camera kernel driver component is installed — pypylon bundles
+; the rest.
+Source: "{#PylonRuntimeSrc}"; DestDir: "{tmp}"; \
+  Flags: deleteafterinstall skipifsourcedoesntexist; Check: NeedsBaslerDriver
+
 [Dirs]
 ; Ensure writable directories exist at install time so the app can write to them
 ; without requesting elevation at runtime.
@@ -179,7 +202,19 @@ Filename: "{tmp}\CH341SER.EXE"; \
   Flags: waituntilterminated runhidden skipifdoesntexist; \
   Check: NeedsCH340Driver
 
-; ── Step 4: Launch SanjINSIGHT (optional checkbox on Finish page) ────────────
+; ── Step 4: Basler pylon USB3 Vision driver (silent, minimal) ───────────────
+; /install=USB_Camera_Driver  — install ONLY the USB3 camera kernel driver
+; /quiet                      — no UI at all
+; pypylon (bundled) provides the pylon C++ runtime and GenTL producers.
+; This step installs only the Windows-level driver that makes the camera
+; visible to the OS.  Without it, EnumerateDevices() returns empty.
+Filename: "{tmp}\Basler_pylon_Runtime.exe"; \
+  Parameters: "/install=USB_Camera_Driver /quiet"; \
+  StatusMsg: "Installing Basler USB3 Vision camera driver…"; \
+  Flags: waituntilterminated runhidden skipifdoesntexist; \
+  Check: NeedsBaslerDriver
+
+; ── Step 5: Launch SanjINSIGHT (optional checkbox on Finish page) ────────────
 Filename: "{app}\{#AppExeName}"; \
   Description: "{cm:LaunchProgram,{#AppName}}"; \
   Flags: nowait postinstall skipifsilent
@@ -240,6 +275,36 @@ begin
   end;
   { Skip if CH341SER.EXE was not bundled }
   Result := FileExists(ExpandConstant('{tmp}\CH341SER.EXE'));
+end;
+
+{ ── Basler USB3 Vision camera driver detection ────────────────────────────────
+  Basler cameras use vendor ID 0x2676.  The pylon USB3 camera driver registers
+  a service named "BvcUsbU3v" (Basler Virtual Camera USB3 Vision).
+  If neither the service nor a matching USB device class entry exists, the
+  driver is needed.  Returns True when the Basler driver should be installed.
+}
+function NeedsBaslerDriver(): Boolean;
+begin
+  { Check for the Basler USB3 Vision camera driver service }
+  if RegKeyExists(HKLM, 'SYSTEM\CurrentControlSet\Services\BvcUsbU3v') then
+  begin
+    Result := False;
+    Exit;
+  end;
+  { Alternate service name used by older pylon versions }
+  if RegKeyExists(HKLM, 'SYSTEM\CurrentControlSet\Services\pylonusb') then
+  begin
+    Result := False;
+    Exit;
+  end;
+  { Check if pylon SDK is installed (it includes the driver) }
+  if RegKeyExists(HKLM, 'SOFTWARE\Basler\pylon') then
+  begin
+    Result := False;
+    Exit;
+  end;
+  { Only install if the redistributable was bundled }
+  Result := FileExists(ExpandConstant('{tmp}\Basler_pylon_Runtime.exe'));
 end;
 
 { ── Hardware SDK prerequisite guidance ───────────────────────────────────────
