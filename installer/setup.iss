@@ -208,83 +208,214 @@ Root: HKCU; Subkey: "Software\Microsanj\SanjINSIGHT"; \
 
 [Run]
 ; ══════════════════════════════════════════════════════════════════════════════
-; ALL drivers are installed UNCONDITIONALLY — even if the hardware is not
-; currently connected.  This ensures devices plugged in later (or not powered
-; during install) work immediately without re-running the installer.
+; Driver installation — controlled by the "Driver Selection" wizard page.
+; All drivers are checked (selected) by default.  The user can uncheck any
+; driver to skip it.  Each driver installer is idempotent: re-running it
+; when already installed is a harmless no-op.
 ;
-; Each driver installer is idempotent: re-running it when the driver is
-; already present is a harmless no-op (exits quickly with success).
+; Check: functions read the checkbox state from the custom wizard page.
 ; ══════════════════════════════════════════════════════════════════════════════
 
-; ── Step 1: Visual C++ Runtime (silent) ──────────────────────────────────────
-; /quiet         — no UI
-; /norestart     — suppress any reboot prompt (installer handles this if needed)
-; Always runs — the VC++ installer itself detects if already present and
-; exits immediately with code 0 (no-op).
+; ── Visual C++ Runtime (silent) ──────────────────────────────────────────────
 Filename: "{tmp}\vc_redist.x64.exe"; \
   Parameters: "/quiet /norestart"; \
   StatusMsg: "Installing Visual C++ 2022 Runtime…"; \
+  Check: ShouldInstallVCRedist; \
   Flags: waituntilterminated runhidden skipifdoesntexist
 
-; ── Step 2: FTDI VCP driver (silent) ─────────────────────────────────────────
-; /S              — NSIS silent mode (no UI)
-; Always runs — CDM_Setup detects existing install and exits cleanly.
+; ── FTDI VCP driver (silent) ─────────────────────────────────────────────────
 Filename: "{tmp}\CDM_Setup.exe"; \
   Parameters: "/S"; \
   StatusMsg: "Installing FTDI USB-serial driver…"; \
+  Check: ShouldInstallFTDI; \
   Flags: waituntilterminated runhidden skipifdoesntexist
 
-; ── Step 3: CH340 USB-serial driver (silent) ─────────────────────────────────
-; /S              — NSIS silent mode (no UI)
-; Always runs — CH341SER detects existing install and exits cleanly.
+; ── CH340 USB-serial driver (silent) ─────────────────────────────────────────
 Filename: "{tmp}\CH341SER.EXE"; \
   Parameters: "/S"; \
   StatusMsg: "Installing CH340 USB-serial driver…"; \
+  Check: ShouldInstallCH340; \
   Flags: waituntilterminated runhidden skipifdoesntexist
 
-; ── Step 4: Basler USB3 Vision camera driver (three MSIs, silent) ────────────
-; msiexec /i ... /quiet /norestart — standard Windows Installer silent mode.
-; These three MSIs together provide the complete USB3 Vision driver stack:
-;   (a) pylon_USB_Camera_Driver.msi  — kernel-level USB filter driver
-;   (b) USB_Transport_Layer_x64.msi  — USB3 Vision transport layer
-;   (c) GenTL_Producer_USB_x64.msi   — GenTL producer for USB cameras
-; Each msiexec call is idempotent (re-running is a no-op if already installed).
+; ── Basler USB3 Vision camera driver (three MSIs, silent) ────────────────────
 Filename: "msiexec.exe"; \
   Parameters: "/i ""{tmp}\pylon_USB_Camera_Driver.msi"" /quiet /norestart"; \
   StatusMsg: "Installing Basler USB3 Vision camera driver (1/3)…"; \
+  Check: ShouldInstallBasler; \
   Flags: waituntilterminated runhidden skipifdoesntexist
 
 Filename: "msiexec.exe"; \
   Parameters: "/i ""{tmp}\USB_Transport_Layer_x64.msi"" /quiet /norestart"; \
   StatusMsg: "Installing Basler USB3 Vision transport layer (2/3)…"; \
+  Check: ShouldInstallBasler; \
   Flags: waituntilterminated runhidden skipifdoesntexist
 
 Filename: "msiexec.exe"; \
   Parameters: "/i ""{tmp}\GenTL_Producer_USB_x64.msi"" /quiet /norestart"; \
   StatusMsg: "Installing Basler USB3 Vision GenTL producer (3/3)…"; \
+  Check: ShouldInstallBasler; \
   Flags: waituntilterminated runhidden skipifdoesntexist
 
-; ── Step 5: NI R Series RIO driver (online installer, silent) ────────────────
-; /q                — quiet mode (no UI)
-; /AcceptLicenses yes — accept the NI EULA automatically
-; NOTE: Requires internet — the online installer downloads driver components
-; from NI's servers (~200 MB).  If no internet is available, this step will
-; fail silently and NI-RIO can be installed manually later.
+; ── NI R Series RIO driver (online installer, silent) ────────────────────────
 Filename: "{tmp}\ni-rio-online-installer.exe"; \
   Parameters: "/q /AcceptLicenses yes"; \
-  StatusMsg: "Installing NI R Series RIO driver (requires internet)…"; \
+  StatusMsg: "Installing NI R Series RIO driver (downloading from NI…)"; \
+  Check: ShouldInstallNIRIO; \
   Flags: waituntilterminated runhidden skipifdoesntexist
 
-; ── Step 6: Launch SanjINSIGHT (optional checkbox on Finish page) ────────────
+; ── Launch SanjINSIGHT (optional checkbox on Finish page) ────────────────────
 Filename: "{app}\{#AppExeName}"; \
   Description: "{cm:LaunchProgram,{#AppName}}"; \
   Flags: nowait postinstall skipifsilent
 
 [Code]
 { ══════════════════════════════════════════════════════════════════════════════
-  Driver detection functions are NO LONGER used as install gates.
-  All drivers are installed unconditionally (each installer is idempotent).
-  These functions are retained only for the post-install verification dialog.
+  Custom "Driver Selection" wizard page
+  ──────────────────────────────────────
+  Displayed after the Tasks page.  Lists every driver the installer can
+  install, grouped into "Bundled (offline)" and "Internet required".
+  All checkboxes are checked by default — the user can uncheck any driver
+  to skip it.
+  ══════════════════════════════════════════════════════════════════════════════ }
+
+var
+  DriverPage: TWizardPage;
+  chkVCRedist: TNewCheckBox;
+  chkFTDI:     TNewCheckBox;
+  chkCH340:    TNewCheckBox;
+  chkBasler:   TNewCheckBox;
+  chkNIRIO:    TNewCheckBox;
+
+{ ── Wizard page creation ─────────────────────────────────────────────────── }
+procedure CreateDriverPage();
+var
+  lbl: TNewStaticText;
+  yPos: Integer;
+begin
+  DriverPage := CreateCustomPage(
+    wpSelectTasks,
+    'Driver Installation',
+    'Select which hardware drivers to install.  All drivers are recommended ' +
+    'for full hardware support.  Uncheck any you do not need.');
+
+  yPos := 0;
+
+  { ── Section: Bundled drivers (offline) ─────────────────────────────── }
+  lbl := TNewStaticText.Create(WizardForm);
+  lbl.Parent   := DriverPage.Surface;
+  lbl.Caption  := 'Bundled drivers (no internet required):';
+  lbl.Font.Style := [fsBold];
+  lbl.Left     := 0;
+  lbl.Top      := yPos;
+  lbl.AutoSize := True;
+  yPos := yPos + 22;
+
+  chkVCRedist := TNewCheckBox.Create(WizardForm);
+  chkVCRedist.Parent  := DriverPage.Surface;
+  chkVCRedist.Caption := 'Visual C++ 2022 Runtime (x64) — required by Qt5 and numpy';
+  chkVCRedist.Checked := True;
+  chkVCRedist.Left    := 16;
+  chkVCRedist.Top     := yPos;
+  chkVCRedist.Width   := DriverPage.SurfaceWidth - 16;
+  yPos := yPos + 22;
+
+  chkFTDI := TNewCheckBox.Create(WizardForm);
+  chkFTDI.Parent  := DriverPage.Surface;
+  chkFTDI.Caption := 'FTDI USB-serial driver — Meerstetter TEC-1089 / LDD-1121';
+  chkFTDI.Checked := True;
+  chkFTDI.Left    := 16;
+  chkFTDI.Top     := yPos;
+  chkFTDI.Width   := DriverPage.SurfaceWidth - 16;
+  yPos := yPos + 22;
+
+  chkCH340 := TNewCheckBox.Create(WizardForm);
+  chkCH340.Parent  := DriverPage.Surface;
+  chkCH340.Caption := 'CH340 USB-serial driver — Arduino Nano, serial adapters';
+  chkCH340.Checked := True;
+  chkCH340.Left    := 16;
+  chkCH340.Top     := yPos;
+  chkCH340.Width   := DriverPage.SurfaceWidth - 16;
+  yPos := yPos + 22;
+
+  chkBasler := TNewCheckBox.Create(WizardForm);
+  chkBasler.Parent  := DriverPage.Surface;
+  chkBasler.Caption := 'Basler USB3 Vision camera driver — Basler area-scan cameras';
+  chkBasler.Checked := True;
+  chkBasler.Left    := 16;
+  chkBasler.Top     := yPos;
+  chkBasler.Width   := DriverPage.SurfaceWidth - 16;
+  yPos := yPos + 38;
+
+  { ── Section: Internet-required drivers ─────────────────────────────── }
+  lbl := TNewStaticText.Create(WizardForm);
+  lbl.Parent   := DriverPage.Surface;
+  lbl.Caption  := 'Internet-required drivers (downloaded during install):';
+  lbl.Font.Style := [fsBold];
+  lbl.Left     := 0;
+  lbl.Top      := yPos;
+  lbl.AutoSize := True;
+  yPos := yPos + 22;
+
+  chkNIRIO := TNewCheckBox.Create(WizardForm);
+  chkNIRIO.Parent  := DriverPage.Surface;
+  chkNIRIO.Caption := 'NI R Series RIO driver — NI 9637 FPGA (~200 MB download)';
+  chkNIRIO.Checked := True;
+  chkNIRIO.Left    := 16;
+  chkNIRIO.Top     := yPos;
+  chkNIRIO.Width   := DriverPage.SurfaceWidth - 16;
+  yPos := yPos + 32;
+
+  { ── Footer note ────────────────────────────────────────────────────── }
+  lbl := TNewStaticText.Create(WizardForm);
+  lbl.Parent   := DriverPage.Surface;
+  lbl.Caption  :=
+    'All drivers are installed silently.  Each is idempotent — re-running ' +
+    'the installer with a driver already present is a harmless no-op.' + #13#10 + #13#10 +
+    'Skipped drivers can be installed later by re-running this installer ' +
+    'or downloading them individually:' + #13#10 +
+    '  • FTDI:   ftdichip.com/drivers/vcp-drivers' + #13#10 +
+    '  • CH340:  wch-ic.com/downloads/CH341SER_EXE.html' + #13#10 +
+    '  • Basler: baslerweb.com/downloads (pylon Runtime)' + #13#10 +
+    '  • NI-RIO: ni.com/en/support/downloads/drivers/download.ni-r-series-multifunction-rio.html';
+  lbl.Left     := 0;
+  lbl.Top      := yPos;
+  lbl.AutoSize := False;
+  lbl.Width    := DriverPage.SurfaceWidth;
+  lbl.Height   := 130;
+  lbl.Font.Color := clGray;
+end;
+
+{ ── Check functions for [Run] entries ────────────────────────────────────── }
+{ These return True when the user has checked the corresponding checkbox on
+  the Driver Selection page.  Used by [Run] Check: clauses. }
+
+function ShouldInstallVCRedist(): Boolean;
+begin
+  Result := chkVCRedist.Checked;
+end;
+
+function ShouldInstallFTDI(): Boolean;
+begin
+  Result := chkFTDI.Checked;
+end;
+
+function ShouldInstallCH340(): Boolean;
+begin
+  Result := chkCH340.Checked;
+end;
+
+function ShouldInstallBasler(): Boolean;
+begin
+  Result := chkBasler.Checked;
+end;
+
+function ShouldInstallNIRIO(): Boolean;
+begin
+  Result := chkNIRIO.Checked;
+end;
+
+{ ══════════════════════════════════════════════════════════════════════════════
+  Driver detection — used only by PostInstallSummary to verify results.
   ══════════════════════════════════════════════════════════════════════════════ }
 
 function HasVCRedist(): Boolean;
@@ -320,60 +451,78 @@ begin
          or RegKeyExists(HKLM64, 'SOFTWARE\National Instruments\RIO');
 end;
 
-{ ── Post-install verification and guidance ───────────────────────────────────
-  Called after installation completes.  Verifies that all bundled drivers
-  installed successfully and checks for optional SDKs (NI-VISA) that
-  cannot be bundled due to vendor licensing.
+{ ── Post-install verification ────────────────────────────────────────────────
+  Called after installation completes.  Reports which selected drivers
+  installed successfully, which failed, and which were skipped by the user.
+  Also checks for optional SDKs (NI-VISA) not bundled in the installer.
 }
 procedure PostInstallSummary();
 var
   summary: String;
   issues: String;
+  skipped: String;
   optional: String;
+  msg: String;
   niVisaKey: String;
 begin
-  summary := '';
-  issues := '';
+  summary  := '';
+  issues   := '';
+  skipped  := '';
   optional := '';
 
-  { ── Verify bundled driver installation ──────────────────────────────── }
-  if HasVCRedist() then
+  { ── VC++ Runtime ───────────────────────────────────────────────────── }
+  if not chkVCRedist.Checked then
+    skipped := skipped + '  -  Visual C++ 2022 Runtime (skipped by user)' + #13#10
+  else if HasVCRedist() then
     summary := summary + '  ✓  Visual C++ 2022 Runtime' + #13#10
   else
     issues := issues + '  ✗  Visual C++ Runtime — may not have installed correctly' + #13#10;
 
-  if HasFTDIDriver() then
+  { ── FTDI ───────────────────────────────────────────────────────────── }
+  if not chkFTDI.Checked then
+    skipped := skipped + '  -  FTDI USB-serial driver (skipped by user)' + #13#10
+  else if HasFTDIDriver() then
     summary := summary + '  ✓  FTDI USB-serial driver (Meerstetter TEC/LDD)' + #13#10
   else
     issues := issues + '  ✗  FTDI driver — re-run installer or install from ftdichip.com' + #13#10;
 
-  if HasCH340Driver() then
+  { ── CH340 ──────────────────────────────────────────────────────────── }
+  if not chkCH340.Checked then
+    skipped := skipped + '  -  CH340 USB-serial driver (skipped by user)' + #13#10
+  else if HasCH340Driver() then
     summary := summary + '  ✓  CH340 USB-serial driver (Arduino Nano)' + #13#10
   else
     issues := issues + '  ✗  CH340 driver — re-run installer or install from wch-ic.com' + #13#10;
 
-  if HasBaslerDriver() then
+  { ── Basler ─────────────────────────────────────────────────────────── }
+  if not chkBasler.Checked then
+    skipped := skipped + '  -  Basler USB3 Vision camera driver (skipped by user)' + #13#10
+  else if HasBaslerDriver() then
     summary := summary + '  ✓  Basler USB3 Vision camera driver' + #13#10
   else
     issues := issues + '  ✗  Basler camera driver — re-run installer or install pylon Runtime' + #13#10;
 
-  { ── Verify NI-RIO (bundled as online installer) ─────────────────────── }
-  if HasNIRIO() then
+  { ── NI-RIO ─────────────────────────────────────────────────────────── }
+  if not chkNIRIO.Checked then
+    skipped := skipped + '  -  NI R Series RIO driver (skipped by user)' + #13#10
+  else if HasNIRIO() then
     summary := summary + '  ✓  NI R Series RIO driver (NI 9637 FPGA)' + #13#10
   else
-    issues := issues + '  ✗  NI-RIO driver — may not have installed (requires internet)' + #13#10 +
-      '     Install manually: https://www.ni.com/en/support/downloads/drivers/download.ni-r-series-multifunction-rio.html' + #13#10;
+    issues := issues +
+      '  ✗  NI-RIO driver — installation may have failed (requires internet)' + #13#10 +
+      '     Download manually:' + #13#10 +
+      '     ni.com/en/support/downloads/drivers/download.ni-r-series-multifunction-rio.html' + #13#10;
 
-  { ── Check optional SDKs (cannot be bundled) ─────────────────────────── }
+  { ── Optional SDKs (not bundled) ────────────────────────────────────── }
   niVisaKey := 'SOFTWARE\National Instruments\NI-VISA\CurrentVersion';
   if not RegKeyExists(HKLM, niVisaKey) and
      not RegKeyExists(HKLM64, niVisaKey) then
     optional := optional +
       '  •  NI-VISA (only needed for Keithley SMU / GPIB instruments)' + #13#10 +
-      '     https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html' + #13#10;
+      '     ni.com/en/support/downloads/drivers/download.ni-visa.html' + #13#10;
 
   { ── Build the final message ─────────────────────────────────────────── }
-  if issues = '' then
+  if (issues = '') and (skipped = '') then
   begin
     if optional <> '' then
       MsgBox(
@@ -390,18 +539,37 @@ begin
         summary,
         mbInformation, MB_OK);
   end
-  else
+  else if issues = '' then
   begin
     MsgBox(
-      'SanjINSIGHT is installed.' + #13#10#13#10 +
+      'SanjINSIGHT is installed and ready!' + #13#10#13#10 +
       'Drivers installed:' + #13#10 +
       summary + #13#10 +
-      'Issues detected:' + #13#10 +
-      issues + #13#10 +
+      'Skipped by user:' + #13#10 +
+      skipped + #13#10 +
+      'You can install skipped drivers later by re-running this installer.',
+      mbInformation, MB_OK);
+  end
+  else
+  begin
+    { Build message with only non-empty sections }
+    msg := 'SanjINSIGHT is installed.' + #13#10#13#10 +
+      'Drivers installed:' + #13#10 + summary;
+    if issues <> '' then
+      msg := msg + #13#10 + 'Issues detected:' + #13#10 + issues;
+    if skipped <> '' then
+      msg := msg + #13#10 + 'Skipped by user:' + #13#10 + skipped;
+    msg := msg + #13#10 +
       'The application will still launch, but affected hardware ' +
-      'may not connect until the drivers are installed.',
-      mbWarning, MB_OK);
+      'may not connect until the missing drivers are installed.';
+    MsgBox(msg, mbWarning, MB_OK);
   end;
+end;
+
+{ ── Wizard initialization ────────────────────────────────────────────────── }
+procedure InitializeWizard();
+begin
+  CreateDriverPage();
 end;
 
 { Called by Inno Setup after the main installation step completes. }
