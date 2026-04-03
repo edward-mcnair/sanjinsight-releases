@@ -6,10 +6,11 @@ import importlib
 from .base import StageDriver
 
 _DRIVERS = {
-    "thorlabs":     ("hardware.stage.thorlabs",     "ThorlabsDriver"),
-    "serial_stage": ("hardware.stage.serial_stage", "SerialStageDriver"),
-    "simulated":    ("hardware.stage.simulated",    "SimulatedStage"),
-    "mpi_prober":   ("hardware.stage.mpi_prober",  "MpiProberDriver"),
+    "thorlabs":      ("hardware.stage.thorlabs",      "ThorlabsDriver"),
+    "serial_stage":  ("hardware.stage.serial_stage",  "SerialStageDriver"),
+    "simulated":     ("hardware.stage.simulated",     "SimulatedStage"),
+    "mpi_prober":    ("hardware.stage.mpi_prober",   "MpiProberDriver"),
+    "newport_npc3":  ("hardware.stage.newport_npc3", "NewportNPC3Driver"),
 }
 
 _INSTALL_HINTS: dict = {
@@ -18,7 +19,8 @@ _INSTALL_HINTS: dict = {
         "Also install Thorlabs Kinesis software: "
         "https://www.thorlabs.com/software_pages/ViewSoftwarePage.cfm?Code=Motion_Control"
     ),
-    "serial_stage": "pip install pyserial",
+    "serial_stage":  "pip install pyserial",
+    "newport_npc3":  "pip install pyserial",
 }
 
 

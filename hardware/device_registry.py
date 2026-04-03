@@ -475,6 +475,26 @@ DEVICE_REGISTRY: dict[str, DeviceDescriptor] = {
                          "Used for fine Z-axis focus adjustment.",
     ),
 
+    "newport_npc3": DeviceDescriptor(
+        uid            = "newport_npc3",
+        display_name   = "Newport NPC3SG Piezo Controller",
+        manufacturer   = "Newport / MKS Instruments",
+        device_type    = DTYPE_STAGE,
+        connection_type= CONN_SERIAL,
+        driver_module  = "hardware.stage.newport_npc3",
+        driver_version = "builtin",
+        hot_loadable   = True,
+        usb_vid        = 0x0403,   # FTDI USB-to-serial chip
+        serial_patterns= ["Newport", "NPC3", "NPC3SG", "Piezo Stack"],
+        default_baud   = 19200,
+        default_timeout= 1.0,
+        description    = "3-channel closed-loop piezo stack amplifier controller. "
+                         "Drives NPA-series actuators for nanometer-precision positioning.",
+        datasheet_url  = "https://www.newport.com/p/NPC3SG",
+        notes          = "Uses FTDI virtual COM port. XON/XOFF flow control. "
+                         "Closed-loop requires SG model with strain-gauge feedback.",
+    ),
+
     "prior_proscan": DeviceDescriptor(
         uid            = "prior_proscan",
         display_name   = "Prior ProScan III Stage",
