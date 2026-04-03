@@ -36,8 +36,8 @@ class StageTab(QWidget):
 
         # Page 0: not-connected empty state
         self._stack.addWidget(self._build_empty_state(
-            "Stage", "Zaber motion stage",
-            "Connect the Zaber motion stage in Device Manager to enable controls."))
+            "Stage", "positioning stage",
+            "Connect a positioning stage in Device Manager to enable controls."))
 
         # Page 1: full controls
         controls = QWidget()
@@ -244,6 +244,55 @@ class StageTab(QWidget):
     def set_hardware_available(self, available: bool) -> None:
         """Switch between empty state (page 0) and full controls (page 1)."""
         self._stack.setCurrentIndex(1 if available else 0)
+        if available:
+            self._adapt_to_driver()
+
+    def _adapt_to_driver(self) -> None:
+        """Adjust spin box ranges and jog steps to the connected driver's travel range."""
+        try:
+            stage = app_state.stage
+            if stage is None:
+                return
+            tr = stage.travel_range()
+            x_lo, x_hi = tr.get("x", (-50_000, 50_000))
+            y_lo, y_hi = tr.get("y", (-50_000, 50_000))
+            z_lo, z_hi = tr.get("z", (0, 25_000))
+
+            self._ax.setRange(x_lo, x_hi)
+            self._ay.setRange(y_lo, y_hi)
+            self._az.setRange(z_lo, z_hi)
+
+            # Adapt jog step sizes to travel range.
+            # For small-range stages (e.g. 30 μm piezo), offer fine steps;
+            # for large-range stages (e.g. 50 mm motorized), offer coarser steps.
+            max_travel = max(x_hi - x_lo, y_hi - y_lo, z_hi - z_lo)
+            self._step_combo.clear()
+            if max_travel <= 100:
+                # Piezo / nano-positioning: 0.01 – 10 μm
+                steps = ["0.01", "0.05", "0.1", "0.5", "1", "5", "10"]
+                default_idx = 3   # 0.5 μm
+                self._ax.setDecimals(3)
+                self._ay.setDecimals(3)
+                self._az.setDecimals(3)
+                self._ax.setSingleStep(0.1)
+                self._ay.setSingleStep(0.1)
+                self._az.setSingleStep(0.1)
+            elif max_travel <= 1000:
+                # Short-travel stage: 0.1 – 100 μm
+                steps = ["0.1", "0.5", "1", "5", "10", "50", "100"]
+                default_idx = 3   # 5 μm
+            else:
+                # Full-range motorized stage: 1 – 5000 μm
+                steps = ["0.1", "1", "10", "100", "1000", "5000"]
+                default_idx = 3   # 100 μm
+            for v in steps:
+                self._step_combo.addItem(f"{v} μm", float(v))
+            self._step_combo.setCurrentIndex(default_idx)
+
+            log.debug("Stage tab adapted: X=[%.1f,%.1f] Y=[%.1f,%.1f] Z=[%.1f,%.1f] μm",
+                      x_lo, x_hi, y_lo, y_hi, z_lo, z_hi)
+        except Exception:
+            log.debug("Stage tab _adapt_to_driver failed", exc_info=True)
 
     # ---------------------------------------------------------------- #
 
