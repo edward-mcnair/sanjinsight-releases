@@ -136,6 +136,22 @@ jobs:
             }
           }
 
+      # ── 4e. Copy FPGA bitfile to installer redist directory ────────────────
+      # The bitfile is tracked in firmware/ (single source of truth).
+      # Inno Setup expects it in installer/redist/firmware/.
+      - name: Stage FPGA bitfile for installer
+        shell: pwsh
+        run: |
+          $src = "firmware\ez500_fpga.lvbitx"
+          $dst = "installer\redist\firmware\ez500_fpga.lvbitx"
+          if (Test-Path $src) {
+            New-Item -ItemType Directory -Force -Path "installer\redist\firmware" | Out-Null
+            Copy-Item $src $dst -Force
+            Write-Host "[OK] FPGA bitfile staged: $dst ($('{0:N1} MB' -f ((Get-Item $dst).Length / 1MB)))"
+          } else {
+            Write-Host "[SKIP] firmware\ez500_fpga.lvbitx not found — FPGA support will not be bundled"
+          }
+
       # ── 5. Read version from version.py ───────────────────────────────────
       - name: Read version
         id: version
