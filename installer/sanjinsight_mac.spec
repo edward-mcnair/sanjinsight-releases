@@ -60,6 +60,8 @@ hidden_imports = [
     'hardware.stage.thorlabs',
     'hardware.stage.serial_stage',
     'hardware.stage.simulated',
+    'hardware.stage.mpi_prober',
+    'hardware.stage.newport_npc3',
     'hardware.autofocus.sweep',
     'hardware.autofocus.hill_climb',
     'hardware.autofocus.simulated',
