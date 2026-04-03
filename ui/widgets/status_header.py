@@ -39,6 +39,9 @@ _DEVICE_LABELS: dict[str, str] = {
     "fpga":            "FPGA",
     "bias":            "Bias Source",
     "stage":           "Stage",
+    "prober":          "Prober",
+    "ldd":             "LDD",
+    "gpio":            "Arduino",
 }
 
 # Camera keys are selectable — clicking one makes it the active scan camera

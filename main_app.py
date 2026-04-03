@@ -1683,10 +1683,11 @@ class MainWindow(QMainWindow):
         try:
             import time as _time
             _DEVICE_DISPLAY = {
-                "tec0": "TEC-1089", "tec1": "ATEC-302",
+                "tec0": "TEC-1089", "tec1": "ATEC-302", "tec2": "TEC 3",
                 "camera": "Camera", "tr_camera": "TR Camera",
                 "ir_camera": "IR Camera", "fpga": "FPGA",
                 "bias": "Bias Source", "stage": "Stage",
+                "prober": "Prober", "ldd": "LDD", "gpio": "Arduino",
             }
             state = STATE_CONNECTED if ok else STATE_ERROR
             err = "" if ok else detail
@@ -1744,10 +1745,11 @@ class MainWindow(QMainWindow):
         try:
             import time as _time
             _DEVICE_DISPLAY = {
-                "tec0": "TEC-1089", "tec1": "ATEC-302",
+                "tec0": "TEC-1089", "tec1": "ATEC-302", "tec2": "TEC 3",
                 "camera": "Camera", "tr_camera": "TR Camera",
                 "ir_camera": "IR Camera", "fpga": "FPGA",
                 "bias": "Bias Source", "stage": "Stage",
+                "prober": "Prober", "ldd": "LDD", "gpio": "Arduino",
             }
             self._health_panel.update_device(
                 uid=key,
@@ -1958,7 +1960,10 @@ class MainWindow(QMainWindow):
         automatically exits demo mode before activating the real driver.
         """
         try:
-            from hardware.device_registry import DTYPE_CAMERA, DTYPE_FPGA, DTYPE_BIAS
+            from hardware.device_registry import (
+                DTYPE_CAMERA, DTYPE_FPGA, DTYPE_BIAS,
+                DTYPE_STAGE, DTYPE_PROBER, DTYPE_TEC, DTYPE_LDD, DTYPE_GPIO,
+            )
             from hardware.app_state import app_state as _as
             entry = self._device_mgr.get(uid)
             if entry is None:
@@ -1984,6 +1989,19 @@ class MainWindow(QMainWindow):
                 key = "fpga"
             elif dtype == DTYPE_BIAS:
                 key = "bias"
+            elif dtype == DTYPE_STAGE:
+                key = "stage"
+            elif dtype == DTYPE_PROBER:
+                key = "prober"
+            elif dtype == DTYPE_TEC:
+                # TEC index = position in app_state.tecs list (set by add_tec)
+                tec_list = getattr(_as, 'tecs', []) or []
+                idx = len(tec_list) - 1  # add_tec already appended it
+                key = f"tec{max(0, idx)}"
+            elif dtype == DTYPE_LDD:
+                key = "ldd"
+            elif dtype == DTYPE_GPIO:
+                key = "gpio"
             else:
                 key = uid
             hw_service.device_connected.emit(key, True)
