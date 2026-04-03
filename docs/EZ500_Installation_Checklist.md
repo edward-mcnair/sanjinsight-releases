@@ -15,6 +15,7 @@ Microsanj, LLC | microsanj.com
   - [ ] Meerstetter LDD-1121 (USB cable — FTDI chip)
   - [ ] Arduino Nano (USB cable — CH340 chip)
   - [ ] Thorlabs stage controller (USB cable)
+  - [ ] Newport NPC3SG piezo controller (USB cable — FTDI chip)
   - [ ] NI FPGA card (PCIe, if applicable)
   - [ ] Rigol DP832 power supply (USB or LAN)
 
@@ -64,7 +65,9 @@ After reboot, open Device Manager and verify:
   - Should show: "USB Serial Port (COMx)" — one for TEC, one for LDD
 - [ ] CH340 device appears under "Ports (COM & LPT)"
   - Should show: "USB-SERIAL CH340 (COMx)" — Arduino Nano
-- [ ] Note the COM port numbers: TEC=COM___, LDD=COM___, Arduino=COM___
+- [ ] Newport NPC3SG appears under "Ports (COM & LPT)"
+  - Should show: "USB Serial Port (COMx)" — uses FTDI chip (same driver as TEC/LDD)
+- [ ] Note the COM port numbers: TEC=COM___, LDD=COM___, Arduino=COM___, NPC3=COM___
 
 ### Camera
 - [ ] Basler camera appears under "Basler Cameras" or "USB3 Vision Devices"
@@ -111,6 +114,7 @@ After reboot, open Device Manager and verify:
   - [ ] LDD: select the correct COM port
   - [ ] Arduino: select the correct COM port (CH340)
   - [ ] Stage: select the correct COM port
+  - [ ] Newport NPC3SG: select the correct COM port
 - [ ] Verify all devices show "Connected" in the status bar
 
 ---

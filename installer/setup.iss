@@ -373,10 +373,10 @@ begin
     'the installer with a driver already present is a harmless no-op.' + #13#10 + #13#10 +
     'Skipped drivers can be installed later by re-running this installer ' +
     'or downloading them individually:' + #13#10 +
-    '  • FTDI:   ftdichip.com/drivers/vcp-drivers' + #13#10 +
-    '  • CH340:  wch-ic.com/downloads/CH341SER_EXE.html' + #13#10 +
-    '  • Basler: baslerweb.com/downloads (pylon Runtime)' + #13#10 +
-    '  • NI-RIO: ni.com/en/support/downloads/drivers/download.ni-r-series-multifunction-rio.html';
+    '  • FTDI:    ftdichip.com/drivers/vcp-drivers  (TEC, LDD, Newport NPC3)' + #13#10 +
+    '  • CH340:   wch-ic.com/downloads/CH341SER_EXE.html  (Arduino Nano)' + #13#10 +
+    '  • Basler:  baslerweb.com/downloads  (pylon Runtime — USB3 Vision cameras)' + #13#10 +
+    '  • NI-RIO:  ni.com/en/support/downloads/drivers/download.ni-r-series-multifunction-rio.html';
   lbl.Left     := 0;
   lbl.Top      := yPos;
   lbl.AutoSize := False;
