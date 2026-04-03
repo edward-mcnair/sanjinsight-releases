@@ -32,6 +32,7 @@ class BaseDeviceService(QObject):
     log_message      = pyqtSignal(str)
     startup_status   = pyqtSignal(str, bool, str)   # (key, ok, detail)
     structured_error = pyqtSignal(object)           # DeviceError
+    heartbeat        = pyqtSignal(str, float, float) # (device_key, unix_ts, response_time_ms)
 
     # -- Auto-reconnect policy (same defaults as HardwareService) ----------
     _MAX_CONSECUTIVE_ERRORS: int   = 3
@@ -125,6 +126,18 @@ class BaseDeviceService(QObject):
             self._stop_event.wait(timeout=delay)
             delay = min(delay * 1.5, self._RECONNECT_MAX_S)
         return False
+
+    def _emit_heartbeat(self, device_key: str, response_time_s: float) -> None:
+        """Emit a heartbeat after a successful poll/status read.
+
+        Parameters
+        ----------
+        device_key : str
+            Signal key (``"tec0"``, ``"camera"``, ``"fpga"``, etc.)
+        response_time_s : float
+            Wall-clock time of the poll round-trip, in **seconds**.
+        """
+        self.heartbeat.emit(device_key, time.time(), response_time_s * 1000.0)
 
     def _classify_and_emit(self, exc: Exception, device_uid: str = "") -> 'DeviceError':
         """Classify an exception and emit both structured_error and error signals.

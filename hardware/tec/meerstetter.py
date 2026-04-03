@@ -260,6 +260,7 @@ class MeerstetterDriver(TecDriver):
         if self._tec is None:
             log.warning("MeerstetterDriver.enable() called before connect()")
             return
+        log.debug("TEC set_parameter(2010, 1) — Output Enable ON")
         with self._api_lock:
             self._tec.set_parameter(parameter_id=2010, value=1,
                                     address=self._address, parameter_instance=1)
@@ -268,6 +269,7 @@ class MeerstetterDriver(TecDriver):
         if self._tec is None:
             log.warning("MeerstetterDriver.disable() called before connect()")
             return
+        log.debug("TEC set_parameter(2010, 0) — Output Enable OFF")
         with self._api_lock:
             self._tec.set_parameter(parameter_id=2010, value=0,
                                     address=self._address, parameter_instance=1)
@@ -277,13 +279,16 @@ class MeerstetterDriver(TecDriver):
         if self._tec is None:
             log.warning("MeerstetterDriver.set_target() called before connect()")
             return
+        log.debug("TEC set_parameter(3000, %.3f) — Target Temperature", temperature_c)
         # Parameter 3000: Target Object Temperature
         with self._api_lock:
             self._tec.set_parameter(parameter_id=3000, value=temperature_c,
                                     address=self._address, parameter_instance=1)
 
     def get_status(self) -> TecStatus:
+        import time as _time
         try:
+            _t0 = _time.perf_counter()
             with self._api_lock:
                 # Parameter 1000: Object Temperature (°C)
                 actual = self._tec.get_parameter(
@@ -304,6 +309,12 @@ class MeerstetterDriver(TecDriver):
                 enabled = bool(self._tec.get_parameter(
                     parameter_id=2010, address=self._address, parameter_instance=1))
 
+            _elapsed = (_time.perf_counter() - _t0) * 1000.0
+            log.debug("TEC get_status: T=%.2f°C sink=%.2f°C I=%.3fA V=%.2fV "
+                       "stable=%s enabled=%s  (%.0f ms)",
+                       float(actual), float(sink), float(current),
+                       float(voltage), hw_stable, enabled, _elapsed)
+
             return TecStatus(
                 actual_temp    = float(actual),
                 target_temp    = self._target,
@@ -315,6 +326,7 @@ class MeerstetterDriver(TecDriver):
                 stable         = hw_stable,
             )
         except Exception as e:
+            log.debug("TEC get_status FAILED: %s", e)
             return TecStatus(error=str(e))
 
     def _auto_detect_port(self, exclude: list[str] | None = None) -> str | None:

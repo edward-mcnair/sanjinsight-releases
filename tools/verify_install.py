@@ -186,15 +186,26 @@ def check_usb_serial_drivers():
           "           Install via the SanjINSIGHT installer or download the pylon\n"
           "           Runtime from: https://www.baslerweb.com/en/downloads/software-downloads/")
 
-    # NI R Series RIO driver (NI 9637 FPGA via PCIe)
+    # NI R Series RIO driver (sbRIO / NI 9637 FPGA)
     ni_rio = (reg_key_exists(winreg.HKEY_LOCAL_MACHINE,
                              r"SOFTWARE\National Instruments\RIO") or
               reg_key_exists(winreg.HKEY_LOCAL_MACHINE,
                              r"SOFTWARE\WOW6432Node\National Instruments\RIO"))
-    check("NI R Series RIO driver (NI 9637 FPGA)", ni_rio,
+    check("NI R Series RIO driver (sbRIO / NI 9637 FPGA)", ni_rio,
           "Not installed — FPGA stimulus generation will not work.\n"
           "           The installer bundles the NI-RIO online installer (requires internet).\n"
           "           Manual download: https://www.ni.com/en/support/downloads/drivers/download.ni-r-series-multifunction-rio.html",
+          warn_only=True)
+
+    # NI-VISA Runtime (optional — GPIB instruments only)
+    ni_visa = (reg_key_exists(winreg.HKEY_LOCAL_MACHINE,
+                              r"SOFTWARE\National Instruments\NI-VISA\CurrentVersion") or
+               reg_key_exists(winreg.HKEY_LOCAL_MACHINE,
+                              r"SOFTWARE\WOW6432Node\National Instruments\NI-VISA\CurrentVersion"))
+    check("NI-VISA Runtime (GPIB / SMU instruments)", ni_visa,
+          "Not installed — GPIB instruments (Keithley SMU) will not connect.\n"
+          "           USB and LAN instruments work without NI-VISA via pyvisa-py.\n"
+          "           Download: https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html",
           warn_only=True)
 
     # Check for DLL conflict (full Pylon SDK + pypylon)
@@ -222,9 +233,9 @@ def check_com_ports():
         driver_hint = ""
         name_lower = name.lower()
         if "ftdi" in name_lower or "vcp" in name_lower:
-            driver_hint = " (FTDI — likely Meerstetter TEC or LDD)"
+            driver_hint = " (FTDI — TEC, LDD, NPC3 piezo, or Thorlabs stage)"
         elif "ch340" in name_lower or "ch341" in name_lower or "wch" in name_lower:
-            driver_hint = " (CH340 — likely Arduino Nano)"
+            driver_hint = " (CH340 — Arduino Nano GPIO/LED selector)"
         elif "usbser" in name_lower:
             driver_hint = " (USB Serial)"
         print(f"  {INFO}  {port}: {name}{driver_hint}")

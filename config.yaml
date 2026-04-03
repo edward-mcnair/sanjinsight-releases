@@ -172,7 +172,7 @@ hardware:
 
   stage:
     enabled: true
-    driver: "simulated"     # simulated | thorlabs | serial_stage
+    driver: "simulated"     # simulated | thorlabs | newport_npc3 | serial_stage
     speed_xy: 1000.0        # μm/s lateral speed
     speed_z:  100.0         # μm/s focus speed
     noise:    0.05          # simulated position noise (μm)

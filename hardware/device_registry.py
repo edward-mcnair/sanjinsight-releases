@@ -385,11 +385,37 @@ DEVICE_REGISTRY: dict[str, DeviceDescriptor] = {
         driver_module  = "hardware.fpga.ni9637",
         driver_version = "builtin",
         hot_loadable   = False,
-        ni_patterns    = ["RIO", "9637", "cRIO"],
+        ni_patterns    = ["9637"],
         description    = "NI CompactRIO FPGA module. Generates lock-in reference "
                          "signal for hot/cold modulation and frame synchronisation.",
         datasheet_url  = "https://www.ni.com/en/shop/model/ni-9637.html",
         notes          = "Requires NI-RIO drivers and compiled FPGA bitfile.",
+    ),
+
+    "ni_sbrio": DeviceDescriptor(
+        uid            = "ni_sbrio",
+        display_name   = "NI sbRIO FPGA",
+        manufacturer   = "National Instruments",
+        device_type    = DTYPE_FPGA,
+        connection_type= CONN_ETHERNET,
+        driver_module  = "hardware.fpga.ni9637",
+        driver_version = "builtin",
+        hot_loadable   = False,
+        ni_patterns    = ["RIO", "sbRIO", "cRIO"],
+        default_ip     = "169.254.19.194",
+        description    = (
+            "NI Single-Board RIO embedded controller with user-programmable "
+            "FPGA. Built into the Microsanj EZ-500 chassis. Generates the "
+            "lock-in reference signal for hot/cold modulation and camera "
+            "frame synchronisation. Connects via Ethernet (link-local "
+            "169.254.x.x) using the nifpga library."),
+        datasheet_url  = "https://www.ni.com/en/shop/compactrio/single-board-rio.html",
+        notes          = (
+            "Requires NI-RIO drivers and compiled LabVIEW FPGA bitfile (.lvbitx). "
+            "Resource string format: rio://169.254.x.x/RIO0 — find the correct "
+            "IP in NI MAX → Remote Systems. The sbRIO uses a link-local Ethernet "
+            "address; ensure the host NIC is configured for DHCP or has a "
+            "169.254.x.x address on the same subnet."),
     ),
 
     "ni_usb_6001": DeviceDescriptor(

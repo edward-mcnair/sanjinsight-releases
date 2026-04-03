@@ -87,6 +87,22 @@ def setup(level: str = "INFO") -> None:
     )
 
 
+def set_hardware_debug(enabled: bool) -> None:
+    """Toggle hardware-driver debug logging at runtime.
+
+    When *enabled*, all ``hardware.*`` loggers are lowered to DEBUG and
+    wire-level TX/RX messages appear in the log file.  When disabled,
+    they return to INFO (normal).
+
+    Called from Settings → Diagnostics checkbox and at startup.
+    """
+    from hardware.hw_debug_log import enable, disable
+    if enabled:
+        enable()
+    else:
+        disable()
+
+
 def log_path() -> Path:
     """Return the current log file path (for display in Settings / About)."""
     return _LOG_FILE

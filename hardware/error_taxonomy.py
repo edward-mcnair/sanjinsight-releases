@@ -70,6 +70,18 @@ class DeviceError:
         first = self.message.split("\n", 1)[0]
         return first[:120]
 
+    @property
+    def narration(self) -> str:
+        """Full natural-language paragraph (lazy import to avoid circular deps)."""
+        from hardware.error_narration import narrate
+        return narrate(self)
+
+    @property
+    def short_narration(self) -> str:
+        """One-line plain-English summary (≤120 chars)."""
+        from hardware.error_narration import short_narrate
+        return short_narrate(self)
+
 
 # ── Install hints (reused from factory modules) ────────────────────────────
 

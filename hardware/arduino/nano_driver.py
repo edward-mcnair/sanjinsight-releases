@@ -95,6 +95,10 @@ class ArduinoNanoDriver(ArduinoDriver):
 
         except Exception as exc:
             self._serial = None
+            from hardware.hw_debug_log import connect_fail
+            connect_fail(log, port=port, error=exc, context={
+                "baud": self._baud, "timeout": self._timeout,
+            })
             raise RuntimeError(
                 f"Failed to connect to Arduino Nano on {port}: {exc}"
             ) from exc
@@ -207,16 +211,22 @@ class ArduinoNanoDriver(ArduinoDriver):
 
     def _cmd(self, command: str) -> str:
         """Send a command and read the response line. Thread-safe."""
+        from hardware.hw_debug_log import tx as _tx, rx as _rx, timed as _timed
+
         with self._lock:
             if self._serial is None:
                 return ""
             try:
-                self._serial.write((command + "\n").encode("ascii"))
+                raw = (command + "\n").encode("ascii")
+                _tx(log, raw, label="Arduino")
+                self._serial.write(raw)
                 self._serial.flush()
-                line = self._serial.readline().decode("ascii", errors="replace").strip()
+                with _timed(log, f"Arduino '{command}' response"):
+                    line = self._serial.readline().decode("ascii", errors="replace").strip()
+                _rx(log, line, label="Arduino")
                 return line
             except Exception as exc:
-                log.warning("Arduino serial error: %s", exc)
+                log.warning("Arduino serial error on '%s': %s", command, exc)
                 return ""
 
     @staticmethod

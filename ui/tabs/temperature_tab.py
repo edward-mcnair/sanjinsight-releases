@@ -72,6 +72,13 @@ class TemperatureTab(QWidget):
         root.setContentsMargins(10, 10, 10, 10)
         root.setSpacing(10)
 
+        # Error banner (hidden until a device error occurs)
+        from ui.widgets.device_error_banner import DeviceErrorBanner
+        self._error_banner = DeviceErrorBanner()
+        self._error_banner.device_manager_clicked.connect(
+            self.open_device_manager.emit)
+        root.addWidget(self._error_banner)
+
         self._panels = []
         labels = ["TEC 1 — Meerstetter TEC-1089", "TEC 2 — ATEC-302"]
         for i in range(n_tecs):
@@ -691,6 +698,16 @@ class TemperatureTab(QWidget):
             p._ready_lbl.setStyleSheet(
                 f"font-family:{MONO_FONT}; font-size:{FONT['readout']}pt; color:{PALETTE['warning']};")
         p._plot.push(status.actual_temp, status.target_temp)
+
+    # ── Device error banner (Feature 6) ──────────────────────────────
+
+    def show_device_error(self, key: str, name: str, message: str) -> None:
+        """Show an error banner at the top of the tab."""
+        self._error_banner.show_error(key, name, message)
+
+    def clear_device_error(self) -> None:
+        """Hide the error banner (device reconnected)."""
+        self._error_banner.clear()
 
     def show_alarm(self, index: int, message: str):
         """Show the alarm banner for the given TEC panel."""

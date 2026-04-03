@@ -126,6 +126,8 @@ class MeerstetterLdd1121(LddDriver):
 
     def enable(self) -> None:
         """Activate LED output (Output Enable = 1)."""
+        log.debug("LDD set_parameter(%d, 1) — Output Enable ON",
+                  self._PID_OUTPUT_ENABLE)
         with self._api_lock:
             self._ldd.set_parameter(
                 parameter_id=self._PID_OUTPUT_ENABLE, value=1,
@@ -133,6 +135,8 @@ class MeerstetterLdd1121(LddDriver):
 
     def disable(self) -> None:
         """De-activate LED output (Output Enable = 0)."""
+        log.debug("LDD set_parameter(%d, 0) — Output Enable OFF",
+                  self._PID_OUTPUT_ENABLE)
         with self._api_lock:
             self._ldd.set_parameter(
                 parameter_id=self._PID_OUTPUT_ENABLE, value=0,
@@ -148,6 +152,8 @@ class MeerstetterLdd1121(LddDriver):
         """
         clamped = max(0.0, min(current_a, LDD_MAX_CURRENT_A))
         self._target_a = clamped
+        log.debug("LDD set_parameter(%d, %.4f) — Target Current",
+                  self._PID_TARGET_CURR, clamped)
         with self._api_lock:
             self._ldd.set_parameter(
                 parameter_id=self._PID_TARGET_CURR, value=clamped,
@@ -158,7 +164,9 @@ class MeerstetterLdd1121(LddDriver):
     # ---------------------------------------------------------------- #
 
     def get_status(self) -> LddStatus:
+        import time as _time
         try:
+            _t0 = _time.perf_counter()
             with self._api_lock:
                 temp = self._ldd.get_parameter(
                     parameter_id=self._PID_OBJECT_TEMP,
@@ -173,6 +181,10 @@ class MeerstetterLdd1121(LddDriver):
                     parameter_id=self._PID_OUTPUT_ENABLE,
                     address=self._address, parameter_instance=1))
 
+            _elapsed = (_time.perf_counter() - _t0) * 1000.0
+            log.debug("LDD get_status: I=%.4fA V=%.2fV T=%.1f°C enabled=%s  (%.0f ms)",
+                       float(current), float(voltage), float(temp), enabled, _elapsed)
+
             return LddStatus(
                 actual_current_a = float(current),
                 actual_voltage_v = float(voltage),
@@ -181,4 +193,5 @@ class MeerstetterLdd1121(LddDriver):
                 mode             = "hw_trigger" if enabled else "cw",
             )
         except Exception as e:
+            log.debug("LDD get_status FAILED: %s", e)
             return LddStatus(error=str(e))

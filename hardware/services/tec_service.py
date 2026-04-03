@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 
 from PyQt5.QtCore import pyqtSignal
 
@@ -100,7 +101,9 @@ class TecService(BaseDeviceService):
         try:
             while not self._stop_event.is_set():
                 try:
+                    _t0 = time.time()
                     status = tec.get_status()
+                    self._emit_heartbeat(tec_key, time.time() - _t0)
                     guard.check(status)          # safety check every poll
                     self.status_update.emit(idx, status)
                     consecutive_errors = 0

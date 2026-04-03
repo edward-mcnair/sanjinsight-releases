@@ -80,10 +80,17 @@ class VisaGenericDriver(BiasDriver):
                 f"VISA connect failed at {self._address}: {e}")
 
     def _write(self, cmd):
+        log.debug("VISA TX → %s", cmd)
         self._inst.write(cmd)
 
     def _query(self, cmd):
-        return self._inst.query(cmd).strip()
+        import time as _time
+        log.debug("VISA TX → %s", cmd)
+        _t0 = _time.perf_counter()
+        resp = self._inst.query(cmd).strip()
+        _elapsed = (_time.perf_counter() - _t0) * 1000.0
+        log.debug("VISA RX ← %s  (%.1f ms)", resp, _elapsed)
+        return resp
 
     def disconnect(self) -> None:
         try:

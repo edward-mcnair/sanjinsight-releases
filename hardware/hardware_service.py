@@ -110,6 +110,7 @@ class HardwareService(QObject):
     emergency_stop_complete = pyqtSignal(str)                    # summary of what was stopped
     structured_error        = pyqtSignal(object)                 # DeviceError from error_taxonomy
     bundle_suggested        = pyqtSignal(str, str)               # (device_uid, reason)
+    heartbeat               = pyqtSignal(str, float, float)      # (device_key, unix_ts, response_ms)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -150,6 +151,7 @@ class HardwareService(QObject):
             svc.error.connect(self.error)
             svc.log_message.connect(self.log_message)
             svc.startup_status.connect(self.startup_status)
+            svc.heartbeat.connect(self.heartbeat)
             # Forward structured errors for taxonomy + support bundle
             if hasattr(svc, 'structured_error'):
                 svc.structured_error.connect(self.structured_error)

@@ -142,6 +142,7 @@ class CameraService(BaseDeviceService):
                     self._stop_event.wait(0.1)
                     continue
                 try:
+                    _grab_t0 = time.monotonic()
                     frame = cam.grab(timeout_ms=500)
                     if frame:
                         # Only queue a preview frame when the GUI has finished
@@ -153,6 +154,10 @@ class CameraService(BaseDeviceService):
                             self._cam_preview_free.clear()
                             self.frame_ready.emit(frame)
                         last_frame_t = time.monotonic()
+                        # Throttle heartbeat to ~1/s (not every frame)
+                        if last_frame_t - getattr(self, '_last_cam_hb', 0) > 1.0:
+                            self._emit_heartbeat("camera", last_frame_t - _grab_t0)
+                            self._last_cam_hb = last_frame_t
                     elif (time.monotonic() - last_frame_t
                             > self._CAMERA_RECONNECT_TIMEOUT_S):
                         raise RuntimeError(

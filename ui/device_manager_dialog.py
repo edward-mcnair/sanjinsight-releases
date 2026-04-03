@@ -1194,6 +1194,69 @@ class _DeviceProfilePanel(QWidget):
                 pg.addWidget(port_lbl, r, 1)
                 r += 1
 
+            # NI RIO devices (sbRIO, 9637 over Ethernet): resource + bitfile
+            if desc.uid in ("ni_sbrio", "ni_9637"):
+                try:
+                    import config as _cfg
+                    _saved_res = _cfg.get_pref(
+                        f"device_params.{desc.uid}.resource", "")
+                    _saved_bit = _cfg.get_pref(
+                        f"device_params.{desc.uid}.bitfile", "")
+                except Exception:
+                    _saved_res = ""
+                    _saved_bit = ""
+                if not _saved_res:
+                    try:
+                        import config as _cfg
+                        _saved_res = _cfg.get("hardware.fpga.resource", "")
+                    except Exception:
+                        _saved_res = ""
+                if not _saved_bit:
+                    try:
+                        import config as _cfg
+                        _saved_bit = _cfg.get("hardware.fpga.bitfile", "")
+                    except Exception:
+                        _saved_bit = ""
+
+                pg.addWidget(self._sublabel("NI Resource"), r, 0)
+                res_edit = QLineEdit(_saved_res)
+                res_edit.setPlaceholderText("e.g. rio://169.254.19.194/RIO0")
+                res_edit.setToolTip(
+                    "NI-RIO resource string for the sbRIO / CompactRIO.\n"
+                    "Find it in NI MAX → Remote Systems → right-click → Properties.\n"
+                    "Format: RIO0 (local chassis) or rio://169.254.x.x/RIO0 (Ethernet)")
+                pg.addWidget(res_edit, r, 1)
+                self._param_widgets["ni_resource"] = res_edit
+                r += 1
+
+                pg.addWidget(self._sublabel("FPGA Bitfile"), r, 0)
+                from PyQt5.QtWidgets import QHBoxLayout
+                _bit_row = QHBoxLayout()
+                _bit_row.setContentsMargins(0, 0, 0, 0)
+                bit_edit = QLineEdit(_saved_bit)
+                bit_edit.setPlaceholderText("Path to compiled .lvbitx file")
+                bit_edit.setToolTip(
+                    "Full path to the compiled LabVIEW FPGA bitfile (.lvbitx).\n"
+                    "This file is specific to the sbRIO target and firmware version.")
+                _bit_row.addWidget(bit_edit, stretch=1)
+                browse_btn = QPushButton("Browse…")
+                browse_btn.setFixedWidth(80)
+                def _browse_bitfile(_checked=False, _edit=bit_edit):
+                    from PyQt5.QtWidgets import QFileDialog
+                    path, _ = QFileDialog.getOpenFileName(
+                        self, "Select FPGA Bitfile",
+                        _edit.text() or "C:/",
+                        "LabVIEW FPGA Bitfiles (*.lvbitx);;All Files (*)")
+                    if path:
+                        _edit.setText(path)
+                browse_btn.clicked.connect(_browse_bitfile)
+                _bit_row.addWidget(browse_btn)
+                _bit_container = QWidget()
+                _bit_container.setLayout(_bit_row)
+                pg.addWidget(_bit_container, r, 1)
+                self._param_widgets["ni_bitfile"] = bit_edit
+                r += 1
+
         # ── Camera Type picker (cameras only) ───────────────────────────────────
         # The device registry knows the correct type for each model (Basler → TR,
         # FLIR Boson → IR).  Show the auto-detected type prominently and let the
@@ -1302,7 +1365,69 @@ class _DeviceProfilePanel(QWidget):
         # ── Connection-method note (non-serial, non-Ethernet devices) ──────────
         # Explain to the user why there is no address field to configure.
         if not _needs_port and ct != CONN_ETHERNET:
-            if ct == CONN_PCIE:
+            if ct == CONN_PCIE and desc.uid == "ni_9637":
+                # NI 9637 via PCIe — needs resource string + bitfile
+                try:
+                    import config as _cfg
+                    _saved_res = _cfg.get_pref(
+                        f"device_params.{desc.uid}.resource", "")
+                    _saved_bit = _cfg.get_pref(
+                        f"device_params.{desc.uid}.bitfile", "")
+                except Exception:
+                    _saved_res = ""
+                    _saved_bit = ""
+                if not _saved_res:
+                    try:
+                        import config as _cfg
+                        _saved_res = _cfg.get("hardware.fpga.resource", "")
+                    except Exception:
+                        _saved_res = ""
+                if not _saved_bit:
+                    try:
+                        import config as _cfg
+                        _saved_bit = _cfg.get("hardware.fpga.bitfile", "")
+                    except Exception:
+                        _saved_bit = ""
+
+                pg.addWidget(self._sublabel("NI Resource"), r, 0)
+                res_edit = QLineEdit(_saved_res)
+                res_edit.setPlaceholderText("e.g. RIO0")
+                res_edit.setToolTip(
+                    "NI-RIO resource string for the FPGA target.\n"
+                    "Find it in NI MAX → Remote Systems.\n"
+                    "Format: RIO0 (local PCIe) or rio://IP/RIO0 (Ethernet)")
+                pg.addWidget(res_edit, r, 1)
+                self._param_widgets["ni_resource"] = res_edit
+                r += 1
+
+                pg.addWidget(self._sublabel("FPGA Bitfile"), r, 0)
+                from PyQt5.QtWidgets import QHBoxLayout as _QHBox2
+                _bit_row2 = _QHBox2()
+                _bit_row2.setContentsMargins(0, 0, 0, 0)
+                bit_edit2 = QLineEdit(_saved_bit)
+                bit_edit2.setPlaceholderText("Path to compiled .lvbitx file")
+                bit_edit2.setToolTip(
+                    "Full path to the compiled LabVIEW FPGA bitfile (.lvbitx).")
+                _bit_row2.addWidget(bit_edit2, stretch=1)
+                browse_btn2 = QPushButton("Browse…")
+                browse_btn2.setFixedWidth(80)
+                def _browse_bitfile2(_checked=False, _edit=bit_edit2):
+                    from PyQt5.QtWidgets import QFileDialog
+                    path, _ = QFileDialog.getOpenFileName(
+                        self, "Select FPGA Bitfile",
+                        _edit.text() or "C:/",
+                        "LabVIEW FPGA Bitfiles (*.lvbitx);;All Files (*)")
+                    if path:
+                        _edit.setText(path)
+                browse_btn2.clicked.connect(_browse_bitfile2)
+                _bit_row2.addWidget(browse_btn2)
+                _bit_container2 = QWidget()
+                _bit_container2.setLayout(_bit_row2)
+                pg.addWidget(_bit_container2, r, 1)
+                self._param_widgets["ni_bitfile"] = bit_edit2
+                r += 1
+                _conn_note = ("Connects via PCIe — no COM port required.")
+            elif ct == CONN_PCIE:
                 _conn_note = ("Connects via PCIe — no COM port required.\n"
                               "Resource name (e.g. RIO0) is assigned in NI MAX.")
             elif desc.uid == "bnc_745":
@@ -1485,6 +1610,11 @@ class _DeviceProfilePanel(QWidget):
                 "timeout_s":   entry.timeout_s,
                 "video_index": entry.video_index,
             }
+            # NI RIO resource string + FPGA bitfile path
+            if "ni_resource" in pw:
+                _pref_dict["resource"] = pw["ni_resource"].text().strip()
+            if "ni_bitfile" in pw:
+                _pref_dict["bitfile"] = pw["ni_bitfile"].text().strip()
             # Camera type — also write to hardware.camera.camera_type so the
             # camera_registry and hardware_service pick it up on next start.
             if "camera_type" in pw:

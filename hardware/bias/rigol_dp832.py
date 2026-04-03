@@ -120,9 +120,11 @@ class RigolDP832Driver(BiasDriver):
     # ------------------------------------------------------------------ #
 
     def enable(self) -> None:
+        log.debug("DP832 ch%d → setChannelEnable(True)", self._channel)
         self._dp.setChannelEnable(True, self._channel)
 
     def disable(self) -> None:
+        log.debug("DP832 ch%d → setChannelEnable(False)", self._channel)
         self._dp.setChannelEnable(False, self._channel)
 
     def set_mode(self, mode: str) -> None:
@@ -133,8 +135,10 @@ class RigolDP832Driver(BiasDriver):
     def set_level(self, value: float) -> None:
         self._level = value
         if self._mode == "voltage":
+            log.debug("DP832 ch%d → setVoltage(%.4f)", self._channel, value)
             self._dp.setVoltage(value, self._channel)
         else:
+            log.debug("DP832 ch%d → setCurrent(%.4f)", self._channel, value)
             # Current-source mode: set current, leave voltage limit unchanged
             self._dp.setCurrent(value, self._channel)
 
@@ -152,9 +156,14 @@ class RigolDP832Driver(BiasDriver):
     # ------------------------------------------------------------------ #
 
     def get_status(self) -> BiasStatus:
+        import time as _time
         try:
+            _t0 = _time.perf_counter()
             v = float(self._dp.getVoltage(self._channel))
             i = float(self._dp.getCurrent(self._channel))
+            _elapsed = (_time.perf_counter() - _t0) * 1000.0
+            log.debug("DP832 ch%d get_status: V=%.4fV I=%.4fA  (%.0f ms)",
+                       self._channel, v, i, _elapsed)
             return BiasStatus(
                 output_on      = True,     # pydp832 ≤0.0.4 has no query for output state
                 mode           = self._mode,
@@ -165,6 +174,7 @@ class RigolDP832Driver(BiasDriver):
                 compliance     = self._compliance,
             )
         except Exception as e:
+            log.debug("DP832 ch%d get_status FAILED: %s", self._channel, e)
             return BiasStatus(error=str(e))
 
     # ------------------------------------------------------------------ #

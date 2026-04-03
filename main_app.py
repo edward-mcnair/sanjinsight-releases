@@ -536,6 +536,12 @@ class MainWindow(QMainWindow):
         # Stage "Open Device Manager" — standalone, wire here
         self._stage_tab.open_device_manager.connect(self._open_device_manager)
 
+        # Wire error-banner reconnect buttons to the reconnect handler
+        for _tab in (self._camera_tab, self._temp_tab, self._fpga_tab,
+                     self._bias_tab, self._stage_tab):
+            if hasattr(_tab, '_error_banner'):
+                _tab._error_banner.reconnect_clicked.connect(self._reconnect_device)
+
         self._roi_tab      = RoiTab()
         self._af_tab       = AutofocusTab()
         self._cal_tab      = CalibrationTab()
@@ -1018,6 +1024,9 @@ class MainWindow(QMainWindow):
         # Structured errors → health panel with actionable suggestions
         if hasattr(hw_service, 'structured_error'):
             hw_service.structured_error.connect(self._on_structured_error)
+
+        # Heartbeat → health panel "last seen" display
+        hw_service.heartbeat.connect(self._health_panel.on_heartbeat)
 
         # Support bundle auto-trigger after repeated failures
         if hasattr(hw_service, 'bundle_suggested'):
@@ -1678,23 +1687,39 @@ class MainWindow(QMainWindow):
         except Exception:
             log.debug("autoscan camera refresh failed", exc_info=True)
 
+    # ── Shared device name lookups (single source of truth) ────────
+
+    def _device_display(self, key: str) -> str:
+        """Short display name for health panel / header."""
+        from hardware.error_narration import DEVICE_SHORT_NAMES
+        return DEVICE_SHORT_NAMES.get(key, key.replace("_", " ").title())
+
+    # ── Device key → tab mapping for error banners ───────────────
+
+    def _device_tab(self, key: str):
+        """Return the tab widget that owns a given device key, or None."""
+        _map = {
+            "tec0": self._temp_tab,    "tec1": self._temp_tab,
+            "tec2": self._temp_tab,    "tec_meerstetter": self._temp_tab,
+            "camera": self._camera_tab, "tr_camera": self._camera_tab,
+            "ir_camera": self._camera_tab,
+            "fpga": self._fpga_tab,    "ni_9637": self._fpga_tab,
+            "ni_sbrio": self._fpga_tab,
+            "bias": self._bias_tab,    "rigol_dp832": self._bias_tab,
+            "stage": self._stage_tab,  "newport_npc3": self._stage_tab,
+        }
+        return _map.get(key)
+
     def _on_startup_device_status(self, key: str, ok: bool, detail: str):
         """Populate the Connection Health panel during initial startup."""
         try:
             import time as _time
-            _DEVICE_DISPLAY = {
-                "tec0": "TEC-1089", "tec1": "ATEC-302", "tec2": "TEC 3",
-                "camera": "Camera", "tr_camera": "TR Camera",
-                "ir_camera": "IR Camera", "fpga": "FPGA",
-                "bias": "Bias Source", "stage": "Stage",
-                "prober": "Prober", "ldd": "LDD", "gpio": "Arduino",
-            }
             state = STATE_CONNECTED if ok else STATE_ERROR
             err = "" if ok else detail
             self._health_panel.update_device(
                 uid=key,
                 state=state,
-                display_name=_DEVICE_DISPLAY.get(key, key),
+                display_name=self._device_display(key),
                 error_msg=err,
                 last_seen=_time.time() if ok else None,
             )
@@ -1702,15 +1727,27 @@ class MainWindow(QMainWindow):
             log.debug("health panel startup update failed", exc_info=True)
 
     def _on_structured_error(self, dev_err):
-        """Handle a structured DeviceError — update health panel with fix suggestion."""
+        """Handle a structured DeviceError — update health panel and tab banner."""
         try:
             uid = getattr(dev_err, 'device_uid', '') or 'unknown'
-            msg = getattr(dev_err, 'suggested_fix', '') or getattr(dev_err, 'message', str(dev_err))
+            # Use narration for rich, readable error messages
+            narration = getattr(dev_err, 'narration', '') or \
+                        getattr(dev_err, 'suggested_fix', '') or \
+                        getattr(dev_err, 'message', str(dev_err))
             self._health_panel.update_device(
                 uid=uid,
                 state=STATE_ERROR,
-                error_msg=msg,
+                error_msg=narration,
             )
+            # Show contextual in-tab error banner (Feature 6)
+            tab = self._device_tab(uid)
+            if tab is not None and hasattr(tab, 'show_device_error'):
+                short = getattr(dev_err, 'short_narration',
+                                self._device_display(uid))
+                tab.show_device_error(uid, self._device_display(uid), narration)
+            # Track for dedup against _on_error()
+            import time as _time
+            self._structured_error_dedup = (uid, _time.time())
         except Exception:
             log.debug("structured error handler failed", exc_info=True)
 
@@ -1744,21 +1781,39 @@ class MainWindow(QMainWindow):
         # Update Connection Health panel in bottom drawer
         try:
             import time as _time
-            _DEVICE_DISPLAY = {
-                "tec0": "TEC-1089", "tec1": "ATEC-302", "tec2": "TEC 3",
-                "camera": "Camera", "tr_camera": "TR Camera",
-                "ir_camera": "IR Camera", "fpga": "FPGA",
-                "bias": "Bias Source", "stage": "Stage",
-                "prober": "Prober", "ldd": "LDD", "gpio": "Arduino",
-            }
+            disp = self._device_display(key)
             self._health_panel.update_device(
                 uid=key,
                 state=STATE_CONNECTED if ok else STATE_ERROR,
-                display_name=_DEVICE_DISPLAY.get(key, key),
+                display_name=disp,
                 last_seen=_time.time() if ok else None,
             )
         except Exception:
             log.debug("health panel update failed", exc_info=True)
+
+        # ── Clear / show in-tab error banner ─────────────────────────────
+        try:
+            tab = self._device_tab(key)
+            if tab is not None and hasattr(tab, 'clear_device_error'):
+                if ok:
+                    tab.clear_device_error()
+                else:
+                    tab.show_device_error(
+                        key, self._device_display(key),
+                        f"{self._device_display(key)} disconnected. "
+                        f"Check the connection and click Reconnect.")
+        except Exception:
+            log.debug("tab banner update failed for %s", key, exc_info=True)
+
+        # ── Update the Connected Devices dropdown in the status header ────
+        # Camera keys get special handling below (model info from driver),
+        # but ALL other device types need set_connected too.
+        if "camera" not in key:
+            try:
+                disp = self._device_display(key)
+                self._header.set_connected(key, ok, f"{disp}: {'connected' if ok else 'disconnected'}")
+            except Exception:
+                log.debug("header set_connected failed for %s", key, exc_info=True)
 
         try:
             self._movie_tab._refresh_hw()
@@ -3386,6 +3441,16 @@ class MainWindow(QMainWindow):
     def _on_error(self, msg: str):
         self._log_tab.append(f"ERROR: {msg}")
         self._status.showMessage(f"Error: {msg}", 8000)
+        # Suppress duplicate toast if _on_structured_error already handled
+        # this error within the last 2 seconds (same device, same moment).
+        import time as _time
+        dedup = getattr(self, '_structured_error_dedup', None)
+        if dedup:
+            uid, ts = dedup
+            if _time.time() - ts < 2.0:
+                # Structured handler already showed narrated toast/banner
+                self._maybe_auto_diagnose(msg)
+                return
         self._toasts.show_error(msg)
         self._maybe_auto_diagnose(msg)
 
@@ -4939,6 +5004,12 @@ if __name__ == "__main__":
     _debug_mode = "--debug" in _sys.argv or "--verbose" in _sys.argv
     _log_level  = "DEBUG" if _debug_mode else _cfg_boot.get("logging").get("level", "INFO")
     _lc.setup(level=_log_level)
+
+    # ── Apply hardware debug logging preference ──────────────────────
+    # Must run after logging_config.setup() so that file handlers are in
+    # place.  Reads the persisted checkbox state from preferences.json.
+    from hardware.hw_debug_log import apply_from_prefs as _apply_hw_debug
+    _apply_hw_debug()
 
     # ── Check for previous crash BEFORE opening new session log ──────
     # open_session_log() truncates session.log, so we must read first.

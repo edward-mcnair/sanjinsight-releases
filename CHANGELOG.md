@@ -85,6 +85,29 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.50.31-beta] — 2026-04-03
+
+### Added
+
+- **NI sbRIO FPGA support** — New `ni_sbrio` device registry entry for the Single-Board RIO built into the EZ-500 chassis. Connects via Ethernet (link-local 169.254.x.x) using the existing `Ni9637Driver` and `nifpga` library. Device Manager shows IP address, NI Resource string, and FPGA Bitfile (with Browse) fields for sbRIO and NI 9637 devices.
+- **NI-VISA Runtime** bundled in installer — Optional online installer for GPIB/SMU instruments (Keithley 2400/2450). Unchecked by default since USB and LAN instruments work without it via `pyvisa-py`.
+- **Newport NPC3SG in first-run wizard** — Stage driver selector now includes `newport_npc3` with auto-selected 19200 baud; hardware discovery auto-fills NPC3 when detected.
+
+### Changed
+
+- **Connected Devices dropdown now shows ALL device types** — TEC, stage, FPGA, bias, LDD, GPIO, and prober now appear in the status header dropdown, not just cameras. Previously only camera devices called `set_connected()`.
+- **FTDI driver description** updated across installer, build script, and verification to list all covered devices: TEC-1089, LDD-1121, Newport NPC3SG, and Thorlabs stage controllers.
+- **Installer driver page** — All checkbox captions now specify which EZ-500 devices each driver covers. Post-install summary includes "built-in" section for Rigol DP832 (Windows USB TMC / LAN — no install needed). NI-RIO label updated to mention sbRIO.
+- **First-run wizard FPGA page** renamed from "NI 9637" to "NI sbRIO / NI 9637".
+- **Status header label** "FPGA" → "FPGA / sbRIO".
+
+### Fixed
+
+- **Newport NPC3 "Write timeout"** — Three root causes: (1) missing `write_timeout` on serial port, (2) `\r\n` terminator changed to `\r` per NPC3 protocol, (3) write-only commands (`set`, `setall`, `setk`, `cloop`) no longer block waiting for a nonexistent response.
+- **Missing PyInstaller hidden imports** — Added `hardware.ldd.meerstetter_ldd1121`, `hardware.ldd.simulated`, `hardware.arduino.nano_driver`, `hardware.arduino.simulated`, `hardware.fpga.bnc745`, `hardware.bias.amcad_bilt`, and `hardware.bias.rigol_dp832` to both Windows and macOS `.spec` files. Without these, LDD, Arduino GPIO, BNC 745, and AMCAD BILT devices would fail with `ImportError` in production builds.
+
+---
+
 ## [1.5.0-beta.3] — 2026-04-02
 
 ### Added

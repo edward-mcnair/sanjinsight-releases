@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 
 from PyQt5.QtCore import pyqtSignal
 
@@ -73,7 +74,9 @@ class BiasService(BaseDeviceService):
         try:
             while not self._stop_event.is_set():
                 try:
+                    _t0 = time.time()
                     status = bias.get_status()
+                    self._emit_heartbeat("bias", time.time() - _t0)
                     self.status_update.emit(status)
                     consecutive_errors = 0
                 except Exception as e:

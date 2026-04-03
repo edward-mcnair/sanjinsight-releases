@@ -26,7 +26,7 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame, QScrollArea, QSizePolicy,
 )
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 
 from ui.theme import PALETTE, FONT
 
@@ -66,6 +66,13 @@ class _DeviceRow(QFrame):
 
     reconnect_clicked = pyqtSignal(str)  # uid
 
+    # Expected poll intervals per device type prefix (ms)
+    _EXPECTED_POLL_MS: dict[str, float] = {
+        "tec": 500, "fpga": 1000, "bias": 1000,
+        "stage": 500, "camera": 1000, "ldd": 500,
+        "gpio": 2000, "prober": 2000,
+    }
+
     def __init__(self, uid: str, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.uid = uid
@@ -73,10 +80,26 @@ class _DeviceRow(QFrame):
         self._port = ""
         self._error_msg = ""
         self._last_seen: Optional[float] = None
+        self._avg_response_ms: float = 0.0
+        self._expected_poll_ms: float = self._guess_expected_poll(uid)
 
         self.setFrameShape(QFrame.NoFrame)
         self._build_ui()
         self._apply_styles()
+
+        # 1-second timer to update the "last seen" label
+        self._hb_timer = QTimer(self)
+        self._hb_timer.setInterval(1000)
+        self._hb_timer.timeout.connect(self._update_heartbeat_display)
+        self._hb_timer.start()
+
+    @staticmethod
+    def _guess_expected_poll(uid: str) -> float:
+        """Guess the expected poll interval for a device UID (ms)."""
+        for prefix, ms in _DeviceRow._EXPECTED_POLL_MS.items():
+            if uid.startswith(prefix):
+                return ms
+        return 1000.0
 
     # ── Build ─────────────────────────────────────────────────────────
 
@@ -101,6 +124,11 @@ class _DeviceRow(QFrame):
         self._port_lbl = QLabel("")
         self._port_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         top.addWidget(self._port_lbl)
+
+        self._heartbeat_lbl = QLabel("")
+        self._heartbeat_lbl.setFixedWidth(64)
+        self._heartbeat_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        top.addWidget(self._heartbeat_lbl)
 
         self._status_lbl = QLabel("")
         self._status_lbl.setFixedWidth(100)
@@ -164,6 +192,46 @@ class _DeviceRow(QFrame):
 
         self._apply_styles()
 
+    # ── Heartbeat ─────────────────────────────────────────────────────
+
+    def on_heartbeat(self, timestamp: float, response_time_ms: float) -> None:
+        """Record a successful poll from the device."""
+        self._last_seen = timestamp
+        # Exponential moving average (α = 0.3)
+        if self._avg_response_ms <= 0:
+            self._avg_response_ms = response_time_ms
+        else:
+            self._avg_response_ms = 0.7 * self._avg_response_ms + 0.3 * response_time_ms
+
+    def _update_heartbeat_display(self) -> None:
+        """Update the 'last seen' text (called every 1 s by timer)."""
+        if self._last_seen is None or self._state != STATE_CONNECTED:
+            self._heartbeat_lbl.setText("")
+            return
+
+        age_s = time.time() - self._last_seen
+        if age_s < 2:
+            txt = "just now"
+        elif age_s < 60:
+            txt = f"{int(age_s)}s ago"
+        else:
+            txt = f"{int(age_s / 60)}m ago"
+
+        # Colour: green if healthy, amber if stale (>2× expected interval)
+        stale_threshold_s = (self._expected_poll_ms * 2.5) / 1000.0
+        muted = PALETTE.get("muted", "#888888")
+        warning = PALETTE.get("warning", "#ffb300")
+        colour = warning if age_s > stale_threshold_s else muted
+
+        self._heartbeat_lbl.setText(txt)
+        self._heartbeat_lbl.setStyleSheet(
+            f"color: {colour}; font-size: {FONT.get('caption', 9)}pt; border: none;"
+        )
+
+        # Also update the dot colour to amber if stale but still "connected"
+        if age_s > stale_threshold_s and self._state == STATE_CONNECTED:
+            self._dot.setStyleSheet(f"color: {warning}; font-size: 14px;")
+
     # ── Styles ────────────────────────────────────────────────────────
 
     def _apply_styles(self) -> None:
@@ -187,6 +255,9 @@ class _DeviceRow(QFrame):
         )
         self._port_lbl.setStyleSheet(
             f"color: {muted}; font-size: {FONT.get('sm', 10)}pt; border: none;"
+        )
+        self._heartbeat_lbl.setStyleSheet(
+            f"color: {muted}; font-size: {FONT.get('caption', 9)}pt; border: none;"
         )
         self._error_lbl.setStyleSheet(
             f"color: {muted}; font-size: {FONT.get('sm', 10)}pt; "
@@ -336,6 +407,18 @@ class ConnectionHealthPanel(QWidget):
                 last_seen=info.get("last_seen"),
                 display_name=info.get("display_name", info.get("name")),
             )
+
+    def on_heartbeat(self, device_key: str, timestamp: float,
+                      response_time_ms: float) -> None:
+        """Route a heartbeat signal to the correct device row.
+
+        Called from ``MainWindow`` via::
+
+            hw_service.heartbeat.connect(health_panel.on_heartbeat)
+        """
+        row = self._rows.get(device_key)
+        if row is not None:
+            row.on_heartbeat(timestamp, response_time_ms)
 
     def remove_device(self, uid: str) -> None:
         """Remove a device row from the panel."""

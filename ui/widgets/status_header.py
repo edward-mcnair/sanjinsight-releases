@@ -36,7 +36,7 @@ _DEVICE_LABELS: dict[str, str] = {
     "tec2":            "TEC 3",
     "tec_meerstetter": "TEC-1089",
     "tec_atec":        "ATEC-302",
-    "fpga":            "FPGA",
+    "fpga":            "FPGA / sbRIO",
     "bias":            "Bias Source",
     "stage":           "Stage",
     "prober":          "Prober",

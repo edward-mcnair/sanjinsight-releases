@@ -38,21 +38,23 @@
 ; VC++ 2015-2022 runtime is not already installed.
 #define VCRedistSrc "redist\vc_redist.x64.exe"
 
-; ── FTDI VCP driver (USB-to-serial for Meerstetter TEC-1089/LDD-1121) ──────
+; ── FTDI VCP driver (USB-to-serial for TEC, LDD, stage controllers) ─────────
+; Covers: Meerstetter TEC-1089, Meerstetter LDD-1121, Newport NPC3SG piezo,
+;         Thorlabs BSC203/MPC320 stage controllers (all use FTDI chips).
 ; Place CDM_Setup.exe in installer\redist\ before building.
 ; build_installer.bat downloads it automatically from FTDI's CDM page.
-; The installer bundles it and runs it silently if FTDI VCP is not installed.
 ; FTDI explicitly permits redistribution of CDM drivers.
 #define FTDISetupSrc "redist\CDM_Setup.exe"
 
 ; ── CH340 USB-serial driver (Arduino Nano, many serial adapters) ──────────
+; Covers: Arduino Nano GPIO / LED wavelength selector.
 ; Place CH341SER.EXE in installer\redist\ before building.
 ; build_installer.bat downloads it automatically from WCH's site.
-; Many clone Arduino boards and USB-serial adapters use the CH340/CH341 chip.
 ; WCH permits free redistribution of their VCP driver.
 #define CH340SetupSrc "redist\CH341SER.EXE"
 
 ; ── Basler USB3 Vision camera driver MSIs (extracted from pylon Runtime) ──
+; Covers: Basler acA1920-155um and all Basler USB3 area-scan cameras.
 ; These three MSIs were extracted from the Basler pylon 26.03 Runtime
 ; Redistributable.  Together they provide the Windows kernel-level USB3
 ; Vision camera driver that makes Basler cameras visible to the OS.
@@ -69,10 +71,9 @@
 #define PylonUSBTransport  "redist\USB_Transport_Layer_x64.msi"
 #define PylonUSBGenTL      "redist\GenTL_Producer_USB_x64.msi"
 
-; ── NI R Series Multifunction RIO driver (NI 9637 FPGA via PCIe) ──────────
-; Online installer (~9 MB) for the NI R Series Multifunction RIO driver.
-; Requires internet during installation — the online installer downloads
-; ~200 MB of driver components from NI's servers.
+; ── NI R Series Multifunction RIO driver (sbRIO / NI 9637 FPGA) ─────────
+; Covers: NI sbRIO (built-in EZ-500 FPGA), NI 9637 CompactRIO module.
+; Online installer (~9 MB) — downloads ~200 MB of driver components from NI.
 ;
 ; NI classifies the R Series driver as "Driver Interface Software" which
 ; permits royalty-free redistribution under NI's standard EULA.
@@ -85,6 +86,21 @@
 ;
 ; Silent install: ni-rio-online-installer.exe /q /AcceptLicenses yes
 #define NIRIOSetupSrc "redist\ni-rio-online-installer.exe"
+
+; ── NI-VISA Runtime (GPIB / USB TMC instrument communication) ────────────
+; Covers: Keithley 2400/2450 SMU (GPIB), BNC 745 digital delay generator,
+;         Rigol DP832 power supply (USB TMC fallback — pyvisa-py handles most
+;         Rigol communication without NI-VISA).
+; Optional — only needed for GPIB instruments or when pyvisa-py is
+; insufficient (rare).  Most EZ-500 setups do not need this.
+;
+; NI permits royalty-free redistribution of the VISA runtime.
+; Download from:
+;   https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html
+; Save as: installer\redist\ni-visa-runtime.exe
+;
+; Silent install: ni-visa-runtime.exe /q /AcceptLicenses yes
+#define NIVISASrc "redist\ni-visa-runtime.exe"
 
 [Setup]
 ; {A1B2C3D4…} — unique GUID identifies this app for Windows Add/Remove Programs.
@@ -153,7 +169,7 @@ Source: "..\dist\SanjINSIGHT\*"; DestDir: "{app}"; \
 Source: "{#VCRedistSrc}"; DestDir: "{tmp}"; \
   Flags: deleteafterinstall
 
-; ── FTDI CDM driver (USB-to-serial for Meerstetter TEC / LDD) ───────────────
+; ── FTDI CDM driver (USB-to-serial: TEC, LDD, NPC3, Thorlabs) ──────────────
 ; FTDI permits redistribution of the CDM (Combined Driver Model) package.
 ; build_installer.bat downloads CDM_Setup.exe to installer\redist\ automatically.
 ; Always bundled — installed unconditionally even if hardware is not present,
@@ -184,6 +200,13 @@ Source: "{#PylonUSBGenTL}"; DestDir: "{tmp}"; \
 ; Requires internet during installation (downloads ~200 MB from NI).
 ; NI permits redistribution of driver installers.
 Source: "{#NIRIOSetupSrc}"; DestDir: "{tmp}"; \
+  Flags: deleteafterinstall skipifsourcedoesntexist
+
+; ── NI-VISA Runtime (online installer) ────────────────────────────────────
+; Optional — only bundled if the file exists in installer\redist\.
+; Requires internet during installation (downloads ~400 MB from NI).
+; NI permits redistribution of the VISA runtime.
+Source: "{#NIVISASrc}"; DestDir: "{tmp}"; \
   Flags: deleteafterinstall skipifsourcedoesntexist
 
 [Dirs]
@@ -226,14 +249,14 @@ Filename: "{tmp}\vc_redist.x64.exe"; \
 ; ── FTDI VCP driver (silent) ─────────────────────────────────────────────────
 Filename: "{tmp}\CDM_Setup.exe"; \
   Parameters: "/S"; \
-  StatusMsg: "Installing FTDI USB-serial driver…"; \
+  StatusMsg: "Installing FTDI USB-serial driver (TEC, LDD, NPC3, Thorlabs)…"; \
   Check: ShouldInstallFTDI; \
   Flags: waituntilterminated runhidden skipifdoesntexist
 
 ; ── CH340 USB-serial driver (silent) ─────────────────────────────────────────
 Filename: "{tmp}\CH341SER.EXE"; \
   Parameters: "/S"; \
-  StatusMsg: "Installing CH340 USB-serial driver…"; \
+  StatusMsg: "Installing CH340 USB-serial driver (Arduino Nano)…"; \
   Check: ShouldInstallCH340; \
   Flags: waituntilterminated runhidden skipifdoesntexist
 
@@ -259,8 +282,15 @@ Filename: "msiexec.exe"; \
 ; ── NI R Series RIO driver (online installer, silent) ────────────────────────
 Filename: "{tmp}\ni-rio-online-installer.exe"; \
   Parameters: "/q /AcceptLicenses yes"; \
-  StatusMsg: "Installing NI R Series RIO driver (downloading from NI…)"; \
+  StatusMsg: "Installing NI R Series RIO driver for sbRIO / NI 9637 (downloading…)"; \
   Check: ShouldInstallNIRIO; \
+  Flags: waituntilterminated runhidden skipifdoesntexist
+
+; ── NI-VISA Runtime (online installer, silent) ───────────────────────────────
+Filename: "{tmp}\ni-visa-runtime.exe"; \
+  Parameters: "/q /AcceptLicenses yes"; \
+  StatusMsg: "Installing NI-VISA Runtime for GPIB/SMU instruments (downloading…)"; \
+  Check: ShouldInstallNIVISA; \
   Flags: waituntilterminated runhidden skipifdoesntexist
 
 ; ── Launch SanjINSIGHT (optional checkbox on Finish page) ────────────────────
@@ -276,6 +306,18 @@ Filename: "{app}\{#AppExeName}"; \
   install, grouped into "Bundled (offline)" and "Internet required".
   All checkboxes are checked by default — the user can uncheck any driver
   to skip it.
+
+  EZ-500 device → driver mapping:
+    Basler acA1920-155um        → Basler USB3 Vision MSIs
+    Meerstetter TEC-1089        → FTDI CDM driver
+    Meerstetter LDD-1121        → FTDI CDM driver (same)
+    Arduino Nano (CH340)        → CH340 driver
+    Thorlabs BSC203 stage       → FTDI CDM driver (Thorlabs uses FTDI chips)
+    Newport NPC3SG piezo        → FTDI CDM driver (same)
+    NI sbRIO (built-in FPGA)    → NI R Series RIO driver
+    Rigol DP832 (USB)           → Windows built-in USB TMC (no driver needed)
+    Rigol DP832 (LAN)           → No driver needed (TCP/IP)
+    Keithley SMU (GPIB)         → NI-VISA Runtime
   ══════════════════════════════════════════════════════════════════════════════ }
 
 var
@@ -285,18 +327,20 @@ var
   chkCH340:    TNewCheckBox;
   chkBasler:   TNewCheckBox;
   chkNIRIO:    TNewCheckBox;
+  chkNIVISA:   TNewCheckBox;
 
 { ── Wizard page creation ─────────────────────────────────────────────────── }
 procedure CreateDriverPage();
 var
   lbl: TNewStaticText;
+  sublbl: TNewStaticText;
   yPos: Integer;
 begin
   DriverPage := CreateCustomPage(
     wpSelectTasks,
     'Driver Installation',
     'Select which hardware drivers to install.  All drivers are recommended ' +
-    'for full hardware support.  Uncheck any you do not need.');
+    'for full EZ-500 hardware support.  Uncheck any you do not need.');
 
   yPos := 0;
 
@@ -321,7 +365,7 @@ begin
 
   chkFTDI := TNewCheckBox.Create(WizardForm);
   chkFTDI.Parent  := DriverPage.Surface;
-  chkFTDI.Caption := 'FTDI USB-serial driver — Meerstetter TEC-1089 / LDD-1121';
+  chkFTDI.Caption := 'FTDI USB-serial driver — TEC-1089, LDD-1121, NPC3SG piezo, Thorlabs stage';
   chkFTDI.Checked := True;
   chkFTDI.Left    := 16;
   chkFTDI.Top     := yPos;
@@ -330,7 +374,7 @@ begin
 
   chkCH340 := TNewCheckBox.Create(WizardForm);
   chkCH340.Parent  := DriverPage.Surface;
-  chkCH340.Caption := 'CH340 USB-serial driver — Arduino Nano, serial adapters';
+  chkCH340.Caption := 'CH340 USB-serial driver — Arduino Nano GPIO / LED wavelength selector';
   chkCH340.Checked := True;
   chkCH340.Left    := 16;
   chkCH340.Top     := yPos;
@@ -339,7 +383,7 @@ begin
 
   chkBasler := TNewCheckBox.Create(WizardForm);
   chkBasler.Parent  := DriverPage.Surface;
-  chkBasler.Caption := 'Basler USB3 Vision camera driver — Basler area-scan cameras';
+  chkBasler.Caption := 'Basler USB3 Vision camera driver — Basler acA1920-155um (TR camera)';
   chkBasler.Checked := True;
   chkBasler.Left    := 16;
   chkBasler.Top     := yPos;
@@ -358,11 +402,30 @@ begin
 
   chkNIRIO := TNewCheckBox.Create(WizardForm);
   chkNIRIO.Parent  := DriverPage.Surface;
-  chkNIRIO.Caption := 'NI R Series RIO driver — NI 9637 FPGA (~200 MB download)';
+  chkNIRIO.Caption := 'NI R Series RIO driver — sbRIO / NI 9637 FPGA (~200 MB download)';
   chkNIRIO.Checked := True;
   chkNIRIO.Left    := 16;
   chkNIRIO.Top     := yPos;
   chkNIRIO.Width   := DriverPage.SurfaceWidth - 16;
+  yPos := yPos + 22;
+
+  chkNIVISA := TNewCheckBox.Create(WizardForm);
+  chkNIVISA.Parent  := DriverPage.Surface;
+  chkNIVISA.Caption := 'NI-VISA Runtime — Keithley SMU / GPIB instruments (~400 MB download)';
+  chkNIVISA.Checked := False;
+  chkNIVISA.Left    := 16;
+  chkNIVISA.Top     := yPos;
+  chkNIVISA.Width   := DriverPage.SurfaceWidth - 16;
+  yPos := yPos + 16;
+
+  { NI-VISA sub-label: explain when it is needed }
+  sublbl := TNewStaticText.Create(WizardForm);
+  sublbl.Parent   := DriverPage.Surface;
+  sublbl.Caption  := '(Only needed for GPIB connections.  USB and LAN instruments work without it.)';
+  sublbl.Font.Color := clGray;
+  sublbl.Left     := 32;
+  sublbl.Top      := yPos;
+  sublbl.AutoSize := True;
   yPos := yPos + 32;
 
   { ── Footer note ────────────────────────────────────────────────────── }
@@ -371,17 +434,20 @@ begin
   lbl.Caption  :=
     'All drivers are installed silently.  Each is idempotent — re-running ' +
     'the installer with a driver already present is a harmless no-op.' + #13#10 + #13#10 +
+    'Note: The Rigol DP832 power supply uses Windows built-in USB TMC drivers ' +
+    '(no separate install needed).  LAN connections work out of the box.' + #13#10 + #13#10 +
     'Skipped drivers can be installed later by re-running this installer ' +
     'or downloading them individually:' + #13#10 +
-    '  • FTDI:    ftdichip.com/drivers/vcp-drivers  (TEC, LDD, Newport NPC3)' + #13#10 +
-    '  • CH340:   wch-ic.com/downloads/CH341SER_EXE.html  (Arduino Nano)' + #13#10 +
-    '  • Basler:  baslerweb.com/downloads  (pylon Runtime — USB3 Vision cameras)' + #13#10 +
-    '  • NI-RIO:  ni.com/en/support/downloads/drivers/download.ni-r-series-multifunction-rio.html';
+    '  FTDI:     ftdichip.com/drivers/vcp-drivers  (TEC, LDD, NPC3, Thorlabs)' + #13#10 +
+    '  CH340:    wch-ic.com/downloads/CH341SER_EXE.html  (Arduino Nano)' + #13#10 +
+    '  Basler:   baslerweb.com/downloads  (pylon Runtime — USB3 Vision cameras)' + #13#10 +
+    '  NI-RIO:   ni.com > Drivers > NI R Series Multifunction RIO' + #13#10 +
+    '  NI-VISA:  ni.com > Drivers > NI-VISA';
   lbl.Left     := 0;
   lbl.Top      := yPos;
   lbl.AutoSize := False;
   lbl.Width    := DriverPage.SurfaceWidth;
-  lbl.Height   := 130;
+  lbl.Height   := 160;
   lbl.Font.Color := clGray;
 end;
 
@@ -412,6 +478,11 @@ end;
 function ShouldInstallNIRIO(): Boolean;
 begin
   Result := chkNIRIO.Checked;
+end;
+
+function ShouldInstallNIVISA(): Boolean;
+begin
+  Result := chkNIVISA.Checked;
 end;
 
 { ══════════════════════════════════════════════════════════════════════════════
@@ -451,93 +522,96 @@ begin
          or RegKeyExists(HKLM64, 'SOFTWARE\National Instruments\RIO');
 end;
 
+function HasNIVISA(): Boolean;
+begin
+  Result := RegKeyExists(HKLM, 'SOFTWARE\National Instruments\NI-VISA\CurrentVersion')
+         or RegKeyExists(HKLM64, 'SOFTWARE\National Instruments\NI-VISA\CurrentVersion');
+end;
+
 { ── Post-install verification ────────────────────────────────────────────────
   Called after installation completes.  Reports which selected drivers
   installed successfully, which failed, and which were skipped by the user.
-  Also checks for optional SDKs (NI-VISA) not bundled in the installer.
 }
 procedure PostInstallSummary();
 var
   summary: String;
   issues: String;
   skipped: String;
-  optional: String;
+  builtin: String;
   msg: String;
-  niVisaKey: String;
 begin
   summary  := '';
   issues   := '';
   skipped  := '';
-  optional := '';
+  builtin  := '';
 
   { ── VC++ Runtime ───────────────────────────────────────────────────── }
   if not chkVCRedist.Checked then
     skipped := skipped + '  -  Visual C++ 2022 Runtime (skipped by user)' + #13#10
   else if HasVCRedist() then
-    summary := summary + '  ✓  Visual C++ 2022 Runtime' + #13#10
+    summary := summary + '  OK  Visual C++ 2022 Runtime' + #13#10
   else
-    issues := issues + '  ✗  Visual C++ Runtime — may not have installed correctly' + #13#10;
+    issues := issues + '  !!  Visual C++ Runtime — may not have installed correctly' + #13#10;
 
   { ── FTDI ───────────────────────────────────────────────────────────── }
   if not chkFTDI.Checked then
     skipped := skipped + '  -  FTDI USB-serial driver (skipped by user)' + #13#10
   else if HasFTDIDriver() then
-    summary := summary + '  ✓  FTDI USB-serial driver (Meerstetter TEC/LDD)' + #13#10
+    summary := summary + '  OK  FTDI USB-serial driver (TEC, LDD, NPC3, Thorlabs)' + #13#10
   else
-    issues := issues + '  ✗  FTDI driver — re-run installer or install from ftdichip.com' + #13#10;
+    issues := issues + '  !!  FTDI driver — re-run installer or install from ftdichip.com' + #13#10;
 
   { ── CH340 ──────────────────────────────────────────────────────────── }
   if not chkCH340.Checked then
     skipped := skipped + '  -  CH340 USB-serial driver (skipped by user)' + #13#10
   else if HasCH340Driver() then
-    summary := summary + '  ✓  CH340 USB-serial driver (Arduino Nano)' + #13#10
+    summary := summary + '  OK  CH340 USB-serial driver (Arduino Nano)' + #13#10
   else
-    issues := issues + '  ✗  CH340 driver — re-run installer or install from wch-ic.com' + #13#10;
+    issues := issues + '  !!  CH340 driver — re-run installer or install from wch-ic.com' + #13#10;
 
   { ── Basler ─────────────────────────────────────────────────────────── }
   if not chkBasler.Checked then
     skipped := skipped + '  -  Basler USB3 Vision camera driver (skipped by user)' + #13#10
   else if HasBaslerDriver() then
-    summary := summary + '  ✓  Basler USB3 Vision camera driver' + #13#10
+    summary := summary + '  OK  Basler USB3 Vision camera driver' + #13#10
   else
-    issues := issues + '  ✗  Basler camera driver — re-run installer or install pylon Runtime' + #13#10;
+    issues := issues + '  !!  Basler camera driver — re-run installer or install pylon Runtime' + #13#10;
 
   { ── NI-RIO ─────────────────────────────────────────────────────────── }
   if not chkNIRIO.Checked then
     skipped := skipped + '  -  NI R Series RIO driver (skipped by user)' + #13#10
   else if HasNIRIO() then
-    summary := summary + '  ✓  NI R Series RIO driver (NI 9637 FPGA)' + #13#10
+    summary := summary + '  OK  NI R Series RIO driver (sbRIO / NI 9637 FPGA)' + #13#10
   else
     issues := issues +
-      '  ✗  NI-RIO driver — installation may have failed (requires internet)' + #13#10 +
+      '  !!  NI-RIO driver — installation may have failed (requires internet)' + #13#10 +
       '     Download manually:' + #13#10 +
-      '     ni.com/en/support/downloads/drivers/download.ni-r-series-multifunction-rio.html' + #13#10;
+      '     ni.com > Drivers > NI R Series Multifunction RIO' + #13#10;
 
-  { ── Optional SDKs (not bundled) ────────────────────────────────────── }
-  niVisaKey := 'SOFTWARE\National Instruments\NI-VISA\CurrentVersion';
-  if not RegKeyExists(HKLM, niVisaKey) and
-     not RegKeyExists(HKLM64, niVisaKey) then
-    optional := optional +
-      '  •  NI-VISA (only needed for Keithley SMU / GPIB instruments)' + #13#10 +
-      '     ni.com/en/support/downloads/drivers/download.ni-visa.html' + #13#10;
+  { ── NI-VISA ────────────────────────────────────────────────────────── }
+  if not chkNIVISA.Checked then
+    skipped := skipped + '  -  NI-VISA Runtime (skipped — only needed for GPIB)' + #13#10
+  else if HasNIVISA() then
+    summary := summary + '  OK  NI-VISA Runtime (GPIB / SMU instruments)' + #13#10
+  else
+    issues := issues +
+      '  !!  NI-VISA Runtime — installation may have failed (requires internet)' + #13#10 +
+      '     Download manually: ni.com > Drivers > NI-VISA' + #13#10;
+
+  { ── Built-in (no install needed) ───────────────────────────────────── }
+  builtin :=
+    'Devices that need no driver installation:' + #13#10 +
+    '  OK  Rigol DP832 power supply (Windows built-in USB TMC / LAN)' + #13#10;
 
   { ── Build the final message ─────────────────────────────────────────── }
   if (issues = '') and (skipped = '') then
   begin
-    if optional <> '' then
-      MsgBox(
-        'SanjINSIGHT is installed and ready!' + #13#10#13#10 +
-        'Drivers installed:' + #13#10 +
-        summary + #13#10 +
-        'Optional SDKs (install only if you have the hardware):' + #13#10 +
-        optional,
-        mbInformation, MB_OK)
-    else
-      MsgBox(
-        'SanjINSIGHT is installed and ready!' + #13#10#13#10 +
-        'All drivers installed:' + #13#10 +
-        summary,
-        mbInformation, MB_OK);
+    MsgBox(
+      'SanjINSIGHT is installed and ready!' + #13#10#13#10 +
+      'Drivers installed:' + #13#10 +
+      summary + #13#10 +
+      builtin,
+      mbInformation, MB_OK);
   end
   else if issues = '' then
   begin
@@ -545,6 +619,7 @@ begin
       'SanjINSIGHT is installed and ready!' + #13#10#13#10 +
       'Drivers installed:' + #13#10 +
       summary + #13#10 +
+      builtin + #13#10 +
       'Skipped by user:' + #13#10 +
       skipped + #13#10 +
       'You can install skipped drivers later by re-running this installer.',
@@ -559,7 +634,7 @@ begin
       msg := msg + #13#10 + 'Issues detected:' + #13#10 + issues;
     if skipped <> '' then
       msg := msg + #13#10 + 'Skipped by user:' + #13#10 + skipped;
-    msg := msg + #13#10 +
+    msg := msg + #13#10 + builtin + #13#10 +
       'The application will still launch, but affected hardware ' +
       'may not connect until the missing drivers are installed.';
     MsgBox(msg, mbWarning, MB_OK);

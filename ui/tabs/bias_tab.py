@@ -64,6 +64,14 @@ class BiasTab(QWidget):
         root = QVBoxLayout(controls)
         root.setContentsMargins(10, 10, 10, 10)
         root.setSpacing(10)
+
+        # Error banner (hidden until a device error occurs)
+        from ui.widgets.device_error_banner import DeviceErrorBanner
+        self._error_banner = DeviceErrorBanner()
+        self._error_banner.device_manager_clicked.connect(
+            self.open_device_manager.emit)
+        root.addWidget(self._error_banner)
+
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
@@ -410,6 +418,12 @@ class BiasTab(QWidget):
         lay.addWidget(btn, 0, Qt.AlignCenter)
         lay.addStretch()
         return w
+
+    def show_device_error(self, key: str, name: str, message: str) -> None:
+        self._error_banner.show_error(key, name, message)
+
+    def clear_device_error(self) -> None:
+        self._error_banner.clear()
 
     def set_hardware_available(self, available: bool) -> None:
         """Switch between empty state (page 0) and full controls (page 1)."""

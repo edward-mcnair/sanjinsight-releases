@@ -16,7 +16,7 @@ Microsanj, LLC | microsanj.com
   - [ ] Arduino Nano (USB cable — CH340 chip)
   - [ ] Thorlabs stage controller (USB cable)
   - [ ] Newport NPC3SG piezo controller (USB cable — FTDI chip)
-  - [ ] NI FPGA card (PCIe, if applicable)
+  - [ ] NI sbRIO (built-in, Ethernet link-local 169.254.x.x)
   - [ ] Rigol DP832 power supply (USB or LAN)
 
 ---
@@ -44,14 +44,15 @@ Microsanj, LLC | microsanj.com
 - [ ] Run `SanjINSIGHT-Setup-{version}.exe` as Administrator
 - [ ] Accept the license agreement
 - [ ] Use default install location (`C:\Program Files\Microsanj\SanjINSIGHT`)
-- [ ] Installer automatically installs:
+- [ ] On the Driver Selection page, verify all are checked:
   - [x] Visual C++ 2015-2022 Runtime (x64) — required by Qt5
-  - [x] FTDI CDM driver — required for Meerstetter TEC/LDD
-  - [x] CH340/CH341 driver — required for Arduino Nano
-  - [x] Basler USB3 Vision camera driver — from pylon Runtime Redistributable
-  - [x] Basler pylon runtime — bundled inside pypylon (no separate install)
-  - [x] NI R Series RIO driver — required for NI 9637 FPGA (**requires internet**)
-- [ ] Note any post-install messages about optional SDKs (NI-VISA only)
+  - [x] FTDI CDM driver — TEC-1089, LDD-1121, Newport NPC3SG, Thorlabs stage
+  - [x] CH340/CH341 driver — Arduino Nano GPIO/LED selector
+  - [x] Basler USB3 Vision camera driver — Basler acA1920-155um (TR camera)
+  - [x] NI R Series RIO driver — sbRIO built-in FPGA (**requires internet**)
+  - [ ] NI-VISA Runtime — check only if Keithley SMU / GPIB is connected (**requires internet**)
+- [ ] Note: Basler pylon runtime is bundled inside pypylon (no separate install)
+- [ ] Note: Rigol DP832 uses Windows built-in USB TMC driver (no install needed)
 - [ ] **Reboot** after installation
 
 ---
@@ -132,17 +133,18 @@ After reboot, open Device Manager and verify:
 
 ## Optional: NI-VISA
 
-NI-VISA is **NOT bundled** in the installer due to vendor licensing.
-Install ONLY if the system has Keithley SMU or GPIB instruments.
+NI-VISA is **optionally bundled** in the installer (unchecked by default).
+Check the NI-VISA checkbox during installation ONLY if the system has
+Keithley SMU or GPIB instruments. USB and LAN instruments work without it.
 
-### NI-VISA (Keithley SMU / GPIB instruments only)
+If NI-VISA was not installed during setup:
 - [ ] Download from: https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html
 - [ ] Install with default options
 - [ ] Reboot
 
-> **Note:** NI-RIO (for the NI 9637 FPGA) is now bundled in the SanjINSIGHT
-> installer. It installs automatically but requires an internet connection
-> during installation (the online installer downloads ~200 MB from NI's servers).
+> **Note:** NI-RIO (for the sbRIO / NI 9637 FPGA) is bundled in the
+> installer and checked by default. It installs automatically but requires
+> an internet connection (downloads ~200 MB from NI's servers).
 > If installation fails due to no internet, download manually from:
 > https://www.ni.com/en/support/downloads/drivers/download.ni-r-series-multifunction-rio.html
 

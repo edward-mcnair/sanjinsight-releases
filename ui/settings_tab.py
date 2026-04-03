@@ -31,7 +31,7 @@ from version import (
     __version__, BUILD_DATE, APP_NAME, APP_VENDOR,
     RELEASES_PAGE_URL, SUPPORT_EMAIL, version_string,
 )
-from ui.theme import FONT, PALETTE, scaled_qss
+from ui.theme import FONT, PALETTE, MONO_FONT, scaled_qss
 
 log = logging.getLogger(__name__)
 
@@ -383,6 +383,9 @@ class SettingsTab(QWidget):
         # ── Plugins ──────────────────────────────────────────────────
         self._plugins_group = self._build_plugins_group()
         lay.addWidget(self._plugins_group)
+
+        # ── Diagnostics ───────────────────────────────────────────────
+        lay.addWidget(self._build_diagnostics_group())
 
         # ── Support ───────────────────────────────────────────────────
         lay.addWidget(self._build_support_group())
@@ -2543,6 +2546,82 @@ class SettingsTab(QWidget):
         plugins_dir = Path.home() / ".microsanj" / "plugins"
         plugins_dir.mkdir(parents=True, exist_ok=True)
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(plugins_dir)))
+
+    # ── Diagnostics section ──────────────────────────────────────────
+
+    def _build_diagnostics_group(self) -> QGroupBox:
+        """Diagnostics: hardware debug logging and log file access."""
+        from pathlib import Path
+        grp = _group("Diagnostics")
+        lay = QVBoxLayout(grp)
+        lay.setSpacing(14)
+
+        lay.addWidget(_body(
+            "Enable hardware debug logging to capture wire-level serial "
+            "TX/RX traffic, command timing, and detailed connection "
+            "diagnostics in the log file.  Useful when troubleshooting "
+            "device connectivity.  Disable when not needed — debug "
+            "logging increases file I/O."))
+
+        # ── Hardware debug checkbox ──────────────────────────────────
+        self._hw_debug_chk = QCheckBox("Enable hardware debug logging")
+        self._hw_debug_chk.setStyleSheet(_CHECK())
+        self._hw_debug_chk.setChecked(
+            cfg_mod.get_pref("logging.hardware_debug", False))
+        self._hw_debug_chk.toggled.connect(self._on_hw_debug_toggled)
+        lay.addWidget(self._hw_debug_chk)
+
+        lay.addWidget(_sep())
+
+        # ── Open log file / folder ───────────────────────────────────
+        log_row = QHBoxLayout()
+        log_lbl = QLabel("Log file location")
+        log_lbl.setStyleSheet(
+            f"font-size:{FONT['label']}pt; color:{_MUTED()};")
+        log_row.addWidget(log_lbl)
+        log_row.addStretch()
+
+        import logging_config as _lc
+        _log_path = str(_lc.log_path())
+
+        open_log_btn = QPushButton("Open Log File")
+        open_log_btn.setFixedWidth(130)
+        open_log_btn.setStyleSheet(_BTN_SECONDARY())
+        open_log_btn.clicked.connect(
+            lambda: QDesktopServices.openUrl(
+                QUrl.fromLocalFile(_log_path)))
+        log_row.addWidget(open_log_btn)
+
+        open_folder_btn = QPushButton("Open Folder")
+        open_folder_btn.setFixedWidth(110)
+        open_folder_btn.setStyleSheet(_BTN_SECONDARY())
+        _log_folder = str(Path(_log_path).parent)
+        open_folder_btn.clicked.connect(
+            lambda: QDesktopServices.openUrl(
+                QUrl.fromLocalFile(_log_folder)))
+        log_row.addWidget(open_folder_btn)
+        lay.addLayout(log_row)
+
+        path_lbl = QLabel(_log_path)
+        path_lbl.setStyleSheet(
+            f"font-size:{FONT['caption']}pt; color:{_MUTED()}; "
+            f"font-family:{MONO_FONT};")
+        path_lbl.setWordWrap(True)
+        path_lbl.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        lay.addWidget(path_lbl)
+
+        return grp
+
+    def _on_hw_debug_toggled(self, enabled: bool) -> None:
+        """Handle the hardware debug logging checkbox."""
+        cfg_mod.set_pref("logging.hardware_debug", enabled)
+        try:
+            import logging_config as _lc
+            _lc.set_hardware_debug(enabled)
+        except Exception:
+            pass
+        log.info("Hardware debug logging %s by user",
+                 "ENABLED" if enabled else "disabled")
 
     def _build_support_group(self) -> QGroupBox:
         g = _group("Support & About")

@@ -116,7 +116,7 @@ echo.
 set FTDI_EXE=%REDIST_DIR%\CDM_Setup.exe
 
 if not exist "%FTDI_EXE%" (
-    echo [2b/4] Downloading FTDI CDM driver ^(USB-serial for Meerstetter TEC/LDD^)...
+    echo [2b/4] Downloading FTDI CDM driver ^(TEC, LDD, NPC3 piezo, Thorlabs stage^)...
     if not exist "%REDIST_DIR%" mkdir "%REDIST_DIR%"
     :: FTDI CDM v2.12.36.4 WHQL Certified — unified VCP + D2XX driver.
     :: FTDI permits redistribution of CDM drivers without prior authorization.
@@ -171,6 +171,7 @@ if not exist "%CH340_EXE%" (
 echo.
 
 :: ── Step 2d: Check for NI R Series RIO online installer ─────────────────────
+:: Covers: NI sbRIO (built-in EZ-500 FPGA), NI 9637 CompactRIO module.
 :: This is a small (~9 MB) online installer that downloads the full driver
 :: from NI's servers during installation.  It cannot be auto-downloaded
 :: (NI's download page requires browser interaction).
@@ -187,6 +188,28 @@ if exist "%NIRIO_EXE%" (
     echo        To bundle it, download the online installer from:
     echo          https://www.ni.com/en/support/downloads/drivers/download.ni-r-series-multifunction-rio.html
     echo        Save as: installer\redist\ni-rio-online-installer.exe
+    echo.
+)
+echo.
+
+:: ── Step 2d2: Check for NI-VISA Runtime online installer ────────────────────
+:: Covers: Keithley 2400/2450 SMU (GPIB), BNC 745 delay generator.
+:: Optional — only needed for GPIB instrument connections.
+:: USB and LAN instruments work without NI-VISA via the pyvisa-py backend.
+:: Download from: https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html
+:: Save as: installer\redist\ni-visa-runtime.exe
+set NIVISA_EXE=%REDIST_DIR%\ni-visa-runtime.exe
+
+if exist "%NIVISA_EXE%" (
+    echo [2d2/4] NI-VISA Runtime online installer found — will be bundled.
+) else (
+    echo [2d2/4] NI-VISA Runtime online installer not found ^(optional^).
+    echo.
+    echo        NI-VISA is only needed for GPIB instrument connections.
+    echo        USB and LAN instruments work without it.
+    echo        To bundle it, download the runtime installer from:
+    echo          https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html
+    echo        Save as: installer\redist\ni-visa-runtime.exe
     echo.
 )
 echo.

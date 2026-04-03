@@ -1180,12 +1180,12 @@ class _PageFPGA(_PageBase):
     def __init__(self, cfg: dict, parent=None):
         fpga_cfg = cfg.get("fpga", {})
         super().__init__(
-            "FPGA — NI 9637",
+            "FPGA — NI sbRIO / NI 9637",
             "Specify the compiled bitfile and network resource string. "
             "Find the resource string in NI MAX under  Remote Systems.",
             parent)
 
-        g = QGroupBox("NI 9637 FPGA Module")
+        g = QGroupBox("NI sbRIO / NI 9637 FPGA")
         g.setStyleSheet(
             f"QGroupBox {{ color:{PALETTE['textSub']}; font-size:{FONT['label']}pt; border:1px solid {PALETTE['border']}; "
             "border-radius:5px; margin-top:8px; padding:12px; }"
@@ -1616,7 +1616,7 @@ class _PageStage(_PageBase):
 
         # Driver selector
         self._drv = QComboBox()
-        self._drv.addItems(["simulated", "thorlabs", "serial_stage"])
+        self._drv.addItems(["simulated", "thorlabs", "newport_npc3", "serial_stage"])
         self._drv.setCurrentText(stage_cfg.get("driver", "simulated"))
         self._drv.setStyleSheet(_INPUT_SS)
         self._drv.currentTextChanged.connect(self._on_driver_changed)
@@ -1707,7 +1707,7 @@ class _PageStage(_PageBase):
 
     def _on_driver_changed(self, drv: str) -> None:
         is_thorlabs = (drv == "thorlabs")
-        is_serial   = (drv == "serial_stage")
+        is_serial   = (drv in ("serial_stage", "newport_npc3"))
 
         self._sn_x_lbl.setVisible(is_thorlabs)
         self._sn_x.setVisible(is_thorlabs)
@@ -1719,6 +1719,12 @@ class _PageStage(_PageBase):
         self._port.setVisible(is_serial)
         self._baud_lbl.setVisible(is_serial)
         self._baud.setVisible(is_serial)
+
+        # NPC3 default baud is 19200 — auto-select it when the driver changes
+        if drv == "newport_npc3":
+            idx = self._baud.findText("19200")
+            if idx >= 0:
+                self._baud.setCurrentIndex(idx)
 
         if is_thorlabs:
             self._apt_notice.setVisible(not self._check_apt())
@@ -1770,9 +1776,12 @@ class _PageStage(_PageBase):
             cfg["serial_x"] = self._sn_x.text().strip()
             cfg["serial_y"] = self._sn_y.text().strip()
             cfg["serial_z"] = self._sn_z.text().strip()
-        elif drv == "serial_stage":
+        elif drv in ("serial_stage", "newport_npc3"):
             cfg["port"] = self._port.currentText().strip()
             cfg["baud"] = int(self._baud.currentText())
+            if drv == "newport_npc3":
+                cfg["baudrate"] = cfg["baud"]   # NPC3 driver uses "baudrate" key
+                cfg["closed_loop"] = True
         return cfg
 
     def apply_scan(self, report) -> int:
@@ -1781,7 +1790,8 @@ class _PageStage(_PageBase):
         # ── New path: DiscoveryReport ────────────────────────────────────
         if hasattr(report, "resolved"):
             stage_devs = [d for d in report.resolved
-                          if "stage" in d.device_uid or "thorlabs" in d.device_uid]
+                          if "stage" in d.device_uid or "thorlabs" in d.device_uid
+                          or "newport" in d.device_uid or "npc3" in d.device_uid]
             if not stage_devs:
                 return 0
             dev = stage_devs[0]
@@ -1789,6 +1799,9 @@ class _PageStage(_PageBase):
                 self._drv.setCurrentText("thorlabs")
                 if dev.serial_number:
                     self._sn_x.setText(dev.serial_number)
+            elif "newport" in dev.device_uid or "npc3" in dev.device_uid:
+                self._drv.setCurrentText("newport_npc3")
+                self._port.setCurrentText(dev.port)
             else:
                 self._drv.setCurrentText("serial_stage")
                 self._port.setCurrentText(dev.port)

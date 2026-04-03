@@ -717,6 +717,37 @@ class DeviceManager:
             # BNC 745 uses a VISA resource string stored in entry.address
             if desc.uid == "bnc_745":
                 cfg["address"] = addr or "GPIB::12"
+            # NI RIO devices (sbRIO, 9637): construct resource string from IP
+            # and pull bitfile from device_params or config.yaml fallback.
+            if desc.uid in ("ni_sbrio", "ni_9637", "ni_usb_6001"):
+                ip = entry.ip_address or desc.default_ip
+                # Resource string: "RIO0" (local) or "rio://IP/RIO0" (Ethernet)
+                try:
+                    import config as _cfg
+                    saved_resource = _cfg.get_pref(
+                        f"device_params.{entry.uid}.resource", "")
+                    saved_bitfile = _cfg.get_pref(
+                        f"device_params.{entry.uid}.bitfile", "")
+                except Exception:
+                    saved_resource = ""
+                    saved_bitfile = ""
+                if not saved_resource:
+                    # Fall back to config.yaml global fpga section
+                    try:
+                        import config as _cfg
+                        saved_resource = _cfg.get("hardware.fpga.resource", "")
+                    except Exception:
+                        saved_resource = ""
+                if not saved_resource and ip:
+                    saved_resource = f"rio://{ip}/RIO0"
+                cfg["resource"] = saved_resource
+                if not saved_bitfile:
+                    try:
+                        import config as _cfg
+                        saved_bitfile = _cfg.get("hardware.fpga.bitfile", "")
+                    except Exception:
+                        saved_bitfile = ""
+                cfg["bitfile"] = saved_bitfile
             return create_fpga(cfg)
         elif dtype == DTYPE_STAGE:
             from hardware.stage import create_stage
@@ -770,6 +801,7 @@ class DeviceManager:
             "wentworth_thermal_chuck":  "thermal_chuck",
             # FPGA / timing
             "ni_9637":                  "ni9637",
+            "ni_sbrio":                 "ni9637",
             "ni_usb_6001":              "ni9637",
             "bnc_745":                  "bnc745",
             # Stages / prober
