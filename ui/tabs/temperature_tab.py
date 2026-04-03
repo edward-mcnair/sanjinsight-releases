@@ -277,6 +277,37 @@ class TemperatureTab(QWidget):
         ctrl.addWidget(dis_btn)
         main.addLayout(ctrl)
 
+        # ── Ramp speed (protects DUT from thermal shock) ──────────────
+        ramp_row = QHBoxLayout()
+        ramp_row.addWidget(QLabel("Ramp (°C/s)"))
+        ramp_spin = QDoubleSpinBox()
+        ramp_spin.setRange(0.0, 50.0)
+        ramp_spin.setValue(0.0)
+        ramp_spin.setSingleStep(0.5)
+        ramp_spin.setDecimals(1)
+        ramp_spin.setFixedWidth(80)
+        ramp_spin.setToolTip(
+            "Temperature ramp rate in °C per second.\n"
+            "0 = disabled (instant setpoint change).\n"
+            "Non-zero values slew to the target gradually,\n"
+            "protecting the DUT from thermal shock.\n"
+            "Supported on Meerstetter TEC-1089 only.")
+        box._ramp_spin = ramp_spin
+        ramp_row.addWidget(ramp_spin)
+
+        ramp_set_btn = QPushButton("Set Ramp")
+        ramp_set_btn.setFixedWidth(80)
+        ramp_set_btn.clicked.connect(
+            lambda _, b=box: self._set_ramp_speed(b, b._ramp_spin.value()))
+        ramp_row.addWidget(ramp_set_btn)
+
+        ramp_hint = QLabel("0 = disabled (Meerstetter only)")
+        ramp_hint.setStyleSheet(
+            f"color:{PALETTE['textSub']}; font-size:{FONT['caption']}pt;")
+        ramp_row.addWidget(ramp_hint)
+        ramp_row.addStretch()
+        main.addLayout(ramp_row)
+
         # ── Safety limits (collapsible Advanced section) ──────────────
         lim_panel = MoreOptionsPanel("Safety Limits", section_key="temperature_safety")
 
@@ -794,3 +825,13 @@ class TemperatureTab(QWidget):
             _tecs = app_state.tecs
             if _tecs and idx < len(_tecs):
                 _tecs[idx].disable()
+
+    def _set_ramp_speed(self, box, degrees_per_second: float):
+        """Set temperature ramp rate for the TEC channel."""
+        idx = self._panels.index(box)
+        if self._hw:
+            self._hw.tec_set_ramp_speed(idx, degrees_per_second)
+        else:
+            _tecs = app_state.tecs
+            if _tecs and idx < len(_tecs) and hasattr(_tecs[idx], 'set_ramp_speed'):
+                _tecs[idx].set_ramp_speed(degrees_per_second)

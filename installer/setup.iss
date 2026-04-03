@@ -71,6 +71,14 @@
 #define PylonUSBTransport  "redist\USB_Transport_Layer_x64.msi"
 #define PylonUSBGenTL      "redist\GenTL_Producer_USB_x64.msi"
 
+; ── EZ-500 FPGA bitfile (compiled firmware for sbRIO-9637) ───────────────
+; Pre-compiled LabVIEW FPGA bitfile for the NI sbRIO-9637 built into the
+; EZ-500 chassis.  This binary is loaded onto the FPGA at session open and
+; controls stimulus timing, voltage output, analog acquisition, and camera
+; triggering.  It never changes unless the FPGA firmware is redesigned.
+; Installed to {app}\firmware\ so config.yaml can reference it portably.
+#define FPGABitfile "redist\firmware\ez500_fpga.lvbitx"
+
 ; ── NI R Series Multifunction RIO driver (sbRIO / NI 9637 FPGA) ─────────
 ; Covers: NI sbRIO (built-in EZ-500 FPGA), NI 9637 CompactRIO module.
 ; Online installer (~9 MB) — downloads ~200 MB of driver components from NI.
@@ -195,6 +203,12 @@ Source: "{#PylonUSBTransport}"; DestDir: "{tmp}"; \
 Source: "{#PylonUSBGenTL}"; DestDir: "{tmp}"; \
   Flags: deleteafterinstall skipifsourcedoesntexist
 
+; ── EZ-500 FPGA bitfile ───────────────────────────────────────────────────
+; Installed to {app}\firmware\ — config.yaml bitfile path points here.
+; Always bundled; not user-selectable (required for FPGA operation).
+Source: "{#FPGABitfile}"; DestDir: "{app}\firmware"; \
+  Flags: ignoreversion skipifsourcedoesntexist
+
 ; ── NI R Series RIO driver (online installer) ─────────────────────────────
 ; Optional — only bundled if the file exists in installer\redist\.
 ; Requires internet during installation (downloads ~200 MB from NI).
@@ -213,6 +227,7 @@ Source: "{#NIVISASrc}"; DestDir: "{tmp}"; \
 ; Ensure writable directories exist at install time so the app can write to them
 ; without requesting elevation at runtime.
 Name: "{app}\logs"
+Name: "{app}\firmware"
 Name: "{app}\profiles\user"
 
 [Icons]

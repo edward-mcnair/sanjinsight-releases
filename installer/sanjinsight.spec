@@ -261,6 +261,13 @@ datas = [
           'docs')]
        if os.path.isdir(os.path.join(PROJECT_DIR, 'docs')) else [] ),
 
+    # ── FPGA bitfile — sbRIO-9637 firmware for EZ-500 ──────────────────────────
+    # Installed to firmware/ alongside the app executable.
+    # config.yaml references it as "firmware/ez500_fpga.lvbitx" (relative).
+    *( [(os.path.join(PROJECT_DIR, 'firmware', 'ez500_fpga.lvbitx'), 'firmware')]
+       if os.path.isfile(os.path.join(PROJECT_DIR, 'firmware', 'ez500_fpga.lvbitx'))
+       else [] ),
+
     # ── Default config — user can edit this after installation ────────────────
     (os.path.join(PROJECT_DIR, 'config.yaml'), '.'),
 

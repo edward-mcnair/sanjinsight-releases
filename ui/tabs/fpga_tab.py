@@ -343,6 +343,262 @@ class FpgaTab(QWidget):
         self._trigger_panel.setVisible(False)
         root.addWidget(self._trigger_panel)
 
+        # ── Voltage output controls (EZ-500 only, collapsible) ────────
+        self._voltage_panel = MoreOptionsPanel(
+            "Voltage Output  (±16 V DAC)", section_key="fpga_voltage")
+
+        v_inner = QWidget()
+        v_grid  = QGridLayout(v_inner)
+        v_grid.setContentsMargins(0, 0, 0, 0)
+        v_grid.setSpacing(8)
+
+        v_grid.addWidget(self._sub("Main Voltage (V)"), 0, 0)
+        self._vout_spin = QDoubleSpinBox()
+        self._vout_spin.setRange(-16.0, 15.999)
+        self._vout_spin.setValue(0.0)
+        self._vout_spin.setDecimals(3)
+        self._vout_spin.setSingleStep(0.1)
+        self._vout_spin.setFixedWidth(120)
+        self._vout_spin.setToolTip("Main DAC voltage output (−16 V to +16 V)")
+        v_grid.addWidget(self._vout_spin, 0, 1)
+
+        v_grid.addWidget(self._sub("Aux Voltage (V)"), 1, 0)
+        self._vaux_spin = QDoubleSpinBox()
+        self._vaux_spin.setRange(-16.0, 15.999)
+        self._vaux_spin.setValue(0.0)
+        self._vaux_spin.setDecimals(3)
+        self._vaux_spin.setSingleStep(0.1)
+        self._vaux_spin.setFixedWidth(120)
+        self._vaux_spin.setToolTip("Auxiliary DAC voltage output (−16 V to +16 V)")
+        v_grid.addWidget(self._vaux_spin, 1, 1)
+
+        v_grid.addWidget(self._sub("Vout Limit (V)"), 2, 0)
+        self._vo_lim_spin = QDoubleSpinBox()
+        self._vo_lim_spin.setRange(-16.0, 15.999)
+        self._vo_lim_spin.setValue(5.0)
+        self._vo_lim_spin.setDecimals(3)
+        self._vo_lim_spin.setFixedWidth(120)
+        v_grid.addWidget(self._vo_lim_spin, 2, 1)
+
+        v_grid.addWidget(self._sub("Vaux Limit (V)"), 3, 0)
+        self._va_lim_spin = QDoubleSpinBox()
+        self._va_lim_spin.setRange(-16.0, 15.999)
+        self._va_lim_spin.setValue(5.0)
+        self._va_lim_spin.setDecimals(3)
+        self._va_lim_spin.setFixedWidth(120)
+        v_grid.addWidget(self._va_lim_spin, 3, 1)
+
+        self._high_range_cb = QPushButton("High Range")
+        self._high_range_cb.setCheckable(True)
+        self._high_range_cb.setFixedWidth(110)
+        self._high_range_cb.setToolTip("Enable high voltage range on analog outputs")
+        self._high_range_cb.toggled.connect(self._set_high_range)
+        v_grid.addWidget(self._high_range_cb, 0, 2)
+
+        v_btn_row = QHBoxLayout()
+        apply_v_btn = QPushButton("Apply Voltages")
+        apply_v_btn.setFixedWidth(130)
+        apply_v_btn.clicked.connect(self._apply_voltages)
+        disable_v_btn = QPushButton("Disable All")
+        disable_v_btn.setFixedWidth(110)
+        disable_v_btn.setObjectName("danger")
+        disable_v_btn.clicked.connect(self._disable_voltages)
+        v_btn_row.addWidget(apply_v_btn)
+        v_btn_row.addWidget(disable_v_btn)
+        v_btn_row.addStretch()
+        v_grid.addLayout(v_btn_row, 4, 0, 1, 3)
+
+        self._voltage_panel.addWidget(v_inner)
+        self._voltage_panel.setVisible(False)
+        root.addWidget(self._voltage_panel)
+
+        # ── LED illumination controls (EZ-500 only, collapsible) ──────
+        self._led_panel = MoreOptionsPanel(
+            "LED Illumination Timing", section_key="fpga_led")
+
+        led_inner = QWidget()
+        led_grid  = QGridLayout(led_inner)
+        led_grid.setContentsMargins(0, 0, 0, 0)
+        led_grid.setSpacing(8)
+
+        led_grid.addWidget(self._sub("LED Phase (ticks)"), 0, 0)
+        self._led_phase_spin = QDoubleSpinBox()
+        self._led_phase_spin.setRange(0, 4294967295)
+        self._led_phase_spin.setDecimals(0)
+        self._led_phase_spin.setFixedWidth(120)
+        led_grid.addWidget(self._led_phase_spin, 0, 1)
+
+        led_grid.addWidget(self._sub("LED Time ON (ticks)"), 1, 0)
+        self._led_ton_spin = QDoubleSpinBox()
+        self._led_ton_spin.setRange(0, 4294967295)
+        self._led_ton_spin.setDecimals(0)
+        self._led_ton_spin.setFixedWidth(120)
+        led_grid.addWidget(self._led_ton_spin, 1, 1)
+
+        led_grid.addWidget(self._sub("LED Pulse Phase (ticks)"), 2, 0)
+        self._led_pulse_ph_spin = QDoubleSpinBox()
+        self._led_pulse_ph_spin.setRange(0, 4294967295)
+        self._led_pulse_ph_spin.setDecimals(0)
+        self._led_pulse_ph_spin.setFixedWidth(120)
+        led_grid.addWidget(self._led_pulse_ph_spin, 2, 1)
+
+        led_grid.addWidget(self._sub("LED Pulse Time (ticks)"), 3, 0)
+        self._led_pulse_time_spin = QDoubleSpinBox()
+        self._led_pulse_time_spin.setRange(0, 4294967295)
+        self._led_pulse_time_spin.setDecimals(0)
+        self._led_pulse_time_spin.setFixedWidth(120)
+        led_grid.addWidget(self._led_pulse_time_spin, 3, 1)
+
+        apply_led_btn = QPushButton("Apply LED Timing")
+        apply_led_btn.setFixedWidth(140)
+        apply_led_btn.clicked.connect(self._apply_led_timing)
+        led_grid.addWidget(apply_led_btn, 4, 1)
+
+        self._led_panel.addWidget(led_inner)
+        self._led_panel.setVisible(False)
+        root.addWidget(self._led_panel)
+
+        # ── Phase / timing controls (EZ-500 only, collapsible) ────────
+        self._phase_panel = MoreOptionsPanel(
+            "Phase Offsets & Timing", section_key="fpga_phase")
+
+        ph_inner = QWidget()
+        ph_grid  = QGridLayout(ph_inner)
+        ph_grid.setContentsMargins(0, 0, 0, 0)
+        ph_grid.setSpacing(8)
+
+        ph_grid.addWidget(self._sub("Device Phase (ticks)"), 0, 0)
+        self._dev_phase_spin = QDoubleSpinBox()
+        self._dev_phase_spin.setRange(0, 4294967295)
+        self._dev_phase_spin.setDecimals(0)
+        self._dev_phase_spin.setFixedWidth(120)
+        ph_grid.addWidget(self._dev_phase_spin, 0, 1)
+
+        ph_grid.addWidget(self._sub("Device Phase 2 (ticks)"), 1, 0)
+        self._dev_phase2_spin = QDoubleSpinBox()
+        self._dev_phase2_spin.setRange(0, 4294967295)
+        self._dev_phase2_spin.setDecimals(0)
+        self._dev_phase2_spin.setFixedWidth(120)
+        ph_grid.addWidget(self._dev_phase2_spin, 1, 1)
+
+        self._use_phase2_cb = QPushButton("Use Phase 2")
+        self._use_phase2_cb.setCheckable(True)
+        self._use_phase2_cb.setFixedWidth(110)
+        ph_grid.addWidget(self._use_phase2_cb, 1, 2)
+
+        ph_grid.addWidget(self._sub("Exposure Time (ticks)"), 2, 0)
+        self._exposure_spin = QDoubleSpinBox()
+        self._exposure_spin.setRange(0, 4294967295)
+        self._exposure_spin.setDecimals(0)
+        self._exposure_spin.setFixedWidth(120)
+        ph_grid.addWidget(self._exposure_spin, 2, 1)
+
+        ph_grid.addWidget(self._sub("Sample Rate (divisor)"), 3, 0)
+        self._samp_rate_spin = QDoubleSpinBox()
+        self._samp_rate_spin.setRange(1, 4294967295)
+        self._samp_rate_spin.setValue(1)
+        self._samp_rate_spin.setDecimals(0)
+        self._samp_rate_spin.setFixedWidth(120)
+        ph_grid.addWidget(self._samp_rate_spin, 3, 1)
+
+        apply_ph_btn = QPushButton("Apply Phase & Timing")
+        apply_ph_btn.setFixedWidth(160)
+        apply_ph_btn.clicked.connect(self._apply_phase_timing)
+        ph_grid.addWidget(apply_ph_btn, 4, 1)
+
+        self._phase_panel.addWidget(ph_inner)
+        self._phase_panel.setVisible(False)
+        root.addWidget(self._phase_panel)
+
+        # ── Synchronisation & trigger I/O (EZ-500 only, collapsible) ──
+        self._sync_panel = MoreOptionsPanel(
+            "Synchronisation & Trigger I/O", section_key="fpga_sync")
+
+        sync_inner = QWidget()
+        sync_grid  = QGridLayout(sync_inner)
+        sync_grid.setContentsMargins(0, 0, 0, 0)
+        sync_grid.setSpacing(8)
+
+        self._synch_enable_cb = QPushButton("Enable Ext. Sync")
+        self._synch_enable_cb.setCheckable(True)
+        self._synch_enable_cb.setFixedWidth(140)
+        self._synch_enable_cb.toggled.connect(self._set_synch)
+        sync_grid.addWidget(self._synch_enable_cb, 0, 0)
+
+        sync_grid.addWidget(self._sub("Sync Phase (ticks)"), 0, 1)
+        self._synch_phase_spin = QDoubleSpinBox()
+        self._synch_phase_spin.setRange(0, 4294967295)
+        self._synch_phase_spin.setDecimals(0)
+        self._synch_phase_spin.setFixedWidth(120)
+        sync_grid.addWidget(self._synch_phase_spin, 0, 2)
+
+        self._trig_dir_cb = QPushButton("Trigger = Output")
+        self._trig_dir_cb.setCheckable(True)
+        self._trig_dir_cb.setChecked(True)
+        self._trig_dir_cb.setFixedWidth(140)
+        self._trig_dir_cb.setToolTip("When checked, FPGA drives the trigger BNC as output")
+        self._trig_dir_cb.toggled.connect(self._set_trig_direction)
+        sync_grid.addWidget(self._trig_dir_cb, 1, 0)
+
+        self._ir_trig_cb = QPushButton("IR Frame Trigger")
+        self._ir_trig_cb.setCheckable(True)
+        self._ir_trig_cb.setFixedWidth(140)
+        self._ir_trig_cb.setToolTip("Enable IR camera frame trigger output")
+        self._ir_trig_cb.toggled.connect(self._set_ir_frame_trigger)
+        sync_grid.addWidget(self._ir_trig_cb, 1, 1)
+
+        self._sync_panel.addWidget(sync_inner)
+        self._sync_panel.setVisible(False)
+        root.addWidget(self._sync_panel)
+
+        # ── Event trigger (EZ-500 only, collapsible) ──────────────────
+        self._event_panel = MoreOptionsPanel(
+            "Event Trigger System", section_key="fpga_event")
+
+        ev_inner = QWidget()
+        ev_grid  = QGridLayout(ev_inner)
+        ev_grid.setContentsMargins(0, 0, 0, 0)
+        ev_grid.setSpacing(8)
+
+        ev_grid.addWidget(self._sub("Event Source"), 0, 0)
+        self._event_src_spin = QDoubleSpinBox()
+        self._event_src_spin.setRange(0, 32767)
+        self._event_src_spin.setDecimals(0)
+        self._event_src_spin.setFixedWidth(120)
+        ev_grid.addWidget(self._event_src_spin, 0, 1)
+
+        ev_grid.addWidget(self._sub("Event Time (µs)"), 1, 0)
+        self._event_time_spin = QDoubleSpinBox()
+        self._event_time_spin.setRange(0, 4294967295)
+        self._event_time_spin.setDecimals(0)
+        self._event_time_spin.setFixedWidth(120)
+        self._event_time_spin.setValue(100)
+        ev_grid.addWidget(self._event_time_spin, 1, 1)
+
+        ev_grid.addWidget(self._sub("Event Phase (µs)"), 2, 0)
+        self._event_phase_spin = QDoubleSpinBox()
+        self._event_phase_spin.setRange(0, 4294967295)
+        self._event_phase_spin.setDecimals(0)
+        self._event_phase_spin.setFixedWidth(120)
+        self._event_phase_spin.setValue(100)
+        ev_grid.addWidget(self._event_phase_spin, 2, 1)
+
+        ev_btn_row = QHBoxLayout()
+        apply_ev_btn = QPushButton("Apply Event Settings")
+        apply_ev_btn.setFixedWidth(160)
+        apply_ev_btn.clicked.connect(self._apply_event_settings)
+        self._arm_event_btn = QPushButton("Arm Event")
+        self._arm_event_btn.setFixedWidth(110)
+        self._arm_event_btn.clicked.connect(self._arm_event)
+        ev_btn_row.addWidget(apply_ev_btn)
+        ev_btn_row.addWidget(self._arm_event_btn)
+        ev_btn_row.addStretch()
+        ev_grid.addLayout(ev_btn_row, 3, 0, 1, 3)
+
+        self._event_panel.addWidget(ev_inner)
+        self._event_panel.setVisible(False)
+        root.addWidget(self._event_panel)
+
         root.addStretch()
 
         # Driver reference (set by main_app when a device connects)
@@ -579,16 +835,25 @@ class FpgaTab(QWidget):
     def set_fpga_driver(self, driver) -> None:
         """
         Called by main_app when an FPGA device connects or disconnects.
-        Reveals / hides the trigger-mode panel based on driver capabilities.
+        Reveals / hides panels based on driver capabilities.
         """
         self._fpga_driver = driver
+
+        # Trigger mode panel (BNC 745 / NI-9637)
         capable = driver is not None and driver.supports_trigger_mode()
         self._trigger_panel.setVisible(capable)
         self._trig_w.setVisible(capable)
         if not capable:
-            # Reset to continuous so state doesn't linger across reconnects
             self._trig_cont_rb.setChecked(True)
             self._arm_btn.setEnabled(False)
+
+        # EZ-500 extended panels — shown only for the NI9637 driver
+        is_ez500 = driver is not None and hasattr(driver, 'set_voltage')
+        self._voltage_panel.setVisible(is_ez500)
+        self._led_panel.setVisible(is_ez500)
+        self._phase_panel.setVisible(is_ez500)
+        self._sync_panel.setVisible(is_ez500)
+        self._event_panel.setVisible(is_ez500)
 
     # ── Trigger mode controls (BNC 745) ──────────────────────────────
 
@@ -672,3 +937,128 @@ class FpgaTab(QWidget):
             fpga = app_state.fpga
             if fpga:
                 fpga.set_stimulus(on)
+
+    # ── EZ-500 voltage controls ───────────────────────────────────────
+
+    def _apply_voltages(self):
+        vout = self._vout_spin.value()
+        vaux = self._vaux_spin.value()
+        vo_lim = self._vo_lim_spin.value()
+        va_lim = self._va_lim_spin.value()
+        if self._hw:
+            self._hw.fpga_set_voltage_limits(vo_lim, va_lim)
+            self._hw.fpga_set_voltage(vout)
+            self._hw.fpga_set_aux_voltage(vaux)
+        else:
+            fpga = app_state.fpga
+            if fpga and hasattr(fpga, 'set_voltage'):
+                fpga.set_voltage_limits(vo_lim, va_lim)
+                fpga.set_voltage(vout)
+                fpga.set_aux_voltage(vaux)
+
+    def _disable_voltages(self):
+        if self._hw:
+            self._hw.fpga_disable_voltage()
+        else:
+            fpga = app_state.fpga
+            if fpga and hasattr(fpga, 'disable_voltage'):
+                fpga.disable_voltage()
+
+    def _set_high_range(self, checked: bool):
+        if self._hw:
+            self._hw.fpga_set_high_range(checked)
+        else:
+            fpga = app_state.fpga
+            if fpga and hasattr(fpga, 'set_high_range'):
+                fpga.set_high_range(checked)
+
+    # ── EZ-500 LED timing controls ────────────────────────────────────
+
+    def _apply_led_timing(self):
+        phase    = int(self._led_phase_spin.value())
+        time_on  = int(self._led_ton_spin.value())
+        p_phase  = int(self._led_pulse_ph_spin.value())
+        p_time   = int(self._led_pulse_time_spin.value())
+        if self._hw:
+            self._hw.fpga_set_led_timing(phase, time_on)
+            self._hw.fpga_set_led_pulsed(p_phase, p_time)
+        else:
+            fpga = app_state.fpga
+            if fpga and hasattr(fpga, 'set_led_timing'):
+                fpga.set_led_timing(phase, time_on)
+                fpga.set_led_pulsed(p_phase, p_time)
+
+    # ── EZ-500 phase / timing controls ────────────────────────────────
+
+    def _apply_phase_timing(self):
+        phase  = int(self._dev_phase_spin.value())
+        phase2 = int(self._dev_phase2_spin.value())
+        use_p2 = self._use_phase2_cb.isChecked()
+        exp    = int(self._exposure_spin.value())
+        rate   = int(self._samp_rate_spin.value())
+        if self._hw:
+            self._hw.fpga_set_device_phase(phase, phase2, use_p2)
+            self._hw.fpga_set_exposure_time(exp)
+            self._hw.fpga_set_sample_rate(rate)
+        else:
+            fpga = app_state.fpga
+            if fpga and hasattr(fpga, 'set_device_phase'):
+                fpga.set_device_phase(phase, phase2, use_p2)
+                fpga.set_exposure_time(exp)
+                fpga.set_sample_rate(rate)
+
+    # ── EZ-500 sync / trigger I/O controls ────────────────────────────
+
+    def _set_synch(self, checked: bool):
+        phase = int(self._synch_phase_spin.value())
+        if self._hw:
+            self._hw.fpga_set_synch(checked, phase)
+        else:
+            fpga = app_state.fpga
+            if fpga and hasattr(fpga, 'set_synch'):
+                fpga.set_synch(checked, phase)
+
+    def _set_trig_direction(self, checked: bool):
+        if self._hw:
+            self._hw.fpga_set_trigger_direction(checked)
+        else:
+            fpga = app_state.fpga
+            if fpga and hasattr(fpga, 'set_trigger_direction'):
+                fpga.set_trigger_direction(checked)
+
+    def _set_ir_frame_trigger(self, checked: bool):
+        if self._hw:
+            self._hw.fpga_set_ir_frame_trigger(checked)
+        else:
+            fpga = app_state.fpga
+            if fpga and hasattr(fpga, 'set_ir_frame_trigger'):
+                fpga.set_ir_frame_trigger(checked)
+
+    # ── EZ-500 event trigger controls ─────────────────────────────────
+
+    def _apply_event_settings(self):
+        source   = int(self._event_src_spin.value())
+        time_us  = int(self._event_time_spin.value())
+        phase_us = int(self._event_phase_spin.value())
+        if self._hw:
+            self._hw.fpga_set_event_source(source)
+            self._hw.fpga_set_event_phase(phase_us)
+            # Pulse duration is the event time register
+            fpga = app_state.fpga
+            if fpga and hasattr(fpga, 'set_pulse_duration'):
+                fpga.set_pulse_duration(float(time_us))
+        else:
+            fpga = app_state.fpga
+            if fpga and hasattr(fpga, 'set_event_source'):
+                fpga.set_event_source(source)
+                fpga.set_event_phase(phase_us)
+                fpga.set_pulse_duration(float(time_us))
+
+    def _arm_event(self):
+        """Arm the event trigger."""
+        drv = self._fpga_driver
+        if drv and hasattr(drv, 'arm_trigger'):
+            try:
+                drv.arm_trigger()
+            except Exception as exc:
+                log.error("arm_trigger (event) failed: %s", exc)

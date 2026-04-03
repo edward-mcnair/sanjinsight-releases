@@ -191,3 +191,24 @@ class TecService(BaseDeviceService):
         tecs = app_state.tecs
         if idx < len(tecs):
             self._dispatch(tecs[idx].set_target, temp_c)
+
+    def tec_set_ramp_speed(self, idx: int, degrees_per_second: float) -> None:
+        """Set temperature ramp rate in °C/s (0 = disable ramping).
+
+        Only supported on Meerstetter TEC-1089.  No-op on ATEC-302 and
+        simulated drivers (which lack the method).
+        """
+        tecs = app_state.tecs
+        if idx < len(tecs) and hasattr(tecs[idx], 'set_ramp_speed'):
+            self._dispatch(tecs[idx].set_ramp_speed, degrees_per_second)
+
+    def tec_set_temperature_limits(self, idx: int,
+                                    low_c: float, high_c: float) -> None:
+        """Set hardware temperature safety limits (ATEC-302 only).
+
+        For Meerstetter devices, limits are enforced by ThermalGuard in
+        software.  For ATEC-302, this writes the hardware registers.
+        """
+        tecs = app_state.tecs
+        if idx < len(tecs) and hasattr(tecs[idx], 'set_temperature_limits'):
+            self._dispatch(tecs[idx].set_temperature_limits, low_c, high_c)

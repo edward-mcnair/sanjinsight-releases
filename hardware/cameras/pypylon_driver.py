@@ -281,6 +281,27 @@ class PylonDriver(CameraDriver):
         except Exception as e:
             log.debug("set_gain failed: %s", e)
 
+    def set_trigger_mode(self, mode: str) -> None:
+        """Set hardware trigger mode.
+
+        Parameters
+        ----------
+        mode : str
+            ``"Off"`` for free-running acquisition,
+            ``"On"`` for external hardware trigger.
+        """
+        self._cfg["trigger_mode"] = mode
+        try:
+            node = self._cam.GetNodeMap().GetNode("TriggerMode")
+            if node is None:
+                return
+            from pypylon import genicam
+            if genicam.IsWritable(node):
+                genicam.IEnumeration(node).FromString(mode)
+                log.debug("TriggerMode = %s", mode)
+        except Exception as e:
+            log.debug("set_trigger_mode failed: %s", e)
+
     def exposure_range(self) -> tuple:
         try:
             node = self._cam.GetNodeMap().GetNode("ExposureTime")

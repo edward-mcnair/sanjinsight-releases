@@ -579,7 +579,16 @@ class HardwareService(QObject):
         """Set TEC channel idx target temperature in C."""
         self._tec_svc.tec_set_target(idx, temp_c)
 
-    # FPGA
+    def tec_set_ramp_speed(self, idx: int, degrees_per_second: float) -> None:
+        """Set temperature ramp rate in °C/s (0 = disable). Meerstetter only."""
+        self._tec_svc.tec_set_ramp_speed(idx, degrees_per_second)
+
+    def tec_set_temperature_limits(self, idx: int,
+                                    low_c: float, high_c: float) -> None:
+        """Set hardware temperature safety limits. ATEC-302 only."""
+        self._tec_svc.tec_set_temperature_limits(idx, low_c, high_c)
+
+    # FPGA — basic controls
     def fpga_set_frequency(self, hz: float) -> None:
         """Set FPGA modulation frequency in Hz."""
         self._fpga_svc.fpga_set_frequency(hz)
@@ -599,6 +608,66 @@ class HardwareService(QObject):
     def fpga_set_stimulus(self, on: bool) -> None:
         """Enable or disable FPGA stimulus output."""
         self._fpga_svc.fpga_set_stimulus(on)
+
+    def fpga_set_trigger_mode(self, mode) -> None:
+        """Set FPGA trigger mode."""
+        self._fpga_svc.fpga_set_trigger_mode(mode)
+
+    # FPGA — EZ-500 extended controls
+    def fpga_set_period_us(self, period_us: float) -> None:
+        self._fpga_svc.fpga_set_period_us(period_us)
+
+    def fpga_set_voltage(self, volts: float) -> None:
+        self._fpga_svc.fpga_set_voltage(volts)
+
+    def fpga_set_aux_voltage(self, volts: float) -> None:
+        self._fpga_svc.fpga_set_aux_voltage(volts)
+
+    def fpga_disable_voltage(self) -> None:
+        self._fpga_svc.fpga_disable_voltage()
+
+    def fpga_set_voltage_limits(self, vo_lim: float, va_lim: float) -> None:
+        self._fpga_svc.fpga_set_voltage_limits(vo_lim, va_lim)
+
+    def fpga_set_led_timing(self, phase: int, time_on: int) -> None:
+        self._fpga_svc.fpga_set_led_timing(phase, time_on)
+
+    def fpga_set_led_pulsed(self, phase: int, pulse_time: int) -> None:
+        self._fpga_svc.fpga_set_led_pulsed(phase, pulse_time)
+
+    def fpga_set_device_phase(self, phase: int, phase2: int = 0,
+                               use_phase2: bool = False) -> None:
+        self._fpga_svc.fpga_set_device_phase(phase, phase2, use_phase2)
+
+    def fpga_set_exposure_time(self, ticks: int) -> None:
+        self._fpga_svc.fpga_set_exposure_time(ticks)
+
+    def fpga_set_synch(self, enabled: bool, phase: int = 0) -> None:
+        self._fpga_svc.fpga_set_synch(enabled, phase)
+
+    def fpga_set_sample_rate(self, rate: int) -> None:
+        self._fpga_svc.fpga_set_sample_rate(rate)
+
+    def fpga_set_trigger_direction(self, output: bool) -> None:
+        self._fpga_svc.fpga_set_trigger_direction(output)
+
+    def fpga_set_high_range(self, enabled: bool) -> None:
+        self._fpga_svc.fpga_set_high_range(enabled)
+
+    def fpga_set_ir_frame_trigger(self, enabled: bool) -> None:
+        self._fpga_svc.fpga_set_ir_frame_trigger(enabled)
+
+    def fpga_set_event_source(self, source: int) -> None:
+        self._fpga_svc.fpga_set_event_source(source)
+
+    def fpga_set_event_phase(self, phase_us: int) -> None:
+        self._fpga_svc.fpga_set_event_phase(phase_us)
+
+    def fpga_read_analog_inputs(self) -> dict:
+        return self._fpga_svc.fpga_read_analog_inputs()
+
+    def fpga_trigger_voltage_readback(self) -> None:
+        self._fpga_svc.fpga_trigger_voltage_readback()
 
     # Bias
     def bias_set_mode(self, mode: str) -> None:

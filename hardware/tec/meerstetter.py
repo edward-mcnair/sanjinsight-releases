@@ -41,6 +41,8 @@ class MeerstetterDriver(TecDriver):
     _PARAM_PID_TD              = 3012   # Derivative time constant (s)
     # Current limit
     _PARAM_MAX_CURRENT         = 2030   # Maximum current (A)
+    # Ramp speed
+    _PARAM_TEMP_RAMP           = 3003   # Temperature ramp speed (°C/s), 0=disable
     # Stability window (software-side; hardware flag 1200 is primary)
     _PARAM_STABILITY_WINDOW    = 3100   # Temperature stability window (°C)
 
@@ -284,6 +286,24 @@ class MeerstetterDriver(TecDriver):
         with self._api_lock:
             self._tec.set_parameter(parameter_id=3000, value=temperature_c,
                                     address=self._address, parameter_instance=1)
+
+    def set_ramp_speed(self, degrees_per_second: float) -> None:
+        """Set temperature ramp rate in °C/s.  Set to 0 to disable ramping.
+
+        When non-zero, the TEC controller slews from the current temperature
+        to the target at the specified rate instead of applying maximum power
+        immediately.  This protects DUTs from thermal shock.
+        """
+        if self._tec is None:
+            log.warning("MeerstetterDriver.set_ramp_speed() called before connect()")
+            return
+        log.debug("TEC set_parameter(3003, %.3f) — Ramp Speed °C/s",
+                  degrees_per_second)
+        with self._api_lock:
+            self._tec.set_parameter(
+                parameter_id=self._PARAM_TEMP_RAMP,
+                value=float(degrees_per_second),
+                address=self._address, parameter_instance=1)
 
     def get_status(self) -> TecStatus:
         import time as _time

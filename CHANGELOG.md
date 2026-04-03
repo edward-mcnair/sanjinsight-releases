@@ -92,8 +92,17 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **NI sbRIO FPGA support** — New `ni_sbrio` device registry entry for the Single-Board RIO built into the EZ-500 chassis. Connects via Ethernet (link-local 169.254.x.x) using the existing `Ni9637Driver` and `nifpga` library. Device Manager shows IP address, NI Resource string, and FPGA Bitfile (with Browse) fields for sbRIO and NI 9637 devices.
 - **NI-VISA Runtime** bundled in installer — Optional online installer for GPIB/SMU instruments (Keithley 2400/2450). Unchecked by default since USB and LAN instruments work without it via `pyvisa-py`.
 - **Newport NPC3SG in first-run wizard** — Stage driver selector now includes `newport_npc3` with auto-selected 19200 baud; hardware discovery auto-fills NPC3 when detected.
+- **NI 9637 FPGA driver rewrite** (`hardware/fpga/ni9637.py`) — Complete rewrite to match actual `FPGA_CODE.vi` firmware registers (38+ controls/indicators). Adds `session.reset()` + `session.run()` FPGA initialization sequence. All register names now match the bitfile exactly.
+- **EZ-500 FPGA extended controls** — 16 new service-layer methods for voltage DAC (±16V FXP20), LED illumination timing (CW + pulsed), device phase offsets, exposure timing, external sync, sample rate, trigger I/O direction, high-range mode, IR frame trigger, event trigger system, and analog input readback.
+- **FPGA tab EZ-500 panels** — 5 new collapsible UI sections (auto-hidden until NI9637 connects): Voltage Output, LED Timing, Phase & Timing, Sync & Trigger I/O, Event Trigger. All wired through service layer to firmware registers.
+- **TEC ramp speed control** — Temperature tab gains ramp speed spinbox (0–50 °C/s) for Meerstetter TEC-1089 temperature ramping (parameter 3003).
+- **TEC temperature safety limits** — Service-layer method for ATEC-302 hardware limit registers.
+- **Camera trigger mode** — `set_trigger_mode()` added to pypylon driver using GenICam IEnumeration API ("Off" = free-running, "On" = external trigger).
+- **FPGA bitfile bundling** — Installer (Inno Setup) and PyInstaller spec both include `firmware/ez500_fpga.lvbitx` for deployment.
 
 ### Changed
+
+- **FPGA config** — `initial_freq_hz` replaced with `initial_period_us: 1000.0` to match firmware register convention.
 
 - **Connected Devices dropdown now shows ALL device types** — TEC, stage, FPGA, bias, LDD, GPIO, and prober now appear in the status header dropdown, not just cameras. Previously only camera devices called `set_connected()`.
 - **FTDI driver description** updated across installer, build script, and verification to list all covered devices: TEC-1089, LDD-1121, Newport NPC3SG, and Thorlabs stage controllers.
@@ -105,6 +114,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 - **Newport NPC3 "Write timeout"** — Three root causes: (1) missing `write_timeout` on serial port, (2) `\r\n` terminator changed to `\r` per NPC3 protocol, (3) write-only commands (`set`, `setall`, `setk`, `cloop`) no longer block waiting for a nonexistent response.
 - **Missing PyInstaller hidden imports** — Added `hardware.ldd.meerstetter_ldd1121`, `hardware.ldd.simulated`, `hardware.arduino.nano_driver`, `hardware.arduino.simulated`, `hardware.fpga.bnc745`, `hardware.bias.amcad_bilt`, and `hardware.bias.rigol_dp832` to both Windows and macOS `.spec` files. Without these, LDD, Arduino GPIO, BNC 745, and AMCAD BILT devices would fail with `ImportError` in production builds.
+
+### Fixed (Hardware Drivers)
+
+- **ATEC-302 wrong register map** — Registers 0x0002/0x0003 were incorrectly labelled as output current/voltage; they are actually high/low temperature safety limits per the ATEC protocol spec. `get_status()` no longer reads wrong registers.
+- **ATEC-302 wrong stop bits** — Changed from `STOPBITS_ONE` to `STOPBITS_TWO` (N-8-2 framing required by ATEC-302 spec).
+- **ATEC-302 missing input buffer reset** — Added `reset_input_buffer()` before all serial writes to clear stale bytes, matching the original reference implementation.
+- **ATEC-302 missing control methods** — Added `set_temperature_limits()`, `get_alarm_status()`, and `set_control_mode()` from the reference protocol spec.
+- **Meerstetter missing ramp control** — Added `set_ramp_speed()` method using parameter 3003 with thread-safe `_api_lock` protection.
 
 ---
 

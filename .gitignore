@@ -34,6 +34,9 @@ installer/redist/*
 !installer/redist/GenTL_Producer_USB_x64.msi
 !installer/redist/ni-rio-online-installer.exe
 
+# ── FPGA bitfiles (large binaries — bundled by installer, not committed) ──────
+firmware/*.lvbitx
+
 # ── macOS ─────────────────────────────────────────────────────────────────────
 .DS_Store
 .AppleDouble
