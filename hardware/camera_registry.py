@@ -16,7 +16,7 @@ Multi-camera (new format):
         exposure_us: 5000
       - label: "FLIR Boson 320"
         camera_type: "ir"
-        driver: "flir"
+        driver: "boson"
 
 Legacy single-camera (backward-compatible):
   hardware:

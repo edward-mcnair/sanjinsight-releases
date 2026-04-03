@@ -133,7 +133,7 @@ hardware:
   #     trigger_mode: "Off"
   #   - label: "FLIR Boson 320"
   #     camera_type: "ir"
-  #     driver: "flir"
+  #     driver: "boson"
   #     exposure_us: 8333
   #     gain: 0.0
 

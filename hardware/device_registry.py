@@ -218,6 +218,56 @@ DEVICE_REGISTRY: dict[str, DeviceDescriptor] = {
                          "Driver: boson",
     ),
 
+    # ── FLIR Boson+ (enhanced sensitivity, <6 ms latency) ───────────────────
+
+    "flir_boson_plus_320": DeviceDescriptor(
+        uid            = "flir_boson_plus_320",
+        display_name   = "FLIR Boson+ 320",
+        manufacturer   = "Teledyne FLIR",
+        device_type    = DTYPE_CAMERA,
+        connection_type= CONN_CAMERA,
+        camera_type    = "ir",
+        driver_module  = "hardware.cameras.boson_driver",
+        driver_version = "builtin",
+        hot_loadable   = True,
+        usb_vid        = 0x09CB,     # Same VID as original Boson
+        usb_pid        = 0x4007,     # Shares PID with Boson 320 — differentiate via SDK PN query
+        serial_patterns= ["Boson+", "Boson Plus", "22320", "23320"],
+        description    = "FLIR Boson+ 320×256 uncooled LWIR microbolometer. "
+                         "Enhanced sensitivity (≤20 mK NEdT Industrial, ≤30 mK Professional), "
+                         "<6 ms video latency. 14-bit radiometric, 60 fps. "
+                         "Pin-compatible upgrade from Boson 320.",
+        datasheet_url  = "https://oem.flir.com/products/boson-plus/",
+        notes          = "Same driver as Boson 320. Differentiated by part number "
+                         "prefix (22xxx shutter / 23xxx shutterless). "
+                         "Adds MIPI interface option (not used over USB). "
+                         "Driver: boson",
+    ),
+
+    "flir_boson_plus_640": DeviceDescriptor(
+        uid            = "flir_boson_plus_640",
+        display_name   = "FLIR Boson+ 640",
+        manufacturer   = "Teledyne FLIR",
+        device_type    = DTYPE_CAMERA,
+        connection_type= CONN_CAMERA,
+        camera_type    = "ir",
+        driver_module  = "hardware.cameras.boson_driver",
+        driver_version = "builtin",
+        hot_loadable   = True,
+        usb_vid        = 0x09CB,
+        usb_pid        = 0x4007,     # May share PID with Boson 320/640
+        serial_patterns= ["Boson+ 640", "Boson Plus 640", "22640", "23640"],
+        description    = "FLIR Boson+ 640×512 uncooled LWIR microbolometer. "
+                         "Enhanced sensitivity (≤20 mK NEdT Industrial, ≤30 mK Professional), "
+                         "<6 ms video latency. 14-bit radiometric, 60 fps. "
+                         "Pin-compatible upgrade from Boson 640.",
+        datasheet_url  = "https://oem.flir.com/products/boson-plus/",
+        notes          = "Same driver as Boson 640. Differentiated by part number "
+                         "prefix (22xxx shutter / 23xxx shutterless). "
+                         "Adds MIPI interface option (not used over USB). "
+                         "Driver: boson",
+    ),
+
     # ── Basler SWIR (ICD-registered, NI IMAQdx / pypylon) ────────────────────
 
     "basler_a2a1280_125um_swir": DeviceDescriptor(

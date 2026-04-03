@@ -791,6 +791,8 @@ class DeviceManager:
             "photonfocus_mv4_d1280u":   "ni_imaqdx",
             "flir_boson_320":           "boson",
             "flir_boson_640":           "boson",
+            "flir_boson_plus_320":      "boson",
+            "flir_boson_plus_640":      "boson",
             # TECs / thermal chucks
             "meerstetter_tec_1089":     "meerstetter",
             "meerstetter_tec_1123":     "meerstetter",
