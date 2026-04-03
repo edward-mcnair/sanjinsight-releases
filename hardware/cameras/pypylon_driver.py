@@ -86,23 +86,40 @@ class PylonDriver(CameraDriver):
             return (False, issues)
 
         # ── Step 3: confirm at least one camera is visible to the SDK ────────
-        try:
-            from pypylon import pylon as _pylon
-            _factory = _pylon.TlFactory.GetInstance()
-            _devices = _factory.EnumerateDevices()
-            if not _devices:
-                issues.append(
-                    "No Basler cameras found by the Pylon SDK.\n"
-                    "Check that the camera is powered and the USB/GigE cable "
-                    "is connected, then click Connect again.\n"
-                    "(The Basler Pylon Viewer can confirm the camera is "
-                    "visible at the OS level.)"
-                )
-                return (False, issues)
-        except Exception as e:
-            # EnumerateDevices failure is non-fatal at preflight — the open()
-            # call will give a clearer error with device-specific context.
-            log.warning("pypylon preflight EnumerateDevices warning: %s", e)
+        # USB3 cameras can take several seconds to enumerate after being
+        # plugged in or after system boot.  Retry a few times with short
+        # delays so a slow USB enumeration doesn't cause a premature
+        # preflight failure.
+        import time as _time
+        _ENUM_RETRIES  = 4     # total attempts (first + 3 retries)
+        _ENUM_DELAY_S  = 1.5   # seconds between attempts
+        _devices = None
+        for _attempt in range(_ENUM_RETRIES):
+            try:
+                _devices = _factory.EnumerateDevices()
+                if _devices:
+                    break   # found at least one camera
+                if _attempt < _ENUM_RETRIES - 1:
+                    log.debug(
+                        "pypylon preflight: no cameras on attempt %d/%d, "
+                        "retrying in %.1fs…",
+                        _attempt + 1, _ENUM_RETRIES, _ENUM_DELAY_S)
+                    _time.sleep(_ENUM_DELAY_S)
+            except Exception as e:
+                # EnumerateDevices failure is non-fatal at preflight — the
+                # open() call will give a clearer error with device context.
+                log.warning("pypylon preflight EnumerateDevices warning: %s", e)
+                break   # don't retry on SDK exceptions
+
+        if not _devices:
+            issues.append(
+                "No Basler cameras found by the Pylon SDK.\n"
+                "Check that the camera is powered and the USB/GigE cable "
+                "is connected, then click Connect again.\n"
+                "(The Basler Pylon Viewer can confirm the camera is "
+                "visible at the OS level.)"
+            )
+            return (False, issues)
 
         return (True, issues)
 
