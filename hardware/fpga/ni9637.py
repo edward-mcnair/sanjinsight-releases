@@ -222,29 +222,24 @@ class Ni9637Driver(FpgaDriver):
 
         # ── 6. Open the session ──────────────────────────────────────
         try:
-            self._session = nifpga.Session(
-                bitfile  = bitfile_path,
-                resource = self._resource,
-                reset_if_last_session_on_exit=self._reset)
-            # Reset and run — matches original project_bonaire behaviour.
-            # reset() re-downloads the bitfile; run() starts the FPGA VI.
-            if self._reset:
-                self._session.reset()
-            self._session.run()
-            self._open = True
-            log.info("FPGA session opened  resource=%s  bitfile=%s",
-                     self._resource, bitfile_path)
+            self._open_session(bitfile_path)
         except Exception as e:
             err = str(e)
             hint = ""
-            if "RIO" in err and ("not found" in err.lower() or "-63192" in err):
-                hint = ("\nHint: The FPGA resource was not found. "
-                        "Check NI MAX → Remote Systems and verify the target "
-                        f"is reachable at {self._resource!r}.")
-            elif "signature" in err.lower() or "-61046" in err:
+            if "-61202" in err or "FpgaBusyFpgaInterface" in err:
+                hint = ("\nHint: The FPGA is already in use by another "
+                        "application (NI MAX, LabVIEW, or a previous "
+                        "SanjINSIGHT session that didn't close cleanly). "
+                        "Close the other application and try again, or "
+                        "reboot the sbRIO via NI MAX → Remote Systems.")
+            elif "-61046" in err or "SignatureMismatch" in err:
                 hint = ("\nHint: Bitfile signature mismatch — the .lvbitx file "
                         "does not match the firmware running on the FPGA. "
                         "Re-deploy the bitfile via NI MAX or LabVIEW.")
+            elif "RIO" in err and ("not found" in err.lower() or "-63192" in err):
+                hint = ("\nHint: The FPGA resource was not found. "
+                        "Check NI MAX → Remote Systems and verify the target "
+                        f"is reachable at {self._resource!r}.")
             elif "license" in err.lower():
                 hint = ("\nHint: NI-RIO license issue. Verify NI-RIO drivers "
                         "are properly activated on this machine.")
@@ -269,6 +264,46 @@ class Ni9637Driver(FpgaDriver):
                      self._period_us, self._duty * 100)
         except Exception as e:
             log.warning("Could not set initial FPGA timing: %s", e)
+
+    def _open_session(self, bitfile_path: str) -> None:
+        """Open the nifpga session, retrying once if the FPGA is busy."""
+        import nifpga
+        try:
+            self._session = nifpga.Session(
+                bitfile  = bitfile_path,
+                resource = self._resource,
+                reset_if_last_session_on_exit=self._reset)
+            if self._reset:
+                self._session.reset()
+            self._session.run()
+            self._open = True
+            log.info("FPGA session opened  resource=%s  bitfile=%s",
+                     self._resource, bitfile_path)
+        except Exception as e1:
+            err1 = str(e1)
+            if "-61202" not in err1 and "FpgaBusyFpgaInterface" not in err1:
+                raise   # not a busy error — propagate immediately
+            # ── FPGA busy: force-close stale session and retry ───────
+            log.warning("FPGA busy (-61202) — closing stale session and "
+                        "retrying...")
+            try:
+                stale = nifpga.Session(
+                    bitfile  = bitfile_path,
+                    resource = self._resource,
+                    no_run=True)
+                stale.close()
+            except Exception:
+                pass   # best-effort cleanup
+            # Retry the open
+            self._session = nifpga.Session(
+                bitfile  = bitfile_path,
+                resource = self._resource,
+                reset_if_last_session_on_exit=self._reset)
+            if self._reset:
+                self._session.reset()
+            self._session.run()
+            self._open = True
+            log.info("FPGA session opened on retry  resource=%s", self._resource)
 
     def close(self) -> None:
         if self._session:
