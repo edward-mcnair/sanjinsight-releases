@@ -1220,7 +1220,7 @@ class _DeviceProfilePanel(QWidget):
 
                 pg.addWidget(self._sublabel("NI Resource"), r, 0)
                 res_edit = QLineEdit(_saved_res)
-                res_edit.setPlaceholderText("e.g. rio://169.254.19.194/RIO0")
+                res_edit.setPlaceholderText("e.g. rio://169.254.252.165/RIO0")
                 res_edit.setToolTip(
                     "NI-RIO resource string for the sbRIO / CompactRIO.\n"
                     "Find it in NI MAX → Remote Systems → right-click → Properties.\n"

@@ -10,7 +10,7 @@ Requires:
 
 Config keys (under hardware.fpga):
     bitfile:       "C:/path/to/firmware.lvbitx"
-    resource:      "rio://169.254.19.194/RIO0"
+    resource:      "rio://169.254.252.165/RIO0"
     reset_on_open: false
 
 FPGA register names must match those compiled into the bitfile.

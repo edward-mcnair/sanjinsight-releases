@@ -402,7 +402,7 @@ DEVICE_REGISTRY: dict[str, DeviceDescriptor] = {
         driver_version = "builtin",
         hot_loadable   = False,
         ni_patterns    = ["RIO", "sbRIO", "cRIO"],
-        default_ip     = "169.254.19.194",
+        default_ip     = "169.254.252.165",
         description    = (
             "NI Single-Board RIO embedded controller with user-programmable "
             "FPGA. Built into the Microsanj EZ-500 chassis. Generates the "

@@ -143,7 +143,7 @@ hardware:
     bitfile: "C:/Software/1. EZ500 New Set Up/EZ500_V1.2/Source/RIO_Source_32Bit/FPGA Bitfiles/ez500firmware_FPGATarget_FPGACODE_wPlAxJTjkzE.lvbitx"
     # resource: Found in NI MAX → Remote Systems → right-click target → Properties
     #           Format: "RIO0" (local chassis) or "rio://169.254.x.x/RIO0" (Ethernet)
-    resource: "rio://169.254.19.194/RIO0"
+    resource: "rio://169.254.252.165/RIO0"
     # reset_on_open: true  (default, recommended) — FPGA resets on session open
     #               and on app exit/crash, stopping stimulus output automatically.
     #               Set to false ONLY if you need the FPGA to continue running
