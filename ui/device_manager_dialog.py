@@ -1230,7 +1230,6 @@ class _DeviceProfilePanel(QWidget):
                 r += 1
 
                 pg.addWidget(self._sublabel("FPGA Bitfile"), r, 0)
-                from PyQt5.QtWidgets import QHBoxLayout
                 _bit_row = QHBoxLayout()
                 _bit_row.setContentsMargins(0, 0, 0, 0)
                 bit_edit = QLineEdit(_saved_bit)
@@ -1401,8 +1400,7 @@ class _DeviceProfilePanel(QWidget):
                 r += 1
 
                 pg.addWidget(self._sublabel("FPGA Bitfile"), r, 0)
-                from PyQt5.QtWidgets import QHBoxLayout as _QHBox2
-                _bit_row2 = _QHBox2()
+                _bit_row2 = QHBoxLayout()
                 _bit_row2.setContentsMargins(0, 0, 0, 0)
                 bit_edit2 = QLineEdit(_saved_bit)
                 bit_edit2.setPlaceholderText("Path to compiled .lvbitx file")
