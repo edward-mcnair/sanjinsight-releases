@@ -85,7 +85,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.50.31-beta] — 2026-04-03
+## [1.50.32-beta] — 2026-04-03
 
 ### Added
 
@@ -121,7 +121,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **ATEC-302 wrong stop bits** — Changed from `STOPBITS_ONE` to `STOPBITS_TWO` (N-8-2 framing required by ATEC-302 spec).
 - **ATEC-302 missing input buffer reset** — Added `reset_input_buffer()` before all serial writes to clear stale bytes, matching the original reference implementation.
 - **ATEC-302 missing control methods** — Added `set_temperature_limits()`, `get_alarm_status()`, and `set_control_mode()` from the reference protocol spec.
+- **ATEC-302 baud rate mismatch** — Device registry listed 38400 baud but the ATEC-302 protocol defaults to 9600. Registry corrected.
 - **Meerstetter missing ramp control** — Added `set_ramp_speed()` method using parameter 3003 with thread-safe `_api_lock` protection.
+- **Boson+ models not handled in Device Manager** — Video-only mode guard and geometry injection (width/height) now include Boson+ 320 and Boson+ 640.
+- **Newport NPC3SG missing driver mapping** — `newport_npc3` was in the device registry but had no entry in Device Manager's driver key map.
+- **Removed duplicate Microsanj IR Camera** — Eliminated confusing duplicate of FLIR Boson 320; users select FLIR Boson / Boson+ instead.
+- **First-run wizard camera driver** — Default IR camera driver changed from `flir` (requires Spinnaker SDK) to `boson` (bundled, no extra install). Added Boson test button.
 
 ---
 

@@ -386,7 +386,8 @@ class DeviceManager:
             # Boson cameras support video-only mode with an empty serial_port —
             # skip the address guard so the driver can open in that mode.
             _boson_video_only = (
-                desc.uid in ("flir_boson_320", "flir_boson_640")
+                desc.uid in ("flir_boson_320", "flir_boson_640",
+                             "flir_boson_plus_320", "flir_boson_plus_640")
                 and not entry.address
             )
             needs_address = (
@@ -699,10 +700,11 @@ class DeviceManager:
             # Boson: serial control port = entry.address (set in Device Manager),
             # UVC video device index = entry.video_index.
             # Width/height injected from registry so Boson 640 gets correct geometry.
-            if desc.uid in ("flir_boson_320", "flir_boson_640"):
+            if desc.uid in ("flir_boson_320", "flir_boson_640",
+                            "flir_boson_plus_320", "flir_boson_plus_640"):
                 cfg["serial_port"] = addr  # address field stores serial port path
                 cfg["video_index"] = entry.video_index
-                if desc.uid == "flir_boson_640":
+                if desc.uid in ("flir_boson_640", "flir_boson_plus_640"):
                     cfg.setdefault("width",  640)
                     cfg.setdefault("height", 512)
                 else:
@@ -786,7 +788,7 @@ class DeviceManager:
             "basler_aca2040_90umnir":   "pypylon",
             "basler_aca640_750um":      "pypylon",
             "basler_gigE_generic":      "pypylon",
-            "basler_a2a1280_125um_swir":"pypylon",
+            "basler_a2a1280_125um_swir": "pypylon",
             "allied_vision_goldeye_g032": "ni_imaqdx",
             "photonfocus_mv4_d1280u":   "ni_imaqdx",
             "flir_boson_320":           "boson",
@@ -809,6 +811,7 @@ class DeviceManager:
             "thorlabs_bsc203":          "thorlabs",
             "thorlabs_mpc320":          "thorlabs",
             "prior_proscan":            "prior",
+            "newport_npc3":             "newport_npc3",
             "mpi_prober_generic":       "mpi_prober",
             # Turret
             "olympus_ix_turret":        "olympus_linx",

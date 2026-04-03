@@ -1017,6 +1017,25 @@ class _PageCamera(_PageBase):
                 self._cam_test_lbl.setStyleSheet(err_ss)
             return
 
+        if driver == "boson":
+            try:
+                import cv2  # noqa: F401
+                # Boson driver uses cv2 + pyserial — both bundled. Try to
+                # detect a FLIR Boson by probing UVC video devices.
+                from hardware.cameras.boson_driver import BosonDriver
+                self._cam_test_lbl.setText(
+                    "✓  Boson driver ready (bundled) — "
+                    "connect the camera via USB and set the video index in Device Manager")
+                self._cam_test_lbl.setStyleSheet(ok_ss)
+            except ImportError as e:
+                self._cam_test_lbl.setText(
+                    f"⊗  Boson driver dependency missing — {str(e)[:60]}")
+                self._cam_test_lbl.setStyleSheet(err_ss)
+            except Exception as e:
+                self._cam_test_lbl.setText(f"⊗  {str(e)[:80]}")
+                self._cam_test_lbl.setStyleSheet(err_ss)
+            return
+
         if driver == "flir":
             try:
                 import PySpin
@@ -1063,7 +1082,7 @@ class _PageCamera(_PageBase):
             cam_devs = [d for d in report.resolved
                         if d.connection_type in ("usb", "camera")
                         and ("camera" in d.device_uid or "basler" in d.device_uid
-                             or "flir" in d.device_uid)]
+                             or "flir" in d.device_uid or "boson" in d.device_uid)]
             if not cam_devs:
                 self._detection_label.setText(
                     "⚠  No camera detected — check USB/GigE connection and SDK installation.\n"

@@ -391,8 +391,8 @@ DEVICE_REGISTRY: dict[str, DeviceDescriptor] = {
         hot_loadable   = True,
         serial_patterns= ["ATEC", "Arroyo", "0403:6001"],
         # Note: generic adapters intentionally excluded — see Meerstetter note above.
-        default_baud   = 38400,
-        description    = "RS-232 TEC controller with Modbus-style protocol. "
+        default_baud   = 9600,
+        description    = "RS-232 TEC controller with Modbus RTU protocol (N-8-2). "
                          "Used as secondary TEC in dual-channel configurations.",
     ),
 
