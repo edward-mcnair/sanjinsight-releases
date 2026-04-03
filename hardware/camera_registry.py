@@ -14,7 +14,7 @@ Multi-camera (new format):
         driver: "ni_imaqdx"
         camera_name: "cam4"
         exposure_us: 5000
-      - label: "Microsanj IR Camera"
+      - label: "FLIR Boson 320"
         camera_type: "ir"
         driver: "flir"
 

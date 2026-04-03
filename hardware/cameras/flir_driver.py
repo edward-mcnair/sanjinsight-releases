@@ -3,9 +3,8 @@ hardware/cameras/flir_driver.py
 
 Camera driver for the FLIR Boson thermal camera via flirpy.
 
-Targets the Microsanj Infrared Camera v1a — a FLIR Boson-based uncooled
-microbolometer (320×256 or 640×512, ~30 Hz) mounted in an OEMCameras.com
-nosepiece housing for passive lock-in IR thermography.
+Targets the FLIR Boson uncooled microbolometer (320×256 or 640×512,
+~30 Hz) for passive lock-in IR thermography.
 
 The Boson connects as two USB devices simultaneously:
   • USB CDC (serial) — camera control commands  (handled by flirpy)
@@ -68,9 +67,8 @@ class FlirDriver(CameraDriver):
             import flirpy  # noqa: F401
         except ImportError:
             issues.append(
-                "flirpy not found — Microsanj IR Camera support is not bundled.\n"
-                "Try reinstalling SanjINSIGHT.  If the problem persists, "
-                "contact Microsanj support."
+                "flirpy not found — FLIR Boson camera support is not bundled.\n"
+                "Try reinstalling SanjINSIGHT."
             )
         return (len(issues) == 0, issues)
 
@@ -101,7 +99,7 @@ class FlirDriver(CameraDriver):
             from flirpy.camera.boson import Boson
         except ImportError as exc:
             raise RuntimeError(
-                "flirpy not found — cannot open Microsanj IR Camera.\n"
+                "flirpy not found — cannot open FLIR Boson camera.\n"
                 "This should be bundled with SanjINSIGHT. "
                 "Try reinstalling the application."
             ) from exc

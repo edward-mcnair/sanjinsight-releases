@@ -789,7 +789,6 @@ class DeviceManager:
             "basler_a2a1280_125um_swir":"pypylon",
             "allied_vision_goldeye_g032": "ni_imaqdx",
             "photonfocus_mv4_d1280u":   "ni_imaqdx",
-            "microsanj_ir_camera_v1a":  "flir",
             "flir_boson_320":           "boson",
             "flir_boson_640":           "boson",
             # TECs / thermal chucks

@@ -283,32 +283,6 @@ DEVICE_REGISTRY: dict[str, DeviceDescriptor] = {
         notes          = "NI IMAQdx required (Windows). interface_name: DUV.",
     ),
 
-    "microsanj_ir_camera_v1a": DeviceDescriptor(
-        uid            = "microsanj_ir_camera_v1a",
-        display_name   = "Microsanj Infrared Camera v1a",
-        manufacturer   = "Microsanj / FLIR Systems (dist. OEMCameras.com)",
-        device_type    = DTYPE_CAMERA,
-        connection_type= CONN_CAMERA,
-        camera_type    = "ir",         # always an IR camera
-        driver_module  = "hardware.cameras.flir_driver",
-        driver_version = "builtin",
-        hot_loadable   = False,
-        usb_vid        = 0x09CB,     # FLIR Boson USB VID
-        usb_pid        = 0x4007,     # Boson 320 PID (Microsanj v1a ships 320)
-        serial_patterns= ["Microsanj IR"],  # narrowed to avoid overlap with flir_boson_320
-        description    = "FLIR Boson-based uncooled microbolometer thermal camera "
-                         "mounted in a Microsanj nosepiece housing. "
-                         "320×256 or 640×512, 16-bit radiometric, ~30 fps. "
-                         "IR imaging channel for passive lock-in IR thermography "
-                         "(no stimulus required).",
-        datasheet_url  = "https://www.flir.com/products/boson/",
-        notes          = "Driver uses flirpy (bundled). Connects via USB CDC "
-                         "(serial control) + UVC (video stream). "
-                         "Set config key hardware.camera.driver='flir' and "
-                         "hardware.camera.modality='ir_lockin' to activate "
-                         "the IR imaging path in AutoScan.",
-    ),
-
     # ---------------------------------------------------------------- #
     #  TEC Controllers                                                  #
     # ---------------------------------------------------------------- #

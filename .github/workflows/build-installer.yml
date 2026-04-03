@@ -48,7 +48,7 @@ jobs:
         uses: actions/checkout@v4
 
       # ── 2. Python ──────────────────────────────────────────────────────────
-      # Python 3.10 required — FLIR PySpin (Microsanj IR camera) only
+      # Python 3.10 required — FLIR PySpin (FLIR Boson IR camera) only
       # distributes wheels up to cp310.  Do not upgrade without checking
       # the FLIR Spinnaker SDK download page for a newer wheel first.
       - name: Set up Python 3.10
@@ -100,8 +100,8 @@ jobs:
             && echo "[OK] pypylon installed — Basler TR camera support bundled" \
             || echo "[SKIP] pypylon unavailable — Basler camera will not be bundled"
           python -m pip install flirpy \
-            && echo "[OK] flirpy installed — Microsanj IR (FLIR Boson) support bundled" \
-            || echo "[SKIP] flirpy unavailable — Microsanj IR camera will not be bundled"
+            && echo "[OK] flirpy installed — FLIR Boson IR camera support bundled" \
+            || echo "[SKIP] flirpy unavailable — FLIR Boson IR camera will not be bundled"
 
       # ── 4d. Download redistributable driver installers ──────────────────
       # These are bundled into the Inno Setup installer and run silently on
@@ -302,7 +302,7 @@ jobs:
 
           # ── 1. Check importability in CI Python environment ────────────────
           for pkg, friendly in [("pypylon.pylon", "Basler (pypylon)"),
-                                 ("flirpy",        "Microsanj IR (flirpy)")]:
+                                 ("flirpy",        "FLIR Boson (flirpy)")]:
               try:
                   importlib.import_module(pkg)
                   results[friendly] = "importable"
@@ -326,7 +326,7 @@ jobs:
           failures = []
 
           for pkg, friendly in [("pypylon", "Basler (pypylon)"),
-                                 ("flirpy",  "Microsanj IR (flirpy)")]:
+                                 ("flirpy",  "FLIR Boson (flirpy)")]:
               in_env    = results.get(friendly, "not checked")
               in_bundle = bundle_hits.get(pkg, [])
 

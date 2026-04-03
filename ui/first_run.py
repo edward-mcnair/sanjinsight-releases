@@ -363,7 +363,7 @@ class _PageWelcome(_PageBase):
         body = QLabel(
             "You will be asked about:\n\n"
             "  ①  TEC controllers   — Meerstetter TEC-1089 and ATEC-302\n"
-            "  ②  Camera            — Basler TR camera or Microsanj IR camera\n"
+            "  ②  Camera            — Basler TR camera or FLIR Boson IR camera\n"
             "  ③  FPGA              — NI 9637 via NI-RIO\n\n"
             "Your answers are saved to  config.yaml  and can be changed at any "
             "time from  Settings → Hardware Setup.")
@@ -379,7 +379,7 @@ class _PageWelcome(_PageBase):
             "  🔷 &nbsp;<b>Basler TR camera</b> — install "
             '<a href="https://www.baslerweb.com/en-us/downloads/software/">Basler pylon 8</a>'
             " (includes the USB3 Vision driver + pypylon Python bindings)<br>"
-            "  🔶 &nbsp;<b>Microsanj IR camera</b> — install "
+            "  🔶 &nbsp;<b>FLIR Boson IR camera</b> — install "
             '<a href="https://www.flir.com/products/spinnaker-sdk/">FLIR Spinnaker SDK</a>'
             " (includes the PySpin Python wheel — see SDK download page)<br>"
             "<br>"
@@ -785,7 +785,7 @@ class _PageCamera(_PageBase):
             "Camera",
             "Choose the camera driver.  "
             "Use  pypylon  for the Basler TR camera, or  "
-            "Microsanj IR Camera  for the Microsanj thermal imager.",
+            "FLIR Boson  for the FLIR Boson IR thermal camera.",
             parent)
 
         g = QGroupBox("Camera")
@@ -799,7 +799,7 @@ class _PageCamera(_PageBase):
         self._drv = QComboBox()
         for _display, _key in [
             ("pypylon",             "pypylon"),
-            ("Microsanj IR Camera", "flir"),
+            ("FLIR Boson",          "flir"),
             ("ni_imaqdx",           "ni_imaqdx"),
             ("directshow",          "directshow"),
             ("simulated",           "simulated"),
@@ -853,7 +853,7 @@ class _PageCamera(_PageBase):
         # FLIR Spinnaker SDK install notice (shown when flir driver is selected
         # and spinnaker_python / PySpin is not importable)
         self._flir_notice = QLabel(
-            '⚠  Spinnaker SDK is not installed — required for the Microsanj IR Camera.<br>'
+            '⚠  Spinnaker SDK is not installed — required for the FLIR Boson IR camera.<br>'
             'The Spinnaker SDK provides the USB3 driver Windows needs to see the camera.  '
             'Download and install it from FLIR, then install the matching Python wheel:<br>'
             '<a href="https://www.flir.com/products/spinnaker-sdk/">'
@@ -913,7 +913,7 @@ class _PageCamera(_PageBase):
                 "Click  Test Camera  to check if the pylon SDK is installed."
             ),
             "flir": (
-                "Microsanj IR Camera — uses the FLIR Spinnaker SDK (PySpin) internally.  "
+                "FLIR Boson IR camera — uses the FLIR Spinnaker SDK (PySpin) internally.  "
                 "Install the Spinnaker SDK from flir.com, then  pip install spinnaker_python.  "
                 "Click  Test Camera  to verify the SDK is installed."
             ),
@@ -1017,7 +1017,7 @@ class _PageCamera(_PageBase):
                 system.ReleaseInstance()
                 if count > 0:
                     self._cam_test_lbl.setText(
-                        f"✓  SDK ready — {count} Microsanj IR camera(s) detected")
+                        f"✓  SDK ready — {count} FLIR Boson camera(s) detected")
                     self._cam_test_lbl.setStyleSheet(ok_ss)
                 else:
                     self._cam_test_lbl.setText(
@@ -1056,7 +1056,7 @@ class _PageCamera(_PageBase):
                 self._detection_label.setText(
                     "⚠  No camera detected — check USB/GigE connection and SDK installation.\n"
                     "    Basler TR: install pylon 8 from baslerweb.com, then: pip install pypylon\n"
-                    "    Microsanj IR: install Spinnaker SDK from flir.com, then: pip install spinnaker_python")
+                    "    FLIR Boson: install Spinnaker SDK from flir.com, then: pip install spinnaker_python")
                 self._detection_label.setStyleSheet(_SS_BADGE_WARN)
                 self._detection_label.setVisible(True)
                 return 0
@@ -1117,7 +1117,7 @@ class _PageCamera(_PageBase):
             self._detection_label.setText(
                 "⚠  No camera detected — check USB/GigE connection and SDK installation.\n"
                 "    Basler TR: install pylon 8 from baslerweb.com, then: pip install pypylon\n"
-                "    Microsanj IR: install Spinnaker SDK from flir.com, then: pip install spinnaker_python")
+                "    FLIR Boson: install Spinnaker SDK from flir.com, then: pip install spinnaker_python")
             self._detection_label.setStyleSheet(_SS_BADGE_WARN)
             self._detection_label.setVisible(True)
             return 0
@@ -1140,7 +1140,7 @@ class _PageCamera(_PageBase):
             self._set_driver_key("flir")
             if cam.serial_number:
                 self._serial.setText(cam.serial_number)
-            label = "Microsanj IR Camera"
+            label = "FLIR Boson"
             if cam.serial_number:
                 label += f"  (s/n {cam.serial_number})"
 

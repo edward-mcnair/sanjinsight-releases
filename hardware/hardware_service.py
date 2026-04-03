@@ -344,7 +344,7 @@ class HardwareService(QObject):
                    "width": 1920, "height": 1200,
                    "fps": 30, "exposure_us": 5000, "noise_level": 12}
         _sim_ir = {"driver": "simulated", "camera_type": "ir",
-                   "model": "Microsanj IR Camera",
+                   "model": "FLIR Boson 320",
                    "width": 320, "height": 240,
                    "fps": 30, "exposure_us": 8333, "noise_level": 60}
 
