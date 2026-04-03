@@ -220,6 +220,13 @@ DEVICE_REGISTRY: dict[str, DeviceDescriptor] = {
 
     # ── FLIR Boson+ (enhanced sensitivity, <6 ms latency) ───────────────────
 
+    # Boson+ entries have NO usb_vid/usb_pid — they share PIDs with the
+    # original Boson and cannot be distinguished by USB enumeration alone.
+    # The scanner will match the physical device to flir_boson_320 or _640;
+    # the driver reports the actual model (Boson vs Boson+) after connecting
+    # via the camera part number.  These entries exist so users with a known
+    # Boson+ can manually select it in Device Manager if desired.
+
     "flir_boson_plus_320": DeviceDescriptor(
         uid            = "flir_boson_plus_320",
         display_name   = "FLIR Boson+ 320",
@@ -230,8 +237,6 @@ DEVICE_REGISTRY: dict[str, DeviceDescriptor] = {
         driver_module  = "hardware.cameras.boson_driver",
         driver_version = "builtin",
         hot_loadable   = True,
-        usb_vid        = 0x09CB,     # Same VID as original Boson
-        usb_pid        = 0x4007,     # Shares PID with Boson 320 — differentiate via SDK PN query
         serial_patterns= ["Boson+", "Boson Plus", "22320", "23320"],
         description    = "FLIR Boson+ 320×256 uncooled LWIR microbolometer. "
                          "Enhanced sensitivity (≤20 mK NEdT Industrial, ≤30 mK Professional), "
@@ -254,8 +259,6 @@ DEVICE_REGISTRY: dict[str, DeviceDescriptor] = {
         driver_module  = "hardware.cameras.boson_driver",
         driver_version = "builtin",
         hot_loadable   = True,
-        usb_vid        = 0x09CB,
-        usb_pid        = 0x4007,     # May share PID with Boson 320/640
         serial_patterns= ["Boson+ 640", "Boson Plus 640", "22640", "23640"],
         description    = "FLIR Boson+ 640×512 uncooled LWIR microbolometer. "
                          "Enhanced sensitivity (≤20 mK NEdT Industrial, ≤30 mK Professional), "

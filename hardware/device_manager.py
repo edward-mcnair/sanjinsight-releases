@@ -390,11 +390,16 @@ class DeviceManager:
                              "flir_boson_plus_320", "flir_boson_plus_640")
                 and not entry.address
             )
+            # Ethernet devices (sbRIO) use ip_address, not address (port)
+            _has_address = (
+                entry.ip_address if desc.connection_type == "ethernet"
+                else entry.address
+            )
             needs_address = (
                 desc.connection_type in ("serial", "usb", "ethernet")
                 and not _boson_video_only
             )
-            if needs_address and not entry.address:
+            if needs_address and not _has_address:
                 raise ValueError(
                     f"No port or address configured for {desc.display_name}.\n\n"
                     "In the Device Manager, select this device → set the Port "
