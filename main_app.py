@@ -3669,12 +3669,12 @@ class MainWindow(QMainWindow):
         ls.resize(460, 520)
 
         _el = _QEL()
-        ls.login_success.connect(
-            lambda sess: (
-                setattr(ls, "_sess", sess),
-                _el.quit(),
-            ) and None
-        )
+
+        def _on_login(sess):
+            ls._sess = sess
+            _el.quit()
+
+        ls.login_success.connect(_on_login)
         ls.show()
         _el.exec_()
         session = getattr(ls, "_sess", None)
@@ -4964,12 +4964,12 @@ def _launch_operator_shell(auth, auth_session, session_mgr, app):
             ls = LoginScreen(auth)
             ls.resize(app.primaryScreen().availableSize())
             _el = _QEL()
-            ls.login_success.connect(
-                lambda sess: (
-                    setattr(ls, "_sess", sess),
-                    _el.quit(),
-                ) and None
-            )
+
+            def _on_login_1(sess):
+                ls._sess = sess
+                _el.quit()
+
+            ls.login_success.connect(_on_login_1)
             ls.show()
             _el.exec_()
             new_sess = getattr(ls, "_sess", None)
@@ -5324,12 +5324,12 @@ if __name__ == "__main__":
             _login_screen.resize(app.primaryScreen().availableSize())
 
             _loop = _QEventLoop()
-            _login_screen.login_success.connect(
-                lambda sess: (
-                    setattr(_login_screen, "_accepted_session", sess),
-                    _loop.quit(),
-                ) and None
-            )
+
+            def _on_login_2(sess):
+                _login_screen._accepted_session = sess
+                _loop.quit()
+
+            _login_screen.login_success.connect(_on_login_2)
             _login_screen.show()
             _loop.exec_()
             _auth_session = getattr(_login_screen, "_accepted_session", None)
@@ -5709,12 +5709,12 @@ if __name__ == "__main__":
                 ls2 = LoginScreen(_auth)
                 ls2.resize(app.primaryScreen().availableSize())
                 _el2 = _QEL2()
-                ls2.login_success.connect(
-                    lambda sess: (
-                        setattr(ls2, "_sess", sess),
-                        _el2.quit(),
-                    ) and None
-                )
+
+                def _on_login_3(sess):
+                    ls2._sess = sess
+                    _el2.quit()
+
+                ls2.login_success.connect(_on_login_3)
                 ls2.show()
                 _el2.exec_()
                 new_sess2 = getattr(ls2, "_sess", None)
