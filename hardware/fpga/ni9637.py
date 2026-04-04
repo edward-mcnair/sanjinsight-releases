@@ -227,11 +227,18 @@ class Ni9637Driver(FpgaDriver):
             err = str(e)
             hint = ""
             if "-61202" in err or "FpgaBusyFpgaInterface" in err:
-                hint = ("\nHint: The FPGA is already in use by another "
-                        "application (NI MAX, LabVIEW, or a previous "
-                        "SanjINSIGHT session that didn't close cleanly). "
-                        "Close the other application and try again, or "
-                        "reboot the sbRIO via NI MAX → Remote Systems.")
+                hint = (
+                    "\nHint: The FPGA interface is locked by another "
+                    "application.  Most likely the sbRIO has a LabVIEW RT "
+                    "startup application that auto-runs on power-up and "
+                    "holds the FPGA.\n"
+                    "Fix: open NI MAX → Remote Systems → right-click the "
+                    "sbRIO → Reboot.  Then expand Software and disable or "
+                    "uninstall any Startup Application so SanjINSIGHT can "
+                    "take control of the FPGA.\n"
+                    "If that doesn't help, check that no other program "
+                    "(NI MAX FPGA test panel, LabVIEW) has the target open."
+                )
             elif "-61046" in err or "SignatureMismatch" in err:
                 hint = ("\nHint: Bitfile signature mismatch — the .lvbitx file "
                         "does not match the firmware running on the FPGA. "
