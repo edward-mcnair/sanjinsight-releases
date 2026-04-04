@@ -113,6 +113,7 @@ class ReportDialog(QDialog):
         self._preset_combo = QComboBox()
         self._preset_combo.addItem("Custom")
         self._preset_combo.setFixedHeight(26)
+        self._preset_combo.setMaximumWidth(300)
         self._save_preset_btn = QPushButton("Save…")
         self._save_preset_btn.setFixedHeight(26)
         self._del_preset_btn = QPushButton("Delete")

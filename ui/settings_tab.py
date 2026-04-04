@@ -566,6 +566,7 @@ class SettingsTab(QWidget):
         self._lab_op_combo.setEditable(True)
         self._lab_op_combo.setInsertPolicy(QComboBox.NoInsert)
         self._lab_op_combo.setMinimumWidth(200)
+        self._lab_op_combo.setMaximumWidth(300)
         self._lab_op_combo.setStyleSheet(_COMBO())
         self._lab_op_combo.lineEdit().setPlaceholderText("Type or select name…")
         self._lab_reload_op_combo()
@@ -1332,6 +1333,7 @@ class SettingsTab(QWidget):
 
         self._ai_model_ids = list(MODEL_ORDER)
         self._ai_model_combo = QComboBox()
+        self._ai_model_combo.setMaximumWidth(360)
         self._ai_model_combo.setStyleSheet(_COMBO())
         for mid in self._ai_model_ids:
             m   = MODEL_CATALOG[mid]
@@ -1687,6 +1689,7 @@ class SettingsTab(QWidget):
         provider_row.addWidget(provider_lbl)
 
         self._cloud_provider_combo = QComboBox()
+        self._cloud_provider_combo.setMaximumWidth(300)
         self._cloud_provider_combo.setStyleSheet(_COMBO())
         self._cloud_provider_ids: list[str] = []
         for pid, pdata in CLOUD_PROVIDERS.items():
@@ -1710,6 +1713,7 @@ class SettingsTab(QWidget):
         model_row.addWidget(model_lbl)
 
         self._cloud_model_combo = QComboBox()
+        self._cloud_model_combo.setMaximumWidth(360)
         self._cloud_model_combo.setStyleSheet(_COMBO())
         self._cloud_model_ids: list[str] = []
         self._cloud_model_combo.currentIndexChanged.connect(
@@ -1879,6 +1883,7 @@ class SettingsTab(QWidget):
         pull_row.addWidget(pull_lbl)
 
         self._ollama_pull_combo = QComboBox()
+        self._ollama_pull_combo.setMaximumWidth(360)
         self._ollama_pull_combo.setStyleSheet(_COMBO())
         for m in ["phi3", "phi3:mini", "mistral", "llama3:8b", "gemma2:2b"]:
             self._ollama_pull_combo.addItem(m)
@@ -1924,6 +1929,7 @@ class SettingsTab(QWidget):
         model_row.addWidget(model_lbl)
 
         self._ollama_model_combo = QComboBox()
+        self._ollama_model_combo.setMaximumWidth(360)
         self._ollama_model_combo.setStyleSheet(_COMBO())
         self._ollama_model_combo.setEditable(False)
         self._ollama_model_combo.setPlaceholderText("(refresh to load installed models)")

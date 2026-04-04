@@ -889,6 +889,7 @@ class _DeviceProfilePanel(QWidget):
             port_combo.setEditable(True)         # user can type any port directly
             port_combo.setInsertPolicy(QComboBox.InsertAtTop)
             port_combo.setMinimumWidth(140)
+            port_combo.setMaximumWidth(300)
             port_row_lay.addWidget(port_combo, 1)
 
             refresh_btn = QPushButton()

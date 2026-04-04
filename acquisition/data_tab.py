@@ -685,6 +685,7 @@ class DataTab(QWidget):
         status_lbl.setStyleSheet(
             f"font-size:{FONT['body']}pt; color:{PALETTE['textDim']};")
         self._status_combo = QComboBox()
+        self._status_combo.setMaximumWidth(200)
         self._status_combo.addItems(["pending", "reviewed", "flagged", "archived"])
         self._status_combo.setFixedHeight(26)
         self._status_combo.setStyleSheet(
@@ -1094,6 +1095,7 @@ class DataTab(QWidget):
         preset_lbl = QLabel("Preset:")
         preset_lbl.setStyleSheet(f"font-size:{FONT['heading']}pt; color:{PALETTE['textDim']};")
         preset_combo = QComboBox()
+        preset_combo.setMaximumWidth(300)
         preset_combo.addItem("Custom")
         preset_combo.addItems(_list_ep())
         preset_combo.setFixedHeight(28)

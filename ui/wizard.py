@@ -576,6 +576,7 @@ class Step2Focus(QWidget):
         step_lbl = QLabel("Step")
         step_lbl.setStyleSheet(f"font-size:{FONT['heading']}pt; color:{PALETTE['textSub']};")
         self._step_combo = QComboBox()
+        self._step_combo.setMaximumWidth(300)
         for label in ["0.5 µm", "1 µm", "2 µm", "5 µm",
                       "10 µm", "25 µm", "50 µm", "100 µm"]:
             self._step_combo.addItem(label)

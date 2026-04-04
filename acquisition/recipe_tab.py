@@ -915,7 +915,9 @@ class _RecipeDiffDialog(QDialog):
         )
 
         self._combo_left  = QComboBox()
+        self._combo_left.setMaximumWidth(300)
         self._combo_right = QComboBox()
+        self._combo_right.setMaximumWidth(300)
         for combo in (self._combo_left, self._combo_right):
             combo.setStyleSheet(combo_style)
             for r in recipes:
