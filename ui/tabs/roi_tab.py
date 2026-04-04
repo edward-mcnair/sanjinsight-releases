@@ -69,7 +69,7 @@ class RoiTab(QWidget):
             il.addWidget(self._sub(label), r, 0)
             lbl = QLabel("--")
             lbl.setStyleSheet(
-                scaled_qss(f"font-family:{MONO_FONT}; font-size:15pt; color:{PALETTE['accent']};"))
+                scaled_qss(f"font-family:{MONO_FONT}; font-size:{FONT['heading']}pt; color:{PALETTE['accent']};"))
             il.addWidget(lbl, r, 1)
             self._roi_labels[key] = lbl
 
@@ -138,12 +138,12 @@ class RoiTab(QWidget):
         """Re-apply PALETTE-driven colours on theme switch."""
         acc = PALETTE['accent']
         sub = PALETTE['textSub']
-        lbl_ss = scaled_qss(f"font-family:{MONO_FONT}; font-size:15pt; color:{acc};")
+        lbl_ss = scaled_qss(f"font-family:{MONO_FONT}; font-size:{FONT['heading']}pt; color:{acc};")
         for key, lbl in self._roi_labels.items():
             if key == "status" and lbl.text() not in ("--", ""):
                 # keep warning colour for "ROI defined"
                 lbl.setStyleSheet(scaled_qss(
-                    f"font-family:{MONO_FONT}; font-size:15pt; "
+                    f"font-family:{MONO_FONT}; font-size:{FONT['heading']}pt; "
                     f"color:{PALETTE['warning']};"))
             else:
                 lbl.setStyleSheet(lbl_ss)
@@ -180,7 +180,7 @@ class RoiTab(QWidget):
                 l.setText("--")
             self._roi_labels["status"].setText("Full frame")
             self._roi_labels["status"].setStyleSheet(
-                scaled_qss(f"font-family:{MONO_FONT}; font-size:15pt; color:{PALETTE['textSub']};"))
+                scaled_qss(f"font-family:{MONO_FONT}; font-size:{FONT['heading']}pt; color:{PALETTE['textSub']};"))
         else:
             self._roi_labels["x"].setText(str(roi.x))
             self._roi_labels["y"].setText(str(roi.y))
@@ -189,7 +189,7 @@ class RoiTab(QWidget):
             self._roi_labels["area"].setText(f"{roi.area:,} px")
             self._roi_labels["status"].setText("ROI defined")
             self._roi_labels["status"].setStyleSheet(
-                scaled_qss(f"font-family:{MONO_FONT}; font-size:15pt; color:{PALETTE['warning']};"))
+                scaled_qss(f"font-family:{MONO_FONT}; font-size:{FONT['heading']}pt; color:{PALETTE['warning']};"))
 
     def _apply_preset(self, rx, ry, rw, rh):
         fh, fw = self._frame_hw

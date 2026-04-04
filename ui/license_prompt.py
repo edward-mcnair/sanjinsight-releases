@@ -98,7 +98,7 @@ class LicenseActivationPrompt(QDialog):
         self._header.setStyleSheet(
             f"background:{_BG2()}; border-bottom:1px solid {_BORDER()};")
         self._header_title.setStyleSheet(
-            scaled_qss(f"font-size:15pt; font-weight:700; color:{PALETTE['text']};"))
+            scaled_qss(f"font-size:{FONT['heading']}pt; font-weight:700; color:{PALETTE['text']};"))
         self._header_sub.setStyleSheet(
             f"font-size:{FONT['sublabel']}pt; color:{_MUTED()};")
         self._intro.setStyleSheet(

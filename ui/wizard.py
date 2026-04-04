@@ -496,7 +496,7 @@ class Step2Focus(QWidget):
         lay.setSpacing(14)
 
         title = QLabel("Focus on Your Sample")
-        title.setStyleSheet(scaled_qss(f"font-size:24pt; font-weight:bold; color:{PALETTE['text']};"))
+        title.setStyleSheet(scaled_qss(f"font-size:{FONT['readout']}pt; font-weight:bold; color:{PALETTE['text']};"))
         sub = QLabel(
             "Use the camera preview to position and focus on your device. "
             "Auto-Focus works best on samples with visible surface features. "
@@ -517,7 +517,7 @@ class Step2Focus(QWidget):
         self._feed.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self._feed.setStyleSheet(
             scaled_qss(f"background:{PALETTE['bg']}; border:1px solid {PALETTE['border2']}; border-radius:4px;"
-                       f"color:{PALETTE['textSub']}; font-size:18pt;"))
+                       f"color:{PALETTE['textSub']}; font-size:{FONT['title']}pt;"))
         self._feed.setText("Camera initialising…")
         content.addWidget(self._feed, 1)
 
@@ -763,7 +763,7 @@ class Step3Acquire(QWidget):
         lay.setSpacing(16)
 
         title = QLabel("Acquire Measurement")
-        title.setStyleSheet(scaled_qss(f"font-size:24pt; font-weight:bold; color:{PALETTE['text']};"))
+        title.setStyleSheet(scaled_qss(f"font-size:{FONT['readout']}pt; font-weight:bold; color:{PALETTE['text']};"))
         sub = QLabel(
             "Everything is configured. Press Acquire to capture the "
             "thermoreflectance measurement. This will take a few seconds.")
@@ -889,7 +889,7 @@ class _VerdictBig(QWidget):
         self._verdict_lbl.setStyleSheet(
             scaled_qss(f"font-size:50pt; font-weight:bold; font-family:{MONO_FONT};"))
         self._sub_lbl = QLabel("")
-        self._sub_lbl.setStyleSheet(scaled_qss("font-size:15pt;"))
+        self._sub_lbl.setStyleSheet(scaled_qss(f"font-size:{FONT['heading']}pt;"))
         ol.addWidget(self._verdict_lbl)
         ol.addWidget(self._sub_lbl)
         lay.addWidget(self._outer)
@@ -908,7 +908,7 @@ class _VerdictBig(QWidget):
         else:
             sub = default_sub
         self._sub_lbl.setText(sub)
-        self._sub_lbl.setStyleSheet(scaled_qss(f"font-size:15pt; color:{fg}99;"))
+        self._sub_lbl.setStyleSheet(scaled_qss(f"font-size:{FONT['heading']}pt; color:{fg}99;"))
 
 
 class Step4Results(QWidget):
@@ -927,7 +927,7 @@ class Step4Results(QWidget):
 
         title = QLabel("Measurement Results")
         title.setStyleSheet(
-            scaled_qss(f"font-size:24pt; font-weight:bold; color:{PALETTE['text']};"))
+            scaled_qss(f"font-size:{FONT['readout']}pt; font-weight:bold; color:{PALETTE['text']};"))
         lay.addWidget(title)
 
         # Verdict

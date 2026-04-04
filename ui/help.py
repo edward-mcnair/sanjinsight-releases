@@ -682,7 +682,7 @@ class HelpPopover(QWidget):
             f"font-size:{FONT['heading']}pt; font-weight:bold;")
         title = QLabel(content["title"])
         title.setStyleSheet(
-            scaled_qss(f"font-size:15pt; font-weight:bold; color:{PALETTE['text']}; background:transparent;"))
+            scaled_qss(f"font-size:{FONT['heading']}pt; font-weight:bold; color:{PALETTE['text']}; background:transparent;"))
         title.setWordWrap(True)
 
         close_btn = QPushButton("✕")

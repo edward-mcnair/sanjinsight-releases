@@ -307,7 +307,7 @@ class AcquireTab(QWidget):
         bot = QHBoxLayout()
         self._snr_lbl = QLabel("SNR  —")
         self._snr_lbl.setStyleSheet(
-            scaled_qss(f"font-family:{MONO_FONT}; font-size:15pt; color:{PALETTE['textSub']};"))
+            scaled_qss(f"font-family:{MONO_FONT}; font-size:{FONT['heading']}pt; color:{PALETTE['textSub']};"))
         self._export_btn = QPushButton("Export")
         set_btn_icon(self._export_btn, "fa5s.file-export")
         self._export_btn.setToolTip("Export acquisition results to a folder")

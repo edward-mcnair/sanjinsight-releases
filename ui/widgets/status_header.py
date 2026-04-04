@@ -1800,7 +1800,7 @@ class StatusHeader(QWidget):
                 color: {PALETTE['danger']};
                 border: 2px solid {PALETTE['danger']};
                 border-radius: 5px;
-                font-size: 13pt;
+                font-size: {FONT['body']}pt;
                 font-weight: bold;
                 letter-spacing: 1px;
                 padding: 0 12px;
@@ -1919,7 +1919,7 @@ class StatusHeader(QWidget):
                     color: {PALETTE['danger']};
                     border: 2px solid {PALETTE['danger']};
                     border-radius: 5px;
-                    font-size: 13pt;
+                    font-size: {FONT['body']}pt;
                     font-weight: bold;
                     letter-spacing: 1px;
                     padding: 0 12px;

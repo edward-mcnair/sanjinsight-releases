@@ -6,6 +6,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.50.33-beta] — 2026-04-04
+
+### Improved
+- **WCAG AA contrast** — Light mode palette adjusted for accessibility: `success`, `warning`, `danger`, `info`, `cta`, `systemYellow`, `systemMint`, `systemCyan` all now meet WCAG AA contrast ratios on white backgrounds
+- **Device Manager style DRY** — Extracted 6 repeated style patterns into helper functions (`_section_title_qss`, `_header_bar_qss`, `_accent_btn_qss`, `_cancel_btn_qss`, `_progress_bar_qss`, `_scroll_area_qss`) for maintainability
+- **Font system consistency** — Migrated 24 hardcoded `font-size` values across 11 files to use `FONT['heading']`, `FONT['title']`, `FONT['readout']`, `FONT['readoutSm']`, `FONT['body']` from the design system, ensuring DPI scaling works correctly everywhere
+
 ## [Unreleased]
 
 ### Added

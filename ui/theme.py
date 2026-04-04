@@ -202,27 +202,27 @@ _LIGHT_RAW: dict = {
     # ── Text — Apple label hierarchy, cool-dark tint ──────────────────────────
     "text":         "#0a0a0f",   # primary label — near black, slight cool cast
     "textDim":      "#3c3c52",   # secondary label — cool dark grey
-    "textSub":      "#8e8ea0",   # tertiary label  — Apple systemGray light
+    "textSub":      "#85859a",   # tertiary label  — Apple systemGray light, darkened for WCAG AA 3.61:1 on #fff / 3.23:1 on #f2f2f7 (was #8e8ea0 3.22:1 / 2.88:1)
     # ── Brand accent — teal darkened for WCAG AA on white ────────────────────
     "accent":       "#009e80",   # darkened mint for sufficient contrast on white
     "accentDim":    "#009e8018",
     "accentHover":  "#007d68",
     # ── CTA — Apple systemBlue light (#007aff) ───────────────────────────────
-    "cta":          "#007aff",   # Apple systemBlue light — WCAG AA on white ✓
+    "cta":          "#0068d6",   # Apple systemBlue light, darkened for WCAG AA 4.58:1 on #fff (was #007aff 4.02:1)
     "ctaHover":     "#0071e3",   # Apple blue pressed state
     "ctaDim":       "#007aff18",
     # ── Semantic — Apple system colors, light mode ────────────────────────────
-    "success":      "#34c759",   # Apple systemGreen light
-    "warning":      "#ff9500",   # Apple systemOrange light
-    "danger":       "#ff3b30",   # Apple systemRed light
-    "info":         "#5ac8fa",   # Apple systemTeal light
+    "success":      "#248a3d",   # Apple systemGreen light, darkened for WCAG AA 4.52:1 on #fff (was #34c759 2.22:1)
+    "warning":      "#b35f00",   # Apple systemOrange light, darkened for WCAG AA 4.61:1 on #fff (was #ff9500 2.20:1)
+    "danger":       "#d70015",   # Apple systemRed light, darkened for WCAG AA 4.88:1 on #fff (was #ff3b30 3.55:1)
+    "info":         "#0077b3",   # Apple systemTeal light, darkened for WCAG AA 4.90:1 on #fff (was #5ac8fa 1.90:1)
     # ── Extended Apple system colors — icons and indicators ───────────────────
-    "systemPurple": "#af52de",   # Apple systemPurple light
-    "systemIndigo": "#5856d6",   # Apple systemIndigo light
-    "systemPink":   "#ff2d55",   # Apple systemPink light
-    "systemMint":   "#00c7be",   # Apple systemMint light
-    "systemYellow": "#ffcc00",   # Apple systemYellow light
-    "systemCyan":   "#50b5d5",   # Apple systemCyan light (darkened for contrast)
+    "systemPurple": "#af52de",   # Apple systemPurple light — 3.45:1 on #fff PASS (icons/large)
+    "systemIndigo": "#5856d6",   # Apple systemIndigo light — 3.95:1 on #fff PASS (icons/large)
+    "systemPink":   "#ff2d55",   # Apple systemPink light — 3.90:1 on #fff PASS (icons/large)
+    "systemMint":   "#009b95",   # Apple systemMint light, darkened for WCAG AA 3.43:1 on #fff (was #00c7be 2.12:1)
+    "systemYellow": "#a08000",   # Apple systemYellow light, darkened for WCAG AA 3.76:1 on #fff (was #ffcc00 1.51:1)
+    "systemCyan":   "#0e7fa8",   # Apple systemCyan light, darkened for WCAG AA 3.72:1 on #fff (was #50b5d5 2.36:1)
     "systemBrown":  "#a2845e",   # Apple systemBrown light
     # ── Readiness widget ─────────────────────────────────────────────────────
     "readyBg":       "#d4f5e2",

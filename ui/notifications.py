@@ -579,7 +579,7 @@ class ToastNotification(QWidget):
         dismiss_btn.setStyleSheet(scaled_qss(f"""
             QPushButton {{
                 background:transparent; color:{PALETTE['textSub']};
-                border:none; font-size:15pt; padding:0;
+                border:none; font-size:{FONT['heading']}pt; padding:0;
             }}
             QPushButton:hover {{ color:{PALETTE['text']}; }}
         """))

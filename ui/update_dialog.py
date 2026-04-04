@@ -227,7 +227,7 @@ class UpdateDialog(QDialog):
         self._hdr_icon.setStyleSheet(
             scaled_qss(f"font-size:30pt; color:{_AMBER()}; font-weight:700;"))
         self._hdr_title.setStyleSheet(
-            scaled_qss(f"font-size:15pt; font-weight:700; color:{PALETTE['text']};"))
+            scaled_qss(f"font-size:{FONT['heading']}pt; font-weight:700; color:{PALETTE['text']};"))
         self._hdr_ver.setStyleSheet(
             f"font-size:{FONT['label']}pt; color:{_AMBER()};")
         if self._pre_lbl:
@@ -368,7 +368,7 @@ class AboutDialog(QDialog):
         self._about_hdr.setStyleSheet(
             f"background:{_BG2()}; border-bottom:1px solid {_BORDER()};")
         self._app_name_lbl.setStyleSheet(
-            scaled_qss(f"font-size:18pt; font-weight:700; color:{PALETTE['text']}; letter-spacing:1px;"))
+            scaled_qss(f"font-size:{FONT['title']}pt; font-weight:700; color:{PALETTE['text']}; letter-spacing:1px;"))
         self._ver_lbl.setStyleSheet(
             f"font-size:{FONT['label']}pt; color:{_GREEN()};")
         self._tabs.setStyleSheet(f"""

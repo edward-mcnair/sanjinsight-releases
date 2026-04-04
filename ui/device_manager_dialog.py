@@ -77,6 +77,81 @@ from hardware.driver_store    import DriverStore, RemoteDriverEntry
 
 
 # ------------------------------------------------------------------ #
+#  Shared style helpers — read PALETTE at call-time for theme switch  #
+# ------------------------------------------------------------------ #
+
+def _section_title_qss() -> str:
+    """Section header title: 11 pt, 2 px letter-spacing, dim text."""
+    return _pt(f"font-size:11pt; letter-spacing:2px; color:{PALETTE['textDim']};")
+
+
+def _header_bar_qss() -> str:
+    """Header bar background with bottom border."""
+    return f"background:{PALETTE['bg']}; border-bottom:1px solid {PALETTE['border']};"
+
+
+def _accent_btn_qss(
+    *,
+    color: str = "accent",
+    border_color: str = "accentDim",
+    border_alpha: str = "",
+    bg: str = "surface",
+    hover_bg: str = "surface",
+    padding: str = "0 8px",
+    disabled_bg: bool = False,
+) -> str:
+    """Accent-colored action button (scan / install / check).
+
+    Parameters
+    ----------
+    color, border_color : PALETTE keys for the foreground and border.
+    border_alpha : optional hex alpha suffix appended to the border color
+                   (e.g. ``"44"`` for ``{PALETTE['cta']}44``).
+    bg           : PALETTE key for the normal background.
+    hover_bg     : PALETTE key for the hover background.
+    padding      : CSS padding value.
+    disabled_bg  : if True, add ``background:{PALETTE['bg']};`` to the
+                   disabled rule.
+    """
+    bdr_val = f"{PALETTE[border_color]}{border_alpha}"
+    dis_extra = f" background:{PALETTE['bg']};" if disabled_bg else ""
+    return _pt(
+        f"QPushButton {{ background:{PALETTE[bg]}; color:{PALETTE[color]};"
+        f" border:1px solid {bdr_val}; border-radius:3px;"
+        f" font-size:10pt; padding:{padding}; }}"
+        f"QPushButton:hover {{ background:{PALETTE[hover_bg]}; }}"
+        f"QPushButton:disabled {{ color:{PALETTE['textDim']};"
+        f" border-color:{PALETTE['border']};{dis_extra} }}")
+
+
+def _cancel_btn_qss(
+    *,
+    padding: str = "0 8px",
+    include_disabled: bool = True,
+) -> str:
+    """Danger-colored cancel button with hover and optional disabled state."""
+    dis = (f"QPushButton:disabled {{ color:{PALETTE['textDim']};"
+           f" border-color:{PALETTE['border']}; }}") if include_disabled else ""
+    return _pt(
+        f"QPushButton {{ background:{PALETTE['surface']}; color:{PALETTE['danger']};"
+        f" border:1px solid {PALETTE['danger']}22; border-radius:3px;"
+        f" font-size:10pt; padding:{padding}; }}"
+        f"QPushButton:hover {{ background:{PALETTE['surface2']}; }}"
+        f"{dis}")
+
+
+def _progress_bar_qss() -> str:
+    """Thin indeterminate progress bar (2–3 px)."""
+    return (f"QProgressBar {{ background:{PALETTE['bg']}; border:none; margin:0; }}"
+            f"QProgressBar::chunk {{ background:{PALETTE['accent']}; }}")
+
+
+def _scroll_area_qss() -> str:
+    """Border-less scroll area with bg background."""
+    return f"QScrollArea{{border:none; background:{PALETTE['bg']};}}"
+
+
+# ------------------------------------------------------------------ #
 #  Live log handler — routes Python logging to the log panel          #
 # ------------------------------------------------------------------ #
 
@@ -203,24 +278,8 @@ class _DeviceListPanel(QWidget):
         self.setMinimumWidth(180)
 
         # Build button stylesheets once (_pt() reads sys.platform at runtime)
-        self._ss_scan = _pt(f"""
-            QPushButton {{
-                background:{PALETTE['surface']}; color:{PALETTE['accent']};
-                border:1px solid {PALETTE['accentDim']}; border-radius:3px;
-                font-size:10pt; padding:0 8px;
-            }}
-            QPushButton:hover    {{ background:{PALETTE['surface']}; }}
-            QPushButton:disabled {{ color:{PALETTE['textDim']}; border-color:{PALETTE['border']}; }}
-        """)
-        self._ss_cancel = _pt(f"""
-            QPushButton {{
-                background:{PALETTE['surface']}; color:{PALETTE['danger']};
-                border:1px solid {PALETTE['danger']}22; border-radius:3px;
-                font-size:10pt; padding:0 8px;
-            }}
-            QPushButton:hover    {{ background:{PALETTE['surface2']}; }}
-            QPushButton:disabled {{ color:{PALETTE['textDim']}; border-color:{PALETTE['border']}; }}
-        """)
+        self._ss_scan = _accent_btn_qss()
+        self._ss_cancel = _cancel_btn_qss()
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -229,12 +288,11 @@ class _DeviceListPanel(QWidget):
         # ── Header bar ────────────────────────────────────────────── #
         hdr = QWidget()
         hdr.setFixedHeight(36)
-        hdr.setStyleSheet(f"background:{PALETTE['bg']}; border-bottom:1px solid {PALETTE['border']};")
+        hdr.setStyleSheet(_header_bar_qss())
         hl = QHBoxLayout(hdr)
         hl.setContentsMargins(12, 0, 8, 0)
         title = QLabel("DEVICES")
-        title.setStyleSheet(
-            f"font-size:11pt; letter-spacing:2px; color:{PALETTE['textDim']};")
+        title.setStyleSheet(_section_title_qss())
         self._hdr       = hdr
         self._hdr_title = title
         self._scan_btn = QPushButton("Scan")
@@ -260,9 +318,7 @@ class _DeviceListPanel(QWidget):
         self._scan_prog.setFixedHeight(2)
         self._scan_prog.setTextVisible(False)
         self._scan_prog.setVisible(False)
-        self._scan_prog.setStyleSheet(
-            f"QProgressBar {{ background:{PALETTE['bg']}; border:none; margin:0; }}"
-            f"QProgressBar::chunk {{ background:{PALETTE['accent']}; }}")
+        self._scan_prog.setStyleSheet(_progress_bar_qss())
         root.addWidget(self._scan_prog)
 
         # ── Device tree ───────────────────────────────────────────── #
@@ -340,28 +396,16 @@ class _DeviceListPanel(QWidget):
         dim = P['textDim']
         sur = P['surface']
         su2 = P['surface2']
-        self._hdr.setStyleSheet(f"background:{bg}; border-bottom:1px solid {bdr};")
-        self._hdr_title.setStyleSheet(f"font-size:11pt; letter-spacing:2px; color:{dim};")
+        self._hdr.setStyleSheet(_header_bar_qss())
+        self._hdr_title.setStyleSheet(_section_title_qss())
         self._net_chk.setStyleSheet(
             f"QCheckBox {{ color:{dim}; font-size:10pt; }} "
             f"QCheckBox::indicator {{ width:15px; height:15px; }}")
         self._status.setStyleSheet(
             f"font-size:10pt; color:{dim}; padding:4px 12px;")
-        self._scan_prog.setStyleSheet(
-            f"QProgressBar {{ background:{bg}; border:none; margin:0; }}"
-            f"QProgressBar::chunk {{ background:{PALETTE['accent']}; }}")
-        self._ss_scan = _pt(
-            f"QPushButton {{ background:{sur}; color:{PALETTE['accent']};"
-            f" border:1px solid {PALETTE['accentDim']}; border-radius:3px;"
-            f" font-size:10pt; padding:0 8px; }}"
-            f"QPushButton:hover {{ background:{sur}; }}"
-            f"QPushButton:disabled {{ color:{dim}; border-color:{bdr}; }}")
-        self._ss_cancel = _pt(
-            f"QPushButton {{ background:{sur}; color:{PALETTE['danger']};"
-            f" border:1px solid {PALETTE['danger']}22; border-radius:3px;"
-            f" font-size:10pt; padding:0 8px; }}"
-            f"QPushButton:hover {{ background:{su2}; }}"
-            f"QPushButton:disabled {{ color:{dim}; border-color:{bdr}; }}")
+        self._scan_prog.setStyleSheet(_progress_bar_qss())
+        self._ss_scan = _accent_btn_qss()
+        self._ss_cancel = _cancel_btn_qss()
         if not self._scanning:
             self._scan_btn.setStyleSheet(self._ss_scan)
         self._tree.setStyleSheet(_pt(
@@ -588,11 +632,11 @@ class _DeviceProfilePanel(QWidget):
         # Header
         hdr = QWidget()
         hdr.setFixedHeight(36)
-        hdr.setStyleSheet(f"background:{PALETTE['bg']}; border-bottom:1px solid {PALETTE['border']};")
+        hdr.setStyleSheet(_header_bar_qss())
         hl  = QHBoxLayout(hdr)
         hl.setContentsMargins(12, 0, 12, 0)
         t = QLabel("DEVICE PROFILE")
-        t.setStyleSheet(f"font-size:11pt; letter-spacing:2px; color:{PALETTE['textDim']};")
+        t.setStyleSheet(_section_title_qss())
         self._hdr       = hdr
         self._hdr_title = t
         hl.addWidget(t)
@@ -602,7 +646,7 @@ class _DeviceProfilePanel(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setStyleSheet(f"QScrollArea{{border:none; background:{PALETTE['bg']};}}")
+        scroll.setStyleSheet(_scroll_area_qss())
         self._scroll = scroll
         self._body = QWidget()
         self._body_layout = QVBoxLayout(self._body)
@@ -651,9 +695,9 @@ class _DeviceProfilePanel(QWidget):
         bg  = P['bg']
         bdr = P['border']
         dim = P['textDim']
-        self._hdr.setStyleSheet(f"background:{bg}; border-bottom:1px solid {bdr};")
-        self._hdr_title.setStyleSheet(f"font-size:11pt; letter-spacing:2px; color:{dim};")
-        self._scroll.setStyleSheet(f"QScrollArea{{border:none; background:{bg};}}")
+        self._hdr.setStyleSheet(_header_bar_qss())
+        self._hdr_title.setStyleSheet(_section_title_qss())
+        self._scroll.setStyleSheet(_scroll_area_qss())
         self._footer.setStyleSheet(
             f"background:{bg}; border-top:1px solid {bdr};")
 
@@ -1940,16 +1984,8 @@ class _DriverCard(QFrame):
                 f"font-size:10pt; padding:2px 10px;}}")
         else:
             self._btn = QPushButton("Install")
-            self._btn.setStyleSheet(f"""
-                QPushButton {{
-                    background:{PALETTE['surface']}; color:{PALETTE['accent']};
-                    border:1px solid {PALETTE['accentDim']}; border-radius:3px;
-                    font-size:10pt; padding:2px 10px;
-                }}
-                QPushButton:hover {{ background:{PALETTE['surface2']}; }}
-                QPushButton:disabled {{ color:{PALETTE['textDim']}; border-color:{PALETTE['border']};
-                                       background:{PALETTE['bg']}; }}
-            """)
+            self._btn.setStyleSheet(_accent_btn_qss(
+                padding="2px 10px", hover_bg="surface2", disabled_bg=True))
             self._btn.clicked.connect(
                 lambda: self.install_requested.emit(self._entry))
 
@@ -1961,14 +1997,8 @@ class _DriverCard(QFrame):
         """Replace the Install button with a live ✕ Cancel button."""
         self._btn.setEnabled(True)
         self._btn.setText("Cancel")
-        self._btn.setStyleSheet(f"""
-            QPushButton {{
-                background:{PALETTE['surface']}; color:{PALETTE['danger']};
-                border:1px solid {PALETTE['danger']}22; border-radius:3px;
-                font-size:10pt; padding:2px 10px;
-            }}
-            QPushButton:hover {{ background:{PALETTE['surface2']}; }}
-        """)
+        self._btn.setStyleSheet(_cancel_btn_qss(
+            padding="2px 10px", include_disabled=False))
         try:
             self._btn.clicked.disconnect()
         except RuntimeError:
@@ -1979,16 +2009,8 @@ class _DriverCard(QFrame):
         """Restore the Install button after a user-cancelled install."""
         self._btn.setEnabled(True)
         self._btn.setText("Install")
-        self._btn.setStyleSheet(f"""
-            QPushButton {{
-                background:{PALETTE['surface']}; color:{PALETTE['accent']};
-                border:1px solid {PALETTE['accentDim']}; border-radius:3px;
-                font-size:10pt; padding:2px 10px;
-            }}
-            QPushButton:hover {{ background:{PALETTE['surface2']}; }}
-            QPushButton:disabled {{ color:{PALETTE['textDim']}; border-color:{PALETTE['border']};
-                                   background:{PALETTE['bg']}; }}
-        """)
+        self._btn.setStyleSheet(_accent_btn_qss(
+            padding="2px 10px", hover_bg="surface2", disabled_bg=True))
         try:
             self._btn.clicked.disconnect()
         except RuntimeError:
@@ -2023,24 +2045,10 @@ class _DriverStorePanel(QWidget):
         self._fetch_cancel   = threading.Event()
 
         # ── Button stylesheets ─────────────────────────────────────────── #
-        self._ss_check = _pt(f"""
-            QPushButton {{
-                background:{PALETTE['bg']}; color:{PALETTE['info']};
-                border:1px solid {PALETTE['cta']}44; border-radius:3px;
-                font-size:10pt; padding:0 8px;
-            }}
-            QPushButton:hover {{ background:{PALETTE['surface2']}; }}
-            QPushButton:disabled {{ color:{PALETTE['textDim']}; border-color:{PALETTE['border']}; }}
-        """)
-        self._ss_cancel = _pt(f"""
-            QPushButton {{
-                background:{PALETTE['surface']}; color:{PALETTE['danger']};
-                border:1px solid {PALETTE['danger']}22; border-radius:3px;
-                font-size:10pt; padding:0 8px;
-            }}
-            QPushButton:hover {{ background:{PALETTE['surface2']}; }}
-            QPushButton:disabled {{ color:{PALETTE['textDim']}; border-color:{PALETTE['border']}; }}
-        """)
+        self._ss_check = _accent_btn_qss(
+            color="info", border_color="cta", border_alpha="44",
+            bg="bg", hover_bg="surface2")
+        self._ss_cancel = _cancel_btn_qss()
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -2049,11 +2057,11 @@ class _DriverStorePanel(QWidget):
         # Header
         hdr = QWidget()
         hdr.setFixedHeight(36)
-        hdr.setStyleSheet(f"background:{PALETTE['bg']}; border-bottom:1px solid {PALETTE['border']};")
+        hdr.setStyleSheet(_header_bar_qss())
         hl  = QHBoxLayout(hdr)
         hl.setContentsMargins(12, 0, 8, 0)
         t = QLabel("DRIVER STORE")
-        t.setStyleSheet(f"font-size:11pt; letter-spacing:2px; color:{PALETTE['textDim']};")
+        t.setStyleSheet(_section_title_qss())
         self._hdr       = hdr
         self._hdr_title = t
         self._refresh_btn = QPushButton("Check")
@@ -2077,16 +2085,14 @@ class _DriverStorePanel(QWidget):
         self._prog.setFixedHeight(3)
         self._prog.setTextVisible(False)
         self._prog.setVisible(False)
-        self._prog.setStyleSheet(
-            f"QProgressBar {{ background:{PALETTE['bg']}; border:none; margin:0; }}"
-            f"QProgressBar::chunk {{ background:{PALETTE['accent']}; }}")
+        self._prog.setStyleSheet(_progress_bar_qss())
         root.addWidget(self._prog)
 
         # Card scroll
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setStyleSheet(f"QScrollArea{{border:none; background:{PALETTE['bg']};}}")
+        scroll.setStyleSheet(_scroll_area_qss())
         self._card_container = QWidget()
         self._card_layout    = QVBoxLayout(self._card_container)
         self._card_layout.setContentsMargins(8, 8, 8, 8)
@@ -2105,27 +2111,17 @@ class _DriverStorePanel(QWidget):
         dim = P['textDim']
         sur = P['surface']
         su2 = P['surface2']
-        self._hdr.setStyleSheet(f"background:{bg}; border-bottom:1px solid {bdr};")
-        self._hdr_title.setStyleSheet(f"font-size:11pt; letter-spacing:2px; color:{dim};")
-        self._scroll.setStyleSheet(f"QScrollArea{{border:none; background:{bg};}}")
+        self._hdr.setStyleSheet(_header_bar_qss())
+        self._hdr_title.setStyleSheet(_section_title_qss())
+        self._scroll.setStyleSheet(_scroll_area_qss())
         self._status.setStyleSheet(
             f"font-size:10pt; color:{dim}; padding:6px 12px; "
             f"background:{bg}; border-bottom:1px solid {sur};")
-        self._prog.setStyleSheet(
-            f"QProgressBar {{ background:{bg}; border:none; margin:0; }}"
-            f"QProgressBar::chunk {{ background:{PALETTE['accent']}; }}")
-        self._ss_check = _pt(
-            f"QPushButton {{ background:{bg}; color:{PALETTE['cta']};"
-            f" border:1px solid {PALETTE['cta']}44; border-radius:3px;"
-            f" font-size:10pt; padding:0 8px; }}"
-            f"QPushButton:hover {{ background:{su2}; }}"
-            f"QPushButton:disabled {{ color:{dim}; border-color:{bdr}; }}")
-        self._ss_cancel = _pt(
-            f"QPushButton {{ background:{sur}; color:{PALETTE['danger']};"
-            f" border:1px solid {PALETTE['danger']}22; border-radius:3px;"
-            f" font-size:10pt; padding:0 8px; }}"
-            f"QPushButton:hover {{ background:{su2}; }}"
-            f"QPushButton:disabled {{ color:{dim}; border-color:{bdr}; }}")
+        self._prog.setStyleSheet(_progress_bar_qss())
+        self._ss_check = _accent_btn_qss(
+            color="cta", border_color="cta", border_alpha="44",
+            bg="bg", hover_bg="surface2")
+        self._ss_cancel = _cancel_btn_qss()
         if not self._fetching:
             self._refresh_btn.setStyleSheet(self._ss_check)
 
@@ -2358,8 +2354,7 @@ class DeviceManagerDialog(QDialog):
         # ---- Title bar ----
         title_bar = QWidget()
         title_bar.setFixedHeight(44)
-        title_bar.setStyleSheet(
-            f"background:{PALETTE['bg']}; border-bottom:1px solid {PALETTE['border']};")
+        title_bar.setStyleSheet(_header_bar_qss())
         tl = QHBoxLayout(title_bar)
         tl.setContentsMargins(16, 0, 16, 0)
         title_lbl = QLabel("⚙  Device Manager")
@@ -2523,8 +2518,7 @@ class DeviceManagerDialog(QDialog):
             f"QPushButton[objectName=\"primary\"]:hover {{ background:{su2}; }}"
             f"QScrollBar:vertical {{ background:{bg}; width:6px; border-radius:3px; }}"
             f"QScrollBar::handle:vertical {{ background:{su2}; border-radius:3px; }}"))
-        self._title_bar.setStyleSheet(
-            f"background:{bg}; border-bottom:1px solid {bdr};")
+        self._title_bar.setStyleSheet(_header_bar_qss())
         self._title_lbl.setStyleSheet(
             f"font-size:{FONT['sublabel']}pt; font-weight:bold; color:{dim};")
         self._log_btn.setStyleSheet(scaled_qss(

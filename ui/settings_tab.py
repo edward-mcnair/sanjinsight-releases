@@ -822,7 +822,7 @@ class SettingsTab(QWidget):
                 f"background:{_BG2()}; border:1px solid {_BORDER()}; border-radius:6px;")
         if hasattr(self, "_version_name_lbl"):
             self._version_name_lbl.setStyleSheet(
-                scaled_qss(f"font-size:15pt; font-weight:700; color:{_TEXT()};"))
+                scaled_qss(f"font-size:{FONT['heading']}pt; font-weight:700; color:{_TEXT()};"))
 
         # Update status label
         if hasattr(self, "_update_status_lbl"):
@@ -999,7 +999,7 @@ class SettingsTab(QWidget):
 
         col = QVBoxLayout()
         self._version_name_lbl = QLabel(f"{APP_VENDOR}  {APP_NAME}")
-        self._version_name_lbl.setStyleSheet(scaled_qss(f"font-size:15pt; font-weight:700; color:{_TEXT()};"))
+        self._version_name_lbl.setStyleSheet(scaled_qss(f"font-size:{FONT['heading']}pt; font-weight:700; color:{_TEXT()};"))
         col.addWidget(self._version_name_lbl)
 
         ver_lbl = QLabel(f"Version {version_string()}  ·  Built {BUILD_DATE}")
