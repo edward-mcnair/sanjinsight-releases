@@ -584,7 +584,8 @@ class Step2Focus(QWidget):
         self._step_combo.setFixedHeight(26)
         self._step_values = [0.5, 1.0, 2.0, 5.0, 10.0, 25.0, 50.0, 100.0]
         step_row.addWidget(step_lbl)
-        step_row.addWidget(self._step_combo, 1)
+        step_row.addWidget(self._step_combo)
+        step_row.addStretch()
         manl.addLayout(step_row)
 
         # Up / Down buttons

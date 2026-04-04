@@ -119,9 +119,10 @@ class ReportDialog(QDialog):
         self._del_preset_btn = QPushButton("Delete")
         self._del_preset_btn.setFixedHeight(26)
         self._del_preset_btn.setEnabled(False)
-        pl.addWidget(self._preset_combo, 1)
+        pl.addWidget(self._preset_combo)
         pl.addWidget(self._save_preset_btn)
         pl.addWidget(self._del_preset_btn)
+        pl.addStretch()
 
         # Populate with saved presets
         from acquisition.report_presets import list_report_presets

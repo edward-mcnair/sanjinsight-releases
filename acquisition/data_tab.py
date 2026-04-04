@@ -694,7 +694,7 @@ class DataTab(QWidget):
             f"padding:2px 6px; font-size:{FONT['body']}pt; }}")
         self._status_combo.currentTextChanged.connect(self._on_status_changed)
         status_row.addWidget(status_lbl)
-        status_row.addWidget(self._status_combo, 1)
+        status_row.addWidget(self._status_combo)
 
         self._delete_btn   = QPushButton("Delete")
         set_btn_icon(self._delete_btn, "fa5s.trash", PALETTE['danger'])
@@ -1105,9 +1105,10 @@ class DataTab(QWidget):
         del_preset_btn.setFixedHeight(28)
         del_preset_btn.setEnabled(False)
         preset_row.addWidget(preset_lbl)
-        preset_row.addWidget(preset_combo, 1)
+        preset_row.addWidget(preset_combo)
         preset_row.addWidget(save_preset_btn)
         preset_row.addWidget(del_preset_btn)
+        preset_row.addStretch()
         v.addLayout(preset_row)
         v.addSpacing(4)
 

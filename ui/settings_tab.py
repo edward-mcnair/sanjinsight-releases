@@ -572,13 +572,14 @@ class SettingsTab(QWidget):
         self._lab_reload_op_combo()
 
         self._lab_op_combo.currentTextChanged.connect(self._on_lab_op_text_changed)
-        active_row.addWidget(self._lab_op_combo, 1)
+        active_row.addWidget(self._lab_op_combo)
 
         set_btn = QPushButton("Set")
         set_btn.setFixedWidth(64)
         set_btn.setStyleSheet(_BTN_PRIMARY())
         set_btn.clicked.connect(self._on_lab_set_operator)
         active_row.addWidget(set_btn)
+        active_row.addStretch()
         lay.addLayout(active_row)
 
         lay.addWidget(_body(
@@ -1347,7 +1348,8 @@ class SettingsTab(QWidget):
             rec_idx = 0
         self._ai_model_combo.setCurrentIndex(rec_idx)
         self._ai_model_combo.currentIndexChanged.connect(self._on_model_combo_changed)
-        combo_row.addWidget(self._ai_model_combo, 1)
+        combo_row.addWidget(self._ai_model_combo)
+        combo_row.addStretch()
         dl_lay.addLayout(combo_row)
 
         # Model description + recommendation reason
@@ -1703,7 +1705,8 @@ class SettingsTab(QWidget):
             pass
         self._cloud_provider_combo.currentIndexChanged.connect(
             self._on_cloud_provider_changed)
-        provider_row.addWidget(self._cloud_provider_combo, 1)
+        provider_row.addWidget(self._cloud_provider_combo)
+        provider_row.addStretch()
         lay.addLayout(provider_row)
 
         # ── Model selector ────────────────────────────────────────────────
@@ -1718,7 +1721,8 @@ class SettingsTab(QWidget):
         self._cloud_model_ids: list[str] = []
         self._cloud_model_combo.currentIndexChanged.connect(
             self._on_cloud_model_changed)
-        model_row.addWidget(self._cloud_model_combo, 1)
+        model_row.addWidget(self._cloud_model_combo)
+        model_row.addStretch()
         lay.addLayout(model_row)
 
         # Populate model combo from initial provider selection
@@ -1888,7 +1892,7 @@ class SettingsTab(QWidget):
         for m in ["phi3", "phi3:mini", "mistral", "llama3:8b", "gemma2:2b"]:
             self._ollama_pull_combo.addItem(m)
         self._ollama_pull_combo.setCurrentText("phi3")
-        pull_row.addWidget(self._ollama_pull_combo, 1)
+        pull_row.addWidget(self._ollama_pull_combo)
 
         self._ollama_pull_btn = QPushButton("⬇  Pull Model")
         self._ollama_pull_btn.setStyleSheet(_BTN_PRIMARY())
@@ -1933,7 +1937,7 @@ class SettingsTab(QWidget):
         self._ollama_model_combo.setStyleSheet(_COMBO())
         self._ollama_model_combo.setEditable(False)
         self._ollama_model_combo.setPlaceholderText("(refresh to load installed models)")
-        model_row.addWidget(self._ollama_model_combo, 1)
+        model_row.addWidget(self._ollama_model_combo)
 
         self._ollama_refresh_btn = QPushButton("⟳ Check Again")
         self._ollama_refresh_btn.setStyleSheet(_BTN_SECONDARY())

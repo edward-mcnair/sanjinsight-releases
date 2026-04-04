@@ -937,9 +937,9 @@ class _RecipeDiffDialog(QDialog):
         self._cmp_btn.clicked.connect(self._rebuild_diff)
 
         sel_row.addWidget(QLabel("Left:"))
-        sel_row.addWidget(self._combo_left, 1)
+        sel_row.addWidget(self._combo_left)
         sel_row.addWidget(QLabel("Right:"))
-        sel_row.addWidget(self._combo_right, 1)
+        sel_row.addWidget(self._combo_right)
         sel_row.addWidget(self._cmp_btn)
         root.addLayout(sel_row)
 

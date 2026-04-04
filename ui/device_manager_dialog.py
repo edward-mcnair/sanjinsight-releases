@@ -890,7 +890,7 @@ class _DeviceProfilePanel(QWidget):
             port_combo.setInsertPolicy(QComboBox.InsertAtTop)
             port_combo.setMinimumWidth(140)
             port_combo.setMaximumWidth(300)
-            port_row_lay.addWidget(port_combo, 1)
+            port_row_lay.addWidget(port_combo)
 
             refresh_btn = QPushButton()
             set_btn_icon(refresh_btn, IC.REFRESH)

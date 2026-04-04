@@ -459,7 +459,7 @@ class _PortRow(QWidget):
         self.combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.combo.setFixedHeight(34)
         self.combo.setMaximumWidth(300)
-        row.addWidget(self.combo, 1)
+        row.addWidget(self.combo)
 
         refresh = QPushButton("⟳")
         refresh.setFixedSize(34, 34)
@@ -1985,7 +1985,7 @@ class _PageAI(_PageBase):
         for m in ["phi3", "phi3:mini", "mistral", "llama3:8b", "gemma2:2b"]:
             self._pull_combo.addItem(m)
         self._pull_combo.setCurrentText("phi3")
-        pull_row.addWidget(self._pull_combo, 1)
+        pull_row.addWidget(self._pull_combo)
 
         self._pull_btn = QPushButton("⬇  Pull Model")
         self._pull_btn.setStyleSheet(_BTN_PRIMARY)
