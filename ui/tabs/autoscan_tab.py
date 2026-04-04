@@ -80,7 +80,7 @@ class _StatusRow(QWidget):
             self._btn.setFixedHeight(24)       # slightly taller for touch/legibility
             self._btn.setMinimumWidth(80)      # min not fixed — longer labels can grow
             self._btn.setStyleSheet(scaled_qss(
-                "QPushButton { font-size:9pt; padding:0 4px; }"))
+                f"QPushButton {{ font-size:{FONT['small']}pt; padding:0 4px; }}"))
             apply_hand_cursor(self._btn)
             self._btn.clicked.connect(self.action_clicked)
             lay.addWidget(self._btn)

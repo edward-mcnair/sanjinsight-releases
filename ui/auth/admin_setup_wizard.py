@@ -78,7 +78,7 @@ def _strength_color(score: int) -> str:
 
 # ── Shared visual helpers ──────────────────────────────────────────────────────
 
-def _H1_SS():   return f"font-size:22pt; font-weight:700; color:{PALETTE['text']};"
+def _H1_SS():   return f"font-size:{FONT['titleLg']}pt; font-weight:700; color:{PALETTE['text']};"
 def _H2_SS():   return f"font-size:{FONT.get('bodyf', 11)}pt; color:{PALETTE['textDim']}; line-height:1.6;"
 def _BODY_SS(): return f"font-size:{FONT.get('bodyf', 11)}pt; color:{PALETTE['text']};"
 def _LABEL_SS(): return f"font-size:{FONT.get('labelf', 10)}pt; color:{PALETTE['textDim']};"

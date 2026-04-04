@@ -35,6 +35,8 @@ from PyQt5.QtCore import Qt, QTimer
 
 import numpy as np
 
+from ui.theme import FONT
+
 log = logging.getLogger(__name__)
 
 # Window length in seconds (60 minutes)
@@ -124,7 +126,7 @@ class HealthTab(QWidget):
         # ── Header bar ────────────────────────────────────────────────
         hdr = QHBoxLayout()
         title = QLabel("Hardware Health")
-        title.setStyleSheet("font-size: 14pt; font-weight: bold;")
+        title.setStyleSheet(f"font-size: {FONT['subhead']}pt; font-weight: bold;")
         title.setToolTip(
             "Rolling 60-minute trend plots for TEC temperature, FPGA duty cycle,\n"
             "and camera frame rate. Data is read-only — no hardware state is modified."

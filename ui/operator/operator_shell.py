@@ -152,7 +152,7 @@ class _TopBar(QWidget):
         self._logo.setText(
             f"Sanj<span style='color:{P['accent']};'>INSIGHT</span>")
         self._logo.setStyleSheet(
-            f"font-size:14pt; font-weight:800; color:{P['text']}; "
+            f"font-size:{FONT['subhead']}pt; font-weight:800; color:{P['text']}; "
             "background:transparent;")
         acc = P["accent"]
         self._mode_lbl.setStyleSheet(

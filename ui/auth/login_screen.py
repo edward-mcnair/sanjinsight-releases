@@ -185,7 +185,7 @@ class LoginScreen(QWidget):
             f"QFrame {{ background:{P['surface']}; border:1px solid {P['border']}; "
             f"border-radius:12px; }}")
         self._logo.setStyleSheet(
-            f"font-size:22pt; font-weight:800; color:{P['text']}; "
+            f"font-size:{FONT['titleLg']}pt; font-weight:800; color:{P['text']}; "
             "background:transparent; border:none;")
         self._tagline.setStyleSheet(
             f"font-size:{FONT.get('sublabel', 9)}pt; color:{P['textSub']}; "

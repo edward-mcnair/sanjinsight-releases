@@ -300,12 +300,15 @@ _LIGHT_RAW: dict = {
 # screen types including ageing lab monitors.
 
 _FONT_BASE: dict = {
+    "titleLg":   22,   # hero headings, login/wizard h1
     "title":     18,   # sidebar app name / wizard h1          (was 17)
     "heading":   15,   # panel section headings                 (was 14)
+    "subhead":   14,   # sub-section headings, search fields
     "body":      13,   # general text, buttons, inputs
     "label":     12,   # form row labels
     "sublabel":  11,   # secondary / dim sub-labels, section caps
     "caption":   11,   # hints, badges, timestamps              (was 10)
+    "small":     10,   # compact buttons, badges, copy btns, tiny UI
     "readout":   24,   # big status readout values              (was 22)
     "readoutLg": 28,   # large readout (e.g. temperature actual)(was 26)
     "readoutSm": 17,   # compact readout (e.g. exposure/gain)  (was 16)

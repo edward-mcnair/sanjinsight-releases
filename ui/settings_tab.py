@@ -335,7 +335,7 @@ class SettingsTab(QWidget):
         # ── Page title ────────────────────────────────────────────────
         self._pg_title = QLabel("Settings")
         pg_title = self._pg_title
-        pg_title.setStyleSheet(scaled_qss(f"font-size:20pt; font-weight:700; color:{_TEXT()};"))
+        pg_title.setStyleSheet(scaled_qss(f"font-size:{FONT['titleLg']}pt; font-weight:700; color:{_TEXT()};"))
         lay.addWidget(pg_title)
 
         lay.addWidget(_sep())
@@ -814,7 +814,7 @@ class SettingsTab(QWidget):
         # Page title
         if hasattr(self, "_pg_title"):
             self._pg_title.setStyleSheet(
-                scaled_qss(f"font-size:20pt; font-weight:700; color:{_TEXT()};"))
+                scaled_qss(f"font-size:{FONT['titleLg']}pt; font-weight:700; color:{_TEXT()};"))
 
         # Version card
         if hasattr(self, "_version_card"):

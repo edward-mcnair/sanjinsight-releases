@@ -197,7 +197,7 @@ class CameraContextBar(QWidget):
             color = PALETTE['stateConnecting']   # amber = connecting
 
         dot.setStyleSheet(
-            f"color:{color}; font-size:9pt; background:transparent;")
+            f"color:{color}; font-size:{FONT['small']}pt; background:transparent;")
         dot.setVisible(True)
         name.setVisible(True)
         if tooltip:

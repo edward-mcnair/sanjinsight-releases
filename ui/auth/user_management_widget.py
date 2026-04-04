@@ -207,7 +207,7 @@ class _AddUserDialog(QDialog):
         # Title
         title = QLabel("Who is this user?")
         title.setStyleSheet(
-            f"font-size:16pt; font-weight:700; color:{PALETTE['text']}; background:transparent;")
+            f"font-size:{FONT['heading']}pt; font-weight:700; color:{PALETTE['text']}; background:transparent;")
         lay.addWidget(title)
 
         # Profile cards
@@ -420,7 +420,7 @@ class _EditUserDialog(QDialog):
 
         title = QLabel(f"Edit: {user.display_name}")
         title.setStyleSheet(
-            f"font-size:15pt; font-weight:700; color:{PALETTE['text']}; background:transparent;")
+            f"font-size:{FONT['heading']}pt; font-weight:700; color:{PALETTE['text']}; background:transparent;")
         lay.addWidget(title)
 
         input_ss = wizard_input_qss()
@@ -539,7 +539,7 @@ class _ResetPasswordDialog(QDialog):
         title = QLabel(f"Reset password for {user.display_name}")
         title.setWordWrap(True)
         title.setStyleSheet(
-            f"font-size:14pt; font-weight:700; color:{PALETTE['text']}; background:transparent;")
+            f"font-size:{FONT['subhead']}pt; font-weight:700; color:{PALETTE['text']}; background:transparent;")
         lay.addWidget(title)
 
         input_ss = wizard_input_qss()

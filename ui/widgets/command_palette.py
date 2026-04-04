@@ -129,7 +129,7 @@ class CommandPalette(QDialog):
                 border: 1px solid {bdr};
                 border-radius: 6px;
                 color: {txt};
-                font-size: 14pt;
+                font-size: {FONT['subhead']}pt;
                 padding: 4px 12px;
             }}
             QLineEdit:focus {{ border-color: {acc}; }}

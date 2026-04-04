@@ -295,7 +295,7 @@ _BTN_PRIMARY   = btn_wizard_primary_qss()
 _BTN_SECONDARY = btn_wizard_secondary_qss()
 _INPUT_SS      = wizard_input_qss()
 
-_LABEL_H1   = scaled_qss(f"font-size:20pt; font-weight:700; color:{PALETTE['textOnAccent']};")
+_LABEL_H1   = scaled_qss(f"font-size:{FONT['titleLg']}pt; font-weight:700; color:{PALETTE['textOnAccent']};")
 _LABEL_BODY = f"font-size:{FONT['body']}pt; color:{PALETTE['textSub']};"
 _LABEL_HINT = f"font-size:{FONT['caption']}pt; color:{PALETTE['textSub']}; font-style:italic;"
 

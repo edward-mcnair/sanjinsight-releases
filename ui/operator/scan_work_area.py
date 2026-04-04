@@ -217,7 +217,7 @@ class ScanWorkArea(QWidget):
         self._clear_btn.setStyleSheet(
             f"QPushButton {{ background:{P['surface']}; color:{P['textDim']}; "
             f"border:1px solid {P['border']}; border-radius:4px; "
-            "font-size:14pt; }}"
+            f"font-size:{FONT['subhead']}pt; }}"
             f"QPushButton:hover {{ background:{P['border']}; color:{P['text']}; }}")
         self._recipe_note.setStyleSheet(
             f"font-size:{FONT.get('sublabel', 9)}pt; "

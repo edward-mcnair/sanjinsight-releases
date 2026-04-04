@@ -148,7 +148,7 @@ class SupervisorOverrideDialog(QDialog):
         P = PALETTE
         self.setStyleSheet(f"QDialog {{ background:{P['bg']}; }}")
         self._title.setStyleSheet(
-            f"font-size:16pt; font-weight:700; color:{P['text']}; "
+            f"font-size:{FONT['heading']}pt; font-weight:700; color:{P['text']}; "
             "background:transparent;")
         self._subtitle.setStyleSheet(
             f"font-size:{FONT.get('sublabel', 9)}pt; color:{P['textDim']}; "
