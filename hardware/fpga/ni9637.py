@@ -266,44 +266,26 @@ class Ni9637Driver(FpgaDriver):
             log.warning("Could not set initial FPGA timing: %s", e)
 
     def _open_session(self, bitfile_path: str) -> None:
-        """Open the nifpga session, retrying once if the FPGA is busy."""
+        """Open the nifpga session.
+
+        Always opens with ``no_run=True`` to avoid -61202 when the FPGA
+        already has a running VI (e.g. loaded from flash or left over from
+        a previous session).  After attaching, ``reset()`` stops any
+        running VI, re-downloads our bitfile, and ``run()`` starts it.
+        """
         import nifpga
-        try:
-            self._session = nifpga.Session(
-                bitfile  = bitfile_path,
-                resource = self._resource,
-                reset_if_last_session_on_exit=self._reset)
-            if self._reset:
-                self._session.reset()
-            self._session.run()
-            self._open = True
-            log.info("FPGA session opened  resource=%s  bitfile=%s",
-                     self._resource, bitfile_path)
-        except Exception as e1:
-            err1 = str(e1)
-            if "-61202" not in err1 and "FpgaBusyFpgaInterface" not in err1:
-                raise   # not a busy error — propagate immediately
-            # ── FPGA busy: force-close stale session and retry ───────
-            log.warning("FPGA busy (-61202) — closing stale session and "
-                        "retrying...")
-            try:
-                stale = nifpga.Session(
-                    bitfile  = bitfile_path,
-                    resource = self._resource,
-                    no_run=True)
-                stale.close()
-            except Exception:
-                pass   # best-effort cleanup
-            # Retry the open
-            self._session = nifpga.Session(
-                bitfile  = bitfile_path,
-                resource = self._resource,
-                reset_if_last_session_on_exit=self._reset)
-            if self._reset:
-                self._session.reset()
-            self._session.run()
-            self._open = True
-            log.info("FPGA session opened on retry  resource=%s", self._resource)
+        self._session = nifpga.Session(
+            bitfile  = bitfile_path,
+            resource = self._resource,
+            no_run   = True,
+            reset_if_last_session_on_exit=self._reset)
+        # reset() aborts any running VI on the FPGA and re-downloads
+        # our bitfile — this is the sequence project_bonaire used.
+        self._session.reset()
+        self._session.run()
+        self._open = True
+        log.info("FPGA session opened  resource=%s  bitfile=%s",
+                 self._resource, bitfile_path)
 
     def close(self) -> None:
         if self._session:
