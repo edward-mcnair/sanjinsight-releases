@@ -220,6 +220,24 @@ class Ni9637Driver(FpgaDriver):
                 'Example:  resource: "RIO0"  or  "rio://169.254.x.x/RIO0"\n'
                 "Find the correct string in NI MAX under Remote Systems.")
 
+        # ── 5b. Network reachability check for Ethernet targets ─────
+        if "://" in self._resource:
+            import re, subprocess
+            ip_match = re.search(r"//([^/]+)", self._resource)
+            if ip_match:
+                ip = ip_match.group(1)
+                try:
+                    result = subprocess.run(
+                        ["ping", "-n" if os.name == "nt" else "-c",
+                         "1", "-w", "2000" if os.name == "nt" else "2", ip],
+                        capture_output=True, timeout=5)
+                    if result.returncode != 0:
+                        log.warning("sbRIO at %s is not responding to ping", ip)
+                    else:
+                        log.info("sbRIO at %s is reachable", ip)
+                except Exception:
+                    log.warning("Could not ping sbRIO at %s", ip)
+
         # ── 6. Open the session ──────────────────────────────────────
         try:
             self._open_session(bitfile_path)

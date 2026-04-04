@@ -433,7 +433,7 @@ class DeviceManager:
             # macOS camera permission pending), that deadlocks _connect_worker.
             # We use shutdown(wait=False) so the stuck thread is abandoned and
             # _connect_worker can report failure immediately.
-            addr_str = entry.address or "(video-only)"
+            addr_str = entry.address or entry.ip_address or "(video-only)"
             self._log(f"Connecting {desc.display_name} on {addr_str} …")
             log.info("[%s] Connecting %s on %s …",
                      uid, desc.display_name, addr_str)
