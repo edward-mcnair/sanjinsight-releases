@@ -409,6 +409,10 @@ jobs:
             'ArchitecturesInstallIn64BitMode=x64compatible',
             'UninstallDisplayIcon={app}\{#AppExeName}',
             'UninstallDisplayName={#AppName} {#AppVersion}',
+            '; In-place upgrade: close the running app, upgrade, relaunch',
+            'CloseApplications      =force',
+            'CloseApplicationsFilter=SanjINSIGHT.exe',
+            'RestartApplications    =yes',
             '',
             '[Languages]',
             'Name: "english"; MessagesFile: "compiler:Default.isl"',
@@ -544,8 +548,50 @@ jobs:
 
           print(f"[OK] Release notes extracted ({len(notes)} chars)")
 
-      # ── 16. Create GitHub Release (tag pushes only — not manual workflow_dispatch) ──
-      - name: Create GitHub Release
+      # ── 16. Publish to PUBLIC releases repo ─────────────────────────────────
+      # The source repo (edward-mcnair/sanjinsight) is PRIVATE.
+      # The updater checks edward-mcnair/sanjinsight-releases (PUBLIC).
+      # We cross-publish the installer there so users can download without
+      # authenticating and the in-app updater works without a token.
+      #
+      # REQUIRED SECRET: RELEASES_REPO_TOKEN
+      #   A fine-grained PAT scoped to edward-mcnair/sanjinsight-releases
+      #   with Contents: read+write permission.
+      #   Create at: https://github.com/settings/personal-access-tokens/new
+      #   Add at:    https://github.com/edward-mcnair/sanjinsight/settings/secrets/actions
+      - name: Publish release to sanjinsight-releases
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="${{ steps.version.outputs.tag }}"
+          REPO="edward-mcnair/sanjinsight-releases"
+          INSTALLER=$(ls installer_output/*.exe | head -1)
+
+          # Determine if this is a pre-release
+          PRERELEASE_FLAG=""
+          if [[ "$VERSION" == *beta* ]] || [[ "$VERSION" == *rc* ]]; then
+            PRERELEASE_FLAG="--prerelease"
+          fi
+
+          # Delete existing release/tag if re-running (idempotent)
+          gh release delete "$TAG" --repo "$REPO" --yes 2>/dev/null || true
+
+          # Create the release on the PUBLIC repo
+          gh release create "$TAG" \
+            --repo "$REPO" \
+            --title "SanjINSIGHT $TAG" \
+            --notes "${{ steps.release_notes.outputs.notes }}" \
+            $PRERELEASE_FLAG \
+            "$INSTALLER"
+
+          echo "[OK] Release $TAG published to $REPO"
+          echo "     https://github.com/$REPO/releases/tag/$TAG"
+
+      # ── 16b. Also tag the source repo release (for internal tracking) ──────
+      - name: Create source repo release (no assets)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
@@ -554,6 +600,6 @@ jobs:
           body:       ${{ steps.release_notes.outputs.notes }}
           draft:      false
           prerelease: ${{ contains(steps.version.outputs.version, 'beta') || contains(steps.version.outputs.version, 'rc') }}
-          files:      installer_output/*.exe
+          # No files — installer lives on the public repo only
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
