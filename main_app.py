@@ -709,17 +709,10 @@ class MainWindow(QMainWindow):
         self._recipe_store = RecipeStore()
         self._header._profile_btn.set_recipe_store(self._recipe_store)
 
-        # ── Extracted services (Phase 2 decomposition) ─────────────────
-        from ui.services.estop_service import EStopService
-        from ui.services.recipe_service import RecipeApplicationService
-        from ui.services.profile_service import ProfileApplicationService
-
-        self._estop_svc = EStopService(
-            header=self._header, status_bar=self._status,
-            log_tab=self._log_tab, toasts=self._toasts,
-            hw_service=hw_service)
-        self._recipe_svc = RecipeApplicationService()
-        self._profile_svc = ProfileApplicationService()
+        # Services are created later in _build_ui (after _status and _toasts exist).
+        self._recipe_svc = None
+        self._profile_svc = None
+        self._estop_svc = None
         self._header._profile_btn.save_requested.connect(self._save_profile_dialog)
         self._header._profile_btn.profile_selected.connect(self._load_profile)
         self._header._profile_btn.manage_requested.connect(self._navigate_to_profiles)
@@ -949,6 +942,19 @@ class MainWindow(QMainWindow):
         # Set to True by _on_startup_done() (fired ~10 s after first show) so
         # post-startup hotplug reconnections still surface as toasts.
         self._startup_done = False
+
+        # ── Extracted services (Phase 2 decomposition) ─────────────────
+        # Created here (not earlier) because they need _status and _toasts.
+        from ui.services.estop_service import EStopService
+        from ui.services.recipe_service import RecipeApplicationService
+        from ui.services.profile_service import ProfileApplicationService
+
+        self._estop_svc = EStopService(
+            header=self._header, status_bar=self._status,
+            log_tab=self._log_tab, toasts=self._toasts,
+            hw_service=hw_service)
+        self._recipe_svc = RecipeApplicationService()
+        self._profile_svc = ProfileApplicationService()
 
         # ── Command Palette ───────────────────────────────────────────
         self._cmd_palette = CommandPalette(self)
