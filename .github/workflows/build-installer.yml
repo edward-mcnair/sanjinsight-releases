@@ -564,6 +564,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+          RELEASE_NOTES: ${{ steps.release_notes.outputs.notes }}
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           TAG="${{ steps.version.outputs.tag }}"
@@ -576,6 +577,10 @@ jobs:
             PRERELEASE_FLAG="--prerelease"
           fi
 
+          # Write notes to a temp file to preserve markdown (backticks, etc.)
+          NOTES_FILE=$(mktemp)
+          printf '%s\n' "$RELEASE_NOTES" > "$NOTES_FILE"
+
           # Delete existing release/tag if re-running (idempotent)
           gh release delete "$TAG" --repo "$REPO" --yes 2>/dev/null || true
 
@@ -583,10 +588,11 @@ jobs:
           gh release create "$TAG" \
             --repo "$REPO" \
             --title "SanjINSIGHT $TAG" \
-            --notes "${{ steps.release_notes.outputs.notes }}" \
+            --notes-file "$NOTES_FILE" \
             $PRERELEASE_FLAG \
             "$INSTALLER"
 
+          rm -f "$NOTES_FILE"
           echo "[OK] Release $TAG published to $REPO"
           echo "     https://github.com/$REPO/releases/tag/$TAG"
 
@@ -597,6 +603,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_NOTES: ${{ steps.release_notes.outputs.notes }}
         run: |
           TAG="${{ steps.version.outputs.tag }}"
           VERSION="${{ steps.version.outputs.version }}"
@@ -609,9 +616,13 @@ jobs:
           # Delete existing release if re-running (idempotent)
           gh release delete "$TAG" --yes 2>/dev/null || true
 
+          NOTES_FILE=$(mktemp)
+          printf '%s\n' "$RELEASE_NOTES" > "$NOTES_FILE"
+
           gh release create "$TAG" \
             --title "SanjINSIGHT $TAG" \
-            --notes "${{ steps.release_notes.outputs.notes }}" \
+            --notes-file "$NOTES_FILE" \
             $PRERELEASE_FLAG
 
+          rm -f "$NOTES_FILE"
           echo "[OK] Source repo release $TAG created (no assets)"
