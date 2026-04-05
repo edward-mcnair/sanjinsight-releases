@@ -390,8 +390,20 @@ class AutofocusTab(QWidget):
         self.log(f"Starting {cfg['strategy']} autofocus "
                  f"(metric: {cfg['metric']})...")
 
+        def _safe_run():
+            try:
+                af_driver.run()
+            except Exception as exc:
+                log.exception("Autofocus crashed")
+                from hardware.autofocus.base import AfResult, AfState
+                fail = AfResult(
+                    state=AfState.FAILED,
+                    message=f"Autofocus error: {exc}")
+                signals.af_complete.emit(fail)
+
         import threading
-        threading.Thread(target=af_driver.run, daemon=True).start()
+        threading.Thread(target=_safe_run, daemon=True,
+                         name="autofocus").start()
 
     def _abort(self):
         if af_driver:
