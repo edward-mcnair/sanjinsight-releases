@@ -252,8 +252,75 @@ class UpdateDialog(QDialog):
         self._download_btn.setStyleSheet(_btn_amber())
 
     def _on_download(self):
-        QDesktopServices.openUrl(QUrl(self._info.download_url))
+        """Download the installer to a temp directory and launch it."""
+        import sys
+        # Only auto-download on Windows where we have a .exe installer
+        if sys.platform != "win32" or not self._info.download_url.lower().endswith(".exe"):
+            QDesktopServices.openUrl(QUrl(self._info.download_url))
+            self.accept()
+            return
+
+        self._download_btn.setEnabled(False)
+        self._download_btn.setText("Downloading…")
+        self._remind_btn.setEnabled(False)
+
+        import threading
+
+        def _do_download():
+            try:
+                import tempfile
+                import urllib.request
+                url = self._info.download_url
+                fname = url.rsplit("/", 1)[-1] if "/" in url else f"SanjINSIGHT-Setup-{self._info.version}.exe"
+                dest = os.path.join(tempfile.gettempdir(), fname)
+                log.info("Downloading update: %s → %s", url, dest)
+                urllib.request.urlretrieve(url, dest)
+                log.info("Download complete: %s", dest)
+                from PyQt5.QtCore import QMetaObject, Q_ARG
+                QMetaObject.invokeMethod(
+                    self, "_launch_installer",
+                    Qt.QueuedConnection,
+                    Q_ARG(str, dest))
+            except Exception as e:
+                log.error("Download failed: %s", e)
+                from PyQt5.QtCore import QMetaObject, Q_ARG
+                QMetaObject.invokeMethod(
+                    self, "_download_failed",
+                    Qt.QueuedConnection,
+                    Q_ARG(str, str(e)))
+
+        threading.Thread(target=_do_download, daemon=True, name="updater.download").start()
+
+    def _launch_installer(self, path: str):
+        """Launch the downloaded installer and quit the app."""
+        import subprocess
+        log.info("Launching installer: %s", path)
+        try:
+            subprocess.Popen([path], close_fds=True)
+        except Exception as e:
+            log.error("Could not launch installer: %s", e)
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "Update Error",
+                f"Downloaded the installer but could not launch it:\n{e}\n\n"
+                f"You can run it manually from:\n{path}")
+            self._download_btn.setEnabled(True)
+            self._download_btn.setText(f"⬇  Download v{self._info.version}")
+            self._remind_btn.setEnabled(True)
+            return
+        # Quit the app so the installer can overwrite files
         self.accept()
+        QApplication.instance().quit()
+
+    def _download_failed(self, error: str):
+        """Handle download failure — fall back to opening browser."""
+        from PyQt5.QtWidgets import QMessageBox
+        QMessageBox.warning(self, "Download Failed",
+            f"Could not download the update:\n{error}\n\n"
+            "Opening the release page in your browser instead.")
+        QDesktopServices.openUrl(QUrl(self._info.download_url))
+        self._download_btn.setEnabled(True)
+        self._download_btn.setText(f"⬇  Download v{self._info.version}")
+        self._remind_btn.setEnabled(True)
 
 
 # ══════════════════════════════════════════════════════════════════════════════

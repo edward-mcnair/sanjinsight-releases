@@ -145,6 +145,12 @@ SolidCompression    =yes
 WizardStyle         =modern
 WizardSizePercent   =120
 
+; In-place upgrades: close SanjINSIGHT before installing so files can be
+; overwritten.  Users can reinstall without uninstalling first.
+CloseApplications       =force
+CloseApplicationsFilter =SanjINSIGHT.exe
+RestartApplications     =yes
+
 ; Require admin rights (needed to write to Program Files, register in Add/Remove Programs,
 ; and run the VC++ redistributable which writes to protected registry paths)
 PrivilegesRequired  =admin

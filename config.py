@@ -254,25 +254,46 @@ import json
 from pathlib import Path as _Path
 
 def _prefs_path() -> _Path:
-    """Return the preferences file path, falling back safely on network homes.
+    """Return the preferences file path, checking multiple locations.
 
-    Path.home() can raise RuntimeError on Windows machines where the user
-    profile directory is unreachable (network-mapped homes, locked-down
-    enterprise environments, or certain AppData-redirect policies).  A
-    failure here would crash the whole config module before logging exists.
+    On Windows the preferred location is ``~/.microsanj/preferences.json``
+    (``C:\\Users\\<name>\\.microsanj\\preferences.json``).  If ``Path.home()``
+    raises (network homes, enterprise lockdown), we fall back to
+    ``%LOCALAPPDATA%\\Microsanj\\preferences.json``.
+
+    To survive reinstalls, if the primary path doesn't exist but the
+    fallback does (or vice-versa), we use whichever already has a file.
+    This prevents "lost" preferences when the resolution order changes
+    between sessions (e.g., running elevated vs normal).
     """
+    import os as _os
+
+    candidates: list[_Path] = []
+
+    # Primary: user home directory
     try:
-        return _Path.home() / ".microsanj" / "preferences.json"
+        candidates.append(_Path.home() / ".microsanj" / "preferences.json")
     except Exception:
-        # Fall back to %LOCALAPPDATA% or %TEMP% — always available on Windows
-        import os as _os
-        fallback = (
-            _os.environ.get("LOCALAPPDATA")
-            or _os.environ.get("APPDATA")
-            or _os.environ.get("TEMP")
-            or "."
-        )
-        return _Path(fallback) / "Microsanj" / "preferences.json"
+        pass
+
+    # Fallback: %LOCALAPPDATA% (always available on Windows)
+    fallback_base = (
+        _os.environ.get("LOCALAPPDATA")
+        or _os.environ.get("APPDATA")
+        or _os.environ.get("TEMP")
+    )
+    if fallback_base:
+        candidates.append(_Path(fallback_base) / "Microsanj" / "preferences.json")
+
+    # Return the first candidate that already has a file on disk.
+    # This ensures we find prefs saved by a previous session that may
+    # have resolved to a different path (e.g., elevated vs normal).
+    for p in candidates:
+        if p.exists():
+            return p
+
+    # No existing file — return the first candidate (preferred location).
+    return candidates[0] if candidates else _Path(".microsanj") / "preferences.json"
 
 
 _PREFS_PATH = _prefs_path()
