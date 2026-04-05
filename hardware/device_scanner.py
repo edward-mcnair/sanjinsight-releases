@@ -494,17 +494,17 @@ class CameraScanner:
                     'full_name':    '',
                 }
                 try: entry['model']        = d.GetModelName()
-                except Exception: pass
+                except Exception: log.debug("Camera enum: GetModelName failed", exc_info=True)
                 try: entry['serial']       = d.GetSerialNumber()
-                except Exception: pass
+                except Exception: log.debug("Camera enum: GetSerialNumber failed", exc_info=True)
                 try: entry['device_class'] = d.GetDeviceClass()
-                except Exception: pass
+                except Exception: log.debug("Camera enum: GetDeviceClass failed", exc_info=True)
                 try: entry['full_name']    = d.GetFullName()
-                except Exception: pass
+                except Exception: log.debug("Camera enum: GetFullName failed", exc_info=True)
                 try:
                     if 'GigE' in entry['device_class']:
                         entry['ip'] = d.GetIpAddress()
-                except Exception: pass
+                except Exception: log.debug("Camera enum: GetIpAddress failed", exc_info=True)
                 out.append(entry)
             log.debug("CameraScanner._enumerate_inline: found %d camera(s)", len(out))
             return out, None

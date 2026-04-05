@@ -309,6 +309,8 @@ class MeerstetterDriver(TecDriver):
         import time as _time
         try:
             _t0 = _time.perf_counter()
+            # Split into two lock acquisitions to reduce hold time.
+            # First batch: high-priority thermal readings (displayed every poll).
             with self._api_lock:
                 # Parameter 1000: Object Temperature (°C)
                 actual = self._tec.get_parameter(
@@ -319,6 +321,8 @@ class MeerstetterDriver(TecDriver):
                 # Parameter 1020: Actual Output Current (A)
                 current = self._tec.get_parameter(
                     parameter_id=1020, address=self._address, parameter_instance=1)
+            # Second batch: lower-priority status flags.
+            with self._api_lock:
                 # Parameter 1021: Actual Output Voltage (V)
                 voltage = self._tec.get_parameter(
                     parameter_id=1021, address=self._address, parameter_instance=1)

@@ -2128,9 +2128,9 @@ class MainWindow(QMainWindow):
         self._device_mgr_dlg.activateWindow()
 
     def _rescan_hardware(self):
-        """Run a full hardware discovery scan and show results."""
+        """Run a full hardware discovery scan off the GUI thread."""
         from PyQt5.QtWidgets import QProgressDialog
-        from PyQt5.QtCore import Qt as _Qt
+        from PyQt5.QtCore import Qt as _Qt, QThread, pyqtSignal
 
         dlg = QProgressDialog(
             "Scanning for hardware devices…", "Cancel", 0, 100, self)
@@ -2140,20 +2140,37 @@ class MainWindow(QMainWindow):
         dlg.setValue(0)
         dlg.show()
 
-        try:
-            from hardware.discovery_engine import DiscoveryEngine
-            engine = DiscoveryEngine()
-            report = engine.discover(
-                progress_cb=lambda msg, pct: (
-                    dlg.setLabelText(msg),
-                    dlg.setValue(min(pct, 99)),
-                ),
-                use_cache=False,
-            )
+        class _ScanWorker(QThread):
+            progress = pyqtSignal(str, int)
+            finished = pyqtSignal(object)   # DiscoveryReport or Exception
+            def run(self):
+                try:
+                    from hardware.discovery_engine import DiscoveryEngine
+                    engine = DiscoveryEngine()
+                    report = engine.discover(
+                        progress_cb=lambda msg, pct: self.progress.emit(msg, pct),
+                        use_cache=False,
+                    )
+                    self.finished.emit(report)
+                except Exception as exc:
+                    self.finished.emit(exc)
+
+        worker = _ScanWorker(self)
+        worker.progress.connect(
+            lambda msg, pct: (dlg.setLabelText(msg), dlg.setValue(min(pct, 99))),
+            _Qt.QueuedConnection)
+
+        def _on_scan_done(result):
             dlg.setValue(100)
             dlg.close()
-
-            # Build summary message
+            worker.wait(3000)
+            from PyQt5.QtWidgets import QMessageBox
+            if isinstance(result, Exception):
+                QMessageBox.warning(
+                    self, "Hardware Scan Failed",
+                    f"Discovery engine error:\n{result}")
+                return
+            report = result
             if report.resolved:
                 lines = ["Discovered devices:\n"]
                 for dev in report.resolved:
@@ -2166,16 +2183,13 @@ class MainWindow(QMainWindow):
             else:
                 msg = ("No devices found.\n\n"
                        "Ensure devices are powered on and connected via USB.")
-
-            from PyQt5.QtWidgets import QMessageBox
             QMessageBox.information(self, "Hardware Scan Results", msg)
 
-        except Exception as exc:
-            dlg.close()
-            from PyQt5.QtWidgets import QMessageBox
-            QMessageBox.warning(
-                self, "Hardware Scan Failed",
-                f"Discovery engine error:\n{exc}")
+        worker.finished.connect(_on_scan_done, _Qt.QueuedConnection)
+        dlg.canceled.connect(lambda: worker.requestInterruption())
+        # Keep reference so thread isn't GC'd
+        self._scan_worker = worker
+        worker.start()
 
     def _reconnect_device(self, uid: str):
         """Attempt to reconnect a single device from the health panel."""

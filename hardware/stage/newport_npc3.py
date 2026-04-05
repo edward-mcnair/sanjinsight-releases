@@ -124,6 +124,11 @@ class NewportNPC3Driver(StageDriver):
                 except Exception:
                     pass
             self._ser = None
+            if self._lock is not None:
+                try:
+                    self._lock.release()
+                except Exception:
+                    log.debug("Port lock release failed", exc_info=True)
             self._lock = None
             log.info("Newport NPC3 disconnected")
 

@@ -182,8 +182,13 @@ class CameraService(BaseDeviceService):
                             except Exception:
                                 log.debug("Camera: cleanup failed before reconnect",
                                           exc_info=True)
-                            cam.open()
-                            cam.start()
+                            try:
+                                cam.open()
+                                cam.start()
+                            except Exception:
+                                log.warning("Camera: reconnect open/start failed",
+                                            exc_info=True)
+                                raise
                         if not self._reconnect_loop(
                                 "camera", _cam_reconnect, "camera"):
                             return
