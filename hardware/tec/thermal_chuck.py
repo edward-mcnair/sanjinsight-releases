@@ -47,7 +47,7 @@ import logging
 import time
 import threading
 from .base import TecDriver, TecStatus
-from hardware.port_lock import PortLock
+from hardware.port_lock import PortLock, serial_connect, serial_disconnect
 
 log = logging.getLogger(__name__)
 
@@ -137,44 +137,21 @@ class ThermalChuckDriver(TecDriver):
     # ---------------------------------------------------------------- #
 
     def connect(self) -> None:
-        if not self._port:
-            raise RuntimeError(
-                "No serial port configured for thermal chuck.\n\n"
-                "Set the port in Device Manager (e.g. COM5 on Windows, "
-                "/dev/cu.usbmodemXXX on macOS).")
-        try:
-            import serial
-        except ImportError:
-            raise RuntimeError(
-                "pyserial not installed.  Run: pip install pyserial")
-        try:
-            self._port_lock.acquire()
-            self._ser = serial.Serial(
-                self._port, self._baud,
-                timeout=self._timeout,
-                write_timeout=self._timeout)
-            self._connected = True
-            log.info("Thermal chuck connected on %s  (%d baud)",
-                     self._port, self._baud)
-        except Exception as e:
-            self._port_lock.release()
-            raise RuntimeError(
-                f"Thermal chuck connect failed on {self._port}: {e}")
+        self._ser = serial_connect(
+            self._port, self._port_lock,
+            baudrate=self._baud,
+            timeout=self._timeout,
+            write_timeout=self._timeout,
+            device_name="Thermal chuck",
+        )
+        self._connected = True
 
     def disconnect(self) -> None:
-        if self._ser:
-            try:
-                self._ser.close()
-            except Exception:
-                pass
-            self._ser = None
+        serial_disconnect(self._ser, self._port_lock,
+                          device_name="Thermal chuck")
+        self._ser = None
         self._connected = False
         self._enabled   = False
-        try:
-            self._port_lock.release()
-        except Exception:
-            pass
-        log.info("Thermal chuck disconnected from %s", self._port)
 
     # ---------------------------------------------------------------- #
     #  Control                                                          #

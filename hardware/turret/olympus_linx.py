@@ -50,7 +50,7 @@ import logging
 import time
 import threading
 from .base import ObjectiveTurretDriver, ObjectiveSpec, TurretStatus
-from hardware.port_lock import PortLock
+from hardware.port_lock import PortLock, serial_connect, serial_disconnect
 
 log = logging.getLogger(__name__)
 
@@ -101,56 +101,34 @@ class OlympusLinxTurret(ObjectiveTurretDriver):
     # ---------------------------------------------------------------- #
 
     def connect(self) -> None:
+        self._ser = serial_connect(
+            self._port, self._port_lock,
+            baudrate=self._baud,
+            timeout=self._timeout,
+            write_timeout=self._timeout,
+            device_name="Olympus turret (LINX)",
+        )
+        time.sleep(0.2)   # Arduino resets on serial connect
+        self._connected = True
+
+        # Query number of slots and initial position
         try:
-            import serial
-        except ImportError:
-            raise RuntimeError(
-                "pyserial not installed.  Run: pip install pyserial")
-        connected_ok = False
+            resp = self._query(self._cmds["query_slots"])
+            self._n_slots = int(resp.strip())
+        except Exception:
+            pass  # use default (6)
+
         try:
-            self._port_lock.acquire()
-            self._ser = serial.Serial(
-                self._port, self._baud,
-                timeout=self._timeout,
-                write_timeout=self._timeout)
-            time.sleep(0.2)   # Arduino resets on serial connect
-            self._connected = True
-            connected_ok = True
-            log.info("Olympus turret (LINX) connected on %s", self._port)
-
-            # Query number of slots and initial position
-            try:
-                resp = self._query(self._cmds["query_slots"])
-                self._n_slots = int(resp.strip())
-            except Exception:
-                pass  # use default (6)
-
-            try:
-                resp = self._query(self._cmds["query_pos"])
-                self._cur_pos = int(resp.strip())
-            except Exception:
-                self._cur_pos = 0
-
-        except Exception as e:
-            raise RuntimeError(
-                f"Olympus turret connect failed on {self._port}: {e}")
-        finally:
-            if not connected_ok:
-                self._port_lock.release()
+            resp = self._query(self._cmds["query_pos"])
+            self._cur_pos = int(resp.strip())
+        except Exception:
+            self._cur_pos = 0
 
     def disconnect(self) -> None:
-        if self._ser:
-            try:
-                self._ser.close()
-            except Exception:
-                pass
-            self._ser = None
+        serial_disconnect(self._ser, self._port_lock,
+                          device_name="Olympus turret (LINX)")
+        self._ser = None
         self._connected = False
-        try:
-            self._port_lock.release()
-        except Exception:
-            pass
-        log.info("Olympus turret disconnected from %s", self._port)
 
     # ---------------------------------------------------------------- #
     #  Control                                                          #

@@ -53,7 +53,7 @@ import logging
 import time
 import threading
 from .base import StageDriver, StagePosition, StageStatus
-from hardware.port_lock import PortLock
+from hardware.port_lock import PortLock, serial_connect, serial_disconnect
 
 log = logging.getLogger(__name__)
 
@@ -126,54 +126,36 @@ class MpiProberDriver(StageDriver):
     # ---------------------------------------------------------------- #
 
     def connect(self) -> None:
-        if not self._port:
-            raise RuntimeError(
-                "No serial port configured for MPI prober.\n\n"
-                "Set the port in Device Manager (e.g. COM6 on Windows, "
-                "/dev/cu.usbmodemXXX on macOS).")
+        self._ser = serial_connect(
+            self._port, self._port_lock,
+            baudrate=self._baud,
+            timeout=self._timeout,
+            write_timeout=self._timeout,
+            device_name="MPI prober",
+        )
+        self._connected = True
+        # Try to read initial position
+        self._refresh_position()
+        # Try to read wafer map size
         try:
-            import serial
-        except ImportError:
-            raise RuntimeError(
-                "pyserial not installed.  Run: pip install pyserial")
-        try:
-            self._port_lock.acquire()
-            self._ser = serial.Serial(
-                self._port, self._baud,
-                timeout=self._timeout,
-                write_timeout=self._timeout)
-            self._connected = True
-            log.info("MPI prober connected on %s", self._port)
-            # Try to read initial position
-            self._refresh_position()
-            # Try to read wafer map size
-            try:
-                resp = self._query(self._cmds["map_size"])
-                parts = resp.split()
-                if len(parts) >= 2:
-                    self._map_size = (int(parts[0]), int(parts[1]))
-            except Exception:
-                pass   # wafer map is optional
-        except Exception as e:
-            self._port_lock.release()
-            raise RuntimeError(
-                f"MPI prober connect failed on {self._port}: {e}")
+            resp = self._query(self._cmds["map_size"])
+            parts = resp.split()
+            if len(parts) >= 2:
+                self._map_size = (int(parts[0]), int(parts[1]))
+        except Exception:
+            pass   # wafer map is optional
 
     def disconnect(self) -> None:
         if self._ser:
             try:
                 self._send(self._cmds["stop"])
-                self._ser.close()
             except Exception:
                 pass
-            self._ser = None
+        serial_disconnect(self._ser, self._port_lock,
+                          device_name="MPI prober")
+        self._ser = None
         self._connected = False
         self._moving    = False
-        try:
-            self._port_lock.release()
-        except Exception:
-            pass
-        log.info("MPI prober disconnected from %s", self._port)
 
     # ---------------------------------------------------------------- #
     #  Motion                                                           #
