@@ -55,7 +55,12 @@ log = logging.getLogger(__name__)
 #  Tiny helper — numpy array → QPixmap via matplotlib colormap        #
 # ------------------------------------------------------------------ #
 
-_cmap_cache: dict = {}   # name → matplotlib colormap (avoid repeated lookups)
+import functools
+
+@functools.lru_cache(maxsize=32)
+def _get_cmap(name: str):
+    """Thread-safe, bounded colormap cache."""
+    return cm.get_cmap(name)
 
 
 def _array_to_pixmap(arr: np.ndarray,
@@ -75,9 +80,7 @@ def _array_to_pixmap(arr: np.ndarray,
     if v_lo == v_hi:
         v_hi = v_lo + 1e-9
 
-    if cmap not in _cmap_cache:
-        _cmap_cache[cmap] = cm.get_cmap(cmap)
-    colormap = _cmap_cache[cmap]
+    colormap = _get_cmap(cmap)
     normed   = np.clip((arr - v_lo) / (v_hi - v_lo), 0.0, 1.0)
     rgba     = (colormap(normed) * 255).astype(np.uint8)   # H×W×4
     h, w     = rgba.shape[:2]

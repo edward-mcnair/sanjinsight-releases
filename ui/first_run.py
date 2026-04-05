@@ -107,9 +107,8 @@ def _list_serial_ports() -> list[str]:
             for n in range(1, 33):
                 p = f"COM{n}"
                 try:
-                    s = serial.Serial(p)
-                    s.close()
-                    ports.append(p)
+                    with serial.Serial(p) as s:
+                        ports.append(p)
                 except Exception:
                     pass
     else:

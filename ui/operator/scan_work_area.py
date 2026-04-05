@@ -82,9 +82,14 @@ class _LiveCanvas(QWidget):
         except Exception:
             return
 
-        # Percentile stretch to uint8 for display
-        lo = float(np.percentile(data, 1))
-        hi = float(np.percentile(data, 99))
+        # Fast approximate percentile stretch — O(n) vs O(n log n) for
+        # np.percentile.  Subsample for speed on large frames.
+        flat = data.ravel()
+        if flat.size > 50_000:
+            flat = flat[::flat.size // 50_000]
+        flat_sorted = np.partition(flat, (len(flat) // 100, -len(flat) // 100))
+        lo = float(flat_sorted[len(flat) // 100])
+        hi = float(flat_sorted[-len(flat) // 100])
         if hi <= lo:
             hi = lo + 1.0
         scaled = np.clip((data.astype(np.float32) - lo) / (hi - lo), 0, 1)
