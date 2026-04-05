@@ -2674,21 +2674,30 @@ class MainWindow(QMainWindow):
         import threading
 
         include_pre = _cfg.get_pref("updates.include_prerelease", False)
+        log.info("Manual update check: include_prerelease pref=%s", include_pre)
 
         def _check():
-            checker = UpdateChecker(
-                on_update=self._on_update_available,
-                on_no_update=lambda: _post_result("✓ You are up to date", PALETTE['accent']),
-                on_error=lambda e: _post_result(f"Could not check: {e}", PALETTE['danger']),
-                include_prerelease=include_pre,
-            )
-            checker.check_sync()
+            try:
+                checker = UpdateChecker(
+                    on_update=self._on_update_available,
+                    on_no_update=lambda: _post_result(
+                        "✓ You are up to date", PALETTE['accent']),
+                    on_error=lambda e: _post_result(
+                        f"Could not check: {e}", PALETTE['danger']),
+                    include_prerelease=include_pre,
+                )
+                result = checker.check_sync()
+                log.info("Manual update check result: %s", result)
+            except Exception as exc:
+                log.exception("Manual update check crashed")
+                _post_result(f"Check failed: {exc}", PALETTE['danger'])
 
         def _post_result(msg, color):
             from PyQt5.QtCore import QTimer
-            QTimer.singleShot(0, lambda: self._settings_tab.set_check_result(msg, color))
+            QTimer.singleShot(0, lambda: self._settings_tab.set_check_result(
+                msg, color))
 
-        threading.Thread(target=_check, daemon=True).start()
+        threading.Thread(target=_check, daemon=True, name="manual-update-check").start()
 
     def _apply_recipe(self, recipe) -> None:
         """

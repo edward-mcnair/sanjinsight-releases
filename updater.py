@@ -115,6 +115,7 @@ class UpdateChecker:
             # Choose endpoint: /releases/latest (stable only) or
             # /releases?per_page=5 (includes pre-releases).
             url = UPDATE_CHECK_ALL_URL if self._include_pre else UPDATE_CHECK_URL
+            log.info("Update check: include_pre=%s, url=%s", self._include_pre, url)
             req = urllib.request.Request(
                 url,
                 headers={
@@ -123,6 +124,8 @@ class UpdateChecker:
                 })
             with urllib.request.urlopen(req, timeout=10) as resp:
                 raw = json.loads(resp.read().decode("utf-8"))
+            log.info("Update check: got %s release(s)",
+                     len(raw) if isinstance(raw, list) else 1)
 
             # /releases returns a list; /releases/latest returns a single object.
             # Normalise to a single release dict — pick the newest that is
