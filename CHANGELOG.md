@@ -66,6 +66,9 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **MainWindow decomposition** — Extracted EStopService, RecipeApplicationService, ProfileApplicationService into `ui/services/` (~410 lines removed from main_app.py)
+- **Hardware discovery off GUI thread** — `_rescan_hardware()` now runs DiscoveryEngine in a QThread worker
+- **TEC polling lock split** — `get_status()` split into two lock acquisitions (3+3 reads) to reduce contention
 - AI Advisor feedback now routed to status bar + log panel instead of toast notifications
 - `gain_db` available in advisor profile summary for all camera types (not just TR)
 - `ContextBuilder` includes active camera type, driver type, and modality in instrument state JSON
@@ -89,6 +92,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - Profile cleared when modality filter removes it; header pill updates accordingly
 - Duty cycle auto-fix loop and download progress display
 - Startup crash with module-level `hw_service` and deferred device manager wiring
+- **Thread safety** — `config.py` globals and `Session` lazy-load properties guarded with locks; all 17 hardware signal connections use `Qt.QueuedConnection`; `QThread.wait()` calls capped at 3 s
+- **Newport NPC3 port lock leak** — `PortLock.release()` now called on disconnect
+- **Camera reconnect crash** — `cam.open()`/`cam.start()` wrapped in try/except
+- **Device scanner silent failures** — Camera enumeration `except: pass` replaced with `log.debug()` for visibility
 
 ---
 
