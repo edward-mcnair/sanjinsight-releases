@@ -703,6 +703,18 @@ class MainWindow(QMainWindow):
         from acquisition.recipe_tab import RecipeStore
         self._recipe_store = RecipeStore()
         self._header._profile_btn.set_recipe_store(self._recipe_store)
+
+        # ── Extracted services (Phase 2 decomposition) ─────────────────
+        from ui.services.estop_service import EStopService
+        from ui.services.recipe_service import RecipeApplicationService
+        from ui.services.profile_service import ProfileApplicationService
+
+        self._estop_svc = EStopService(
+            header=self._header, status_bar=self._status,
+            log_tab=self._log_tab, toasts=self._toasts,
+            hw_service=hw_service)
+        self._recipe_svc = RecipeApplicationService()
+        self._profile_svc = ProfileApplicationService()
         self._header._profile_btn.save_requested.connect(self._save_profile_dialog)
         self._header._profile_btn.profile_selected.connect(self._load_profile)
         self._header._profile_btn.manage_requested.connect(self._navigate_to_profiles)
@@ -1095,6 +1107,31 @@ class MainWindow(QMainWindow):
             self._nav.select_by_label)
         self._readiness_widget.fix_requested.connect(
             self._on_readiness_fix_requested)
+
+        # ── Wire extracted services (set_targets) ─────────────────────
+        self._recipe_svc.set_targets(
+            hw_service=hw_service, app_state=app_state,
+            profile_mgr=self._profile_mgr, profile_tab=self._profile_tab,
+            analysis_tab=self._analysis_tab, acquire_tab=self._acquire_tab,
+            nav=self._nav, capture_tab=self._capture_tab,
+            safe_call=safe_call)
+        self._profile_svc.set_targets(
+            hw=hw_service, app_state=app_state,
+            header=self._header, toasts=self._toasts,
+            log_tab=self._log_tab, status=self._status,
+            phase_tracker=self._phase_tracker,
+            recipe_store=self._recipe_store,
+            profile_mgr=self._profile_mgr,
+            camera_tab=self._camera_tab, acquire_tab=self._acquire_tab,
+            live_tab=self._live_tab, scan_tab=self._scan_tab,
+            fpga_tab=self._fpga_tab, bias_tab=self._bias_tab,
+            cal_tab=self._cal_tab, af_tab=self._af_tab,
+            analysis_tab=self._analysis_tab,
+            signal_check_section=self._signal_check_section,
+            modality_section=self._modality_section,
+            nav=self._nav, library_tab=self._library_tab,
+            maybe_launch_advisor=self._maybe_launch_advisor,
+            on_auto_expose_done=self._on_auto_expose_done)
 
         # Section "navigate" signals → sidebar navigation
         for w in (self._data_tab, self._focus_stage_tab,
@@ -2716,210 +2753,21 @@ class MainWindow(QMainWindow):
         threading.Thread(target=_check, daemon=True, name="manual-update-check").start()
 
     def _apply_recipe(self, recipe) -> None:
-        """
-        Apply a Recipe to the live hardware and, optionally, start acquisition.
-
-        Called when the user clicks RUN in the Recipes tab.  Applies all recipe
-        parameters that have connected hardware; silently skips anything that isn't.
-        """
-        from acquisition.recipe_tab import Recipe   # local import avoids circular
-
-        log = logging.getLogger(__name__)
-        log.info("Applying recipe: %s", recipe.label)
-
-        # Reflect active recipe name in the Acquire tab
-        safe_call(self._acquire_tab.set_active_recipe_name, recipe.label,
-                  label="acquire_tab.set_active_recipe_name", level=logging.DEBUG)
-
-        # ── Camera settings ───────────────────────────────────────
-        try:
-            hw_service.cam_set_exposure(recipe.camera.exposure_us)
-            hw_service.cam_set_gain(recipe.camera.gain_db)
-        except Exception as e:
-            log.warning("Recipe: failed to set camera params: %s", e)
-
-        # ── Modality ──────────────────────────────────────────────
-        app_state.active_modality = recipe.acquisition.modality
-
-        # ── Material profile ──────────────────────────────────────
-        if recipe.profile_name:
-            try:
-                profile = self._profile_mgr.find_by_name(recipe.profile_name)
-                if profile:
-                    app_state.active_profile = profile
-                    self._profile_tab.select_profile(profile)
-            except Exception as e:
-                log.warning("Recipe: could not activate profile '%s': %s",
-                            recipe.profile_name, e)
-
-        # ── TEC setpoint ──────────────────────────────────────────
-        if recipe.tec.enabled:
-            for idx in range(len(app_state.tecs)):
-                try:
-                    hw_service.tec_set_target(idx, recipe.tec.setpoint_c)
-                except Exception as e:
-                    log.warning("Recipe: TEC setpoint failed: %s", e)
-
-        # ── Analysis config ───────────────────────────────────────
-        try:
-            from acquisition.analysis import AnalysisConfig
-            cfg = AnalysisConfig(
-                threshold_k          = recipe.analysis.threshold_k,
-                fail_hotspot_count   = recipe.analysis.fail_hotspot_count,
-                fail_peak_k          = recipe.analysis.fail_peak_k,
-                fail_area_fraction   = recipe.analysis.fail_area_fraction,
-                warn_hotspot_count   = recipe.analysis.warn_hotspot_count,
-                warn_peak_k          = recipe.analysis.warn_peak_k,
-                warn_area_fraction   = recipe.analysis.warn_area_fraction,
-            )
-            self._analysis_tab.set_config(cfg)
-        except Exception as e:
-            log.warning("Recipe: analysis config not applied: %s", e)
-
-        # ── Switch to Capture tab and start ───────────────────────
-        self._nav.navigate_to(self._capture_tab)
-        # Trigger acquisition using recipe frame count and delay
-        try:
-            self._acquire_tab.start_acquisition(
-                n_frames            = recipe.camera.n_frames,
-                inter_phase_delay_s = recipe.acquisition.inter_phase_delay_s,
-            )
-        except Exception as e:
-            log.warning("Recipe: could not auto-start acquisition: %s", e)
+        self._recipe_svc.apply(recipe)
 
     # ── Profile save / load ────────────────────────────────────────────
 
     def _navigate_to_profiles(self):
-        """Navigate to the Library tab and switch to the Scan Profiles sub-tab."""
-        self._nav.navigate_to(self._library_tab)
-        self._library_tab._tabs.setCurrentIndex(1)  # Scan Profiles
+        self._profile_svc.navigate_to_profiles()
 
     def _save_profile_dialog(self):
-        """Show a dialog to name and save the current settings as a profile."""
-        from PyQt5.QtWidgets import QInputDialog
-        from acquisition.recipe_tab import Recipe
-
-        label, ok = QInputDialog.getText(
-            self, "Save Profile",
-            "Profile name:",
-            text=f"Profile {time.strftime('%Y-%m-%d %H:%M')}")
-        if not ok or not label.strip():
-            return
-
-        label = label.strip()
-        recipe = Recipe.from_current_state(app_state, label=label)
-
-        # Also capture TEC and bias state
-        if app_state.tecs:
-            try:
-                tec = app_state.tecs[0]
-                st = tec.get_status()
-                recipe.tec.enabled = True
-                recipe.tec.setpoint_c = st.target_temp
-            except Exception:
-                pass
-        if app_state.bias is not None:
-            try:
-                st = app_state.bias.get_status()
-                recipe.bias.enabled = True
-                recipe.bias.voltage_v = st.actual_voltage
-                recipe.bias.current_a = st.actual_current
-            except Exception:
-                pass
-
-        # Capture FPGA settings
-        if app_state.fpga is not None:
-            try:
-                st = app_state.fpga.get_status()
-                recipe.acquisition.modality = getattr(
-                    app_state, "active_modality", "thermoreflectance")
-            except Exception:
-                pass
-
-        self._recipe_store.save(recipe)
-        self._header._profile_btn.set_active_recipe(label)
-        self._toasts.show_success(f"Profile saved: {label}")
-        log.info("Profile saved: %s", label)
+        self._profile_svc.save_dialog(self)
 
     def _open_profile_dialog(self):
-        """Show a dialog listing saved profiles for the user to open."""
-        from PyQt5.QtWidgets import QInputDialog
-
-        recipes = self._recipe_store.list()
-        if not recipes:
-            self._toasts.show_warning("No saved profiles found.")
-            return
-
-        labels = [r.label for r in recipes]
-        chosen, ok = QInputDialog.getItem(
-            self, "Open Profile", "Select a profile:", labels, 0, False)
-        if not ok:
-            return
-
-        recipe = self._recipe_store.load(chosen)
-        if recipe:
-            self._load_profile(recipe)
+        self._profile_svc.open_dialog(self)
 
     def _load_profile(self, recipe):
-        """Apply a saved profile (recipe) to the current hardware state.
-
-        Unlike _apply_recipe, this does NOT start an acquisition — it only
-        configures the hardware parameters so the user can review before running.
-        """
-        from acquisition.recipe_tab import Recipe
-        log.info("Loading profile: %s", recipe.label)
-
-        # Camera
-        try:
-            hw_service.cam_set_exposure(recipe.camera.exposure_us)
-            hw_service.cam_set_gain(recipe.camera.gain_db)
-            self._camera_tab.set_exposure(recipe.camera.exposure_us)
-            self._camera_tab.set_gain(recipe.camera.gain_db)
-        except Exception as e:
-            log.debug("Profile load — camera: %s", e)
-
-        # Modality
-        app_state.active_modality = recipe.acquisition.modality
-
-        # Material profile
-        if recipe.profile_name:
-            try:
-                _find = getattr(self._profile_mgr, 'find_by_name',
-                                self._profile_mgr.find)
-                profile = _find(recipe.profile_name)
-                if profile:
-                    self._on_profile_applied(profile)
-            except Exception as e:
-                log.debug("Profile load — material profile: %s", e)
-
-        # TEC
-        if recipe.tec.enabled:
-            for idx in range(len(app_state.tecs)):
-                try:
-                    hw_service.tec_set_target(idx, recipe.tec.setpoint_c)
-                except Exception:
-                    pass
-
-        # Analysis
-        try:
-            from acquisition.analysis import AnalysisConfig
-            cfg = AnalysisConfig(
-                threshold_k        = recipe.analysis.threshold_k,
-                fail_hotspot_count = recipe.analysis.fail_hotspot_count,
-                fail_peak_k        = recipe.analysis.fail_peak_k,
-                fail_area_fraction = recipe.analysis.fail_area_fraction,
-                warn_hotspot_count = recipe.analysis.warn_hotspot_count,
-                warn_peak_k        = recipe.analysis.warn_peak_k,
-                warn_area_fraction = recipe.analysis.warn_area_fraction,
-            )
-            self._analysis_tab.set_config(cfg)
-        except Exception as e:
-            log.debug("Profile load — analysis: %s", e)
-
-        # Track active recipe in header button
-        self._header._profile_btn.set_active_recipe(recipe.label)
-        self._toasts.show_success(
-            f"Profile loaded: {recipe.label}")
+        self._profile_svc.load_profile(recipe)
 
     def _on_autoscan_scan_requested(self, cfg: dict) -> None:
         """Route an AutoScan scan/preview config to the appropriate engine."""
@@ -2953,247 +2801,7 @@ class MainWindow(QMainWindow):
         self._nav.select_by_label("Analysis")
 
     def _on_profile_applied(self, profile):
-        """
-        A material profile has been selected and applied.
-        Propagate all recommended settings to the relevant subsystems.
-        """
-        app_state.active_profile = profile
-        # Reset the auto-launch guard so _on_ai_status can fire for this profile
-        self._advisor_launched_for = None
-
-        # 1. Update header indicator
-        self._header.set_profile(profile)
-
-        # 1b. Sync the modality section's profile picker (no re-emit)
-        try:
-            self._modality_section._profile_picker.set_profile(profile)
-        except Exception as _e:
-            log.debug("Profile apply — modality picker sync: %s", _e)
-
-        # 2. Push camera settings
-        try:
-            hw_service.cam_set_exposure(profile.exposure_us)
-            hw_service.cam_set_gain(profile.gain_db)
-            self._camera_tab.set_exposure(profile.exposure_us)
-            self._camera_tab.set_gain(profile.gain_db)
-        except Exception as _e:
-            log.warning("Profile apply — camera settings: %s", _e)
-
-        # 3. Push acquisition frame count to acquire tab
-        try:
-            self._acquire_tab.set_n_frames(profile.n_frames)
-        except Exception as _e:
-            log.debug("Profile apply — acquire n_frames: %s", _e)
-
-        # 4. Push live tab accumulation depth + frames per half
-        try:
-            self._live_tab._frames_per_half.setValue(
-                max(2, profile.n_frames // 4))
-            self._live_tab._accum.setValue(profile.accumulation)
-        except Exception as _e:
-            log.debug("Profile apply — live tab settings: %s", _e)
-
-        # 5. Push scan frames per tile
-        try:
-            self._scan_tab._n_frames.setValue(profile.n_frames)
-        except Exception as _e:
-            log.debug("Profile apply — scan n_frames: %s", _e)
-
-        # 6. Push stimulus settings to FPGA tab
-        try:
-            freq = getattr(profile, "stimulus_freq_hz", 0)
-            duty = getattr(profile, "stimulus_duty", 0)
-            if freq > 0:
-                hw_service.fpga_set_frequency(freq)
-                self._fpga_tab._freq_spin.setValue(freq)
-            if duty > 0:
-                hw_service.fpga_set_duty_cycle(duty)
-                self._fpga_tab._duty_spin.setValue(duty * 100)
-        except Exception as _e:
-            log.debug("Profile apply — stimulus settings: %s", _e)
-
-        # 7. Push TEC setpoint
-        try:
-            if getattr(profile, "tec_enabled", False):
-                sp = getattr(profile, "tec_setpoint_c", 25.0)
-                hw_service.tec_set_target(0, sp)
-        except Exception as _e:
-            log.debug("Profile apply — TEC settings: %s", _e)
-
-        # 8. Push bias source settings
-        try:
-            if getattr(profile, "bias_enabled", False):
-                self._bias_tab._level_spin.setValue(
-                    getattr(profile, "bias_voltage_v", 0))
-                comp_ma = getattr(profile, "bias_compliance_ma", 100)
-                self._bias_tab._comp_spin.setValue(comp_ma / 1000.0)
-        except Exception as _e:
-            log.debug("Profile apply — bias settings: %s", _e)
-
-        # 9. Push calibration temperature sequence + quality settings
-        try:
-            cal_temps = getattr(profile, "cal_temps", "")
-            settle = getattr(profile, "cal_settle_s", 60.0)
-            if cal_temps:
-                self._cal_tab.set_temp_sequence(cal_temps)
-            if settle > 0:
-                self._cal_tab._settle.setValue(settle)
-            cal_n_avg = getattr(profile, "cal_n_avg", 0)
-            if cal_n_avg > 0:
-                self._cal_tab._n_avg.setValue(cal_n_avg)
-            cal_tol = getattr(profile, "cal_stability_tol_c", 0)
-            if cal_tol > 0:
-                self._cal_tab._stable_tol.setValue(cal_tol)
-            cal_dur = getattr(profile, "cal_stability_dur_s", 0)
-            if cal_dur > 0:
-                self._cal_tab._stable_dur.setValue(cal_dur)
-            cal_r2 = getattr(profile, "cal_min_r2", 0)
-            if cal_r2 > 0:
-                self._cal_tab._min_r2.setValue(cal_r2)
-        except Exception as _e:
-            log.debug("Profile apply — calibration settings: %s", _e)
-
-        # 10. Push signal check SNR threshold + ROI strategy
-        try:
-            snr_thr = getattr(profile, "snr_threshold_db", 20.0)
-            self._signal_check_section.set_snr_threshold(snr_thr)
-            roi = getattr(profile, "roi_strategy", "")
-            if roi:
-                self._signal_check_section.set_roi_strategy(roi)
-        except Exception as _e:
-            log.debug("Profile apply — signal check settings: %s", _e)
-
-        # 11. Push grid scan defaults
-        try:
-            step = getattr(profile, "grid_step_um", 0)
-            if step > 0:
-                self._scan_tab.set_grid_from_profile(step,
-                    getattr(profile, "grid_overlap_pct", 10.0))
-        except Exception as _e:
-            log.debug("Profile apply — grid scan settings: %s", _e)
-
-        # 12. Push autofocus defaults
-        try:
-            af_strat = getattr(profile, "af_strategy", "")
-            if af_strat:
-                idx = self._af_tab._strategy.findText(
-                    af_strat, Qt.MatchFixedString)
-                if idx >= 0:
-                    self._af_tab._strategy.setCurrentIndex(idx)
-            af_metric = getattr(profile, "af_metric", "")
-            if af_metric:
-                idx = self._af_tab._metric.findText(
-                    af_metric, Qt.MatchFixedString)
-                if idx >= 0:
-                    self._af_tab._metric.setCurrentIndex(idx)
-            af_z = getattr(profile, "af_z_range_um", 0)
-            if af_z > 0:
-                self._af_tab._z_start.setValue(-af_z / 2)
-                self._af_tab._z_end.setValue(af_z / 2)
-            af_c = getattr(profile, "af_coarse_um", 0)
-            if af_c > 0:
-                self._af_tab._coarse.setValue(af_c)
-            af_f = getattr(profile, "af_fine_um", 0)
-            if af_f > 0:
-                self._af_tab._fine.setValue(af_f)
-            af_n = getattr(profile, "af_n_avg", 0)
-            if af_n > 0:
-                self._af_tab._n_avg.setValue(af_n)
-        except Exception as _e:
-            log.debug("Profile apply — autofocus settings: %s", _e)
-
-        # 13. Push FPGA trigger mode
-        try:
-            trig = getattr(profile, "trigger_mode", "continuous")
-            if trig == "single_shot":
-                self._fpga_tab._trig_single_rb.setChecked(True)
-            else:
-                self._fpga_tab._trig_cont_rb.setChecked(True)
-        except Exception as _e:
-            log.debug("Profile apply — trigger mode: %s", _e)
-
-        # 14. Push BILT pulse settings (only if BILT tab has pulse widgets)
-        try:
-            if getattr(profile, "bias_enabled", False) and \
-               hasattr(self._bias_tab, "_g_bias_sp"):
-                self._bias_tab._g_bias_sp.setValue(
-                    getattr(profile, "bilt_gate_bias_v", -5.0))
-                self._bias_tab._g_pulse_sp.setValue(
-                    getattr(profile, "bilt_gate_pulse_v", -2.2))
-                self._bias_tab._g_width_sp.setValue(
-                    getattr(profile, "bilt_gate_width_us", 110.0))
-                self._bias_tab._g_delay_sp.setValue(
-                    getattr(profile, "bilt_gate_delay_us", 5.0))
-                self._bias_tab._d_bias_sp.setValue(
-                    getattr(profile, "bilt_drain_bias_v", 0.0))
-                self._bias_tab._d_pulse_sp.setValue(
-                    getattr(profile, "bilt_drain_pulse_v", 1.0))
-                self._bias_tab._d_width_sp.setValue(
-                    getattr(profile, "bilt_drain_width_us", 100.0))
-                self._bias_tab._d_delay_sp.setValue(
-                    getattr(profile, "bilt_drain_delay_us", 10.0))
-        except Exception as _e:
-            log.debug("Profile apply — BILT pulse settings: %s", _e)
-
-        # 15. Push analysis thresholds
-        try:
-            at = getattr(profile, "analysis_threshold_k", 0)
-            if at > 0:
-                self._analysis_tab.set_thresholds_from_profile(
-                    threshold_k=at,
-                    fail_hotspot_n=getattr(profile, "analysis_fail_hotspot_n", 0),
-                    fail_peak_k=getattr(profile, "analysis_fail_peak_k", 0),
-                    warn_hotspot_n=getattr(profile, "analysis_warn_hotspot_n", 0),
-                    warn_peak_k=getattr(profile, "analysis_warn_peak_k", 0))
-        except Exception as _e:
-            log.debug("Profile apply — analysis thresholds: %s", _e)
-
-        # 16. Mark phase tracker checks (for guided walkthrough)
-        try:
-            tracker = self._phase_tracker
-            tracker.mark(1, "camera_selected", True)
-            tracker.mark(1, "profile_selected", True)
-            tracker.mark(1, "stimulus_configured", True)
-            if getattr(profile, "tec_enabled", False):
-                tracker.mark(1, "temperature_set", True)
-        except Exception as _e:
-            log.debug("Profile apply — phase tracker: %s", _e)
-
-        # 17. Log
-        self._log_tab.append(
-            f"Profile applied: {profile.name}  ·  "
-            f"C_T = {profile.ct_value:.3e} K⁻¹  ·  "
-            f"exposure = {profile.exposure_us:.0f} µs  ·  "
-            f"gain = {profile.gain_db:.1f} dB  ·  "
-            f"frames = {profile.n_frames}  ·  "
-            f"EMA = {profile.accumulation}")
-
-        # 18. Status bar
-        self._status.showMessage(
-            f"Profile active: {profile.name}   "
-            f"C_T = {profile.ct_value:.3e} K⁻¹",
-            8000)
-
-        # 19. Proactive AI Advisor
-        self._maybe_launch_advisor(profile)
-
-        # 20. Auto-exposure (runs on background thread, updates UI on complete)
-        if getattr(profile, "auto_exposure", False) and app_state.cam is not None:
-            target = getattr(profile, "exposure_target_pct", 70.0)
-            roi = getattr(profile, "roi_strategy", "center50")
-
-            import threading
-
-            def _run_ae():
-                from hardware.cameras.auto_exposure import auto_expose
-                result = auto_expose(
-                    hw_service, target_pct=target, roi=roi, max_iters=6)
-                from PyQt5.QtCore import QTimer
-                QTimer.singleShot(0, lambda: self._on_auto_expose_done(result))
-
-            threading.Thread(target=_run_ae, daemon=True,
-                             name="auto-exposure").start()
-            self._toasts.show_info("Auto-exposure running…")
+        self._profile_svc.apply(profile)
 
     def _on_auto_expose_done(self, result) -> None:
         """Handle auto-exposure completion (called on GUI thread)."""
@@ -3612,33 +3220,13 @@ class MainWindow(QMainWindow):
     # ── Emergency Stop ────────────────────────────────────────────────
 
     def _trigger_estop(self):
-        """User pressed E-Stop — latch the UI then fire the stop sequence."""
-        self._header.set_estop_triggered()
-        self._status.showMessage("⚠  EMERGENCY STOP — stopping all hardware outputs…", 0)
-        self._log_tab.append("⊗ EMERGENCY STOP triggered by user")
-        hw_service.emergency_stop()
+        self._estop_svc.trigger()
 
     def _on_estop_complete(self, summary: str):
-        """Called on UI thread when all outputs are confirmed stopped."""
-        self._log_tab.append(f"⊗ E-STOP complete — {summary}")
-        self._status.showMessage(f"⚠  STOPPED — {summary}", 0)
-        self._toasts._show(
-            title="Emergency Stop — Hardware Outputs Disabled",
-            message=summary,
-            level="error",
-            guidance=[
-                "Bias output, all TECs, and stage motion have been stopped",
-                "Acquisition has been aborted",
-                "Inspect the instrument before proceeding",
-                "Click '⚠ STOPPED — Click to Clear' in the header when safe to re-arm",
-            ],
-            auto_dismiss_ms=0)
+        self._estop_svc.on_complete(summary)
 
     def _clear_estop(self):
-        """User clicked the latched STOPPED button to re-arm."""
-        self._header.set_estop_armed()
-        self._status.showMessage("Emergency stop cleared — hardware ready", 4000)
-        self._log_tab.append("✓ Emergency stop cleared — outputs can be re-enabled")
+        self._estop_svc.clear()
 
     # ── Demo mode activation ───────────────────────────────────────────
 
