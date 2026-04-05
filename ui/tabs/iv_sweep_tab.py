@@ -364,7 +364,8 @@ class IVSweepTab(QWidget):
         # Always quit+wait before nulling — prevents QThread leak/crash
         if self._thread is not None:
             self._thread.quit()
-            self._thread.wait()
+            if not self._thread.wait(3000):
+                log.warning("IV sweep thread did not exit within 3 s")
         self._worker = None
         self._thread = None
 

@@ -27,6 +27,7 @@ Usage:
 from __future__ import annotations
 import logging
 import os, json, time
+import threading
 import numpy as np
 from dataclasses import dataclass, field, asdict
 from typing import List, Optional
@@ -139,47 +140,60 @@ class SessionMeta:
 
 @dataclass
 class Session:
-    """Full session — metadata + lazily-loaded numpy arrays."""
+    """Full session — metadata + lazily-loaded numpy arrays.
+
+    Thread safety: all mutable state is guarded by ``_lock``.  Concurrent
+    reads (e.g. autosave thread + analysis thread) are serialised to avoid
+    TOCTOU races on the lazy-loaded numpy arrays and the JSON save path.
+    """
     meta:             SessionMeta          = field(default_factory=SessionMeta)
     _cold_avg:        Optional[np.ndarray] = field(default=None, repr=False)
     _hot_avg:         Optional[np.ndarray] = field(default=None, repr=False)
     _delta_r_over_r:  Optional[np.ndarray] = field(default=None, repr=False)
     _difference:      Optional[np.ndarray] = field(default=None, repr=False)
 
+    def __post_init__(self):
+        self._lock = threading.RLock()
+
     @property
     def cold_avg(self) -> Optional[np.ndarray]:
-        if self._cold_avg is None:
-            self._cold_avg = self._load("cold_avg.npy")
-        return self._cold_avg
+        with self._lock:
+            if self._cold_avg is None:
+                self._cold_avg = self._load("cold_avg.npy")
+            return self._cold_avg
 
     @property
     def hot_avg(self) -> Optional[np.ndarray]:
-        if self._hot_avg is None:
-            self._hot_avg = self._load("hot_avg.npy")
-        return self._hot_avg
+        with self._lock:
+            if self._hot_avg is None:
+                self._hot_avg = self._load("hot_avg.npy")
+            return self._hot_avg
 
     @property
     def delta_r_over_r(self) -> Optional[np.ndarray]:
-        if self._delta_r_over_r is None:
-            self._delta_r_over_r = self._load("delta_r_over_r.npy")
-        return self._delta_r_over_r
+        with self._lock:
+            if self._delta_r_over_r is None:
+                self._delta_r_over_r = self._load("delta_r_over_r.npy")
+            return self._delta_r_over_r
 
     @property
     def difference(self) -> Optional[np.ndarray]:
-        if self._difference is None:
-            self._difference = self._load("difference.npy")
-        return self._difference
+        with self._lock:
+            if self._difference is None:
+                self._difference = self._load("difference.npy")
+            return self._difference
 
     def _load(self, filename: str) -> Optional[np.ndarray]:
         p = os.path.join(self.meta.path, filename)
         return np.load(p, mmap_mode="r") if os.path.exists(p) else None
 
     def unload(self):
-        for attr in ("_cold_avg", "_hot_avg", "_delta_r_over_r", "_difference"):
-            arr = getattr(self, attr, None)
-            if isinstance(arr, np.memmap):
-                del arr
-            setattr(self, attr, None)
+        with self._lock:
+            for attr in ("_cold_avg", "_hot_avg", "_delta_r_over_r", "_difference"):
+                arr = getattr(self, attr, None)
+                if isinstance(arr, np.memmap):
+                    del arr
+                setattr(self, attr, None)
 
     @staticmethod
     def from_result(result, label: str = "",
@@ -259,26 +273,27 @@ class Session:
         )
 
     def save(self, sessions_root: str) -> str:
-        folder = os.path.join(sessions_root, self.meta.uid)
-        os.makedirs(folder, exist_ok=True)
-        self.meta.path = folder
+        with self._lock:
+            folder = os.path.join(sessions_root, self.meta.uid)
+            os.makedirs(folder, exist_ok=True)
+            self.meta.path = folder
 
-        for name, arr in [
-            ("cold_avg",       self._cold_avg),
-            ("hot_avg",        self._hot_avg),
-            ("delta_r_over_r", self._delta_r_over_r),
-            ("difference",     self._difference),
-        ]:
-            if arr is not None:
-                np.save(os.path.join(folder, f"{name}.npy"), arr)
+            for name, arr in [
+                ("cold_avg",       self._cold_avg),
+                ("hot_avg",        self._hot_avg),
+                ("delta_r_over_r", self._delta_r_over_r),
+                ("difference",     self._difference),
+            ]:
+                if arr is not None:
+                    np.save(os.path.join(folder, f"{name}.npy"), arr)
 
-        if self._delta_r_over_r is not None:
-            self._save_thumbnail(folder)
+            if self._delta_r_over_r is not None:
+                self._save_thumbnail(folder)
 
-        with open(os.path.join(folder, "session.json"), "w") as f:
-            json.dump(self.meta.to_dict(), f, indent=2)
+            with open(os.path.join(folder, "session.json"), "w") as f:
+                json.dump(self.meta.to_dict(), f, indent=2)
 
-        return folder
+            return folder
 
     def _save_thumbnail(self, folder: str):
         try:
@@ -324,24 +339,25 @@ class Session:
 
     def save_analysis(self, result) -> None:
         """Persist an AnalysisResult alongside the session on disk."""
-        folder = self.meta.path
-        if not folder or not os.path.isdir(folder):
-            log.warning("Cannot save analysis — session has no path on disk")
-            return
+        with self._lock:
+            folder = self.meta.path
+            if not folder or not os.path.isdir(folder):
+                log.warning("Cannot save analysis — session has no path on disk")
+                return
 
-        # Save overlay and mask as .npy
-        if result.overlay_rgb is not None:
-            np.save(os.path.join(folder, "analysis_overlay.npy"),
-                    result.overlay_rgb)
-        if result.binary_mask is not None:
-            np.save(os.path.join(folder, "analysis_mask.npy"),
-                    result.binary_mask)
+            # Save overlay and mask as .npy
+            if result.overlay_rgb is not None:
+                np.save(os.path.join(folder, "analysis_overlay.npy"),
+                        result.overlay_rgb)
+            if result.binary_mask is not None:
+                np.save(os.path.join(folder, "analysis_mask.npy"),
+                        result.binary_mask)
 
-        # Attach serialised dict to meta and re-write session.json
-        self.meta.analysis_result = result.to_dict()
-        json_path = os.path.join(folder, "session.json")
-        with open(json_path, "w") as f:
-            json.dump(self.meta.to_dict(), f, indent=2)
+            # Attach serialised dict to meta and re-write session.json
+            self.meta.analysis_result = result.to_dict()
+            json_path = os.path.join(folder, "session.json")
+            with open(json_path, "w") as f:
+                json.dump(self.meta.to_dict(), f, indent=2)
 
     def load_analysis(self):
         """Reconstruct an AnalysisResult from disk, or return None."""

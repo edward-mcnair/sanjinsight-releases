@@ -832,7 +832,8 @@ class WavelengthTab(QWidget):
         # prevents a race if the connection fires before the thread fully exits.
         if self._sweep_thread is not None:
             self._sweep_thread.quit()
-            self._sweep_thread.wait()
+            if not self._sweep_thread.wait(3000):
+                log.warning("Wavelength sweep thread did not exit within 3 s")
             self._sweep_thread.deleteLater()
             self._sweep_thread = None
         if self._sweep_worker is not None:

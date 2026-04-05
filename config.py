@@ -20,6 +20,7 @@ import yaml
 import logging
 import logging.handlers
 import os
+import threading
 from pathlib import Path
 
 
@@ -177,9 +178,12 @@ def setup_logging(cfg: dict):
     )
 
 
-# Load once at import time so all modules share the same instance
+# Load once at import time so all modules share the same instance.
+# All access to _config and _prefs is guarded by their respective locks
+# so background hardware threads can read while the UI thread writes.
 _config = load_config()
 _path   = str(CONFIG_PATH)   # exposed so first_run wizard knows where to write
+_config_lock = threading.Lock()
 setup_logging(_config)
 
 
@@ -189,7 +193,8 @@ def get(section: str, default=None) -> dict:
     Mirrors the dict.get(key, default) signature so callers can write:
         config.get('hardware', {})
     """
-    return _config.get(section, {} if default is None else default)
+    with _config_lock:
+        return _config.get(section, {} if default is None else default)
 
 
 def update_camera_config(updates: dict) -> None:
@@ -204,9 +209,10 @@ def update_camera_config(updates: dict) -> None:
         config.update_camera_config({"width": 1280, "height": 720, "fps": 15})
     """
     global _config
-    # Update in-memory config
-    cam_section = _config.setdefault("hardware", {}).setdefault("camera", {})
-    cam_section.update(updates)
+    with _config_lock:
+        # Update in-memory config
+        cam_section = _config.setdefault("hardware", {}).setdefault("camera", {})
+        cam_section.update(updates)
 
     # Write the full config back to disk, preserving all non-camera settings.
     try:
@@ -237,8 +243,9 @@ def reload(path: str = None) -> None:
     """
     global _config, _path
     fresh = load_config(path)
-    _config.clear()
-    _config.update(fresh)
+    with _config_lock:
+        _config.clear()
+        _config.update(fresh)
     if path:
         _path = path
     logging.getLogger(__name__).info("Config reloaded from %s", _path)
@@ -298,6 +305,7 @@ def _prefs_path() -> _Path:
 
 _PREFS_PATH = _prefs_path()
 _prefs: dict = {}
+_prefs_lock = threading.Lock()
 _prefs_log = logging.getLogger(__name__ + ".prefs")
 _prefs_log.info("Preferences path: %s (exists: %s)", _PREFS_PATH, _PREFS_PATH.exists())
 
@@ -377,22 +385,24 @@ AUTH_DEFAULT_SUPERVISOR_OVERRIDE_S   = 900
 def get_pref(key: str, default=None):
     """Read a user preference.  e.g. get_pref('ui.mode', 'standard')"""
     keys = key.split(".")
-    val  = _prefs
-    for k in keys:
-        if not isinstance(val, dict):
-            return default
-        val = val.get(k, None)
-        if val is None:
-            return default
-    return val
+    with _prefs_lock:
+        val = _prefs
+        for k in keys:
+            if not isinstance(val, dict):
+                return default
+            val = val.get(k, None)
+            if val is None:
+                return default
+        return val
 
 
 def set_pref(key: str, value):
     """Write and immediately persist a user preference."""
     keys = key.split(".")
-    node = _prefs
-    for k in keys[:-1]:
-        node = node.setdefault(k, {})
-    node[keys[-1]] = value
+    with _prefs_lock:
+        node = _prefs
+        for k in keys[:-1]:
+            node = node.setdefault(k, {})
+        node[keys[-1]] = value
     _save_prefs()
 
