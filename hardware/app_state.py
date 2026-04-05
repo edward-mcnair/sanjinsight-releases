@@ -1,12 +1,20 @@
 """
 hardware/app_state.py
 
-ApplicationState — a thread-safe container for all live hardware driver
-references and active measurement objects.
+ApplicationState — a thread-safe, observable container for all live hardware
+driver references and active measurement objects.
 
 Replaces the module-level globals (cam, fpga, stage …) in main_app.py.
 Every read or write goes through a single RLock, making compound
 read-check-write operations safe across background threads.
+
+Observable
+----------
+Property setters fire registered listener callbacks when a value actually
+changes (identity comparison).  Listeners are called **inside** the lock,
+so they must not re-acquire it or block.  For Qt UI updates, use the
+``StateSignalBridge`` in ``ui.app_signals`` which marshals notifications
+to the GUI thread via a queued signal.
 
 Usage
 -----
@@ -22,6 +30,13 @@ Usage
         app_state.cam      = new_driver
         app_state.pipeline = AcquisitionPipeline(new_driver)
 
+    # Subscribe to changes (called inside the lock — keep it fast)
+    def on_cam_change(key, old, new):
+        log.info("Camera changed: %s → %s", old, new)
+
+    app_state.subscribe("cam", on_cam_change)
+    app_state.unsubscribe("cam", on_cam_change)
+
     # Convenience helper — get camera or raise
     cam = app_state.require_cam()   # raises RuntimeError if None
 
@@ -33,21 +48,35 @@ Design notes
    operations (read → check → write) must use the context manager.
 •  Background status threads that only read a single attribute (e.g.
    tec.get_status()) are safe without the lock.
+•  Listeners are called under the lock with (key, old_value, new_value).
+   They must not block or re-acquire the lock.
 """
 
 from __future__ import annotations
+
+import logging
 import threading
-from typing import Optional, List
+from typing import Any, Callable, Optional, List
+
+log = logging.getLogger(__name__)
+
+# Type alias for state-change listener callbacks.
+# Signature: callback(key: str, old_value: Any, new_value: Any) -> None
+StateListener = Callable[[str, Any, Any], None]
 
 
 class ApplicationState:
     """
-    Thread-safe singleton container for all live hardware drivers and
-    active measurement objects.
+    Thread-safe, observable singleton container for all live hardware drivers
+    and active measurement objects.
     """
 
     def __init__(self):
         self._lock = threading.RLock()
+
+        # ── Listener registry ──────────────────────────────────────
+        # key → list of callbacks.  "" key means "all changes".
+        self._listeners: dict[str, list[StateListener]] = {}
 
         # ── Hardware drivers ────────────────────────────────────────
         self._cam      = None    # CameraDriver (TR)    | None — primary / TR camera
@@ -86,6 +115,45 @@ class ApplicationState:
         # to keep this module free of the cryptography dependency.
         self._license_info = None         # LicenseInfo | None
 
+    # ── Subscription API ────────────────────────────────────────────
+
+    def subscribe(self, key: str, callback: StateListener) -> None:
+        """Register *callback* to be called when *key* changes.
+
+        Use ``key=""`` to subscribe to **all** state changes.
+        Callback signature: ``(key, old_value, new_value) -> None``.
+        Called under the lock — must not block or re-acquire.
+        """
+        with self._lock:
+            self._listeners.setdefault(key, [])
+            if callback not in self._listeners[key]:
+                self._listeners[key].append(callback)
+
+    def unsubscribe(self, key: str, callback: StateListener) -> None:
+        """Remove a previously registered listener."""
+        with self._lock:
+            cbs = self._listeners.get(key, [])
+            try:
+                cbs.remove(callback)
+            except ValueError:
+                pass
+
+    def _notify(self, key: str, old: Any, new: Any) -> None:
+        """Fire listeners for *key* and for the wildcard key "".
+
+        MUST be called while the lock is held.
+        """
+        for cb in self._listeners.get(key, ()):
+            try:
+                cb(key, old, new)
+            except Exception:
+                log.debug("State listener error for %r", key, exc_info=True)
+        for cb in self._listeners.get("", ()):
+            try:
+                cb(key, old, new)
+            except Exception:
+                log.debug("Wildcard state listener error for %r", key, exc_info=True)
+
     # ── Context manager (use for compound operations) ───────────────
 
     def __enter__(self):
@@ -106,7 +174,10 @@ class ApplicationState:
     @license_info.setter
     def license_info(self, value) -> None:
         with self._lock:
-            self._license_info = value
+            old = self._license_info
+            if old is not value:
+                self._license_info = value
+                self._notify("license_info", old, value)
 
     @property
     def is_licensed(self) -> bool:
@@ -124,7 +195,10 @@ class ApplicationState:
     @demo_mode.setter
     def demo_mode(self, value: bool) -> None:
         with self._lock:
+            old = self._demo_mode
             self._demo_mode = bool(value)
+            if old != self._demo_mode:
+                self._notify("demo_mode", old, self._demo_mode)
 
     # ── Hardware driver properties ───────────────────────────────────
 
@@ -146,7 +220,10 @@ class ApplicationState:
     def cam(self, value):
         """Set the primary (TR) camera. Backward-compatible with all existing callers."""
         with self._lock:
-            self._cam = value
+            old = self._cam
+            if old is not value:
+                self._cam = value
+                self._notify("cam", old, value)
 
     @property
     def tr_cam(self):
@@ -161,7 +238,10 @@ class ApplicationState:
     @ir_cam.setter
     def ir_cam(self, value):
         with self._lock:
-            self._ir_cam = value
+            old = self._ir_cam
+            if old is not value:
+                self._ir_cam = value
+                self._notify("ir_cam", old, value)
 
     @property
     def active_camera_type(self) -> str:
@@ -173,11 +253,14 @@ class ApplicationState:
         if value not in ("tr", "ir"):
             raise ValueError(f"active_camera_type must be 'tr' or 'ir', got {value!r}")
         with self._lock:
-            self._active_camera_type = value
-            # Keep active_modality in sync
-            self._active_modality = (
-                "thermoreflectance" if value == "tr" else "ir_lockin"
-            )
+            old = self._active_camera_type
+            if old != value:
+                self._active_camera_type = value
+                # Keep active_modality in sync
+                self._active_modality = (
+                    "thermoreflectance" if value == "tr" else "ir_lockin"
+                )
+                self._notify("active_camera_type", old, value)
 
     @property
     def fpga(self):
@@ -186,7 +269,10 @@ class ApplicationState:
     @fpga.setter
     def fpga(self, value):
         with self._lock:
-            self._fpga = value
+            old = self._fpga
+            if old is not value:
+                self._fpga = value
+                self._notify("fpga", old, value)
 
     @property
     def bias(self):
@@ -195,7 +281,10 @@ class ApplicationState:
     @bias.setter
     def bias(self, value):
         with self._lock:
-            self._bias = value
+            old = self._bias
+            if old is not value:
+                self._bias = value
+                self._notify("bias", old, value)
 
     @property
     def stage(self):
@@ -204,7 +293,10 @@ class ApplicationState:
     @stage.setter
     def stage(self, value):
         with self._lock:
-            self._stage = value
+            old = self._stage
+            if old is not value:
+                self._stage = value
+                self._notify("stage", old, value)
 
     @property
     def prober(self):
@@ -214,7 +306,10 @@ class ApplicationState:
     @prober.setter
     def prober(self, value):
         with self._lock:
-            self._prober = value
+            old = self._prober
+            if old is not value:
+                self._prober = value
+                self._notify("prober", old, value)
 
     @property
     def turret(self):
@@ -224,7 +319,10 @@ class ApplicationState:
     @turret.setter
     def turret(self, value):
         with self._lock:
-            self._turret = value
+            old = self._turret
+            if old is not value:
+                self._turret = value
+                self._notify("turret", old, value)
 
     @property
     def af(self):
@@ -233,7 +331,10 @@ class ApplicationState:
     @af.setter
     def af(self, value):
         with self._lock:
-            self._af = value
+            old = self._af
+            if old is not value:
+                self._af = value
+                self._notify("af", old, value)
 
     @property
     def tecs(self) -> list:
@@ -242,14 +343,18 @@ class ApplicationState:
     @tecs.setter
     def tecs(self, value: list):
         with self._lock:
+            old = list(self._tecs)
             self._tecs = list(value)
+            self._notify("tecs", old, self._tecs)
 
     def add_tec(self, tec) -> int:
         """Thread-safely append a TEC driver and return its index."""
         with self._lock:
             self._tecs.append(tec)
             self._tec_guards.append(None)   # guard registered separately
-            return len(self._tecs) - 1
+            idx = len(self._tecs) - 1
+            self._notify("tecs", None, self._tecs)
+            return idx
 
     @property
     def ldd(self):
@@ -259,7 +364,10 @@ class ApplicationState:
     @ldd.setter
     def ldd(self, value):
         with self._lock:
-            self._ldd = value
+            old = self._ldd
+            if old is not value:
+                self._ldd = value
+                self._notify("ldd", old, value)
 
     @property
     def gpio(self):
@@ -269,7 +377,10 @@ class ApplicationState:
     @gpio.setter
     def gpio(self, value):
         with self._lock:
-            self._gpio = value
+            old = self._gpio
+            if old is not value:
+                self._gpio = value
+                self._notify("gpio", old, value)
 
     def set_tec_guard(self, index: int, guard) -> None:
         """Register a ThermalGuard for the given TEC index."""
@@ -294,7 +405,10 @@ class ApplicationState:
     @pipeline.setter
     def pipeline(self, value):
         with self._lock:
-            self._pipeline = value
+            old = self._pipeline
+            if old is not value:
+                self._pipeline = value
+                self._notify("pipeline", old, value)
 
     # ── Active measurement context ───────────────────────────────────
 
@@ -305,7 +419,10 @@ class ApplicationState:
     @active_calibration.setter
     def active_calibration(self, value):
         with self._lock:
-            self._active_calibration = value
+            old = self._active_calibration
+            if old is not value:
+                self._active_calibration = value
+                self._notify("active_calibration", old, value)
 
     @property
     def active_profile(self):
@@ -314,7 +431,10 @@ class ApplicationState:
     @active_profile.setter
     def active_profile(self, value):
         with self._lock:
-            self._active_profile = value
+            old = self._active_profile
+            if old is not value:
+                self._active_profile = value
+                self._notify("active_profile", old, value)
 
     @property
     def active_analysis(self):
@@ -323,7 +443,10 @@ class ApplicationState:
     @active_analysis.setter
     def active_analysis(self, value):
         with self._lock:
-            self._active_analysis = value
+            old = self._active_analysis
+            if old is not value:
+                self._active_analysis = value
+                self._notify("active_analysis", old, value)
 
     @property
     def active_modality(self) -> str:
@@ -332,7 +455,10 @@ class ApplicationState:
     @active_modality.setter
     def active_modality(self, value: str):
         with self._lock:
-            self._active_modality = value
+            old = self._active_modality
+            if old != value:
+                self._active_modality = value
+                self._notify("active_modality", old, value)
 
     @property
     def active_objective(self):
@@ -342,7 +468,10 @@ class ApplicationState:
     @active_objective.setter
     def active_objective(self, value):
         with self._lock:
-            self._active_objective = value
+            old = self._active_objective
+            if old is not value:
+                self._active_objective = value
+                self._notify("active_objective", old, value)
 
     # ── System identification ────────────────────────────────────────
 
@@ -354,7 +483,11 @@ class ApplicationState:
     @system_model.setter
     def system_model(self, value: Optional[str]) -> None:
         with self._lock:
-            self._system_model = value if value is None else str(value)
+            old = self._system_model
+            new = value if value is None else str(value)
+            if old != new:
+                self._system_model = new
+                self._notify("system_model", old, new)
 
     # ── Convenience helpers ──────────────────────────────────────────
 

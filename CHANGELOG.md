@@ -17,6 +17,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Observable state store** — `ApplicationState` now supports `subscribe(key, callback)` / `unsubscribe()` for reactive state change notifications. Property setters fire listeners when values actually change (identity comparison). `StateSignalBridge` in `ui/app_signals.py` marshals notifications to the Qt GUI thread via queued signals. All 20 state properties (cam, fpga, bias, stage, etc.) emit change notifications.
 - **AI capability tier system** — Automatic feature gating (NONE → BASIC → STANDARD → FULL) based on model size and backend. Tier badge in AI panel, info strip in Settings, upgrade nudge system for tier-gated features.
 - **Proactive AI Advisor** — Modal dialog analyses the selected material profile against live instrument state after every profile selection. Identifies conflicts (e.g. exposure too high for lock-in frequency) and suggests corrective settings with one-click "Apply fixes". Supports all camera modalities (TR, IR, future plugins).
   - Modality-aware physics reasoning (thermoreflectance vs IR thermal imaging)

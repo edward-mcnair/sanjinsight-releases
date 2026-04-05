@@ -252,7 +252,7 @@ def _style_pt(macos_pt: int) -> str:
 
 # AppSignals and its singleton live in ui/app_signals.py so that any module
 # can import `signals` without depending on this file.
-from ui.app_signals import AppSignals, signals
+from ui.app_signals import AppSignals, signals, StateSignalBridge
 
 # ------------------------------------------------------------------ #
 #  Shared state — all hardware refs live in the thread-safe AppState  #
@@ -432,6 +432,12 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(480, 280)
         self.move(screen.x() + (screen.width()  - win_w) // 2,
                   screen.y() + (screen.height() - win_h) // 2)
+        # Install the state signal bridge so app_state changes can be observed
+        # from the Qt GUI thread via queued signals.
+        self._state_bridge = StateSignalBridge.install()
+        self._state_bridge.state_changed.connect(
+            self._on_state_changed, Qt.QueuedConnection)
+
         # Bounded thread pool — prevents unbounded thread spawning from rapid button clicks
         self._thread_pool = ThreadPoolExecutor(max_workers=4,
                                                thread_name_prefix="msanj_worker")
@@ -3058,6 +3064,34 @@ class MainWindow(QMainWindow):
                  "snr_db": float(getattr(r, "snr_db", 0))})
         except Exception as _ae:
             log.debug("Autosave (acquire) failed: %s", _ae)
+
+    # ── Central state store observer ──────────────────────────────────
+
+    # Keys worth logging to the session log when they change.
+    _STATE_LOG_KEYS = frozenset({
+        "cam", "ir_cam", "fpga", "bias", "stage", "prober",
+        "turret", "ldd", "gpio", "active_profile", "active_calibration",
+        "active_modality", "demo_mode",
+    })
+
+    def _on_state_changed(self, key: str, old, new) -> None:
+        """Centralized handler for app_state changes (runs on GUI thread)."""
+        if key not in self._STATE_LOG_KEYS:
+            return
+        # Hardware driver connect/disconnect → log
+        if key in ("cam", "ir_cam", "fpga", "bias", "stage", "prober",
+                    "turret", "ldd", "gpio"):
+            name = key.replace("_", " ").upper()
+            if new is not None and old is None:
+                log.debug("State: %s connected (%s)", name,
+                          type(new).__name__)
+            elif new is None and old is not None:
+                log.debug("State: %s disconnected", name)
+        elif key == "active_profile":
+            pname = getattr(new, "name", "None")
+            log.debug("State: active_profile → %s", pname)
+        elif key == "active_modality":
+            log.debug("State: modality → %s", new)
 
     def _on_log(self, msg: str):
         self._log_tab.append(msg)

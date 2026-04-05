@@ -60,5 +60,45 @@ class AppSignals(QObject):
     error           = pyqtSignal(str)              # Error message → toast
 
 
+class StateSignalBridge(QObject):
+    """Bridges app_state change notifications to a Qt queued signal.
+
+    ``app_state`` fires listener callbacks **inside** its RLock (from any
+    thread).  Those callbacks must not touch Qt widgets.  This bridge
+    re-emits each notification as a Qt signal, which Qt automatically
+    queues to the GUI event loop for safe processing.
+
+    Usage
+    -----
+    After creating the bridge, connect to ``state_changed``::
+
+        bridge = StateSignalBridge.install()
+        bridge.state_changed.connect(my_handler, Qt.QueuedConnection)
+
+    The handler receives ``(key: str, old_value: object, new_value: object)``.
+    """
+
+    # (key, old_value, new_value)
+    state_changed = pyqtSignal(str, object, object)
+
+    _instance: "StateSignalBridge | None" = None
+
+    @classmethod
+    def install(cls) -> "StateSignalBridge":
+        """Create the singleton bridge and subscribe to app_state."""
+        if cls._instance is not None:
+            return cls._instance
+        from hardware.app_state import app_state
+        bridge = cls()
+        # Subscribe to ALL state changes (wildcard key "")
+        app_state.subscribe("", bridge._on_state_change)
+        cls._instance = bridge
+        return bridge
+
+    def _on_state_change(self, key: str, old, new) -> None:
+        """Called under app_state's lock — just emit the Qt signal."""
+        self.state_changed.emit(key, old, new)
+
+
 # Module-level singleton — import this object, do not instantiate your own.
 signals = AppSignals()
