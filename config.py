@@ -22,6 +22,7 @@ import logging.handlers
 import os
 import threading
 from pathlib import Path
+from typing import Any
 
 
 def _user_data_dir() -> Path:
@@ -153,7 +154,7 @@ def load_config(path: str = None) -> dict:
         return _DEFAULT_CONFIG.copy()
 
 
-def setup_logging(cfg: dict):
+def setup_logging(cfg: dict) -> None:
     """Configure logging based on config settings."""
     log_cfg = cfg.get("logging", {})
     level = getattr(logging, log_cfg.get("level", "INFO").upper(), logging.INFO)
@@ -382,7 +383,7 @@ AUTH_DEFAULT_LOCK_TIMEOUT_S          = 1800
 AUTH_DEFAULT_SUPERVISOR_OVERRIDE_S   = 900
 
 
-def get_pref(key: str, default=None):
+def get_pref(key: str, default: Any = None) -> Any:
     """Read a user preference.  e.g. get_pref('ui.mode', 'standard')"""
     keys = key.split(".")
     with _prefs_lock:
@@ -396,7 +397,7 @@ def get_pref(key: str, default=None):
         return val
 
 
-def set_pref(key: str, value):
+def set_pref(key: str, value: Any) -> None:
     """Write and immediately persist a user preference."""
     keys = key.split(".")
     with _prefs_lock:

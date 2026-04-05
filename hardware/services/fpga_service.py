@@ -163,7 +163,7 @@ class FpgaService(BaseDeviceService):
         if fpga:
             self._dispatch(fpga.set_stimulus, on)
 
-    def fpga_set_trigger_mode(self, mode) -> None:
+    def fpga_set_trigger_mode(self, mode: str) -> None:
         """Set FPGA trigger mode (continuous / single-shot)."""
         fpga = app_state.fpga
         if fpga:

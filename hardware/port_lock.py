@@ -192,6 +192,121 @@ class PortLock:
 
 
 # ---------------------------------------------------------------------------
+# Serial connect helper
+# ---------------------------------------------------------------------------
+
+def serial_connect(
+    port: str,
+    lock: PortLock,
+    *,
+    baudrate: int = 9600,
+    bytesize: int = 8,
+    parity: str = "N",
+    stopbits: float = 1,
+    timeout: float = 1.0,
+    write_timeout: float | None = None,
+    xonxoff: bool = False,
+    device_name: str = "device",
+    extra_kwargs: dict | None = None,
+) -> "serial.Serial":
+    """Open a serial port with lock acquisition and standardised error handling.
+
+    This encapsulates the boilerplate shared by every serial-based hardware
+    driver: validate the port string, acquire the port lock, open the serial
+    connection, and raise a clear ``RuntimeError`` on failure (with lock
+    release in the error path).
+
+    Parameters
+    ----------
+    port : str
+        Serial port path (e.g. ``COM5`` or ``/dev/cu.usbserial-ABC``).
+    lock : PortLock
+        Port lock instance — acquired on success, released on failure.
+    device_name : str
+        Human-readable name for error messages (e.g. ``"ATEC-302 TEC"``).
+    extra_kwargs : dict, optional
+        Additional kwargs forwarded to ``serial.Serial()``.
+
+    Returns
+    -------
+    serial.Serial
+        Open, ready-to-use serial connection.
+
+    Raises
+    ------
+    RuntimeError
+        If pyserial is missing, the port is invalid, or the port cannot be opened.
+    """
+    import serial as _serial
+
+    if not port:
+        raise RuntimeError(
+            f"No serial port configured for {device_name}. "
+            f"Set 'port' under the device section in config.yaml or Device Manager."
+        )
+
+    kw = extra_kwargs or {}
+    ok = False
+    try:
+        lock.acquire()
+        ser = _serial.Serial(
+            port=port,
+            baudrate=baudrate,
+            bytesize=bytesize,
+            parity=parity,
+            stopbits=stopbits,
+            timeout=timeout,
+            write_timeout=write_timeout,
+            xonxoff=xonxoff,
+            **exclusive_serial_kwargs(),
+            **kw,
+        )
+        ok = True
+        log.info("%s: serial connected on %s @ %d baud", device_name, port, baudrate)
+        return ser
+    except ImportError:
+        raise RuntimeError(
+            f"pyserial not installed. Run: pip install pyserial"
+        ) from None
+    except _serial.SerialException as e:
+        from hardware.hw_debug_log import connect_fail
+        connect_fail(log, port=port, error=e, context={
+            "baud": baudrate, "device": device_name,
+        })
+        raise RuntimeError(
+            f"Cannot open {port} for {device_name}: {e}"
+        ) from e
+    finally:
+        if not ok:
+            try:
+                lock.release()
+            except Exception:
+                pass
+
+
+def serial_disconnect(
+    ser: "serial.Serial | None",
+    lock: PortLock,
+    *,
+    device_name: str = "device",
+) -> None:
+    """Close a serial port and release its lock.
+
+    Safe to call even if *ser* is ``None`` or already closed.
+    """
+    if ser is not None and ser.is_open:
+        try:
+            ser.close()
+        except Exception:
+            log.debug("%s: serial close failed", device_name, exc_info=True)
+    try:
+        lock.release()
+    except Exception:
+        log.debug("%s: port lock release failed", device_name, exc_info=True)
+    log.info("%s: disconnected", device_name)
+
+
+# ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 

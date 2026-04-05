@@ -30,7 +30,7 @@ import serial
 from typing import Optional
 
 from .base import StageDriver, StageStatus, StagePosition
-from hardware.port_lock import PortLock, exclusive_serial_kwargs
+from hardware.port_lock import PortLock, serial_connect, serial_disconnect
 
 log = logging.getLogger(__name__)
 
@@ -60,32 +60,16 @@ class NewportNPC3Driver(StageDriver):
     def connect(self) -> None:
         if self._connected:
             return
-        if not self._port:
-            raise RuntimeError(
-                "No serial port configured for Newport NPC3. "
-                "Set 'port' under hardware.stage in config.yaml.")
 
-        try:
-            self._lock = PortLock(self._port)
-            self._ser = serial.Serial(
-                port          = self._port,
-                baudrate      = self._baud,
-                bytesize      = serial.EIGHTBITS,
-                parity        = serial.PARITY_NONE,
-                stopbits      = serial.STOPBITS_ONE,
-                timeout       = self._timeout,
-                write_timeout = self._timeout,   # prevent indefinite write blocks
-                xonxoff       = True,             # NPC3 uses software flow control
-                **exclusive_serial_kwargs(),
-            )
-        except serial.SerialException as e:
-            from hardware.hw_debug_log import connect_fail
-            connect_fail(log, port=self._port, error=e, context={
-                "baud": self._baud, "xonxoff": True,
-                "closed_loop": self._closed_loop,
-            })
-            raise RuntimeError(
-                f"Cannot open {self._port} for Newport NPC3: {e}") from e
+        self._lock = PortLock(self._port)
+        self._ser = serial_connect(
+            self._port, self._lock,
+            baudrate=self._baud,
+            timeout=self._timeout,
+            write_timeout=self._timeout,
+            xonxoff=True,                # NPC3 uses software flow control
+            device_name="Newport NPC3",
+        )
 
         # Small delay for controller to become responsive after port open
         time.sleep(0.3)
@@ -118,19 +102,11 @@ class NewportNPC3Driver(StageDriver):
                     pass
         finally:
             self._connected = False
-            if self._ser and self._ser.is_open:
-                try:
-                    self._ser.close()
-                except Exception:
-                    pass
-            self._ser = None
             if self._lock is not None:
-                try:
-                    self._lock.release()
-                except Exception:
-                    log.debug("Port lock release failed", exc_info=True)
+                serial_disconnect(self._ser, self._lock,
+                                  device_name="Newport NPC3")
+            self._ser = None
             self._lock = None
-            log.info("Newport NPC3 disconnected")
 
     # ---------------------------------------------------------------- #
     #  Motion                                                           #

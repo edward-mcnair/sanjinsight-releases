@@ -17,7 +17,7 @@ import struct
 import threading
 import serial
 from .base import TecDriver, TecStatus
-from hardware.port_lock import PortLock, exclusive_serial_kwargs
+from hardware.port_lock import PortLock, serial_connect, serial_disconnect
 
 log = logging.getLogger(__name__)
 
@@ -51,42 +51,20 @@ class AtecDriver(TecDriver):
         self._serial_lock = threading.Lock()
 
     def connect(self) -> None:
-        if not self._port:
-            raise RuntimeError(
-                "No serial port configured for ATEC-302 TEC.\n\n"
-                "Set the port in Device Manager (e.g. COM4 on Windows, "
-                "/dev/cu.usbmodemXXX on macOS).")
-        connected_ok = False
-        try:
-            self._port_lock.acquire()
-            self._serial = serial.Serial(
-                port     = self._port,
-                baudrate = self._baudrate,
-                bytesize = serial.EIGHTBITS,
-                parity   = serial.PARITY_NONE,
-                stopbits = serial.STOPBITS_TWO,   # N-8-2 per ATEC-302 spec
-                timeout  = self._timeout,
-                **exclusive_serial_kwargs(),
-            )
-            self._connected = True
-            connected_ok = True
-            log.info("ATEC-302 connected on %s", self._port)
-        except ImportError:
-            raise RuntimeError(
-                "pyserial not installed. Run: pip install pyserial")
-        except serial.SerialException as e:
-            raise RuntimeError(
-                f"ATEC-302 connect failed on {self._port}: {e}\n"
-                f"Check port name and cable connection.")
-        finally:
-            if not connected_ok:
-                self._port_lock.release()
+        self._serial = serial_connect(
+            self._port, self._port_lock,
+            baudrate=self._baudrate,
+            stopbits=serial.STOPBITS_TWO,  # N-8-2 per ATEC-302 spec
+            timeout=self._timeout,
+            device_name="ATEC-302 TEC",
+        )
+        self._connected = True
 
     def disconnect(self) -> None:
-        if self._serial and self._serial.is_open:
-            self._serial.close()
+        serial_disconnect(self._serial, self._port_lock,
+                          device_name="ATEC-302 TEC")
+        self._serial = None
         self._connected = False
-        self._port_lock.release()
 
     def _crc16(self, data: bytes) -> int:
         crc = 0xFFFF

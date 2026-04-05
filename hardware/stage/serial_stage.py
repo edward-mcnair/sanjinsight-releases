@@ -25,7 +25,7 @@ import serial
 import time
 from typing import Optional
 from .base import StageDriver, StageStatus, StagePosition
-from hardware.port_lock import PortLock, exclusive_serial_kwargs
+from hardware.port_lock import PortLock, serial_connect, serial_disconnect
 
 log = logging.getLogger(__name__)
 
@@ -43,39 +43,20 @@ class SerialStageDriver(StageDriver):
         self._port_lock = PortLock(self._port)
 
     def connect(self) -> None:
-        if not self._port:
-            raise RuntimeError(
-                "No serial port configured for stage.\n\n"
-                "Set the port in Device Manager (e.g. COM5 on Windows, "
-                "/dev/cu.usbmodemXXX on macOS).")
-        try:
-            self._port_lock.acquire()
-            self._serial = serial.Serial(
-                port     = self._port,
-                baudrate = self._baud,
-                timeout  = self._timeout,
-                **exclusive_serial_kwargs(),
-            )
-            self._connected = True
-            log.info("Stage (%s) connected on %s", self._dialect, self._port)
-        except ImportError:
-            self._port_lock.release()
-            raise RuntimeError(
-                "pyserial not installed. Run: pip install pyserial")
-        except serial.SerialException as e:
-            self._port_lock.release()
-            raise RuntimeError(
-                f"Stage connect failed on {self._port}: {e}")
-        except Exception:
-            self._port_lock.release()
-            raise
+        self._serial = serial_connect(
+            self._port, self._port_lock,
+            baudrate=self._baud,
+            timeout=self._timeout,
+            device_name=f"Stage ({self._dialect})",
+        )
+        self._connected = True
 
     def disconnect(self) -> None:
         self.stop()
-        if self._serial and self._serial.is_open:
-            self._serial.close()
+        serial_disconnect(self._serial, self._port_lock,
+                          device_name=f"Stage ({self._dialect})")
+        self._serial = None
         self._connected = False
-        self._port_lock.release()
 
     def _send(self, cmd: str) -> str:
         """Write cmd and return the response line.
