@@ -278,6 +278,7 @@ def _prefs_path() -> _Path:
 _PREFS_PATH = _prefs_path()
 _prefs: dict = {}
 _prefs_log = logging.getLogger(__name__ + ".prefs")
+_prefs_log.info("Preferences path: %s (exists: %s)", _PREFS_PATH, _PREFS_PATH.exists())
 
 
 def _load_prefs() -> dict:

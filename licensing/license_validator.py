@@ -125,8 +125,14 @@ def load_license(prefs) -> LicenseInfo:
     """
     key_string = prefs.get_pref("license.key", "")
     if not key_string:
+        log.debug("No license key found in preferences")
         return UNLICENSED
+    log.info("License key found in preferences (%d chars), validating…",
+             len(key_string))
     info = validate_key(key_string)
+    if info is None:
+        log.warning("Stored license key failed validation — key is present "
+                     "but could not be verified (cryptography issue?)")
     return info if info is not None else UNLICENSED
 
 
