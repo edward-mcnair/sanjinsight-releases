@@ -44,6 +44,10 @@ class BaseDeviceService(QObject):
         self._stop_event = stop_event   # shared with HardwareService
         self._threads: list[threading.Thread] = []
         self._lock = threading.Lock()
+        # Per-device state machines — populated by child services as devices
+        # are discovered/connected.  Keyed by device_key ("camera", "tec0", etc.)
+        from hardware.device_state import DeviceStateMachine
+        self._states: dict[str, DeviceStateMachine] = {}
 
     # ================================================================ #
     #  Thread infrastructure                                            #
@@ -69,17 +73,21 @@ class BaseDeviceService(QObject):
         delay    = initial_delay_s
         last_exc: Exception | None = None
 
+        from hardware.device_state import DeviceState
         for attempt in range(1, max_retries + 1):
             if self._stop_event.is_set():
                 raise RuntimeError("Service stopped during connect retry")
+            self._set_device_state(label, DeviceState.CONNECTING)
             try:
                 t0 = time.time()
                 connect_fn()
+                self._set_device_state(label, DeviceState.CONNECTED)
                 log.info("[%s] Connected (attempt %d/%.2fs)",
                          label, attempt, time.time() - t0)
                 return
             except Exception as exc:
                 last_exc = exc
+                self._set_device_state(label, DeviceState.ERROR)
                 if attempt < max_retries:
                     log.warning(
                         "[%s] Attempt %d/%d failed: %s  -- retrying in %.1fs ...",
@@ -109,23 +117,40 @@ class BaseDeviceService(QObject):
         True  -- reconnected successfully
         False -- _stop_event was set; caller should return without reconnecting
         """
+        from hardware.device_state import DeviceState
         delay   = self._RECONNECT_INITIAL_S
         attempt = 0
         while not self._stop_event.is_set():
             attempt += 1
+            self._set_device_state(device_key, DeviceState.CONNECTING)
             try:
                 reconnect_fn()
+                self._set_device_state(device_key, DeviceState.CONNECTED)
                 log.info("[%s] Auto-reconnect succeeded (attempt %d)", label, attempt)
                 self.device_connected.emit(device_key, True)
                 self.log_message.emit(f"{label}: reconnected automatically")
                 return True
             except Exception as exc:
+                self._set_device_state(device_key, DeviceState.ERROR)
                 log.warning("[%s] Reconnect attempt %d failed: %s -- retry in %.0f s",
                             label, attempt, exc, delay)
             # Interruptible sleep: wakes instantly when service shuts down
             self._stop_event.wait(timeout=delay)
             delay = min(delay * 1.5, self._RECONNECT_MAX_S)
         return False
+
+    def _set_device_state(self, device_key: str, state) -> None:
+        """Transition a device's state machine, creating it on first use."""
+        from hardware.device_state import DeviceStateMachine, DeviceState
+        if device_key not in self._states:
+            self._states[device_key] = DeviceStateMachine(device_key)
+        self._states[device_key].transition(state)
+
+    def _get_device_state(self, device_key: str):
+        """Return the current DeviceState for *device_key*, or UNKNOWN."""
+        from hardware.device_state import DeviceState
+        sm = self._states.get(device_key)
+        return sm.state if sm else DeviceState.UNKNOWN
 
     def _emit_heartbeat(self, device_key: str, response_time_s: float) -> None:
         """Emit a heartbeat after a successful poll/status read.
@@ -146,7 +171,9 @@ class BaseDeviceService(QObject):
         for the legacy ``startup_status`` detail string.
         """
         from hardware.error_taxonomy import classify_error
+        from hardware.device_state import DeviceState
         dev_err = classify_error(exc, device_uid=device_uid)
+        self._set_device_state(device_uid, DeviceState.ERROR)
         self.structured_error.emit(dev_err)
         self.error.emit(dev_err.short_message)
         return dev_err
