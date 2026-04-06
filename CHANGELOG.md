@@ -6,6 +6,30 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.50.34-beta] — 2026-04-05
+
+### Added
+- **Shared SegmentedControl widget** (`ui/widgets/segmented_control.py`) — Pill-style segmented control with custom QPainter rendering, sliding accent pill, and `_apply_styles()` for live theme refresh. Replaces QPushButton-based segments in sidebar navigation, settings (Theme/Colors/Workspace), and autoscan config (Goal/Stimulus/Objective)
+- **Shared tab helpers** (`ui/widgets/tab_helpers.py`) — `make_readout()`, `make_sub()`, `inner_tab_qss()` extracted from 14 duplicated tab files
+- **Shared image rendering** (`acquisition/processing/image_rendering.py`) — `render_array()`, `render_to_tmpfile()`, `render_to_b64()` deduplicated from report.py and report_html.py
+- **QThread export/report workers** (`acquisition/export_worker.py`, `acquisition/report_worker.py`) — Background workers for export and report generation, replacing inline thread management
+- **Async session loading** — `_SessionLoadWorker` in data_tab.py moves `SessionManager.load()` off the UI thread with loading indicators and stale-load guards
+- **AI settings extraction** — `ui/settings/ai_section.py` extracted from settings_tab.py as `AISettingsMixin`
+
+### Improved
+- **Theme switching reliability** — `_swap_visual_theme()` now rewrites hex colour values in every widget's inline stylesheet using an old→new PALETTE remap, preserving font-size, font-weight, and padding while updating all colours to the new theme. Eliminates the stale-colour bug where text became unreadable after switching between dark and light modes
+- **Light mode contrast** — `textSub` darkened from `#85859a` to `#6e6e82` (3.61:1 → 5.14:1 contrast ratio on white). QGroupBox titles use primary text colour instead of dim/muted in both modes
+- **Session metadata thread safety** — `SessionManager._update_field()` now holds the RLock through the entire read-modify-write cycle and uses atomic writes (`.tmp` + `os.replace()`) to prevent partial/corrupt JSON on interruption
+- **Silent exception logging** — 10 bare `except Exception: pass` blocks in main_app.py replaced with `log.debug("Swallowed exception", exc_info=True)` for visibility
+- **Hardware service shutdown** — `_dispatch()` threads in `BaseDeviceService` are now tracked in `self._threads` for graceful shutdown joins
+- **QSS deduplication** — settings_tab.py imports shared helpers from `ui/settings/_helpers.py` instead of redefining 73 lines of local palette/QSS lambdas
+- **Hardware rescan** — Replaced blocking `worker.wait(3000)` with async callback to avoid 3-second GUI freeze during device rescan
+
+### Fixed
+- Theme switch stale colours: switching dark → light (or vice versa) no longer leaves text, headings, or group-box titles with old-theme colours
+- `camera_tab.py` now has `_apply_styles()` (was the only tab missing it; 14 construction-time stylesheets now refresh correctly on theme switch)
+- Duplicate `import config` in camera_service.py hoisted to top-level import
+
 ## [1.50.33-beta] — 2026-04-04
 
 ### Improved

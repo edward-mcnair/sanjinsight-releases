@@ -1,7 +1,7 @@
 # SanjINSIGHT User Manual
 
-**Microsanj SanjINSIGHT v1.5.0-beta.1**
-**Document revision: 2026-03-25**
+**Microsanj SanjINSIGHT v1.50.34-beta**
+**Document revision: 2026-04-05**
 
 ---
 
@@ -1507,7 +1507,7 @@ Open with **Help → Settings** or **Ctrl+,**. The Settings panel is organised i
 
 | Setting | Description |
 |---|---|
-| **Theme** | Three-button segmented control: **Auto** (follows OS dark/light mode), **Dark**, **Light** |
+| **Theme** | Pill-style segmented control: **Auto** \| **Dark** \| **Light**. Switching is instant — all widget colours update in-place without restarting. **Auto** follows the OS dark/light mode preference and re-checks every 5 seconds, so theme changes made in System Settings are picked up automatically. |
 
 ### 18.2 Lab
 
@@ -1550,6 +1550,8 @@ Embeds the full user management table. See Section 21.4 for details.
 | **Release Notes** | Open the changelog for the latest release |
 
 ### 18.6 AI Assistant
+
+> *As of v1.50.34-beta, the AI Assistant settings have been reorganised into their own dedicated section (`ai_section.py`) within Settings. The layout and options are unchanged, but the section now loads independently for faster Settings panel startup.*
 
 **Local model (Ollama / bundled)**
 

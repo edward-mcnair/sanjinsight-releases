@@ -1,6 +1,6 @@
 # SanjINSIGHT — Developer Guide
 
-**Version**: 1.5.0-beta.1
+**Version**: 1.50.34-beta
 **Platform**: Windows 10/11 (64-bit); macOS/Linux supported for development
 **Stack**: Python 3.10 · PyQt5 · NumPy · PyInstaller · Inno Setup
 **Repository**: Private source (`edward-mcnair/sanjinsight`) · Public releases (`edward-mcnair/sanjinsight-releases`)
@@ -115,7 +115,11 @@ sanjinsight/
 │   ├── fps_optimizer.py       ← Auto-optimize acquisition throughput (LED → FPS → exposure)
 │   ├── image_metrics.py       ← Shared stateless image-quality metrics (focus, intensity, stability)
 │   ├── preflight.py           ← Pre-capture validation system (PreflightValidator, PreflightCheck, PreflightResult)
-│   └── rgb_analysis.py        ← Per-channel RGB thermoreflectance analysis utilities
+│   ├── rgb_analysis.py        ← Per-channel RGB thermoreflectance analysis utilities
+│   ├── export_worker.py       ← QThread worker for background export
+│   ├── report_worker.py       ← QThread worker for background report generation
+│   ├── processing/
+│   │   ├── image_rendering.py ← Shared render_array(), render_to_tmpfile(), render_to_b64()
 │
 ├── ui/                        ← Qt5 UI components
 │   ├── charts.py              ← PyQtGraph chart widgets (calibration, analysis, transient, sessions)
@@ -123,6 +127,9 @@ sanjinsight/
 │   ├── sidebar_nav.py         ← Collapsible sidebar navigation (Manual mode)
 │   ├── wizard.py              ← Guided workflow wizard (Auto mode)
 │   ├── settings_tab.py        ← Preferences / AI setup / license / about
+│   ├── settings/              ← Settings subsystem
+│   │   ├── _helpers.py        ← Shared QSS/palette helper functions for settings UI
+│   │   └── ai_section.py     ← AISettingsMixin (extracted from settings_tab.py)
 │   ├── first_run.py           ← First-run hardware setup wizard
 │   ├── device_manager_dialog.py ← Device discovery and management dialog
 │   ├── update_dialog.py       ← Update badge and about dialog
@@ -138,7 +145,10 @@ sanjinsight/
 │   ├── tabs/                  ← Merged tabs (capture, transient_capture, camera_control, stimulus, library)
 │   ├── dialogs/               ← Specialized dialogs (support bundle, etc.)
 │   └── widgets/               ← Reusable widgets (image pane, temp plot, status header …)
-│       └── preflight_dialog.py ← Pre-capture validation dialog (modal, traffic-light results)
+│       ├── preflight_dialog.py ← Pre-capture validation dialog (modal, traffic-light results)
+│       ├── segmented_control.py ← Shared pill-style SegmentedControl widget
+│       ├── tab_helpers.py      ← Shared make_readout(), make_sub(), inner_tab_qss()
+│       └── empty_state.py      ← Empty-state placeholder widget
 │
 ├── ai/                        ← AI assistant
 │   ├── ai_service.py          ← Multi-backend AI service (local + cloud)
@@ -1018,13 +1028,26 @@ Dual-mode theme system supporting Auto (OS-adaptive), Dark, and Light modes. The
 
 - **`_DARK_RAW` / `_LIGHT_RAW`** — raw palette dictionaries for each mode
 - **`PALETTE`** — a live mutable dict updated in-place by `set_theme(mode)`. All widgets reference `PALETTE["key"]` and get the current theme's values without re-importing
-- **`build_style(mode)`** — generates a master QSS string for all widget classes
+- **`build_style(mode)`** — generates a master QSS string (~670 lines) for all widget classes
 - **`build_qt_palette(mode)`** — generates a `QPalette` for native Qt widgets
 - **`detect_system_theme()`** — OS detection (macOS/Windows/Linux), fallback `"dark"`
+- **17 QSS helper functions** — `btn_primary_qss()`, `btn_danger_qss()`, `input_qss()`, `status_pill_qss()`, `groupbox_qss()`, etc. for consistent widget styling
 
-Theme preference is stored as `config.get_pref("ui.theme", "auto")` with three options controlled by a segmented control in Settings → Appearance. When set to `"auto"`, a 5-second polling timer (`MainWindow._poll_system_theme()`) detects OS theme changes.
+Theme preference is stored as `config.get_pref("ui.theme", "auto")` with three options controlled by a `SegmentedControl` in Settings → Appearance. When set to `"auto"`, a 5-second polling timer (`MainWindow._poll_system_theme()`) detects OS theme changes.
 
-Persistent widgets implement `_apply_styles()`, called by `MainWindow._swap_visual_theme()` to re-theme on mode switch. Sidebar palette helpers (`_BG()`, `_ACCENT()`, etc.) are functions, not snapshots, ensuring live updates.
+**Theme switching (`_swap_visual_theme()`):**
+
+The method uses a colour-rewrite strategy to update inline stylesheets without losing font/layout properties:
+
+1. Snapshots all PALETTE hex values before `set_theme()` updates them
+2. Builds an old→new colour remap (only entries that changed)
+3. For each widget: rewrites stale hex values in its inline stylesheet, then calls `unpolish()` / `polish()` / `_apply_styles()` / `update()`
+
+This preserves `font-size`, `font-weight`, `padding`, and all non-colour CSS properties while updating every colour to the new theme. Widgets with `_apply_styles()` re-apply any specialised styling with current PALETTE values.
+
+**Widget theme contract:**
+
+Persistent widgets that set inline stylesheets should implement `_apply_styles(self)` and re-apply all construction-time styling with current `PALETTE`/`FONT` values. This method is called automatically by `_swap_visual_theme()`. Sidebar palette helpers (`_BG()`, `_ACCENT()`, etc.) are functions, not snapshots, ensuring live updates.
 
 ### 6.7 Charts (`ui/charts.py`)
 
@@ -1558,7 +1581,7 @@ config.get_pref("license.key", "")
 | `frame_bit_depth` | int | Native sensor bit depth (12, 14, 16) *(v3)* |
 | `pixel_format` | str | `"mono"`, `"bayer_rggb"`, or `"rgb"` *(v3)* |
 | `preflight` | Optional[dict] | PreflightResult snapshot, or None *(v3)* |
-| `schema_version` | int | For migrations (currently 3) |
+| `schema_version` | int | For migrations (currently 5) |
 
 ### 12.3 Loading Sessions
 
@@ -1669,6 +1692,7 @@ log.error("Camera grab failed: %s", exc)
 | `threading.Event` (`_stop_event`) | Signaling background threads to exit |
 | `threading.Event` (`_cam_preview_free`) | Camera frame back-pressure |
 | `DeviceManager._lock` | Device state machine transitions |
+| `SessionManager._lock` (RLock) | Protecting session index and atomic metadata writes |
 | Qt signals (auto-queued) | Cross-thread GUI updates |
 
 **Rule**: Background threads (hardware poll loops, acquisition pipeline) **never** call any Qt widget methods directly. They emit signals, which Qt queues to the GUI thread automatically.
@@ -1676,6 +1700,8 @@ log.error("Camera grab failed: %s", exc)
 **Rule**: All reads/writes of hardware driver references use `with app_state:` to avoid races during hotplug.
 
 **Rule**: `AcquisitionPipeline.run()` (blocking) must be called from a non-GUI thread. `AcquisitionPipeline.start()` (non-blocking) spawns its own thread internally.
+
+**Rule**: `SessionManager._update_field()` holds its RLock through the entire read-modify-write cycle (in-memory update + JSON file write). File writes use atomic operations (write to `.tmp`, then `os.replace()`) to prevent corruption on process crash.
 
 ---
 
@@ -2040,6 +2066,21 @@ def __init__(self, hw_service, app_state, auth_session=None, parent=None):
 
 Tabs should **never block** the user from viewing data — they should hide or disable controls they can't use, not hide the entire tab.
 
+**Step 4 — Implement `_apply_styles()` for theme switching:**
+
+Every tab that sets inline stylesheets at construction time must implement `_apply_styles()` to re-apply them with current PALETTE values:
+
+```python
+def _apply_styles(self):
+    from ui.theme import PALETTE as P, FONT as F
+    self._readout.setStyleSheet(
+        f"font-family: 'Menlo'; font-size: {F['readoutLg']}pt; color: {P['accent']};")
+    self._sublabel.setStyleSheet(
+        f"font-size: {F['caption']}pt; color: {P['textDim']};")
+```
+
+This method is called automatically by `MainWindow._swap_visual_theme()` during theme switches. Use `ui/widgets/tab_helpers.py` helpers (`make_readout()`, `make_sub()`) for common readout patterns.
+
 ---
 
 ## 22. Key Design Decisions
@@ -2066,6 +2107,9 @@ Tabs should **never block** the user from viewing data — they should hide or d
 | **SQLite for user DB** | Zero server dependency; stdlib `sqlite3`; works air-gapped |
 | **JSON Lines for audit log** | Human-readable, grep-able, append-only; matches existing `timeline.jsonl` pattern |
 | **FLIR driver key stays `"flir"` internally** | User-facing label is "Microsanj IR Camera" via QComboBox userData; `config.yaml` key unchanged for backwards compatibility |
+| **Colour-rewrite theme switching** | Inline stylesheets are rewritten in-place (old hex → new hex) instead of cleared-and-rebuilt, preserving font/layout properties that would be lost by clearing |
+| **SegmentedControl as shared widget** | One custom-painted pill-style widget replaces 7+ QPushButton-based segment implementations across the app |
+| **Atomic session metadata writes** | `.tmp` + `os.replace()` prevents corrupt JSON if the process crashes mid-write |
 | **PyQtGraph for interactive charts** | Native QWidget, no web engine, OpenGL-accelerated, real-time capable; degrades gracefully to a `QLabel` placeholder when not installed. Chosen over matplotlib (slow redraws in Qt), Qt Charts (GPL, separate install), and Plotly/Bokeh (require Chromium). |
 | **`_PG_OK` flag + conditional base class** | `_PlotBase = pg.PlotWidget if _PG_OK else QWidget` evaluated once at import; all chart classes inherit from it. `pg.PlotWidget` is only referenced when PyQtGraph is available, so `import ui.charts` never crashes on a system without it. |
 | **`_CmdSignals.finished` + `_active_cmd_signals` set** | `setAutoDelete(False)` on `_CmdRunnable` + a strong Python reference held in the parent widget's `_active_cmd_signals` set until `finished` fires. Prevents the common PyQt5 pitfall where a `QObject` signal carrier is garbage-collected before its queued cross-thread delivery reaches the main thread. |
