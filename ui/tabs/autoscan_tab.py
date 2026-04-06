@@ -44,11 +44,6 @@ from ui.widgets.metadata_strip  import MetadataStrip
 def _group(title: str) -> QGroupBox:
     return QGroupBox(title)
 
-def _seg_btn(label: str) -> QPushButton:
-    btn = QPushButton(label)
-    btn.setCheckable(True)
-    btn.setMinimumHeight(28)   # min not fixed — allows growth on high-DPI / large fonts
-    return btn
 
 
 # ── Readiness panel ───────────────────────────────────────────────────────────
@@ -232,8 +227,10 @@ class _ReadinessPanel(QGroupBox):
                 from hardware.app_state import app_state
                 if getattr(app_state, "stage", None):
                     app_state.stage.home("xy")
-            except Exception:
-                pass
+            except Exception as exc:
+                log.exception("Stage homing failed: %s", exc)
+                QTimer.singleShot(0, lambda: self._stage_row.set_status(
+                    "err", f"Stage — homing failed: {exc}"))
             finally:
                 self._homing = False
                 QTimer.singleShot(0, self.refresh)
@@ -275,9 +272,19 @@ class _ReadinessPanel(QGroupBox):
         self._cam_row.set_action_enabled(True, "Abort")
 
         def _run():
-            result = self._af_driver.run()
-            from PyQt5.QtCore import QTimer
-            QTimer.singleShot(0, lambda: self._on_af_complete(result))
+            try:
+                result = self._af_driver.run()
+                from PyQt5.QtCore import QTimer
+                QTimer.singleShot(0, lambda: self._on_af_complete(result))
+            except Exception as exc:
+                log.exception("Autofocus failed: %s", exc)
+                from PyQt5.QtCore import QTimer
+                QTimer.singleShot(0, lambda: self._cam_row.set_status(
+                    "err", f"Camera — autofocus failed: {exc}"))
+                QTimer.singleShot(0, lambda: self._cam_row.set_action_enabled(
+                    True, "Focus"))
+                self._af_running = False
+                self._af_driver = None
 
         threading.Thread(target=_run, daemon=True).start()
 
@@ -470,21 +477,13 @@ class AutoScanTab(QWidget):
         obj_outer.setContentsMargins(0, 0, 0, 0)
         obj_outer.setSpacing(4)
 
-        obj_lbl_row = QHBoxLayout()
-        obj_lbl_row.setSpacing(0)
+        from ui.widgets.segmented_control import SegmentedControl
         from ai.instrument_knowledge import OBJECTIVE_SPECS
         self._obj_specs = list(OBJECTIVE_SPECS)
 
-        self._obj_btns    = []
-        self._obj_btn_grp = QButtonGroup(self)
-        self._obj_btn_grp.setExclusive(True)
-        for i, spec in enumerate(self._obj_specs):
-            b = _seg_btn(f" {spec.magnification}× ")
-            b.setMinimumWidth(46)
-            self._obj_btns.append(b)
-            self._obj_btn_grp.addButton(b, i)
-            obj_lbl_row.addWidget(b)
-        obj_lbl_row.addStretch()
+        obj_labels = [f"{s.magnification}×" for s in self._obj_specs]
+        self._obj_seg = SegmentedControl(obj_labels, seg_width=52)
+        self._obj_seg.selection_changed.connect(self._on_objective_changed)
 
         # Default: last-used magnification (persisted), then 10×, then first available
         _saved_mag = _cfg.get_pref("autoscan.last_objective_mag", 10)
@@ -493,9 +492,12 @@ class AutoScanTab(QWidget):
             if _s.magnification == _saved_mag:
                 _default_idx = _i
                 break
-        self._obj_btn_grp.button(_default_idx).setChecked(True)
-        self._obj_btn_grp.idClicked.connect(self._on_objective_changed)
-        obj_outer.addLayout(obj_lbl_row)
+        self._obj_seg.set_index(_default_idx)
+
+        obj_row = QHBoxLayout()
+        obj_row.addWidget(self._obj_seg)
+        obj_row.addStretch()
+        obj_outer.addLayout(obj_row)
 
         self._obj_info_lbl = QLabel()
         self._obj_info_lbl.setObjectName("sublabel")
@@ -511,18 +513,9 @@ class AutoScanTab(QWidget):
         goal_grp = _group("Goal")
         g_lay = QHBoxLayout(goal_grp)
         g_lay.setSpacing(0)
-        self._goal_find = _seg_btn("  Find Hotspots")
-        self._goal_map  = _seg_btn("  Map Full Area")
-        self._goal_find.setChecked(True)
-        self._goal_find.setMinimumWidth(120)   # min not fixed — accommodates scaled fonts
-        self._goal_map.setMinimumWidth(120)
-        self._goal_grp = QButtonGroup(self)
-        self._goal_grp.addButton(self._goal_find, 0)
-        self._goal_grp.addButton(self._goal_map,  1)
-        self._goal_grp.setExclusive(True)
-        self._goal_grp.idClicked.connect(lambda _: self._refresh_seg_styles())
-        g_lay.addWidget(self._goal_find)
-        g_lay.addWidget(self._goal_map)
+        self._goal_seg = SegmentedControl(
+            ["Find Hotspots", "Map Full Area"], seg_width=100)
+        g_lay.addWidget(self._goal_seg)
         g_lay.addStretch()
         lay.addWidget(goal_grp)
 
@@ -531,22 +524,10 @@ class AutoScanTab(QWidget):
         stim_grp = self._stim_grp_box
         s_lay = QVBoxLayout(stim_grp)
         seg_row = QHBoxLayout()
-        seg_row.setSpacing(0)
-        self._stim_off    = _seg_btn("  Off")
-        self._stim_dc     = _seg_btn("  DC")
-        self._stim_pulsed = _seg_btn("  Pulsed")
-        self._stim_off.setChecked(True)
-        for b, w in [(self._stim_off, 70), (self._stim_dc, 70),
-                     (self._stim_pulsed, 80)]:
-            b.setMinimumWidth(w)    # min not fixed — scaled fonts can push width up
-            seg_row.addWidget(b)
+        self._stim_seg = SegmentedControl(["Off", "DC", "Pulsed"], seg_width=72)
+        self._stim_seg.selection_changed.connect(self._on_stim_changed)
+        seg_row.addWidget(self._stim_seg)
         seg_row.addStretch()
-        self._stim_grp = QButtonGroup(self)
-        self._stim_grp.addButton(self._stim_off,    0)
-        self._stim_grp.addButton(self._stim_dc,     1)
-        self._stim_grp.addButton(self._stim_pulsed, 2)
-        self._stim_grp.setExclusive(True)
-        self._stim_grp.idClicked.connect(self._on_stim_changed)
         s_lay.addLayout(seg_row)
 
         self._stim_params = QWidget()
@@ -789,7 +770,6 @@ class AutoScanTab(QWidget):
 
     def _on_stim_changed(self, idx: int) -> None:
         self._stim_params.setVisible(idx > 0)
-        self._refresh_seg_styles()
 
     def _on_quality_changed(self, val: int) -> None:
         labels = ["Fastest — fewer frames", "Fast", "Balanced  (recommended)",
@@ -835,7 +815,6 @@ class AutoScanTab(QWidget):
         self._ir_stim_note.setVisible(is_ir)
         self._obj_section.setVisible(not is_ir)
         self._update_modality_badge()
-        self._refresh_seg_styles()
 
     def _on_objective_changed(self, idx: int) -> None:
         """User selected a different objective magnification."""
@@ -852,12 +831,16 @@ class AutoScanTab(QWidget):
                 app_state.active_objective = spec
                 turret = getattr(app_state, "turret", None)
                 if turret is not None:
+                    def _move_turret(t=turret, pos=spec.position):
+                        try:
+                            t.move_to(pos)
+                        except Exception as exc:
+                            log.exception("Turret move failed: %s", exc)
                     threading.Thread(
-                        target=turret.move_to,
-                        args=(spec.position,),
+                        target=_move_turret,
                         daemon=True).start()
-            except Exception:
-                pass
+            except Exception as exc:
+                log.exception("Objective selection failed: %s", exc)
 
     def _sync_objective_from_hardware(self) -> None:
         """Select the objective button that matches the current hardware state.
@@ -904,9 +887,9 @@ class AutoScanTab(QWidget):
 
         for i, spec in enumerate(self._obj_specs):
             if spec.magnification == mag:
-                self._obj_btn_grp.blockSignals(True)
-                self._obj_btn_grp.button(i).setChecked(True)
-                self._obj_btn_grp.blockSignals(False)
+                self._obj_seg.blockSignals(True)
+                self._obj_seg.set_index(i)
+                self._obj_seg.blockSignals(False)
                 self._update_obj_info()
                 break
 
@@ -928,7 +911,7 @@ class AutoScanTab(QWidget):
         except Exception:
             cam_model = ""
 
-        idx = self._obj_btn_grp.checkedId()
+        idx = self._obj_seg.index()
         if 0 <= idx < len(self._obj_specs):
             spec = self._obj_specs[idx]
             fov  = spec.fov_um(cam_model)
@@ -1062,14 +1045,14 @@ class AutoScanTab(QWidget):
     def _build_config(self) -> dict:
         area_map = {0: "single", 1: "roi", 2: "full"}
         stim_map = {0: "off",    1: "dc",  2: "pulsed"}
-        idx = self._obj_btn_grp.checkedId()
+        idx = self._obj_seg.index()
         mag = (self._obj_specs[idx].magnification
                if 0 <= idx < len(self._obj_specs) else 10)
         return {
-            "goal":         "hotspots" if self._goal_find.isChecked() else "map",
+            "goal":         "hotspots" if self._goal_seg.index() == 0 else "map",
             "modality":     self._modality,
             "magnification": mag,          # 0 for IR (no objective choice)
-            "stimulus":     stim_map[self._stim_grp.checkedId()],
+            "stimulus":     stim_map[self._stim_seg.index()],
             "voltage":      self._voltage.value(),
             "current":      self._current.value(),
             "scan_area":    area_map[self._area_grp.checkedId()],
@@ -1089,15 +1072,12 @@ class AutoScanTab(QWidget):
         mag = cfg.get("magnification", 10)
         for i, spec in enumerate(self._obj_specs):
             if spec.magnification == mag:
-                self._obj_btn_grp.button(i).setChecked(True)
+                self._obj_seg.set_index(i)
                 self._update_obj_info()
                 break
-        if cfg.get("goal") == "map":
-            self._goal_map.setChecked(True)
-        else:
-            self._goal_find.setChecked(True)
+        self._goal_seg.set_index(1 if cfg.get("goal") == "map" else 0)
         stim = {"off": 0, "dc": 1, "pulsed": 2}.get(cfg.get("stimulus", "off"), 0)
-        self._stim_grp.button(stim).setChecked(True)
+        self._stim_seg.set_index(stim)
         self._stim_params.setVisible(stim > 0)
         if "voltage"     in cfg: self._voltage.setValue(cfg["voltage"])
         if "current"     in cfg: self._current.setValue(cfg["current"])
@@ -1107,7 +1087,6 @@ class AutoScanTab(QWidget):
         if "exposure_ms" in cfg: self._exposure.setValue(cfg["exposure_ms"])
         if "n_frames"    in cfg: self._n_frames.setValue(cfg["n_frames"])
         if "settle_s"    in cfg: self._settle.setValue(cfg["settle_s"])
-        self._refresh_seg_styles()
 
     # ── Theme ─────────────────────────────────────────────────────────────────
 
@@ -1133,7 +1112,7 @@ class AutoScanTab(QWidget):
                 font-style:italic;
             }}
             QGroupBox {{
-                color:{dim}; border:1px solid {bdr}; border-radius:6px;
+                color:{text}; border:1px solid {bdr}; border-radius:6px;
                 margin-top:8px; padding-top:10px;
                 font-size:{FONT['label']}pt; font-weight:600;
             }}
@@ -1173,7 +1152,9 @@ class AutoScanTab(QWidget):
             }}
             QToolButton:hover {{ color:{text}; }}
         """))
-        self._refresh_seg_styles()
+        # Segmented pill controls repaint automatically
+        for seg in (self._goal_seg, self._stim_seg, self._obj_seg):
+            seg._apply_styles()
         if hasattr(self, "_meta_strip"):
             self._meta_strip._apply_styles()
         if hasattr(self, "_new_scan_btn"):
@@ -1188,44 +1169,3 @@ class AutoScanTab(QWidget):
                 f"QPushButton:hover {{ border-color:{P.get('accent',PALETTE['accent'])}; }}"
             ))
 
-    def _refresh_seg_styles(self) -> None:
-        P    = PALETTE
-        surf = P['surface2']
-        dim  = P.get("textDim",  PALETTE['textDim'])
-        bdr  = P['border']
-        acc  = P.get("accent",   PALETTE['accent'])
-
-        base = scaled_qss(f"""
-            QPushButton {{
-                background:{surf}; color:{dim};
-                border:1px solid {bdr}; padding:4px 0;
-                font-size:{FONT['label']}pt;
-            }}
-            QPushButton:checked {{ background:{acc}; color:{PALETTE['textOnAccent']}; border-color:{acc}; }}
-        """)
-
-        self._goal_find.setStyleSheet(
-            base + "QPushButton { border-radius:4px 0 0 4px; }")
-        self._goal_map.setStyleSheet(
-            base + "QPushButton { border-radius:0 4px 4px 0; border-left:none; }")
-        self._stim_off.setStyleSheet(
-            base + "QPushButton { border-radius:4px 0 0 4px; }")
-        self._stim_dc.setStyleSheet(
-            base + "QPushButton { border-radius:0; border-left:none; }")
-        self._stim_pulsed.setStyleSheet(
-            base + "QPushButton { border-radius:0 4px 4px 0; border-left:none; }")
-
-        # Objective buttons
-        n = len(self._obj_btns)
-        for i, b in enumerate(self._obj_btns):
-            if i == 0:
-                radius = "4px 0 0 4px"
-                extra  = ""
-            elif i == n - 1:
-                radius = "0 4px 4px 0"
-                extra  = " border-left:none;"
-            else:
-                radius = "0"
-                extra  = " border-left:none;"
-            b.setStyleSheet(
-                base + f"QPushButton {{ border-radius:{radius};{extra} }}")

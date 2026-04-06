@@ -32,6 +32,7 @@ from PyQt5.QtGui  import QColor, QFont
 
 from ui.theme import FONT, PALETTE, MONO_FONT
 from ui.icons import set_btn_icon
+from ui.widgets.tab_helpers import make_sub
 from acquisition.emissivity_cal import (
     EmissivityCalibration, EmissivityCalResult,
 )
@@ -44,9 +45,7 @@ from acquisition.emissivity_cal import (
 
 def _sub(text: str) -> QLabel:
     """Dimmed subscript / field-label widget consistent with calibration_tab."""
-    lbl = QLabel(text)
-    lbl.setObjectName("sublabel")
-    return lbl
+    return make_sub(text)
 
 
 def _hline() -> QFrame:

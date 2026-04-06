@@ -559,7 +559,7 @@ class _PageTEC(_PageBase):
         atec_cfg        = cfg.get("tec_atec",        {})
 
         _grp_ss = (
-            f"QGroupBox {{ color:{PALETTE['textSub']}; font-size:{FONT['label']}pt; border:1px solid {PALETTE['border']}; "
+            f"QGroupBox {{ color:{PALETTE['text']}; font-size:{FONT['label']}pt; border:1px solid {PALETTE['border']}; "
             "border-radius:5px; margin-top:8px; padding:12px; }"
             "QGroupBox::title { subcontrol-origin:margin; left:10px; padding:0 4px; }")
 
@@ -789,7 +789,7 @@ class _PageCamera(_PageBase):
 
         g = QGroupBox("Camera")
         g.setStyleSheet(
-            f"QGroupBox {{ color:{PALETTE['textSub']}; font-size:{FONT['label']}pt; border:1px solid {PALETTE['border']}; "
+            f"QGroupBox {{ color:{PALETTE['text']}; font-size:{FONT['label']}pt; border:1px solid {PALETTE['border']}; "
             "border-radius:5px; margin-top:8px; padding:12px; }"
             "QGroupBox::title { subcontrol-origin:margin; left:10px; padding:0 4px; }")
         fl = QFormLayout(g)
@@ -1219,7 +1219,7 @@ class _PageFPGA(_PageBase):
 
         g = QGroupBox("NI sbRIO / NI 9637 FPGA")
         g.setStyleSheet(
-            f"QGroupBox {{ color:{PALETTE['textSub']}; font-size:{FONT['label']}pt; border:1px solid {PALETTE['border']}; "
+            f"QGroupBox {{ color:{PALETTE['text']}; font-size:{FONT['label']}pt; border:1px solid {PALETTE['border']}; "
             "border-radius:5px; margin-top:8px; padding:12px; }"
             "QGroupBox::title { subcontrol-origin:margin; left:10px; padding:0 4px; }")
         fl = QFormLayout(g)
@@ -1359,7 +1359,7 @@ class _PageBias(_PageBase):
         # ── GroupBox ──────────────────────────────────────────────────────────
         g = QGroupBox("Bias Source Configuration")
         g.setStyleSheet(
-            f"QGroupBox {{ color:{PALETTE['textSub']}; font-size:{FONT['label']}pt; border:1px solid {PALETTE['border']}; "
+            f"QGroupBox {{ color:{PALETTE['text']}; font-size:{FONT['label']}pt; border:1px solid {PALETTE['border']}; "
             "border-radius:5px; margin-top:8px; padding:12px; }"
             "QGroupBox::title { subcontrol-origin:margin; left:10px; padding:0 4px; }")
         fl = QFormLayout(g)
@@ -1640,7 +1640,7 @@ class _PageStage(_PageBase):
         # ── GroupBox ──────────────────────────────────────────────────────────
         g = QGroupBox("Stage Configuration")
         g.setStyleSheet(
-            f"QGroupBox {{ color:{PALETTE['textSub']}; font-size:{FONT['label']}pt; border:1px solid {PALETTE['border']}; "
+            f"QGroupBox {{ color:{PALETTE['text']}; font-size:{FONT['label']}pt; border:1px solid {PALETTE['border']}; "
             "border-radius:5px; margin-top:8px; padding:12px; }"
             "QGroupBox::title { subcontrol-origin:margin; left:10px; padding:0 4px; }")
         fl = QFormLayout(g)

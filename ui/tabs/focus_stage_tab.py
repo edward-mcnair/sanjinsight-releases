@@ -14,6 +14,7 @@ from PyQt5.QtCore import Qt, pyqtSignal, QSize
 
 from ui.theme import FONT, PALETTE
 from ui.icons import IC, make_icon
+from ui.widgets.tab_helpers import inner_tab_qss
 from ui.guidance import get_section_cards, GuidanceCard, WorkflowFooter
 from ui.guidance.steps import next_steps_after
 
@@ -194,19 +195,4 @@ class FocusStageTab(QWidget):
 
 
 def _inner_tab_qss() -> str:
-    P = PALETTE
-    return f"""
-        QTabWidget::pane {{ border:none; background:{P['bg']}; }}
-        QTabBar::tab {{
-            background:{P['surface2']}; color:{P['textDim']};
-            border:none; border-right:1px solid {P['border']};
-            padding:6px 20px; font-size:{FONT['label']}pt;
-        }}
-        QTabBar::tab:selected {{
-            background:{P['surface']}; color:{P['text']};
-            border-bottom:2px solid {P['accent']};
-        }}
-        QTabBar::tab:hover:!selected {{
-            background:{P['surfaceHover']}; color:{P['text']};
-        }}
-    """
+    return inner_tab_qss()

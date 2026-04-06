@@ -34,6 +34,7 @@ from reportlab.pdfgen          import canvas as rl_canvas
 from acquisition.storage.session        import Session
 from acquisition.calibration.calibration import CalibrationResult
 from acquisition.processing.processing   import to_display
+from acquisition.processing.image_rendering import render_to_tmpfile
 
 
 # ------------------------------------------------------------------ #
@@ -83,60 +84,15 @@ class ReportConfig:
 
 def _array_to_tmpimg(data: np.ndarray, mode: str = "percentile",
                      cmap: str = "Thermal Delta", size: tuple = (300, 220)) -> str:
-    """
-    Convert a numpy array to a temp PNG file and return its path.
-    Renders via OpenCV if available, falls back to pure numpy.
-    """
-    disp = to_display(data, mode=mode)
+    """Convert a numpy array to a temp PNG file and return its path.
 
-    if cmap in ("Thermal Delta", "signed") and data is not None:
-        d      = data.astype(np.float32)
-        limit  = float(np.percentile(np.abs(d), 99.5)) or 1e-9
-        normed = np.clip(d / limit, -1.0, 1.0)
-        r = (np.clip( normed, 0, 1) * 255).astype(np.uint8)
-        b = (np.clip(-normed, 0, 1) * 255).astype(np.uint8)
-        g = np.zeros_like(r)
-        rgb = np.stack([r, g, b], axis=-1)
-    elif cmap != "gray" and disp.ndim == 2:
-        try:
-            import cv2
-            cv_maps = {"hot": cv2.COLORMAP_HOT, "cool": cv2.COLORMAP_COOL,
-                       "viridis": cv2.COLORMAP_VIRIDIS}
-            if cmap in cv_maps:
-                rgb = cv2.applyColorMap(disp, cv_maps[cmap])
-            else:
-                rgb = np.stack([disp]*3, axis=-1)
-        except ImportError:
-            rgb = np.stack([disp]*3, axis=-1)
-    elif disp.ndim == 2:
-        rgb = np.stack([disp]*3, axis=-1)
-    else:
-        rgb = disp
-
-    # Resize to target
-    h, w = rgb.shape[:2]
+    Delegates to :func:`render_to_tmpfile` from the shared image-rendering
+    module.
+    """
     tw, th = size
-    if h > 0 and w > 0:
-        try:
-            import cv2
-            rgb = cv2.resize(rgb, (tw, th))
-        except ImportError:
-            pass   # use original size
-
-    tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
-    try:
-        import cv2
-        cv2.imwrite(tmp.name, rgb)
-    except ImportError:
-        # Fallback: write minimal PNG via PIL if available
-        try:
-            from PIL import Image as PILImage
-            PILImage.fromarray(rgb).save(tmp.name)
-        except ImportError:
-            tmp.close()
-            return None
-    tmp.close()
-    return tmp.name
+    return render_to_tmpfile(
+        data, mode=mode, colormap=cmap, width=tw, height=th,
+    )
 
 
 def _logo_png(logo_svg: str, width_px: int = 240) -> Optional[str]:

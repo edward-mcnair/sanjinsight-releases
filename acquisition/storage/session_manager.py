@@ -8,6 +8,7 @@ Provides save, load, delete, and comparison operations.
 from __future__ import annotations
 import logging
 import os, shutil
+import threading
 from typing import List, Optional, Dict
 
 import config as cfg_mod
@@ -21,6 +22,7 @@ class SessionManager:
     def __init__(self, root: str):
         self._root  = root
         self._index: Dict[str, SessionMeta] = {}
+        self._lock  = threading.RLock()
 
     @property
     def root(self) -> str:
@@ -28,8 +30,9 @@ class SessionManager:
 
     @root.setter
     def root(self, path: str):
-        self._root  = path
-        self._index = {}
+        with self._lock:
+            self._root  = path
+            self._index = {}
 
     # ---------------------------------------------------------------- #
     #  Index                                                            #
@@ -37,28 +40,32 @@ class SessionManager:
 
     def scan(self) -> int:
         """Rebuild index by scanning root. Returns session count."""
-        self._index = {}
-        if not os.path.isdir(self._root):
-            return 0
-        for name in os.listdir(self._root):
-            folder = os.path.join(self._root, name)
-            if not os.path.isdir(folder):
-                continue
-            meta = Session.load_meta(folder)
-            if meta:
-                self._index[meta.uid] = meta
-        return len(self._index)
+        with self._lock:
+            self._index = {}
+            if not os.path.isdir(self._root):
+                return 0
+            for name in os.listdir(self._root):
+                folder = os.path.join(self._root, name)
+                if not os.path.isdir(folder):
+                    continue
+                meta = Session.load_meta(folder)
+                if meta:
+                    self._index[meta.uid] = meta
+            return len(self._index)
 
     def all_metas(self) -> List[SessionMeta]:
         """All metadata, newest first."""
-        return sorted(self._index.values(),
-                      key=lambda m: m.timestamp, reverse=True)
+        with self._lock:
+            return sorted(self._index.values(),
+                          key=lambda m: m.timestamp, reverse=True)
 
     def get_meta(self, uid: str) -> Optional[SessionMeta]:
-        return self._index.get(uid)
+        with self._lock:
+            return self._index.get(uid)
 
     def count(self) -> int:
-        return len(self._index)
+        with self._lock:
+            return len(self._index)
 
     # ---------------------------------------------------------------- #
     #  CRUD                                                             #
@@ -95,12 +102,14 @@ class SessionManager:
             tags=tags or [],
         )
         session.save(self._root)
-        self._index[session.meta.uid] = session.meta
+        with self._lock:
+            self._index[session.meta.uid] = session.meta
         return session
 
     def load(self, uid: str) -> Optional[Session]:
         """Load full session by uid (arrays lazy-loaded)."""
-        meta = self._index.get(uid)
+        with self._lock:
+            meta = self._index.get(uid)
         if meta is None:
             return None
         try:
@@ -109,54 +118,44 @@ class SessionManager:
             log.warning("SessionManager.load(%s): %s", uid, e)
             return None
 
+    def _update_field(self, uid: str, field: str, value):
+        """Update a single metadata field on both the in-memory index and disk."""
+        import json
+        with self._lock:
+            meta = self._index.get(uid)
+            if meta is None:
+                return
+            setattr(meta, field, value)
+            p = os.path.join(meta.path, "session.json")
+            if os.path.exists(p):
+                try:
+                    with open(p) as f:
+                        d = json.load(f)
+                    d[field] = value
+                    tmp = p + ".tmp"
+                    with open(tmp, "w") as f:
+                        json.dump(d, f, indent=2)
+                    os.replace(tmp, p)
+                except (OSError, json.JSONDecodeError) as e:
+                    log.warning("SessionManager._update_field(%s, %s): %s",
+                                uid, field, e)
+
     def update_label(self, uid: str, label: str):
         """Rename a session label in-place."""
-        import json
-        meta = self._index.get(uid)
-        if meta is None:
-            return
-        meta.label = label
-        p = os.path.join(meta.path, "session.json")
-        if os.path.exists(p):
-            with open(p) as f:
-                d = json.load(f)
-            d["label"] = label
-            with open(p, "w") as f:
-                json.dump(d, f, indent=2)
+        self._update_field(uid, "label", label)
 
     def update_notes(self, uid: str, notes: str):
         """Update session notes in-place."""
-        import json
-        meta = self._index.get(uid)
-        if meta is None:
-            return
-        meta.notes = notes
-        p = os.path.join(meta.path, "session.json")
-        if os.path.exists(p):
-            with open(p) as f:
-                d = json.load(f)
-            d["notes"] = notes
-            with open(p, "w") as f:
-                json.dump(d, f, indent=2)
+        self._update_field(uid, "notes", notes)
 
     def update_status(self, uid: str, status: str):
         """Update session status in-place (pending/reviewed/flagged/archived)."""
-        import json
-        meta = self._index.get(uid)
-        if meta is None:
-            return
-        meta.status = status
-        p = os.path.join(meta.path, "session.json")
-        if os.path.exists(p):
-            with open(p) as f:
-                d = json.load(f)
-            d["status"] = status
-            with open(p, "w") as f:
-                json.dump(d, f, indent=2)
+        self._update_field(uid, "status", status)
 
     def delete(self, uid: str) -> bool:
         """Delete session folder from disk and remove from index."""
-        meta = self._index.pop(uid, None)
+        with self._lock:
+            meta = self._index.pop(uid, None)
         if meta is None:
             return False
         try:

@@ -31,34 +31,9 @@ from ui.icons import make_icon, IC
 # ── Helpers ──────────────────────────────────────────────────────────
 
 def _group(title: str) -> QGroupBox:
-    grp = QGroupBox(title)
-    grp.setStyleSheet(_group_qss())
-    return grp
+    """Create a QGroupBox — styling applied by parent _apply_styles()."""
+    return QGroupBox(title)
 
-def _group_qss() -> str:
-    P = PALETTE
-    return scaled_qss(f"""
-        QGroupBox {{
-            color: {P['textDim']};
-            border: 1px solid {P['border']};
-            border-radius: 6px;
-            margin-top: 8px;
-            padding-top: 10px;
-            font-size: {FONT['label']}pt;
-            font-weight: 600;
-        }}
-        QGroupBox::title {{
-            subcontrol-origin: margin;
-            left: 12px;
-            padding: 0 4px;
-        }}
-    """)
-
-def _seg_btn(label: str) -> QPushButton:
-    btn = QPushButton(label)
-    btn.setCheckable(True)
-    btn.setFixedHeight(28)
-    return btn
 
 def _hline() -> QFrame:
     f = QFrame()
@@ -134,50 +109,27 @@ class ConfigScreen(QWidget):
     # ── Section builders ─────────────────────────────────────────────
 
     def _build_goal_group(self) -> QGroupBox:
+        from ui.widgets.segmented_control import SegmentedControl
         grp = _group("Goal")
         lay = QHBoxLayout(grp)
         lay.setSpacing(0)
 
-        self._goal_find = _seg_btn("  Find Hotspots")
-        self._goal_map  = _seg_btn("  Map Full Area")
-        self._goal_find.setChecked(True)
-
-        self._goal_grp = QButtonGroup(self)
-        self._goal_grp.addButton(self._goal_find, 0)
-        self._goal_grp.addButton(self._goal_map,  1)
-        self._goal_grp.setExclusive(True)
-        self._goal_grp.idClicked.connect(lambda _: self._refresh_seg_styles())
-
-        for btn in (self._goal_find, self._goal_map):
-            btn.setFixedWidth(140)
-            lay.addWidget(btn)
+        self._goal_seg = SegmentedControl(
+            ["Find Hotspots", "Map Full Area"], seg_width=100)
+        lay.addWidget(self._goal_seg)
         lay.addStretch()
         return grp
 
     def _build_stimulus_group(self) -> QGroupBox:
+        from ui.widgets.segmented_control import SegmentedControl
         grp = _group("Stimulus")
         lay = QVBoxLayout(grp)
 
         # Segmented: Off / DC / Pulsed
         seg_row = QHBoxLayout()
-        self._stim_off    = _seg_btn("  Off")
-        self._stim_dc     = _seg_btn("  DC")
-        self._stim_pulsed = _seg_btn("  Pulsed")
-        self._stim_off.setChecked(True)
-        self._stim_off.setFixedWidth(80)
-        self._stim_dc.setFixedWidth(80)
-        self._stim_pulsed.setFixedWidth(80)
-
-        self._stim_grp = QButtonGroup(self)
-        self._stim_grp.addButton(self._stim_off,    0)
-        self._stim_grp.addButton(self._stim_dc,     1)
-        self._stim_grp.addButton(self._stim_pulsed, 2)
-        self._stim_grp.setExclusive(True)
-        self._stim_grp.idClicked.connect(self._on_stim_changed)
-
-        seg_row.addWidget(self._stim_off)
-        seg_row.addWidget(self._stim_dc)
-        seg_row.addWidget(self._stim_pulsed)
+        self._stim_seg = SegmentedControl(["Off", "DC", "Pulsed"], seg_width=72)
+        self._stim_seg.selection_changed.connect(self._on_stim_changed)
+        seg_row.addWidget(self._stim_seg)
         seg_row.addStretch()
         lay.addLayout(seg_row)
 
@@ -309,7 +261,6 @@ class ConfigScreen(QWidget):
 
     def _on_stim_changed(self, idx: int) -> None:
         self._stim_params.setVisible(idx > 0)
-        self._refresh_seg_styles()
 
     def _on_quality_changed(self, val: int) -> None:
         labels = ["Fastest  — fewer frames", "Fast", "Balanced  (recommended)",
@@ -330,8 +281,8 @@ class ConfigScreen(QWidget):
         stim_map = {0: "off", 1: "dc", 2: "pulsed"}
         area_map = {0: "single", 1: "roi", 2: "full"}
         return {
-            "goal":        "hotspots" if self._goal_find.isChecked() else "map",
-            "stimulus":    stim_map[self._stim_grp.checkedId()],
+            "goal":        "hotspots" if self._goal_seg.index() == 0 else "map",
+            "stimulus":    stim_map[self._stim_seg.index()],
             "voltage":     self._voltage.value(),
             "current":     self._current.value(),
             "scan_area":   area_map[self._area_grp.checkedId()],
@@ -346,11 +297,12 @@ class ConfigScreen(QWidget):
         if not cfg:
             return
         goal_map = {"hotspots": 0, "map": 1}
-        self._goal_grp.button(goal_map.get(cfg.get("goal", "hotspots"), 0)).setChecked(True)
+        self._goal_seg.set_index(goal_map.get(cfg.get("goal", "hotspots"), 0))
 
         stim_map = {"off": 0, "dc": 1, "pulsed": 2}
-        self._stim_grp.button(stim_map.get(cfg.get("stimulus", "off"), 0)).setChecked(True)
-        self._stim_params.setVisible(cfg.get("stimulus", "off") != "off")
+        stim_idx = stim_map.get(cfg.get("stimulus", "off"), 0)
+        self._stim_seg.set_index(stim_idx)
+        self._stim_params.setVisible(stim_idx > 0)
         self._voltage.setValue(cfg.get("voltage", 0.0))
         self._current.setValue(cfg.get("current", 0.0))
 
@@ -360,7 +312,6 @@ class ConfigScreen(QWidget):
         self._exposure.setValue(cfg.get("exposure_ms", 10.0))
         self._n_frames.setValue(cfg.get("n_frames", 20))
         self._settle.setValue(cfg.get("settle_s", 0.5))
-        self._refresh_seg_styles()
 
     # ── Theme ─────────────────────────────────────────────────────────
 
@@ -382,7 +333,7 @@ class ConfigScreen(QWidget):
                 background: transparent;
             }}
             QGroupBox {{
-                color: {dim}; border: 1px solid {bdr}; border-radius: 6px;
+                color: {text}; border: 1px solid {bdr}; border-radius: 6px;
                 margin-top: 8px; padding-top: 10px;
                 font-size: {FONT['label']}pt; font-weight: 600;
             }}
@@ -436,30 +387,6 @@ class ConfigScreen(QWidget):
             QPushButton:pressed {{ background: {acc}; }}
         """))
 
-        self._refresh_seg_styles()
-
-    def _refresh_seg_styles(self) -> None:
-        """Re-apply segmented button styles with current PALETTE."""
-        P    = PALETTE
-        surf = P['surface2']
-        dim  = P['textDim']
-        bdr  = P['border']
-        acc  = P['accent']
-
-        base = scaled_qss(f"""
-            QPushButton {{
-                background: {surf}; color: {dim};
-                border: 1px solid {bdr}; padding: 4px 0;
-                font-size: {FONT['label']}pt;
-            }}
-            QPushButton:checked {{ background: {acc}; color: {P['textOnAccent']}; border-color: {acc}; }}
-        """)
-
-        # Goal buttons
-        self._goal_find.setStyleSheet(base + "QPushButton { border-radius: 4px 0 0 4px; }")
-        self._goal_map.setStyleSheet( base + "QPushButton { border-radius: 0 4px 4px 0; border-left: none; }")
-
-        # Stimulus buttons
-        self._stim_off.setStyleSheet(   base + "QPushButton { border-radius: 4px 0 0 4px; }")
-        self._stim_dc.setStyleSheet(    base + "QPushButton { border-radius: 0; border-left: none; }")
-        self._stim_pulsed.setStyleSheet(base + "QPushButton { border-radius: 0 4px 4px 0; border-left: none; }")
+        # Segmented pill controls repaint automatically
+        for seg in (self._goal_seg, self._stim_seg):
+            seg._apply_styles()

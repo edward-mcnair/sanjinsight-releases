@@ -9,17 +9,15 @@ ReportConfig toggles as the PDF generator.
 """
 
 from __future__ import annotations
-import base64
 import os
 import time
-import tempfile
 import numpy as np
 from typing import Optional
 
 from acquisition.storage.session        import Session
 from acquisition.calibration.calibration import CalibrationResult
-from acquisition.processing.processing   import to_display
 from .report      import ReportConfig
+from acquisition.processing.image_rendering import render_to_b64
 
 
 # ------------------------------------------------------------------ #
@@ -29,48 +27,15 @@ from .report      import ReportConfig
 def _array_to_b64(data: np.ndarray, mode: str = "percentile",
                   cmap: str = "Thermal Delta",
                   size: tuple = (600, 440)) -> str:
-    """Convert a numpy array to a base64-encoded PNG data URI."""
-    disp = to_display(data, mode=mode)
+    """Convert a numpy array to a base64-encoded PNG data URI.
 
-    if cmap in ("Thermal Delta", "signed") and data is not None:
-        d      = data.astype(np.float32)
-        limit  = float(np.percentile(np.abs(d), 99.5)) or 1e-9
-        normed = np.clip(d / limit, -1.0, 1.0)
-        r = (np.clip( normed, 0, 1) * 255).astype(np.uint8)
-        b = (np.clip(-normed, 0, 1) * 255).astype(np.uint8)
-        g = np.zeros_like(r)
-        rgb = np.stack([r, g, b], axis=-1)
-    elif disp.ndim == 2:
-        rgb = np.stack([disp] * 3, axis=-1)
-    else:
-        rgb = disp
-
-    # Resize
-    h, w = rgb.shape[:2]
+    Delegates to :func:`render_to_b64` from the shared image-rendering
+    module.
+    """
     tw, th = size
-    if h > 0 and w > 0:
-        try:
-            import cv2
-            rgb = cv2.resize(rgb, (tw, th))
-        except ImportError:
-            pass
-
-    # Encode to PNG
-    try:
-        import cv2
-        _, buf = cv2.imencode(".png", rgb[:, :, ::-1])  # RGB→BGR
-        b64 = base64.b64encode(buf.tobytes()).decode("ascii")
-    except ImportError:
-        try:
-            from PIL import Image as PILImage
-            import io
-            pil_img = PILImage.fromarray(rgb)
-            buf = io.BytesIO()
-            pil_img.save(buf, format="PNG")
-            b64 = base64.b64encode(buf.getvalue()).decode("ascii")
-        except ImportError:
-            return ""
-    return f"data:image/png;base64,{b64}"
+    return render_to_b64(
+        data, mode=mode, colormap=cmap, width=tw, height=th,
+    )
 
 
 # ------------------------------------------------------------------ #

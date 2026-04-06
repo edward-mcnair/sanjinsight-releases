@@ -384,9 +384,9 @@ class ComparisonTab(QWidget):
         lay.addWidget(maps_split, 3)
 
         # ─ Stats table ─
-        stats_box = QGroupBox("Comparison Statistics")
+        self._stats_box = stats_box = QGroupBox("Comparison Statistics")
         stats_box.setStyleSheet(f"""
-            QGroupBox {{ color:{PALETTE['textDim']}; font-size:{FONT['label']}pt; border:1px solid {PALETTE['border']};
+            QGroupBox {{ color:{PALETTE['text']}; font-size:{FONT['label']}pt; border:1px solid {PALETTE['border']};
                         border-radius:4px; margin-top:6px; }}
             QGroupBox::title {{ subcontrol-position:top left; padding:0 4px; }}
         """)
@@ -397,6 +397,23 @@ class ComparisonTab(QWidget):
         lay.addWidget(stats_box, 1)
 
         return content
+
+    def _apply_styles(self) -> None:
+        """Re-apply PALETTE / FONT styles after a theme change."""
+        self._stats_box.setStyleSheet(f"""
+            QGroupBox {{ color:{PALETTE['text']}; font-size:{FONT['label']}pt; border:1px solid {PALETTE['border']};
+                        border-radius:4px; margin-top:6px; }}
+            QGroupBox::title {{ subcontrol-position:top left; padding:0 4px; }}
+        """)
+        self._stats_table.setStyleSheet(f"""
+            QTableWidget {{ background:{PALETTE['surface']}; color:{PALETTE['text']}; font-size:{FONT['label']}pt;
+                           font-family:{MONO_FONT}; gridline-color:{PALETTE['border']}; }}
+            QHeaderView::section {{ background:{PALETTE['surface2']}; color:{PALETTE['textDim']}; font-size:{FONT['label']}pt;
+                                   padding: 4px 16px 4px 8px; }}
+            QTableWidget::item:alternate {{ background:{PALETTE['bg']}; }}
+        """)
+        self._status_lbl.setStyleSheet(
+            f"color:{PALETTE['textDim']}; font-size:{FONT['label']}pt; padding:2px 4px;")
 
     def _check_empty_state(self):
         """Show empty state (page 0) or content (page 1) based on loaded data."""

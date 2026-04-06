@@ -271,3 +271,9 @@ class CameraContextBar(QWidget):
         self._sep.setStyleSheet(f"color:{bdr};")
         self._periph_sep.setStyleSheet(f"color:{bdr};")
         self._apply_periph_name_style()
+
+        # Refresh mode badge with current palette colours
+        self._update_mode_badge(
+            getattr(
+                __import__('hardware.app_state', fromlist=['app_state']).app_state,
+                'active_camera_type', 'tr'))

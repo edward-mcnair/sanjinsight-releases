@@ -509,7 +509,7 @@ class RecipeTab(QWidget):
         txt = P['text']
         su2 = P['surface2']
         return (
-            f"QGroupBox {{ color:{dim}; font-size:{FONT['label']}pt; "
+            f"QGroupBox {{ color:{txt}; font-size:{FONT['label']}pt; "
             f"border:1px solid {bdr}; border-radius:4px; margin-top:6px; }} "
             "QGroupBox::title { subcontrol-position:top left; padding:0 4px; } "
             f"QDoubleSpinBox, QSpinBox, QLineEdit, QComboBox {{ "

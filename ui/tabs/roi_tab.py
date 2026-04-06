@@ -20,6 +20,7 @@ from acquisition.roi         import Roi
 from acquisition.roi_widget  import RoiSelector
 from ui.icons import set_btn_icon
 from ui.theme import FONT, PALETTE, scaled_qss, MONO_FONT
+from ui.widgets.tab_helpers import make_sub
 
 
 class RoiTab(QWidget):
@@ -157,9 +158,7 @@ class RoiTab(QWidget):
             f"font-family:{MONO_FONT}; font-size:{FONT['heading']}pt; color:{col};")
 
     def _sub(self, text):
-        l = QLabel(text)
-        l.setObjectName("sublabel")
-        return l
+        return make_sub(text)
 
     def _ispin(self, lo, hi, val):
         s = QSpinBox()

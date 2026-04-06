@@ -425,8 +425,12 @@ class _LogoHeader(QWidget):
         lay.setSpacing(0)
 
         # Mode pill toggle (Guided / Standard / Expert)
-        self._mode_pill = _ModePill()
-        self._mode_pill.mode_clicked.connect(self.mode_clicked)
+        from ui.widgets.segmented_control import SegmentedControl
+        self._mode_pill = SegmentedControl(
+            ["Guided", "Standard", "Expert"], seg_width=66, height=28)
+        _MODE_NAMES = ("guided", "standard", "expert")
+        self._mode_pill.selection_changed.connect(
+            lambda idx: self.mode_clicked.emit(_MODE_NAMES[idx]))
         lay.addWidget(self._mode_pill)
 
         lay.addStretch()
@@ -475,105 +479,6 @@ class _LogoHeader(QWidget):
         self._mode_pill._apply_styles()
 
 
-# ================================================================== #
-#  _ModePill  — three-way pill toggle: Guided / Standard / Expert     #
-# ================================================================== #
-class _ModePill(QWidget):
-    """Three-segment pill toggle for workspace mode selection.
-
-    Renders as a rounded-rect track containing three labelled segments.
-    The active segment is accent-coloured; inactive ones are dim.
-    """
-    mode_clicked = pyqtSignal(str)
-
-    _MODES  = ("guided", "standard", "expert")
-    _LABELS = ("Guided", "Standard", "Expert")
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self._mode_idx = 1  # standard
-        self._hover_idx = -1
-        self.setFixedSize(198, 28)
-        self.setCursor(QCursor(Qt.PointingHandCursor))
-        self.setMouseTracking(True)
-        self.setToolTip("Workspace mode — click to switch")
-
-    def set_mode(self, mode: str) -> None:
-        try:
-            self._mode_idx = self._MODES.index(mode)
-        except ValueError:
-            self._mode_idx = 1
-        self.update()
-
-    def _idx_at(self, x: int) -> int:
-        seg_w = self.width() / 3
-        idx = int(x / seg_w)
-        return max(0, min(2, idx))
-
-    def mouseMoveEvent(self, e):
-        idx = self._idx_at(e.x())
-        if idx != self._hover_idx:
-            self._hover_idx = idx
-            self.update()
-
-    def leaveEvent(self, e):
-        self._hover_idx = -1
-        self.update()
-
-    def mousePressEvent(self, e):
-        if e.button() == Qt.LeftButton:
-            idx = self._idx_at(e.x())
-            if idx != self._mode_idx:
-                self._mode_idx = idx
-                self.mode_clicked.emit(self._MODES[idx])
-                self.update()
-
-    def paintEvent(self, event):
-        p = QPainter(self)
-        p.setRenderHint(QPainter.Antialiasing)
-        w, h = self.width(), self.height()
-        seg_w = w / 3
-
-        # Track background
-        track = QPainterPath()
-        track.addRoundedRect(0.5, 0.5, w - 1, h - 1, h / 2, h / 2)
-        p.fillPath(track, QColor(_BG()))
-        p.setPen(QPen(QColor(_DIVIDER()), 1))
-        p.drawPath(track)
-
-        # Active segment highlight
-        ax = self._mode_idx * seg_w + 2
-        aw = seg_w - 4
-        ah = h - 4
-        ay = 2
-        pill = QPainterPath()
-        pill.addRoundedRect(ax, ay, aw, ah, ah / 2, ah / 2)
-        p.fillPath(pill, QColor(_ACCENT()))
-
-        # Labels
-        font = _sans_font(_FONT.get("caption", 8), bold=False)
-        p.setFont(font)
-
-        for i, label in enumerate(self._LABELS):
-            sx = i * seg_w
-            if i == self._mode_idx:
-                # Active: dark text on accent background
-                p.setPen(QColor(PALETTE['textOnAccent']))
-                f = _sans_font(_FONT.get("caption", 8), bold=True)
-                p.setFont(f)
-            elif i == self._hover_idx:
-                p.setPen(QColor(_TEXT_NORM()))
-                p.setFont(font)
-            else:
-                p.setPen(QColor(_TEXT_DIM()))
-                p.setFont(font)
-            p.drawText(int(sx), 0, int(seg_w), h,
-                       Qt.AlignCenter, label)
-
-        p.end()
-
-    def _apply_styles(self) -> None:
-        self.update()
 
 
 # ================================================================== #
@@ -880,7 +785,8 @@ class _Sidebar(QWidget):
     def set_workspace_mode(self, mode: str) -> None:
         """Reconfigure sidebar presentation for the given workspace mode."""
         self._workspace_mode = mode
-        self._logo_hdr._mode_pill.set_mode(mode)
+        _mode_map = {"guided": 0, "standard": 1, "expert": 2}
+        self._logo_hdr._mode_pill.set_index(_mode_map.get(mode, 1))
 
         for header in self._phase_headers:
             if mode == "expert":

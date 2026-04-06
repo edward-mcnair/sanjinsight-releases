@@ -20,6 +20,7 @@ from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from ui.icons import set_btn_icon
 from ui.theme import progress_bar_qss, FONT, PALETTE, scaled_qss, MONO_FONT
 from ui.widgets.time_estimate_label import TimeEstimateLabel
+from ui.widgets.tab_helpers import make_sub
 
 from hardware.app_state import app_state
 from acquisition        import AcquisitionProgress, AcqState
@@ -388,9 +389,7 @@ class AcquireTab(QWidget):
         self._left_layout.insertWidget(0, widget)
 
     def _sub(self, text):
-        l = QLabel(text)
-        l.setObjectName("sublabel")
-        return l
+        return make_sub(text)
 
     def get_notes(self) -> str:
         """Return the current session notes (called by MainWindow before saving)."""

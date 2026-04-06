@@ -88,9 +88,9 @@ def _write_crash_report(msg: str) -> None:
                 try:
                     _lh.flush()
                 except Exception:
-                    pass
+                    pass  # handler flush failed — logging itself is broken
     except Exception:
-        pass
+        pass  # logging not yet configured
 
     # Always write to the dedicated crash file — works before any logging setup
     try:
@@ -132,7 +132,7 @@ def _pre_boot_excepthook(exc_type, exc_value, exc_tb) -> None:
                 0x10,   # MB_ICONERROR
             )
         except Exception:
-            pass
+            pass  # last-resort dialog failed — nothing more we can do
 
     _sys_boot.exit(1)
 
@@ -154,7 +154,6 @@ import sys
 import os
 import time
 import threading
-import collections
 import logging
 
 log = logging.getLogger(__name__)
@@ -168,26 +167,21 @@ from PyQt5.QtWidgets import (
     QSizePolicy, QButtonGroup, QSplitter, QStatusBar,
     QAction, QMenuBar, QMessageBox, QStackedWidget,
     QCheckBox, QScrollArea, QDockWidget, QDialog)
-from PyQt5.QtCore  import Qt, QTimer, pyqtSignal, QObject, QSize
-from PyQt5.QtGui   import (QImage, QPixmap, QFont, QColor, QPainter,
-                           QPen, QBrush, QPalette, QIcon)
+from PyQt5.QtCore  import Qt, QTimer, pyqtSignal, QSize
+from PyQt5.QtGui   import QPen, QBrush, QPalette, QIcon
 
 import config
 from hardware.app_state  import app_state                   # ← thread-safe state
-from acquisition         import (AcquisitionPipeline, AcquisitionResult,
+from acquisition         import (AcquisitionPipeline,
                                 AcquisitionProgress, AcqState,
                                 to_display, apply_colormap, export_result)
-from acquisition.roi             import Roi
 from acquisition.session         import Session
 from acquisition.session_manager import SessionManager
 from acquisition.data_tab        import DataTab
-from acquisition.calibration     import CalibrationResult
 from acquisition.calibration_tab import CalibrationTab
 from acquisition.scan_tab        import ScanTab
 from acquisition.live_tab        import LiveTab
-from acquisition.analysis        import AnalysisResult
 from acquisition.analysis_tab    import AnalysisTab
-from acquisition.modality        import ImagingModality     # ← modality enum
 from acquisition.comparison_tab  import ComparisonTab       # ← session comparison
 from acquisition.surface_plot_tab import SurfacePlotTab     # ← 3D surface plot
 from acquisition.recipe_tab      import RecipeTab           # ← measurement recipes
@@ -203,8 +197,7 @@ from ui.scripting_console        import ScriptingConsoleTab # ← Python console
 from ui.sidebar_nav              import SidebarNav          # ← grouped sidebar nav
 from hardware.device_manager     import DeviceManager
 from ui.device_manager_dialog    import DeviceManagerDialog
-from ui.notifications            import (ToastManager, get_guidance)  # ← notifications
-from profiles.profiles        import MaterialProfile
+from ui.notifications            import ToastManager
 from profiles.profile_manager import ProfileManager
 from profiles.profile_tab     import ProfileTab
 from ui.settings_tab          import SettingsTab
@@ -266,7 +259,7 @@ from ui.app_signals import AppSignals, signals, StateSignalBridge
 # New code should use:
 #     from hardware.app_state       import app_state
 from hardware.hardware_service import HardwareService
-from version import __version__, APP_NAME, APP_VENDOR, version_string, SUPPORT_EMAIL
+from version import APP_NAME, APP_VENDOR, version_string, SUPPORT_EMAIL
 #     cam = app_state.cam
 #
 
@@ -323,7 +316,7 @@ from ui.tabs.fpga_tab         import FpgaTab
 from ui.tabs.bias_tab         import BiasTab
 from ui.tabs.stage_tab        import StageTab
 from ui.tabs.roi_tab          import RoiTab
-from ui.tabs.autofocus_tab    import AutofocusTab, FocusPlot
+from ui.tabs.autofocus_tab    import AutofocusTab
 from ui.tabs.log_tab          import LogTab
 from ui.tabs.capture_tab           import CaptureTab
 from ui.tabs.transient_capture_tab import TransientCaptureTab
@@ -341,7 +334,7 @@ from ui.tabs.signal_check_section  import SignalCheckSection
 from ui.workspace                  import get_manager as _get_ws_manager
 from ui.phase_tracker              import PhaseTracker
 from ui.widgets.bottom_drawer      import BottomDrawer, DrawerToggleBar
-from ui.widgets.connection_health_panel import ConnectionHealthPanel, STATE_CONNECTED, STATE_ERROR, STATE_ABSENT
+from ui.widgets.connection_health_panel import ConnectionHealthPanel, STATE_CONNECTED, STATE_ERROR
 from ui.widgets.measurement_strip  import MeasurementReadoutStrip
 from ui.charts                     import dTSparklineWidget
 from ai.metrics_service          import MetricsService
@@ -352,7 +345,7 @@ from ui.widgets.optimization_suggestions import OptimizationSuggestionsWidget
 from ui.widgets.batch_progress_widget import BatchProgressWidget
 from ai.ai_service               import AIService
 from ai.model_runner             import llama_available
-from ai.model_downloader         import ModelDownloader, RECOMMENDED_MODEL, DEFAULT_MODELS_DIR
+from ai.model_downloader         import ModelDownloader
 from ui.widgets.ai_panel_widget  import AIPanelWidget
 
 
@@ -720,6 +713,9 @@ class MainWindow(QMainWindow):
         # Wire Settings tab → theme toggle (Auto / Dark / Light)
         self._settings_tab.theme_changed.connect(self.apply_theme)
 
+        # Wire Settings tab → colors palette (Standard / Accessible)
+        self._settings_tab.colors_changed.connect(self._apply_colors)
+
         # Wire Settings tab → workspace mode (Guided / Standard / Expert)
         self._settings_tab.workspace_changed.connect(self._on_workspace_changed)
 
@@ -845,7 +841,7 @@ class MainWindow(QMainWindow):
             if _mono_driver is not None:
                 self._wavelength_tab.set_driver(_mono_driver)
         except Exception:
-            pass
+            log.debug("Swallowed exception", exc_info=True)
 
         # Wire hardware sources into Timing Diagram tab for Sync buttons
         self._timing_tab.set_fpga_source(self._fpga_tab)
@@ -865,7 +861,7 @@ class MainWindow(QMainWindow):
                 self._header.set_auth_users_exist(
                     self._auth._store.has_users())
             except Exception:
-                pass
+                log.debug("Swallowed exception", exc_info=True)
 
         # AutoScanTab signal wiring
         self._autoscan_tab.scan_requested.connect(self._on_autoscan_scan_requested)
@@ -1225,18 +1221,50 @@ class MainWindow(QMainWindow):
         """Core visual swap — applies 'dark' or 'light' with no flicker.
 
         Does NOT touch pref storage or the auto-polling timer.
+        Reads the ``ui.colors`` preference (``'standard'`` or
+        ``'accessible'``) and passes it to ``set_theme()`` so the
+        accessible palette overrides are applied when active.
         """
-        from ui.theme import set_theme, build_qt_palette, build_style as _bs
+        from ui.theme import set_theme, build_qt_palette, build_style as _bs, PALETTE as _PAL
         from ui.charts import refresh_pyqtgraph_globals
+        colors = config.get_pref("ui.colors", "standard")
         app = QApplication.instance()
         self.setUpdatesEnabled(False)
         try:
-            set_theme(effective)
+            # Snapshot every palette colour BEFORE the switch so we can
+            # find-and-replace stale hex values inside inline stylesheets.
+            old_colors = dict(_PAL)
+
+            set_theme(effective, colors=colors)
             refresh_pyqtgraph_globals()
             app.setStyleSheet(_bs(effective))
             app.setPalette(build_qt_palette(effective))
+
+            # Build old→new colour mapping (case-insensitive hex).
+            # Only include entries that actually changed.
+            _remap: dict[str, str] = {}
+            for key, old_val in old_colors.items():
+                new_val = _PAL.get(key, old_val)
+                if old_val.lower() != new_val.lower():
+                    _remap[old_val.lower()] = new_val
+
             style = app.style()
             for w in app.allWidgets():
+                # Rewrite stale colour hex values in inline stylesheets.
+                # This preserves font-size, font-weight, padding, spacing
+                # and every other non-colour property while updating the
+                # colours to the new theme.
+                ss = w.styleSheet()
+                if ss and _remap:
+                    lowered = ss.lower()
+                    for old_hex, new_hex in _remap.items():
+                        if old_hex in lowered:
+                            # Replace case-insensitively but preserve
+                            # surrounding structure.
+                            ss = ss.replace(old_hex, new_hex)
+                            ss = ss.replace(old_hex.upper(), new_hex)
+                            lowered = ss.lower()
+                    w.setStyleSheet(ss)
                 style.unpolish(w)
                 style.polish(w)
                 if hasattr(w, "_apply_styles"):
@@ -1259,6 +1287,22 @@ class MainWindow(QMainWindow):
             self._auto_theme_timer.stop()
             effective = mode
         config.set_pref("ui.theme", mode)
+        self._swap_visual_theme(effective)
+
+    def _apply_colors(self, colors: str) -> None:
+        """Switch colour palette to 'standard' or 'accessible'.
+
+        Persists the preference and re-applies the current brightness
+        mode with the new colour variant.
+        """
+        from ui.theme import detect_system_theme, active_theme
+        config.set_pref("ui.colors", colors)
+        # Determine the effective brightness mode (may be 'auto')
+        mode_pref = config.get_pref("ui.theme", "auto")
+        if mode_pref == "auto":
+            effective = detect_system_theme()
+        else:
+            effective = mode_pref
         self._swap_visual_theme(effective)
 
     def _on_panel_changed(self, panel: QWidget) -> None:
@@ -2018,7 +2062,7 @@ class MainWindow(QMainWindow):
         try:
             self._live_tab.refresh_camera_mode()
         except Exception:
-            pass
+            log.debug("Swallowed exception", exc_info=True)
 
     def _update_safe_mode(self) -> None:
         """
@@ -2211,7 +2255,13 @@ class MainWindow(QMainWindow):
         def _on_scan_done(result):
             dlg.setValue(100)
             dlg.close()
-            worker.wait(3000)
+            # Clean up the worker thread asynchronously instead of blocking the
+            # GUI thread with worker.wait(3000).
+            def _cleanup():
+                worker.wait(3000)
+                self._scan_worker = None
+            threading.Thread(target=_cleanup, daemon=True,
+                             name="scan-cleanup").start()
             from PyQt5.QtWidgets import QMessageBox
             if isinstance(result, Exception):
                 QMessageBox.warning(
@@ -3344,7 +3394,7 @@ class MainWindow(QMainWindow):
             try:
                 self._auth.logout()
             except Exception:
-                pass
+                log.debug("Swallowed exception", exc_info=True)
         self._auth_session = None
         self._header.update_from_session(None)
         # Re-show the Log-in button so the admin can re-authenticate
@@ -3352,7 +3402,7 @@ class MainWindow(QMainWindow):
             try:
                 self._header.set_auth_users_exist(self._auth._store.has_users())
             except Exception:
-                pass
+                log.debug("Swallowed exception", exc_info=True)
         self._settings_tab.set_auth_session(None)
         log.info("Admin logged out")
 
@@ -3414,7 +3464,7 @@ class MainWindow(QMainWindow):
                 if _as.tr_cam is not None and not isinstance(_as.tr_cam, SimulatedDriver):
                     _real_cam = _as.tr_cam
             except Exception:
-                pass
+                log.debug("Swallowed exception", exc_info=True)
 
             hw_service.shutdown()          # stop simulated drivers
 
@@ -3960,12 +4010,12 @@ class MainWindow(QMainWindow):
             try:
                 self._nav.select_by_label("Camera")
             except Exception:
-                pass
+                log.debug("Swallowed exception", exc_info=True)
         elif code == "tec_wait":
             try:
                 self._nav.select_by_label("Temperature")
             except Exception:
-                pass
+                log.debug("Swallowed exception", exc_info=True)
 
     def _on_history_exported(self, path: str) -> None:
         """Show a transient status-bar message when a conversation is exported."""
@@ -4172,7 +4222,7 @@ class MainWindow(QMainWindow):
                         f"  {r.severity.upper()}: {r.display_name} — {r.observed}"
                         for r in issues)
         except Exception:
-            pass
+            log.debug("Swallowed exception", exc_info=True)
 
         is_cloud = (self._ai_service._active_backend == "remote"
                     and getattr(self._ai_service._remote_runner, "_provider", "")
@@ -4565,7 +4615,7 @@ class MainWindow(QMainWindow):
             from logging_config import mark_clean_exit
             mark_clean_exit()
         except Exception:
-            pass
+            log.debug("Swallowed exception", exc_info=True)
 
         event.accept()
         super().closeEvent(event)
@@ -4688,7 +4738,7 @@ if __name__ == "__main__":
             try:
                 _h.flush()
             except Exception:
-                pass
+                pass  # handler flush failed — logging itself is broken
         # Show a non-modal error dialog if QApplication already exists
         try:
             from PyQt5.QtWidgets import QMessageBox, QApplication as _QA
@@ -4703,7 +4753,7 @@ if __name__ == "__main__":
                 _dlg.setDetailedText(msg)
                 _dlg.exec_()
         except Exception:
-            pass
+            pass  # error dialog failed — crash already logged above
 
     _sys.excepthook = _qt_exception_hook
 
@@ -4726,7 +4776,7 @@ if __name__ == "__main__":
             try:
                 _h.flush()
             except Exception:
-                pass
+                pass  # handler flush failed — logging itself is broken
         # Also write to the pre-boot crash file so field support finds it
         # even if the rotating log hasn't been retrieved yet.
         _write_crash_report(
@@ -4756,7 +4806,7 @@ if __name__ == "__main__":
             try:
                 _h.flush()
             except Exception:
-                pass
+                pass  # handler flush failed — logging itself is broken
 
     _sys.unraisablehook = _unraisable_hook
 

@@ -2481,7 +2481,7 @@ class DeviceManagerDialog(QDialog):
         txt = P['text']
         self.setStyleSheet(
             f"QDialog {{ background:{bg}; }}"
-            f"QGroupBox {{ color:{dim}; font-size:{FONT['sublabel']}pt; letter-spacing:1px;"
+            f"QGroupBox {{ color:{txt}; font-size:{FONT['sublabel']}pt; letter-spacing:1px;"
             f" border:1px solid {bdr}; border-radius:4px;"
             f" margin-top:10px; padding-top:10px; }}"
             f"QGroupBox::title {{ subcontrol-origin:margin; left:8px; padding:0 4px; }}"

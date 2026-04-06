@@ -187,4 +187,7 @@ class BaseDeviceService(QObject):
             except Exception as e:
                 log.exception("Device service control call failed: %s", name)
                 self.error.emit(str(e))
-        threading.Thread(target=_run, daemon=True, name=f"svc.ctrl.{name}").start()
+        t = threading.Thread(target=_run, daemon=True, name=f"svc.ctrl.{name}")
+        with self._lock:
+            self._threads.append(t)
+        t.start()

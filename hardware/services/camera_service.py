@@ -15,6 +15,7 @@ from PyQt5.QtCore import pyqtSignal
 from hardware.services.base_device_service import BaseDeviceService
 from hardware.app_state import app_state
 from hardware.cameras.factory import create_camera
+import config as _cfg_mod
 
 try:
     from acquisition.pipeline import AcquisitionPipeline, AcqState
@@ -56,10 +57,8 @@ class CameraService(BaseDeviceService):
             camera_type "ir" routes the driver to app_state.ir_cam instead of
             app_state.cam.
         """
-        import config as config_module
-
         if cam_cfg is None:
-            cam_cfg = config_module.get("hardware", {}).get("camera", {})
+            cam_cfg = _cfg_mod.get("hardware", {}).get("camera", {})
 
         cam_type = str(cam_cfg.get("camera_type", "tr")).lower()
         is_ir    = cam_type == "ir"
@@ -78,7 +77,6 @@ class CameraService(BaseDeviceService):
             }
 
         # Device key used for status / Connected-Devices header
-        import config as _cfg_mod
         _imaging_sys = _cfg_mod.get("hardware", {}).get("imaging_system", "tr_only")
         _cam_key = ("ir_camera" if is_ir
                     else ("tr_camera" if _imaging_sys == "hybrid" else "camera"))
@@ -167,7 +165,6 @@ class CameraService(BaseDeviceService):
                     if (time.monotonic() - last_frame_t
                             > self._CAMERA_RECONNECT_TIMEOUT_S):
                         log.warning("Camera: %s — triggering reconnect", e)
-                        import config as _cfg_mod
                         _is_hybrid = _cfg_mod.get("hardware", {}).get(
                             "imaging_system", "tr_only") == "hybrid"
                         self.device_connected.emit(

@@ -19,7 +19,6 @@ from PyQt5.QtCore import Qt, pyqtSignal
 
 from hardware.app_state import app_state
 from ui.theme import PALETTE, FONT, MONO_FONT
-from ui.icons import IC, make_icon, make_icon_label
 from ui.guidance import get_section_cards, GuidanceCard, WorkflowFooter
 from ui.guidance.steps import next_steps_after
 
@@ -392,58 +391,13 @@ class SignalCheckSection(QWidget):
     # ── Empty state ────────────────────────────────────────────────────
 
     def _build_empty_state(self) -> QWidget:
-        w = QWidget()
-        lay = QVBoxLayout(w)
-        lay.setAlignment(Qt.AlignCenter)
-        lay.setSpacing(16)
-
-        self._es_icon = make_icon_label(
-            IC.LINK_OFF, color=PALETTE['textDim'], size=64)
-        self._es_icon.setAlignment(Qt.AlignCenter)
-
-        self._es_title = QLabel("No Live Feed")
-        self._es_title.setAlignment(Qt.AlignCenter)
-
-        self._es_tip = QLabel(
-            "Connect a camera and start the live view to verify signal quality.")
-        self._es_tip.setAlignment(Qt.AlignCenter)
-        self._es_tip.setWordWrap(True)
-        self._es_tip.setMaximumWidth(400)
-
-        self._es_btn = QPushButton("Open Device Manager")
-        self._es_btn.setFixedWidth(200)
-        self._es_btn.setFixedHeight(36)
-        self._es_btn.clicked.connect(self.open_device_manager)
-
-        self._apply_empty_state_styles()
-
-        lay.addStretch()
-        lay.addWidget(self._es_icon)
-        lay.addWidget(self._es_title)
-        lay.addWidget(self._es_tip)
-        lay.addSpacing(8)
-        lay.addWidget(self._es_btn, 0, Qt.AlignCenter)
-        lay.addStretch()
-        return w
-
-    def _apply_empty_state_styles(self) -> None:
-        dim = PALETTE['textDim']
-        accent = PALETTE['accent']
-        self._es_title.setStyleSheet(
-            f"font-size:{FONT['readoutSm']}pt; font-weight:bold; color:{dim};")
-        self._es_tip.setStyleSheet(
-            f"font-size:{FONT['label']}pt; color:{dim};")
-        self._es_btn.setStyleSheet(f"""
-            QPushButton {{
-                background:{PALETTE['surface']}; color:{accent};
-                border:1px solid {accent}66; border-radius:5px;
-                font-size:{FONT['label']}pt; font-weight:600;
-            }}
-            QPushButton:hover {{ background:{PALETTE['surface2']}; }}
-        """)
-        icon = make_icon(IC.LINK_OFF, color=dim, size=64)
-        if icon:
-            self._es_icon.setPixmap(icon.pixmap(64, 64))
+        from ui.widgets.empty_state import build_empty_state
+        return build_empty_state(
+            title="No Live Feed",
+            description="Connect a camera and start the live view to "
+                        "verify signal quality.",
+            on_action=self.open_device_manager.emit,
+        )
 
     # ── Workspace mode ────────────────────────────────────────────────
 
@@ -467,8 +421,6 @@ class SignalCheckSection(QWidget):
         for w in [self._snr_val, self._sat_val, self._verdict]:
             w._sub.setStyleSheet(
                 f"font-size:{FONT['sublabel']}pt; color:{PALETTE['textDim']};")
-        if hasattr(self, "_es_btn"):
-            self._apply_empty_state_styles()
         for card in (self._overview_card, self._guide_card1):
             card._apply_styles()
         self._workflow_footer._apply_styles()

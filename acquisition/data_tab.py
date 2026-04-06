@@ -18,7 +18,7 @@ from PyQt5.QtWidgets import (
     QMessageBox, QInputDialog, QToolButton, QStackedWidget,
     QDialog, QDialogButtonBox, QCheckBox, QDoubleSpinBox,
     QSizePolicy)
-from PyQt5.QtCore    import Qt, pyqtSignal
+from PyQt5.QtCore    import Qt, pyqtSignal, QThread
 from PyQt5.QtGui     import QPixmap, QImage
 
 from .session         import Session, SessionMeta
@@ -58,7 +58,7 @@ class NotesDialog(QDialog):
         self.setStyleSheet(
             f"QDialog  {{ background:{PALETTE['bg']}; }}"
             f"QLabel   {{ color:{PALETTE['text']}; font-size:{FONT['heading']}pt; }}"
-            f"QGroupBox {{ color:{PALETTE['textDim']}; font-size:{FONT['body']}pt; border:1px solid {PALETTE['border']}; "
+            f"QGroupBox {{ color:{PALETTE['text']}; font-size:{FONT['body']}pt; border:1px solid {PALETTE['border']}; "
             f"            border-radius:3px; margin-top:8px; padding-top:6px; }}"
             f"QGroupBox::title {{ subcontrol-origin:margin; left:8px; }}"
             f"QPushButton {{ background:{PALETTE['surface2']}; color:{PALETTE['textSub']}; border:1px solid {PALETTE['border']}; "
@@ -357,6 +357,25 @@ class SessionCard(QFrame):
 #  Image pane (reused from main_app pattern)                          #
 # ------------------------------------------------------------------ #
 
+class _SessionLoadWorker(QThread):
+    """Loads a session off the main thread to avoid UI freezes."""
+
+    loaded = pyqtSignal(object)   # Session or None
+    error  = pyqtSignal(str)
+
+    def __init__(self, manager: SessionManager, uid: str, parent=None):
+        super().__init__(parent)
+        self._mgr = manager
+        self._uid = uid
+
+    def run(self):  # noqa: D401 — Qt override
+        try:
+            session = self._mgr.load(self._uid)
+            self.loaded.emit(session)
+        except Exception as exc:
+            self.error.emit(str(exc))
+
+
 class DataImagePane(QWidget):
     def __init__(self, title: str = ""):
         super().__init__()
@@ -425,6 +444,7 @@ class DataTab(QWidget):
         self._compare_a = None
         self._compare_b = None
         self._batch_worker = None     # keep reference to prevent GC
+        self._active_load_worker = None  # session-load worker (prevent GC)
 
         # Export history log
         from acquisition.export_history import ExportHistory
@@ -462,11 +482,42 @@ class DataTab(QWidget):
         bdr = P['border']
         dim = P.get("textDim", PALETTE['textDim'])
         txt = P['text']
+
+        # Sessions title label
+        if hasattr(self, "_sessions_title"):
+            self._sessions_title.setStyleSheet(
+                scaled_qss(f"font-size:15pt; color:{P['textDim']}; letter-spacing:2px; "
+                           "text-transform:uppercase;"))
+
+        # Session count label
+        if hasattr(self, "_count_lbl"):
+            self._count_lbl.setStyleSheet(
+                f"font-family:{MONO_FONT}; font-size:{FONT['heading']}pt; color:{P['textSub']};")
+
+        # Status filter combo
+        if hasattr(self, "_status_filter"):
+            self._status_filter.setStyleSheet(
+                f"QComboBox {{ background:{P['surface2']}; "
+                f"color:{txt}; border:1px solid {bdr}; "
+                f"padding:2px 8px; font-size:{FONT['body']}pt; }}")
+
+        # Scroll area background
+        if hasattr(self, "_list_scroll"):
+            self._list_scroll.setStyleSheet(
+                f"QScrollArea {{ border:none; background:{bg}; }}")
+
         # Inline-styled notes editor — the most visibly affected widget
         if hasattr(self, "_notes_edit"):
             self._notes_edit.setStyleSheet(
                 f"background:{bg}; color:{txt}; border:1px solid {bdr}; "
                 f"font-size:{FONT['body']}pt; font-family:{MONO_FONT};")
+
+        # Meta field values
+        if hasattr(self, "_meta_fields"):
+            for val in self._meta_fields.values():
+                val.setStyleSheet(
+                    f"font-family:{MONO_FONT}; font-size:{FONT['heading']}pt; color:{P['textDim']};")
+
         if hasattr(self, "_trend_chart"):
             self._trend_chart._apply_styles()
 
@@ -484,11 +535,11 @@ class DataTab(QWidget):
 
         # Header
         hdr = QHBoxLayout()
-        title = QLabel("Sessions")
-        title.setStyleSheet(
+        self._sessions_title = QLabel("Sessions")
+        self._sessions_title.setStyleSheet(
             scaled_qss(f"font-size:15pt; color:{PALETTE['textDim']}; letter-spacing:2px; "
                        "text-transform:uppercase;"))
-        hdr.addWidget(title)
+        hdr.addWidget(self._sessions_title)
         hdr.addStretch()
 
         self._count_lbl = QLabel("0")
@@ -515,18 +566,18 @@ class DataTab(QWidget):
         lay.addWidget(self._status_filter)
 
         # Scrollable card list
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setStyleSheet(f"QScrollArea {{ border:none; background:{PALETTE['bg']}; }}")
+        self._list_scroll = QScrollArea()
+        self._list_scroll.setWidgetResizable(True)
+        self._list_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._list_scroll.setStyleSheet(f"QScrollArea {{ border:none; background:{PALETTE['bg']}; }}")
 
         self._list_widget = QWidget()
         self._list_layout = QVBoxLayout(self._list_widget)
         self._list_layout.setContentsMargins(0, 0, 0, 0)
         self._list_layout.setSpacing(3)
         self._list_layout.addStretch()
-        scroll.setWidget(self._list_widget)
-        lay.addWidget(scroll)
+        self._list_scroll.setWidget(self._list_widget)
+        lay.addWidget(self._list_scroll)
 
         # Buttons
         btns = QHBoxLayout()
@@ -886,7 +937,7 @@ class DataTab(QWidget):
         if meta is None:
             return
 
-        # Metadata fields
+        # Metadata fields (fast — meta is already in memory)
         snr = f"{meta.snr_db:.1f} dB" if meta.snr_db else "—"
         roi = (f"x={meta.roi['x']} y={meta.roi['y']} "
                f"w={meta.roi['w']} h={meta.roi['h']}"
@@ -921,18 +972,45 @@ class DataTab(QWidget):
         self._notes_edit.setPlainText(meta.notes or "")
         self._notes_edit.blockSignals(False)
 
-        # Load session arrays (lazy)
-        session = self._mgr.load(uid)
-        if session is None:
-            return
-        self._pane_cold.show_array(session.cold_avg)
-        self._pane_hot.show_array(session.hot_avg)
-        self._pane_diff.show_array(session.difference, mode="percentile")
-        cmap = self._cmap_combo.currentText()
-        mode = "signed" if cmap in ("Thermal Delta", "signed") else "percentile"
-        self._pane_drr.show_array(session.delta_r_over_r, mode=mode, cmap=cmap)
+        # Show loading state on image panes while session loads
+        for pane in (self._pane_cold, self._pane_hot,
+                     self._pane_diff, self._pane_drr):
+            pane.clear()
+            pane._lbl.setText("Loading…")
         self._pane_cmp.clear()
-        session.unload()   # free memory after display
+
+        # Load session arrays off the main thread
+        worker = _SessionLoadWorker(self._mgr, uid, parent=self)
+
+        def _on_loaded(session):
+            self._active_load_worker = None
+            if session is None:
+                for pane in (self._pane_cold, self._pane_hot,
+                             self._pane_diff, self._pane_drr):
+                    pane._lbl.setText("Failed to load session")
+                return
+            # Guard against stale load (user clicked a different session)
+            if self._selected != uid:
+                session.unload()
+                return
+            self._pane_cold.show_array(session.cold_avg)
+            self._pane_hot.show_array(session.hot_avg)
+            self._pane_diff.show_array(session.difference, mode="percentile")
+            cmap = self._cmap_combo.currentText()
+            mode = "signed" if cmap in ("Thermal Delta", "signed") else "percentile"
+            self._pane_drr.show_array(session.delta_r_over_r, mode=mode, cmap=cmap)
+            session.unload()   # free memory after display
+
+        def _on_error(msg):
+            self._active_load_worker = None
+            for pane in (self._pane_cold, self._pane_hot,
+                         self._pane_diff, self._pane_drr):
+                pane._lbl.setText("Load error")
+
+        worker.loaded.connect(_on_loaded)
+        worker.error.connect(_on_error)
+        self._active_load_worker = worker
+        worker.start()
 
     def _redisplay_drr(self):
         if self._selected:
@@ -998,19 +1076,19 @@ class DataTab(QWidget):
     def _generate_report(self):
         if not self._selected:
             return
-        session = self._mgr.load(self._selected)
-        if session is None:
+        meta = self._mgr.get_meta(self._selected)
+        if meta is None:
             return
 
         from ui.widgets.report_dialog import ReportDialog
-        dlg = ReportDialog(session_label=session.meta.label, parent=self)
+        dlg = ReportDialog(session_label=meta.label, parent=self)
         if dlg.exec_() != QDialog.Accepted:
             return
 
         report_config = dlg.get_config()
 
         out_dir = QFileDialog.getExistingDirectory(
-            self, "Save Report To", session.meta.path)
+            self, "Save Report To", meta.path)
         if not out_dir:
             return
 
@@ -1021,38 +1099,87 @@ class DataTab(QWidget):
         except Exception:
             cal, analysis = None, None
 
-        # Load persisted analysis if none active
-        if analysis is None:
-            analysis = session.load_analysis()
+        scorecard = meta.quality_scorecard
 
-        # Load quality scorecard from session meta
-        scorecard = session.meta.quality_scorecard
+        # ── Load session off main thread, then run report worker ───
+        from acquisition.report_worker import ReportWorker
 
-        try:
-            from .report import generate_report_any_format
-            import os
-            report_path = generate_report_any_format(
+        self._report_btn.setEnabled(False)
+        self._report_btn.setText("Loading session…")
+
+        _uid = meta.uid
+        _label = meta.label
+        _fmt = report_config.format
+        _fmt_label = "HTML" if _fmt == "html" else "PDF"
+
+        loader = _SessionLoadWorker(self._mgr, _uid, parent=self)
+
+        def _on_session_loaded(session):
+            self._active_report_loader = None
+            if session is None:
+                self._report_btn.setEnabled(True)
+                self._report_btn.setText("Generate Report")
+                QMessageBox.critical(
+                    self, "Report Failed",
+                    "Could not load session data.")
+                return
+
+            # Load persisted analysis if none active
+            nonlocal analysis
+            if analysis is None:
+                analysis = session.load_analysis()
+
+            self._report_btn.setText("Generating…")
+
+            worker = ReportWorker(
                 session,
-                output_dir       = out_dir,
-                calibration      = cal,
-                analysis         = analysis,
-                report_config    = report_config,
-                quality_scorecard= scorecard)
-            fmt_label = "HTML" if report_config.format == "html" else "PDF"
-            self._record_history(session.meta.uid, session.meta.label,
-                                 "report", report_config.format,
-                                 report_path, True)
-            self.report_completed.emit(session.meta.uid)
-            QMessageBox.information(
-                self, "Report Generated",
-                f"{fmt_label} report saved to:\n{report_path}")
-        except Exception as e:
-            self._record_history(session.meta.uid, session.meta.label,
-                                 "report", report_config.format,
-                                 out_dir, False, str(e))
+                output_dir=out_dir,
+                calibration=cal,
+                analysis=analysis,
+                report_config=report_config,
+                quality_scorecard=scorecard,
+                parent=self,
+            )
+
+            def _on_report_finished(report_path):
+                self._report_btn.setEnabled(True)
+                self._report_btn.setText("Generate Report")
+                self._record_history(_uid, _label, "report", _fmt,
+                                     report_path, True)
+                self.report_completed.emit(_uid)
+                QMessageBox.information(
+                    self, "Report Generated",
+                    f"{_fmt_label} report saved to:\n{report_path}")
+
+            def _on_report_error(msg):
+                self._report_btn.setEnabled(True)
+                self._report_btn.setText("Generate Report")
+                self._record_history(_uid, _label, "report", _fmt,
+                                     out_dir, False, msg)
+                QMessageBox.critical(
+                    self, "Report Failed",
+                    f"Could not generate report:\n{msg}")
+
+            worker.finished.connect(_on_report_finished)
+            worker.error.connect(_on_report_error)
+            # prevent garbage collection of the worker while running
+            self._active_report_worker = worker
+            worker.finished.connect(lambda _: setattr(self, '_active_report_worker', None))
+            worker.error.connect(lambda _: setattr(self, '_active_report_worker', None))
+            worker.start()
+
+        def _on_load_error(msg):
+            self._active_report_loader = None
+            self._report_btn.setEnabled(True)
+            self._report_btn.setText("Generate Report")
             QMessageBox.critical(
                 self, "Report Failed",
-                f"Could not generate report:\n{e}")
+                f"Could not load session:\n{msg}")
+
+        loader.loaded.connect(_on_session_loaded)
+        loader.error.connect(_on_load_error)
+        self._active_report_loader = loader
+        loader.start()
 
     def _export(self):
         if not self._selected:
@@ -1207,40 +1334,92 @@ class DataTab(QWidget):
         if not d:
             return
 
-        session = self._mgr.load(self._selected)
-        if session is None:
+        # ── Load session off main thread, then run export worker ───
+        from acquisition.export_worker import ExportWorker
+
+        meta = self._mgr.get_meta(self._selected)
+        if meta is None:
             return
 
-        folder = os.path.join(d, session.meta.uid)
-
-        # ── Run export in background thread ─────────────────────────
-        _uid = session.meta.uid
-        _label = session.meta.label
+        _uid = meta.uid
+        _label = meta.label
+        folder = os.path.join(d, _uid)
         _fmt_str = "+".join(f.value for f in selected_fmts)
 
-        def _run():
-            ar = session.load_analysis()
-            exporter = SessionExporter(session, output_dir=folder,
-                                       px_per_um=px_per_um,
-                                       analysis_result=ar)
-            result = exporter.export(selected_fmts)
-            # Record in export history
-            self._record_history(_uid, _label, "export", _fmt_str,
-                                 folder, result.success,
-                                 "; ".join(result.errors.values()) if result.errors else "")
-            msg = (f"Exported {result.n_files} file(s) to:\n{folder}"
-                   if result.success
-                   else f"Export failed:\n"
-                        + "\n".join(result.errors.values()))
-            if result.success:
-                QTimer.singleShot(0, lambda: self.export_completed.emit(_uid))
-            QTimer.singleShot(0, lambda: QMessageBox.information(
-                self, "Export complete" if result.success else "Export error",
-                msg))
+        self._export_btn.setEnabled(False)
+        self._export_btn.setText("Loading session…")
 
-        import threading
-        from PyQt5.QtCore import QTimer
-        threading.Thread(target=_run, daemon=True).start()
+        loader = _SessionLoadWorker(self._mgr, _uid, parent=self)
+
+        def _on_session_loaded(session):
+            self._active_export_loader = None
+            if session is None:
+                self._export_btn.setEnabled(True)
+                self._export_btn.setText("Export Files")
+                QMessageBox.critical(
+                    self, "Export Failed",
+                    "Could not load session data.")
+                return
+
+            ar = session.load_analysis()
+
+            self._export_btn.setText("Exporting…")
+
+            worker = ExportWorker(
+                session,
+                formats=selected_fmts,
+                output_dir=folder,
+                px_per_um=px_per_um,
+                analysis_result=ar,
+                parent=self,
+            )
+
+            def _on_export_finished(result):
+                self._export_btn.setEnabled(True)
+                self._export_btn.setText("Export Files")
+                self._record_history(
+                    _uid, _label, "export", _fmt_str, folder,
+                    result.success,
+                    "; ".join(result.errors.values()) if result.errors else "")
+                if result.success:
+                    self.export_completed.emit(_uid)
+                    QMessageBox.information(
+                        self, "Export complete",
+                        f"Exported {result.n_files} file(s) to:\n{folder}")
+                else:
+                    QMessageBox.warning(
+                        self, "Export error",
+                        "Export failed:\n" + "\n".join(result.errors.values()))
+
+            def _on_export_error(msg):
+                self._export_btn.setEnabled(True)
+                self._export_btn.setText("Export Files")
+                self._record_history(
+                    _uid, _label, "export", _fmt_str, folder, False, msg)
+                QMessageBox.critical(
+                    self, "Export Failed",
+                    f"Could not export session:\n{msg}")
+
+            worker.finished.connect(_on_export_finished)
+            worker.error.connect(_on_export_error)
+            # prevent garbage collection of the worker while running
+            self._active_export_worker = worker
+            worker.finished.connect(lambda _: setattr(self, '_active_export_worker', None))
+            worker.error.connect(lambda _: setattr(self, '_active_export_worker', None))
+            worker.start()
+
+        def _on_load_error(msg):
+            self._active_export_loader = None
+            self._export_btn.setEnabled(True)
+            self._export_btn.setText("Export Files")
+            QMessageBox.critical(
+                self, "Export Failed",
+                f"Could not load session:\n{msg}")
+
+        loader.loaded.connect(_on_session_loaded)
+        loader.error.connect(_on_load_error)
+        self._active_export_loader = loader
+        loader.start()
 
     def _batch_report(self):
         """Generate reports for multiple sessions at once."""

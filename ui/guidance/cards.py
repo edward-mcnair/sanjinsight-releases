@@ -148,7 +148,7 @@ class GuidanceCard(QFrame):
     def _title_qss() -> str:
         return (
             f"font-weight: 600;"
-            f"color: {PALETTE['accent']};"
+            f"color: {PALETTE['text']};"
             f"font-size: {FONT.get('body', 12)}pt;")
 
     @staticmethod
@@ -219,12 +219,9 @@ class WorkflowFooter(QFrame):
         layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(8)
 
-        header = QLabel("What happens next?")
-        header.setStyleSheet(
-            f"color: {PALETTE['textDim']};"
-            f"font-size: {FONT.get('caption', 11)}pt;"
-            f"font-weight: 600;")
-        layout.addWidget(header)
+        self._header_lbl = QLabel("What happens next?")
+        self._header_lbl.setStyleSheet(self._header_qss())
+        layout.addWidget(self._header_lbl)
 
         steps_row = QHBoxLayout()
         steps_row.setSpacing(20)
@@ -253,6 +250,13 @@ class WorkflowFooter(QFrame):
             self._step_labels.append((t, d))
             steps_row.addLayout(col, 1)
 
+    @staticmethod
+    def _header_qss() -> str:
+        return (
+            f"color: {PALETTE['textDim']};"
+            f"font-size: {FONT.get('caption', 11)}pt;"
+            f"font-weight: 600;")
+
     def _apply_frame_style(self) -> None:
         self.setStyleSheet(
             f"QFrame#WorkflowFooter {{"
@@ -263,6 +267,7 @@ class WorkflowFooter(QFrame):
 
     def _apply_styles(self) -> None:
         self._apply_frame_style()
+        self._header_lbl.setStyleSheet(self._header_qss())
         for i, (t, d) in enumerate(self._step_labels):
             t.setStyleSheet(
                 f"color: {PALETTE['accent' if i == 0 else 'textDim']};"

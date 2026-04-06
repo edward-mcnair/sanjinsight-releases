@@ -25,6 +25,7 @@ from hardware.app_state  import app_state
 from hardware.autofocus  import create_autofocus, AfState
 from ui.theme      import FONT, PALETTE, MONO_FONT, progress_bar_qss
 from ui.widgets.time_estimate_label import TimeEstimateLabel
+from ui.widgets.tab_helpers import make_readout, make_sub
 from ui.font_utils import mono_font
 from ui.icons import set_btn_icon
 
@@ -221,22 +222,7 @@ class AutofocusTab(QWidget):
 
     def _readout(self, label, initial, pal_key):
         """Create a readout widget.  pal_key is a PALETTE key (e.g. "accent")."""
-        w = QWidget()
-        v = QVBoxLayout(w)
-        v.setAlignment(Qt.AlignCenter)
-        sub = QLabel(label)
-        sub.setObjectName("sublabel")
-        sub.setAlignment(Qt.AlignCenter)
-        val = QLabel(initial)
-        val.setAlignment(Qt.AlignCenter)
-        color = PALETTE.get(pal_key, "#00d4aa")
-        val.setStyleSheet(
-            f"font-family:{MONO_FONT}; font-size:{FONT['readout']}pt; color:{color};")
-        v.addWidget(sub)
-        v.addWidget(val)
-        w._val      = val
-        w._pal_key  = pal_key
-        return w
+        return make_readout(label, initial, pal_key=pal_key)
 
     def _apply_styles(self):
         """Re-apply PALETTE-driven colours on theme switch."""
@@ -248,9 +234,7 @@ class AutofocusTab(QWidget):
         set_btn_icon(self._abort_btn, "fa5s.stop", PALETTE['danger'])
 
     def _sub(self, text):
-        l = QLabel(text)
-        l.setObjectName("sublabel")
-        return l
+        return make_sub(text)
 
     def _dspin(self, lo, hi, val, suffix=""):
         s = QDoubleSpinBox()

@@ -36,7 +36,7 @@ from ui.widgets.image_pane import ImagePane
 from ui.widgets.collapsible_panel import CollapsiblePanel
 from ui.widgets.more_options import MoreOptionsPanel
 from ui.theme import FONT, PALETTE, scaled_qss, MONO_FONT
-from ui.icons import IC, make_icon_label, set_btn_icon
+from ui.icons import set_btn_icon
 
 
 def hline():
@@ -358,7 +358,7 @@ class CameraTab(QWidget):
         pr2.addStretch()
         simcam_grid.addLayout(pr2, 1, 1)
 
-        sub_res = QLabel("lower = faster, higher = more detail  ·  applied immediately")
+        self._sub_res = sub_res = QLabel("lower = faster, higher = more detail  ·  applied immediately")
         sub_res.setStyleSheet(
             f"font-size:{FONT['caption']}pt; color:{PALETTE['textDim']};"
             f" padding-left:2px;")
@@ -379,7 +379,7 @@ class CameraTab(QWidget):
         simcam_grid.addWidget(self._simcam_fps_slider, 3, 1)
         simcam_grid.addWidget(self._simcam_fps_lbl, 3, 2)
 
-        sub_fps = QLabel("higher fps = smoother preview but more CPU  ·  max 60 fps")
+        self._sub_fps = sub_fps = QLabel("higher fps = smoother preview but more CPU  ·  max 60 fps")
         sub_fps.setStyleSheet(
             f"font-size:{FONT['caption']}pt; color:{PALETTE['textDim']};"
             f" padding-left:2px;")
@@ -410,45 +410,67 @@ class CameraTab(QWidget):
     # ── Empty state ───────────────────────────────────────────────────
 
     def _build_empty_state(self, title: str, device: str, tip: str) -> QWidget:
-        w = QWidget()
-        lay = QVBoxLayout(w)
-        lay.setAlignment(Qt.AlignCenter)
-        lay.setSpacing(16)
+        from ui.widgets.empty_state import build_empty_state
+        return build_empty_state(
+            title=f"{title} Not Connected",
+            description=tip,
+            on_action=self.open_device_manager,
+        )
 
-        icon_lbl = make_icon_label(IC.LINK_OFF, color=PALETTE['textSub'], size=64)
-        icon_lbl.setAlignment(Qt.AlignCenter)
+    def _apply_styles(self):
+        """Re-apply PALETTE-driven colours on theme switch."""
+        acc  = PALETTE['accent']
+        dim  = PALETTE['textDim']
+        txt  = PALETTE['text']
 
-        title_lbl = QLabel(f"{title} Not Connected")
-        title_lbl.setAlignment(Qt.AlignCenter)
-        title_lbl.setStyleSheet(f"font-size: {FONT['readoutSm']}pt; font-weight: bold; color: {PALETTE['textDim']};")
+        # Exposure readout
+        self._exp_lbl.setStyleSheet(
+            f"font-family:{MONO_FONT}; font-size:{FONT['readoutSm']}pt; color:{acc};")
+        # Exposure sub-label
+        self._exp_sub.setStyleSheet(
+            f"font-size:{FONT['caption']}pt; color:{dim}; padding-left:2px;")
 
-        tip_lbl = QLabel(tip)
-        tip_lbl.setAlignment(Qt.AlignCenter)
-        tip_lbl.setWordWrap(True)
-        tip_lbl.setStyleSheet(f"font-size: {FONT['label']}pt; color: {PALETTE['textSub']};")
-        tip_lbl.setMaximumWidth(400)
+        # TR gain readout
+        self._gain_lbl.setStyleSheet(
+            f"font-family:{MONO_FONT}; font-size:{FONT['readoutSm']}pt; color:{acc};")
+        # TR gain sub-label
+        self._gain_sub_tr.setStyleSheet(
+            f"font-size:{FONT['caption']}pt; color:{dim}; padding-left:2px;")
 
-        btn = QPushButton("Open Device Manager")
-        btn.setFixedWidth(200)
-        btn.setFixedHeight(36)
-        btn.setStyleSheet(f"""
-            QPushButton {{
-                background: {PALETTE['surface']}; color: {PALETTE['accent']};
-                border: 1px solid {PALETTE['accent']}66; border-radius: 5px;
-                font-size: {FONT['label']}pt; font-weight: 600;
-            }}
-            QPushButton:hover {{ background: {PALETTE['surface2']}; }}
-        """)
-        btn.clicked.connect(self.open_device_manager)
+        # IR gain label
+        self._gain_label_ir.setStyleSheet(
+            f"font-size:{FONT['label']}pt; font-weight:600; "
+            f"color:{txt};")
+        # IR gain sub-label
+        self._gain_sub_ir.setStyleSheet(
+            f"font-size:{FONT['caption']}pt; color:{dim}; padding-left:2px;")
 
-        lay.addStretch()
-        lay.addWidget(icon_lbl)
-        lay.addWidget(title_lbl)
-        lay.addWidget(tip_lbl)
-        lay.addSpacing(8)
-        lay.addWidget(btn, 0, Qt.AlignCenter)
-        lay.addStretch()
-        return w
+        # Objective FOV label
+        self._obj_fov_lbl.setStyleSheet(
+            f"font-size:{FONT['caption']}pt; color:{dim}; "
+            f"padding-left:2px;")
+
+        # Signal quality strip
+        self._qual_exp_lbl.setStyleSheet(
+            f"font-family:{MONO_FONT}; font-size:{FONT['label']}pt; "
+            f"color:{dim};")
+        self._qual_sat_lbl.setStyleSheet(
+            f"font-family:{MONO_FONT}; font-size:{FONT['label']}pt; "
+            f"color:{dim};")
+
+        # Simulated camera readouts
+        self._simcam_res_lbl.setStyleSheet(
+            f"font-family:{MONO_FONT}; font-size:{FONT['readoutSm']}pt;"
+            f" color:{acc};")
+        self._sub_res.setStyleSheet(
+            f"font-size:{FONT['caption']}pt; color:{dim};"
+            f" padding-left:2px;")
+        self._simcam_fps_lbl.setStyleSheet(
+            f"font-family:{MONO_FONT}; font-size:{FONT['readoutSm']}pt;"
+            f" color:{acc};")
+        self._sub_fps.setStyleSheet(
+            f"font-size:{FONT['caption']}pt; color:{dim};"
+            f" padding-left:2px;")
 
     @staticmethod
     def _ffc_camera():
@@ -846,7 +868,10 @@ class CameraTab(QWidget):
                 turret.move_to(obj.position)
                 app_state.active_objective = obj
             except Exception as exc:
-                log.warning("Turret move error: %s", exc)
+                log.exception("Turret move error: %s", exc)
+                from ui.app_signals import signals
+                QTimer.singleShot(0, lambda: signals.log_message.emit(
+                    f"Turret move failed: {exc}"))
             finally:
                 # Re-enable the combo and restore the FOV readout.
                 QTimer.singleShot(0, lambda: self._obj_combo.setEnabled(True))
@@ -901,9 +926,17 @@ class CameraTab(QWidget):
         from acquisition.auto_exposure import AutoExposure
 
         def _worker():
-            ae = AutoExposure(cam)
-            result = ae.run()
-            QTimer.singleShot(0, lambda: self._on_auto_expose_done(result))
+            try:
+                ae = AutoExposure(cam)
+                result = ae.run()
+                QTimer.singleShot(0, lambda: self._on_auto_expose_done(result))
+            except Exception as exc:
+                log.exception("Auto-exposure failed: %s", exc)
+                from ui.app_signals import signals
+                QTimer.singleShot(0, lambda: signals.log_message.emit(
+                    f"Auto-exposure failed: {exc}"))
+                QTimer.singleShot(0, lambda: self._auto_exp_btn.setEnabled(True))
+                QTimer.singleShot(0, lambda: self._auto_exp_btn.setText("Auto-Expose"))
 
         threading.Thread(target=_worker, daemon=True).start()
 
@@ -940,8 +973,16 @@ class CameraTab(QWidget):
         from hardware.cameras.auto_gain import auto_gain
 
         def _worker():
-            result = auto_gain(cam)
-            QTimer.singleShot(0, lambda: self._on_auto_gain_done(result))
+            try:
+                result = auto_gain(cam)
+                QTimer.singleShot(0, lambda: self._on_auto_gain_done(result))
+            except Exception as exc:
+                log.exception("Auto-gain failed: %s", exc)
+                from ui.app_signals import signals
+                QTimer.singleShot(0, lambda: signals.log_message.emit(
+                    f"Auto-gain failed: {exc}"))
+                QTimer.singleShot(0, lambda: self._auto_gain_btn.setEnabled(True))
+                QTimer.singleShot(0, lambda: self._auto_gain_btn.setText("Auto-Gain"))
 
         threading.Thread(target=_worker, daemon=True).start()
 

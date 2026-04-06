@@ -30,7 +30,7 @@ from PyQt5.QtGui import QImage, QPixmap, QPainter, QColor
 
 from hardware.app_state import app_state
 from ui.theme import PALETTE, FONT, MONO_FONT
-from ui.icons import IC, make_icon, make_icon_label, set_btn_icon
+from ui.icons import IC, make_icon, set_btn_icon
 from ui.widgets.profile_picker import ProfilePicker
 from ui.guidance.cards import GuidanceCard, WorkflowFooter
 from ui.guidance.content import (
@@ -657,59 +657,13 @@ class ModalitySection(QWidget):
     # ── Empty state ────────────────────────────────────────────────────
 
     def _build_empty_state(self) -> QWidget:
-        w = QWidget()
-        lay = QVBoxLayout(w)
-        lay.setAlignment(Qt.AlignCenter)
-        lay.setSpacing(16)
-
-        self._es_icon = make_icon_label(
-            IC.LINK_OFF, color=PALETTE['textDim'], size=64)
-        self._es_icon.setAlignment(Qt.AlignCenter)
-
-        self._es_title = QLabel("Camera Not Connected")
-        self._es_title.setAlignment(Qt.AlignCenter)
-
-        self._es_tip = QLabel(
-            "Connect a camera in Device Manager to configure "
-            "measurement modality.")
-        self._es_tip.setAlignment(Qt.AlignCenter)
-        self._es_tip.setWordWrap(True)
-        self._es_tip.setMaximumWidth(400)
-
-        self._es_btn = QPushButton("Open Device Manager")
-        self._es_btn.setFixedWidth(200)
-        self._es_btn.setFixedHeight(36)
-        self._es_btn.clicked.connect(self.open_device_manager)
-
-        self._apply_empty_state_styles()
-
-        lay.addStretch()
-        lay.addWidget(self._es_icon)
-        lay.addWidget(self._es_title)
-        lay.addWidget(self._es_tip)
-        lay.addSpacing(8)
-        lay.addWidget(self._es_btn, 0, Qt.AlignCenter)
-        lay.addStretch()
-        return w
-
-    def _apply_empty_state_styles(self) -> None:
-        dim = PALETTE['textDim']
-        accent = PALETTE['accent']
-        self._es_title.setStyleSheet(
-            f"font-size:{FONT['readoutSm']}pt; font-weight:bold; color:{dim};")
-        self._es_tip.setStyleSheet(
-            f"font-size:{FONT['label']}pt; color:{dim};")
-        self._es_btn.setStyleSheet(f"""
-            QPushButton {{
-                background:{PALETTE['surface']}; color:{accent};
-                border:1px solid {accent}66; border-radius:5px;
-                font-size:{FONT['label']}pt; font-weight:600;
-            }}
-            QPushButton:hover {{ background:{PALETTE['surface2']}; }}
-        """)
-        icon = make_icon(IC.LINK_OFF, color=dim, size=64)
-        if icon:
-            self._es_icon.setPixmap(icon.pixmap(64, 64))
+        from ui.widgets.empty_state import build_empty_state
+        return build_empty_state(
+            title="Camera Not Connected",
+            description="Connect a camera in Device Manager to configure "
+                        "measurement modality.",
+            on_action=self.open_device_manager.emit,
+        )
 
     # ── Theme ──────────────────────────────────────────────────────────
 
@@ -720,8 +674,6 @@ class ModalitySection(QWidget):
         self._subtitle.setStyleSheet(_dim_style())
         if hasattr(self, "_profile_picker"):
             self._profile_picker._apply_styles()
-        if hasattr(self, "_es_btn"):
-            self._apply_empty_state_styles()
         # Preview panel
         if hasattr(self, "_preview_lbl"):
             self._preview_lbl.setStyleSheet(self._preview_frame_qss())

@@ -31,7 +31,6 @@ from hardware.app_state    import app_state
 from ui.widgets.temp_plot  import TempPlot
 from ui.widgets.more_options import MoreOptionsPanel
 from ui.theme import FONT, PALETTE, scaled_qss, MONO_FONT
-from ui.icons import make_icon_label, IC
 
 # Approximate TEC temperature ramp rate (°C per minute).
 # Used for the stabilization time estimate shown in the UI.
@@ -102,46 +101,12 @@ class TemperatureTab(QWidget):
         self._stack.setCurrentIndex(0)  # empty state until device connects
 
     def _build_empty_state(self, title: str, device: str, tip: str) -> QWidget:
-        w = QWidget()
-        lay = QVBoxLayout(w)
-        lay.setAlignment(Qt.AlignCenter)
-        lay.setSpacing(16)
-
-        icon_lbl = make_icon_label(IC.LINK_OFF, color=PALETTE['textSub'], size=64)
-        icon_lbl.setAlignment(Qt.AlignCenter)
-
-        title_lbl = QLabel(f"{title} Not Connected")
-        title_lbl.setAlignment(Qt.AlignCenter)
-        title_lbl.setStyleSheet(
-            f"font-size: {FONT['readoutSm']}pt; font-weight: bold; color: {PALETTE['textDim']};")
-
-        tip_lbl = QLabel(tip)
-        tip_lbl.setAlignment(Qt.AlignCenter)
-        tip_lbl.setWordWrap(True)
-        tip_lbl.setStyleSheet(f"font-size: {FONT['label']}pt; color: {PALETTE['textSub']};")
-        tip_lbl.setMaximumWidth(400)
-
-        btn = QPushButton("Open Device Manager")
-        btn.setFixedWidth(200)
-        btn.setFixedHeight(36)
-        btn.setStyleSheet(f"""
-            QPushButton {{
-                background: {PALETTE['surface']}; color: {PALETTE['accent']};
-                border: 1px solid {PALETTE['accent']}66; border-radius: 5px;
-                font-size: {FONT['label']}pt; font-weight: 600;
-            }}
-            QPushButton:hover {{ background: {PALETTE['surface2']}; }}
-        """)
-        btn.clicked.connect(self.open_device_manager)
-
-        lay.addStretch()
-        lay.addWidget(icon_lbl)
-        lay.addWidget(title_lbl)
-        lay.addWidget(tip_lbl)
-        lay.addSpacing(8)
-        lay.addWidget(btn, 0, Qt.AlignCenter)
-        lay.addStretch()
-        return w
+        from ui.widgets.empty_state import build_empty_state
+        return build_empty_state(
+            title=f"{title} Not Connected",
+            description=tip,
+            on_action=self.open_device_manager,
+        )
 
     def set_hardware_available(self, available: bool) -> None:
         """Switch between empty state (page 0) and full controls (page 1)."""

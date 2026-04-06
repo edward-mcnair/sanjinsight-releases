@@ -296,6 +296,46 @@ class ReadinessWidget(QWidget):
             f"font-weight: 600;")
         label.setToolTip(tip)
 
+    def _apply_styles(self) -> None:
+        """Re-apply PALETTE / FONT styles after a theme change.
+
+        Delegates to ``_apply_state`` which already sets every inline
+        stylesheet on ``_frame``, ``_dot``, ``_title``, and rebuilds the
+        issue rows.  We simply re-trigger whatever visual state the widget
+        is currently showing.
+        """
+        # Determine the current logical state from the existing title text.
+        title = self._title.text()
+        if title.startswith("READY"):
+            state = "ready"
+        elif title.startswith("NOT READY"):
+            state = "warn"
+        elif title == "Checking instrument state…":
+            state = "unknown"
+        else:
+            state = "unknown"
+
+        # Collect current issue data from the existing layout (if any).
+        # _apply_state will clear and re-render them, so we just need the
+        # text that is already visible — but the issue dicts are not stored.
+        # Re-rendering with the current title/state is sufficient because
+        # update_metrics() will be called again shortly with fresh data.
+        self._apply_state(state, title, [])
+
+        # Refresh trend labels with current palette colours
+        for lbl in (self._drift_trend, self._focus_trend):
+            # Re-read the existing text to decide colour
+            txt = lbl.text()
+            if "↑" in txt:
+                color = PALETTE['success']
+            elif "↓" in txt:
+                color = PALETTE['warning']
+            else:
+                continue
+            lbl.setStyleSheet(
+                f"color: {color}; font-size: {FONT['caption']}pt; "
+                f"font-weight: 600;")
+
     def _clear_issues(self) -> None:
         """Remove all existing issue rows from the issues layout."""
         while self._issues_layout.count():

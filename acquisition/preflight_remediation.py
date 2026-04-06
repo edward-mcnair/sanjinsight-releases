@@ -136,9 +136,15 @@ class PreflightRemediator:
             # There's no hardware action for stability — the remediation
             # is "wait".  The preflight dialog re-runs checks after the
             # user clicks this, giving the system time to settle.
+            # We pump the Qt event loop in short intervals so the UI
+            # stays responsive (this action runs on the main thread).
             import time
+            from PyQt5.QtWidgets import QApplication
             log.info("Remediation: waiting 3s for system to settle (CV=%.4f)", cv)
-            time.sleep(3)
+            deadline = time.monotonic() + 3.0
+            while time.monotonic() < deadline:
+                QApplication.processEvents()
+                time.sleep(0.05)  # 50 ms slices — keeps CPU low
             return True
 
         return Remediation(

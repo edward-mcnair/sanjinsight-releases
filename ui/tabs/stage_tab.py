@@ -18,7 +18,8 @@ from PyQt5.QtCore    import Qt, pyqtSignal
 
 from hardware.app_state import app_state
 from ui.theme import FONT, PALETTE, scaled_qss, MONO_FONT
-from ui.icons import IC, make_icon_label, set_btn_icon
+from ui.icons import set_btn_icon
+from ui.widgets.tab_helpers import make_readout
 
 
 class StageTab(QWidget):
@@ -209,45 +210,12 @@ class StageTab(QWidget):
             )
 
     def _build_empty_state(self, title: str, device: str, tip: str) -> QWidget:
-        w = QWidget()
-        lay = QVBoxLayout(w)
-        lay.setAlignment(Qt.AlignCenter)
-        lay.setSpacing(16)
-
-        icon_lbl = make_icon_label(IC.LINK_OFF, color=PALETTE['textSub'], size=64)
-        icon_lbl.setAlignment(Qt.AlignCenter)
-
-        title_lbl = QLabel(f"{title} Not Connected")
-        title_lbl.setAlignment(Qt.AlignCenter)
-        title_lbl.setStyleSheet(f"font-size: {FONT['readoutSm']}pt; font-weight: bold; color: {PALETTE['textDim']};")
-
-        tip_lbl = QLabel(tip)
-        tip_lbl.setAlignment(Qt.AlignCenter)
-        tip_lbl.setWordWrap(True)
-        tip_lbl.setStyleSheet(f"font-size: {FONT['label']}pt; color: {PALETTE['textSub']};")
-        tip_lbl.setMaximumWidth(400)
-
-        btn = QPushButton("Open Device Manager")
-        btn.setFixedWidth(200)
-        btn.setFixedHeight(36)
-        btn.setStyleSheet(f"""
-            QPushButton {{
-                background: {PALETTE['surface']}; color: {PALETTE['accent']};
-                border: 1px solid {PALETTE['accent']}66; border-radius: 5px;
-                font-size: {FONT['label']}pt; font-weight: 600;
-            }}
-            QPushButton:hover {{ background: {PALETTE['surface2']}; }}
-        """)
-        btn.clicked.connect(self.open_device_manager)
-
-        lay.addStretch()
-        lay.addWidget(icon_lbl)
-        lay.addWidget(title_lbl)
-        lay.addWidget(tip_lbl)
-        lay.addSpacing(8)
-        lay.addWidget(btn, 0, Qt.AlignCenter)
-        lay.addStretch()
-        return w
+        from ui.widgets.empty_state import build_empty_state
+        return build_empty_state(
+            title=f"{title} Not Connected",
+            description=tip,
+            on_action=self.open_device_manager,
+        )
 
     # ── Device error banner ─────────────────────────────────────────
 
@@ -313,20 +281,7 @@ class StageTab(QWidget):
     # ---------------------------------------------------------------- #
 
     def _readout(self, label, initial, color):
-        w = QWidget()
-        v = QVBoxLayout(w)
-        v.setAlignment(Qt.AlignCenter)
-        sub = QLabel(label)
-        sub.setObjectName("sublabel")
-        sub.setAlignment(Qt.AlignCenter)
-        val = QLabel(initial)
-        val.setAlignment(Qt.AlignCenter)
-        val.setStyleSheet(
-            f"font-family:{MONO_FONT}; font-size:{FONT['readoutLg']}pt; color:{color};")
-        v.addWidget(sub)
-        v.addWidget(val)
-        w._val = val
-        return w
+        return make_readout(label, initial, color, font_key="readoutLg")
 
     def _axis_spin(self, label, lo, hi):
         s = QDoubleSpinBox()

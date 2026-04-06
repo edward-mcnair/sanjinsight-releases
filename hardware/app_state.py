@@ -147,12 +147,12 @@ class ApplicationState:
             try:
                 cb(key, old, new)
             except Exception:
-                log.debug("State listener error for %r", key, exc_info=True)
+                log.warning("State listener error for %r", key, exc_info=True)
         for cb in self._listeners.get("", ()):
             try:
                 cb(key, old, new)
             except Exception:
-                log.debug("Wildcard state listener error for %r", key, exc_info=True)
+                log.warning("Wildcard state listener error for %r", key, exc_info=True)
 
     # ── Context manager (use for compound operations) ───────────────
 
