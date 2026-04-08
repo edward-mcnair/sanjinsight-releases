@@ -170,7 +170,14 @@ def check_usb_serial_drivers():
                               r"SYSTEM\CurrentControlSet\Services\CH341SER")
     ch340_ok = ch341_64 or ch341_32
     check("CH340/CH341 driver (Arduino Nano)", ch340_ok,
-          "Not installed — Arduino GPIO will not connect",
+          "Not installed — Arduino Nano GPIO will not connect",
+          warn_only=True)
+
+    # Silicon Labs CP210x (ESP32 dev boards)
+    cp210x = reg_key_exists(winreg.HKEY_LOCAL_MACHINE,
+                            r"SYSTEM\CurrentControlSet\Services\silabser")
+    check("CP210x driver (ESP32)", cp210x,
+          "Not installed — ESP32 GPIO will not connect",
           warn_only=True)
 
     # Basler USB3 Vision camera driver
@@ -236,6 +243,10 @@ def check_com_ports():
             driver_hint = " (FTDI — TEC, LDD, NPC3 piezo, or Thorlabs stage)"
         elif "ch340" in name_lower or "ch341" in name_lower or "wch" in name_lower:
             driver_hint = " (CH340 — Arduino Nano GPIO/LED selector)"
+        elif "cp210" in name_lower or "silicon labs" in name_lower:
+            driver_hint = " (CP210x — ESP32 GPIO/LED selector)"
+        elif "espressif" in name_lower or "esp32" in name_lower:
+            driver_hint = " (Espressif — ESP32 native USB)"
         elif "usbser" in name_lower:
             driver_hint = " (USB Serial)"
         print(f"  {INFO}  {port}: {name}{driver_hint}")

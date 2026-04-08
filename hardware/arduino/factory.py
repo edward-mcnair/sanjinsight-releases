@@ -8,8 +8,10 @@ import importlib
 from .base import ArduinoDriver
 
 _DRIVERS = {
-    "nano":      ("hardware.arduino.nano_driver",  "ArduinoNanoDriver"),
-    "simulated": ("hardware.arduino.simulated",    "SimulatedArduino"),
+    "nano":      ("hardware.arduino.nano_driver",   "ArduinoNanoDriver"),
+    "esp32":     ("hardware.arduino.esp32_driver",   "Esp32Driver"),
+    "uno":       ("hardware.arduino.nano_driver",   "ArduinoNanoDriver"),
+    "simulated": ("hardware.arduino.simulated",      "SimulatedArduino"),
 }
 
 _INSTALL_HINTS: dict = {
@@ -19,6 +21,17 @@ _INSTALL_HINTS: dict = {
         "  Windows: usually auto-installed via Windows Update\n"
         "  macOS:   brew install ch340g-ch34g-ch34x-mac-os-x-driver\n"
         "  Linux:   included in kernel (ch341 module)"
+    ),
+    "esp32": (
+        "pip install pyserial\n"
+        "CP2102 driver is usually included with the OS.\n"
+        "  If not detected, install from:\n"
+        "  https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers"
+    ),
+    "uno": (
+        "pip install pyserial\n"
+        "Arduino UNO uses the ATmega16U2 USB-serial bridge.\n"
+        "  Driver is included with the Arduino IDE and most OS installs."
     ),
 }
 

@@ -830,6 +830,11 @@ class DeviceManager:
             # Arduino GPIO / LED selector
             "arduino_nano_ch340":       "nano",
             "arduino_nano_ftdi":        "nano",
+            "arduino_uno":              "uno",
+            "arduino_uno_r4":           "uno",
+            # ESP32 GPIO / LED selector
+            "esp32_cp2102":             "esp32",
+            "esp32_native_usb":         "esp32",
         }
         return KEY_MAP.get(desc.uid, desc.uid)
 

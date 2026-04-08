@@ -9,6 +9,8 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 ## [1.50.35-beta] — 2026-04-08
 
 ### Added
+- **ESP32 GPIO driver** (`hardware/arduino/esp32_driver.py`) — Full driver for ESP32 dev boards (CP2102 and native USB variants) as GPIO/LED wavelength selectors. Auto-detects Silicon Labs CP210x (VID 10C4:EA60) and Espressif native USB (VID 303A:1001). Same serial protocol as Arduino Nano firmware. Default pin map uses GPIO16–19 for LED channels (avoids boot-strapping pins)
+- **Arduino UNO support** — Device registry entries for UNO R3 (ATmega16U2 bridge, VID 2341:0043) and UNO R4 Minima (Renesas RA4M1 native USB, VID 2341:0069). Both use the existing Nano driver (same serial protocol). Auto-detect updated with UNO VID/PID pairs and description-string matching
 - **Multi-ROI model** (`acquisition/roi_model.py`) — Shared QObject singleton holding up to 16 ROIs with signals (`rois_changed`, `roi_added`, `roi_removed`, `roi_updated`, `active_changed`), auto-colour/label assignment, and `to_list()`/`from_list()` serialization
 - **Multi-ROI canvas** (`acquisition/roi_widget.py`) — `MultiRoiCanvas` with hit-testing for selection, colour-coded overlays, and `MultiRoiSelector` combining canvas + ROI list + control buttons. Backward-compatible `RoiCanvas`/`RoiSelector` aliases
 - **Extended ROI dataclass** (`acquisition/roi.py`) — Added `uid`, `label`, `color` fields with 8-colour `ROI_COLORS` palette

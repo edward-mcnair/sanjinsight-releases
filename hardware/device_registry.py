@@ -813,6 +813,98 @@ DEVICE_REGISTRY: dict[str, DeviceDescriptor] = {
         description    = "Arduino Nano (ATmega328P) with FTDI FT232R USB-serial. "
                          "Original Arduino Nano revision; same firmware as CH340 variant.",
     ),
+
+    # ---------------------------------------------------------------- #
+    #  Arduino UNO                                                      #
+    # ---------------------------------------------------------------- #
+
+    "arduino_uno": DeviceDescriptor(
+        uid            = "arduino_uno",
+        display_name   = "Arduino UNO",
+        manufacturer   = "Arduino / Microsanj",
+        device_type    = DTYPE_GPIO,
+        connection_type= CONN_SERIAL,
+        driver_module  = "hardware.arduino.nano_driver",
+        driver_version = "builtin",
+        hot_loadable   = True,
+        usb_vid        = 0x2341,   # Arduino SA
+        usb_pid        = 0x0043,   # UNO R3 (ATmega16U2 bridge)
+        serial_patterns= ["Arduino Uno", "Arduino UNO", "ttyACM"],
+        default_baud   = 115200,
+        description    = "Arduino UNO (ATmega328P) with ATmega16U2 USB-serial bridge. "
+                         "Same firmware and serial protocol as the Nano variant. "
+                         "Pin mapping: D2–D5 LED select, D6–D13 GPIO, A0–A5 ADC.",
+        notes          = "Flash firmware/arduino_nano/sanjinsight_io.ino via Arduino IDE. "
+                         "The UNO resets on serial open (2 s bootloader wait). "
+                         "A0–A5 only (no A6/A7 — those are analog-only on Nano but "
+                         "absent on UNO headers).",
+    ),
+
+    "arduino_uno_r4": DeviceDescriptor(
+        uid            = "arduino_uno_r4",
+        display_name   = "Arduino UNO R4",
+        manufacturer   = "Arduino / Microsanj",
+        device_type    = DTYPE_GPIO,
+        connection_type= CONN_SERIAL,
+        driver_module  = "hardware.arduino.nano_driver",
+        driver_version = "builtin",
+        hot_loadable   = True,
+        usb_vid        = 0x2341,   # Arduino SA
+        usb_pid        = 0x0069,   # UNO R4 Minima
+        serial_patterns= ["Arduino UNO R4", "UNO R4", "Renesas"],
+        default_baud   = 115200,
+        description    = "Arduino UNO R4 Minima/WiFi (Renesas RA4M1). "
+                         "Native USB — no external USB-serial chip. "
+                         "Same serial protocol as the Nano firmware.",
+        notes          = "The R4 has a 14-bit ADC (0–16383) but firmware should "
+                         "scale output to 10-bit for protocol compatibility. "
+                         "No bootloader reset delay on native USB variants.",
+    ),
+
+    # ---------------------------------------------------------------- #
+    #  ESP32 GPIO / LED Controllers                                     #
+    # ---------------------------------------------------------------- #
+
+    "esp32_cp2102": DeviceDescriptor(
+        uid            = "esp32_cp2102",
+        display_name   = "ESP32 (CP2102)",
+        manufacturer   = "Espressif / Microsanj",
+        device_type    = DTYPE_GPIO,
+        connection_type= CONN_SERIAL,
+        driver_module  = "hardware.arduino.esp32_driver",
+        driver_version = "builtin",
+        hot_loadable   = True,
+        usb_vid        = 0x10C4,   # Silicon Labs
+        usb_pid        = 0xEA60,   # CP210x USB-UART
+        serial_patterns= ["CP210", "cp210", "ESP32", "esp32"],
+        default_baud   = 115200,
+        description    = "ESP32 dev board with Silicon Labs CP2102/CP2104 USB-UART bridge. "
+                         "Common on ESP32-DevKitC, NodeMCU-32S, and most third-party boards. "
+                         "Same serial protocol as the Arduino Nano firmware.",
+        notes          = "Flash firmware/esp32/sanjinsight_io.ino via Arduino IDE or "
+                         "PlatformIO. GPIO16–19: LED select. GPIO21–33: general GPIO. "
+                         "ADC1 channels (GPIO32–39): 12-bit analog input.",
+    ),
+
+    "esp32_native_usb": DeviceDescriptor(
+        uid            = "esp32_native_usb",
+        display_name   = "ESP32-S3/C3 (Native USB)",
+        manufacturer   = "Espressif / Microsanj",
+        device_type    = DTYPE_GPIO,
+        connection_type= CONN_SERIAL,
+        driver_module  = "hardware.arduino.esp32_driver",
+        driver_version = "builtin",
+        hot_loadable   = True,
+        usb_vid        = 0x303A,   # Espressif Inc.
+        usb_pid        = 0x1001,   # ESP32-S2/S3/C3 native USB-CDC
+        serial_patterns= ["Espressif", "ESP32-S", "ESP32-C"],
+        default_baud   = 115200,
+        description    = "ESP32-S2, ESP32-S3, or ESP32-C3 with built-in USB (no external "
+                         "USB-serial chip). Driver-free on all platforms. "
+                         "Same serial protocol as the Arduino Nano firmware.",
+        notes          = "No bootloader reset delay — USB-CDC is always ready. "
+                         "Flash via Arduino IDE (ESP32 board package) or PlatformIO.",
+    ),
 }
 
 

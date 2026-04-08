@@ -1,35 +1,38 @@
 """
-hardware/arduino/nano_driver.py
+hardware/arduino/esp32_driver.py
 
-Arduino Nano serial driver for LED wavelength selection and GPIO control.
+ESP32 serial driver for LED wavelength selection and GPIO control.
 
-Communicates with an ATmega328P running the SanjINSIGHT I/O firmware
-(firmware/arduino_nano/sanjinsight_io.ino) over USB-serial at 115200 baud.
+Communicates with an ESP32 (any variant: ESP32, ESP32-S2, ESP32-S3, ESP32-C3)
+running the SanjINSIGHT I/O firmware over USB-serial at 115200 baud.
 
-Serial protocol (line-based ASCII, \\n terminated)
---------------------------------------------------
-Commands sent to Arduino:
-    LED <ch>          Select LED channel (0-based), or -1 for all off
-    PIN <pin> <0|1>   Set digital pin LOW/HIGH
-    READ <pin>        Read digital pin → "PIN <pin> <0|1>"
-    ADC <ch>          Read analog channel → "ADC <ch> <value>"
-    STATUS            Request full status → "STATUS ..." (see below)
-    IDENT             Request firmware identity → "IDENT <firmware_version>"
+The ESP32 speaks the **same ASCII protocol** as the Arduino Nano firmware
+(see nano_driver.py for the full command reference).  The only differences
+are hardware-level:
 
-Responses from Arduino:
-    OK                Command accepted (LED, PIN)
-    PIN <pin> <0|1>   Digital pin readback
-    ADC <ch> <value>  Analog readback (0–1023)
-    STATUS <led> <uptime_ms>   Current state summary
-    IDENT <version>   Firmware version string
-    ERR <message>     Error from firmware
+  • USB chip: CP2102/CP2104 (Silicon Labs), or native USB (ESP32-S2/S3/C3)
+  • GPIO pin numbering: ESP32 uses its own pin map (configurable via
+    ``led_channels`` in config.yaml)
+  • ADC resolution: ESP32 has 12-bit ADC (0–4095) vs Nano's 10-bit (0–1023).
+    The firmware should scale to 10-bit for protocol compatibility, or callers
+    can read the raw 12-bit value via the ``adc_bits`` config key.
+  • No bootloader reset: ESP32 does not reset on serial open, so the 2-second
+    post-connect delay used by the Nano driver is skipped.
 
 Config keys (config.yaml → hardware.arduino):
-    driver:      "nano"
-    port:        "COM3" or "/dev/ttyUSB0"  (auto-detected if omitted)
+    driver:      "esp32"
+    port:        "/dev/tty.usbserial-0001"  (auto-detected if omitted)
     baud:        115200
     timeout:     2.0
-    led_channels:  [{wavelength_nm: 470, label: "Blue", pin: 2}, ...]
+    adc_bits:    12       (default; set to 10 if firmware scales output)
+    led_channels:  [{wavelength_nm: 470, label: "Blue", pin: 16}, ...]
+
+Auto-detection
+--------------
+Scans for:
+  • Silicon Labs CP210x  — VID 10C4, PID EA60 (most common ESP32 dev boards)
+  • Espressif native USB — VID 303A, PID 1001 (ESP32-S2/S3/C3 built-in USB)
+  • Description-string fallback: "CP210", "ESP32", "Espressif"
 """
 
 from __future__ import annotations
@@ -39,23 +42,37 @@ import threading
 import time
 from typing import Optional
 
-from .base import ArduinoDriver, ArduinoStatus
+from .base import ArduinoDriver, ArduinoStatus, LedChannel
 
 log = logging.getLogger(__name__)
 
+# Default LED channels for ESP32 — sensible GPIO pins that avoid
+# boot-strapping pins (GPIO0, GPIO2, GPIO12) and flash pins (GPIO6–11).
+_ESP32_DEFAULT_LED_CHANNELS = [
+    LedChannel(index=0, wavelength_nm=470, label="470 nm Blue",   pin=16),
+    LedChannel(index=1, wavelength_nm=530, label="530 nm Green",  pin=17),
+    LedChannel(index=2, wavelength_nm=590, label="590 nm Amber",  pin=18),
+    LedChannel(index=3, wavelength_nm=625, label="625 nm Red",    pin=19),
+]
 
-class ArduinoNanoDriver(ArduinoDriver):
-    """Concrete Arduino Nano driver over USB-serial (CH340/FTDI)."""
+
+class Esp32Driver(ArduinoDriver):
+    """Concrete ESP32 driver over USB-serial (CP2102 or native USB)."""
 
     def __init__(self, cfg: dict):
         super().__init__(cfg)
         self._port: Optional[str] = cfg.get("port")
         self._baud: int = int(cfg.get("baud", 115200))
         self._timeout: float = float(cfg.get("timeout", 2.0))
+        self._adc_bits: int = int(cfg.get("adc_bits", 12))
         self._serial = None  # serial.Serial instance
         self._lock = threading.Lock()
         self._firmware_version: str = ""
         self._active_led: int = -1
+
+        # Use ESP32 default pin map if no custom channels were loaded
+        if not cfg.get("led_channels"):
+            self._channels = list(_ESP32_DEFAULT_LED_CHANNELS)
 
     # ---------------------------------------------------------------- #
     #  Lifecycle                                                        #
@@ -69,8 +86,8 @@ class ArduinoNanoDriver(ArduinoDriver):
             port = self._auto_detect_port()
             if not port:
                 raise RuntimeError(
-                    "Arduino Nano not found. Specify 'port' in config.yaml "
-                    "or connect an Arduino Nano with CH340 USB-serial chip.")
+                    "ESP32 not found. Specify 'port' in config.yaml "
+                    "or connect an ESP32 board with CP2102 or native USB.")
 
         try:
             self._serial = serial.Serial(
@@ -78,9 +95,9 @@ class ArduinoNanoDriver(ArduinoDriver):
                 baudrate=self._baud,
                 timeout=self._timeout,
             )
-            # Arduino resets on serial open — wait for bootloader
-            time.sleep(2.0)
-            # Flush any bootloader output
+            # ESP32 does NOT reset on serial open (unlike Arduino Nano),
+            # but give a short settle for the USB-serial bridge.
+            time.sleep(0.3)
             self._serial.reset_input_buffer()
 
             # Identify firmware
@@ -90,7 +107,7 @@ class ArduinoNanoDriver(ArduinoDriver):
 
             self._connected = True
             self._port = port
-            log.info("Arduino Nano connected on %s  (firmware: %s)",
+            log.info("ESP32 connected on %s  (firmware: %s)",
                      port, self._firmware_version)
 
         except Exception as exc:
@@ -100,13 +117,12 @@ class ArduinoNanoDriver(ArduinoDriver):
                 "baud": self._baud, "timeout": self._timeout,
             })
             raise RuntimeError(
-                f"Failed to connect to Arduino Nano on {port}: {exc}"
+                f"Failed to connect to ESP32 on {port}: {exc}"
             ) from exc
 
     def disconnect(self) -> None:
         if self._serial is not None:
             try:
-                # Turn off all LEDs before disconnecting
                 self._cmd("LED -1")
             except Exception:
                 pass
@@ -117,7 +133,7 @@ class ArduinoNanoDriver(ArduinoDriver):
             self._serial = None
         self._connected = False
         self._active_led = -1
-        log.info("Arduino Nano disconnected")
+        log.info("ESP32 disconnected")
 
     # ---------------------------------------------------------------- #
     #  LED wavelength selection                                         #
@@ -130,9 +146,8 @@ class ArduinoNanoDriver(ArduinoDriver):
                 f"(-1..{len(self._channels) - 1})")
         resp = self._cmd(f"LED {channel}")
         if resp and resp.startswith("ERR"):
-            raise RuntimeError(f"Arduino LED select failed: {resp}")
+            raise RuntimeError(f"ESP32 LED select failed: {resp}")
         self._active_led = channel
-        # Update channel state
         for ch in self._channels:
             ch.enabled = (ch.index == channel)
         if channel >= 0:
@@ -152,12 +167,11 @@ class ArduinoNanoDriver(ArduinoDriver):
         val = 1 if state else 0
         resp = self._cmd(f"PIN {pin} {val}")
         if resp and resp.startswith("ERR"):
-            raise RuntimeError(f"Arduino set_pin failed: {resp}")
+            raise RuntimeError(f"ESP32 set_pin failed: {resp}")
 
     def get_pin(self, pin: int) -> bool:
         resp = self._cmd(f"READ {pin}")
         if resp and resp.startswith("PIN"):
-            # "PIN <pin> <0|1>"
             parts = resp.split()
             if len(parts) >= 3:
                 return parts[2] == "1"
@@ -172,7 +186,6 @@ class ArduinoNanoDriver(ArduinoDriver):
             raise ValueError(f"Analog channel {channel} out of range (0–7)")
         resp = self._cmd(f"ADC {channel}")
         if resp and resp.startswith("ADC"):
-            # "ADC <ch> <value>"
             parts = resp.split()
             if len(parts) >= 3:
                 return int(parts[2])
@@ -218,51 +231,45 @@ class ArduinoNanoDriver(ArduinoDriver):
                 return ""
             try:
                 raw = (command + "\n").encode("ascii")
-                _tx(log, raw, label="Arduino")
+                _tx(log, raw, label="ESP32")
                 self._serial.write(raw)
                 self._serial.flush()
-                with _timed(log, f"Arduino '{command}' response"):
-                    line = self._serial.readline().decode("ascii", errors="replace").strip()
-                _rx(log, line, label="Arduino")
+                with _timed(log, f"ESP32 '{command}' response"):
+                    line = self._serial.readline().decode(
+                        "ascii", errors="replace").strip()
+                _rx(log, line, label="ESP32")
                 return line
             except Exception as exc:
-                log.warning("Arduino serial error on '%s': %s", command, exc)
+                log.warning("ESP32 serial error on '%s': %s", command, exc)
                 return ""
 
     @staticmethod
     def _auto_detect_port() -> Optional[str]:
-        """Scan serial ports for a CH340-based Arduino Nano."""
+        """Scan serial ports for an ESP32 board."""
         try:
             from serial.tools.list_ports import comports
         except ImportError:
             return None
 
-        # CH340 VID:PID  = 1A86:7523
-        # FTDI VID:PID   = 0403:6001  (some Nano clones)
-        # Arduino.cc      = 2341:0043  (UNO R3)
-        # Arduino.cc      = 2341:0069  (UNO R4 Minima)
-        _VIDS_PIDS = {
-            (0x1A86, 0x7523),  # CH340
-            (0x0403, 0x6001),  # FTDI FT232R
-            (0x2341, 0x0043),  # Arduino UNO R3
-            (0x2341, 0x0069),  # Arduino UNO R4 Minima
-        }
+        # Silicon Labs CP210x:  VID 10C4, PID EA60
+        # Espressif native USB: VID 303A, PID 1001
+        _ESP32_VIDS = {0x10C4, 0x303A}
+        _ESP32_PIDS = {0xEA60, 0x1001}
 
         for port_info in comports():
             vid = port_info.vid
             pid = port_info.pid
             if vid is not None and pid is not None:
-                if (vid, pid) in _VIDS_PIDS:
-                    log.info("Auto-detected Arduino on %s "
+                if vid in _ESP32_VIDS and pid in _ESP32_PIDS:
+                    log.info("Auto-detected ESP32 on %s "
                              "(VID=%04X PID=%04X)",
                              port_info.device, vid, pid)
                     return port_info.device
 
             # Fallback: match description strings
             desc = (port_info.description or "").lower()
-            if any(s in desc for s in ("ch340", "arduino nano",
-                                       "arduino uno", "ttyacm")):
-                log.info("Auto-detected Arduino on %s (desc=%s)",
+            if any(s in desc for s in ("cp210", "esp32", "espressif")):
+                log.info("Auto-detected ESP32 on %s (desc=%s)",
                          port_info.device, port_info.description)
                 return port_info.device
 
