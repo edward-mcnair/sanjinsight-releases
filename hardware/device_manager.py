@@ -277,6 +277,10 @@ class DeviceManager:
         """
         Update all device entries based on the latest scan report.
         Devices that were CONNECTED are not disturbed.
+
+        Port exclusivity: if two discovered devices resolve to the same
+        serial port, only the first is accepted; the duplicate is logged
+        and left as ABSENT so we don't attempt a double-open at startup.
         """
         with self._lock:
             # Mark everything not currently connected as ABSENT first
@@ -285,6 +289,15 @@ class DeviceManager:
                                        DeviceState.CONNECTING,
                                        DeviceState.DISCONNECTING):
                     entry.state = DeviceState.ABSENT
+
+            # Track ports already claimed by this scan pass.
+            # Includes ports held by already-connected devices.
+            claimed_ports: dict[str, str] = {}   # port → uid
+            for uid, entry in self._entries.items():
+                if (entry.state in (DeviceState.CONNECTED,
+                                    DeviceState.CONNECTING)
+                        and entry.address):
+                    claimed_ports[entry.address] = uid
 
             # Update entries for discovered devices
             for dev in report.devices:
@@ -297,11 +310,27 @@ class DeviceManager:
                 if entry.state in (DeviceState.CONNECTED,
                                    DeviceState.CONNECTING):
                     continue   # don't disturb live connections
+
+                # ── Port exclusivity check ────────────────────────
+                addr = dev.address or ""
+                if addr and addr in claimed_ports:
+                    owner = claimed_ports[addr]
+                    log.warning(
+                        "Port collision: %s claims %s but it is already "
+                        "assigned to %s — skipping duplicate",
+                        uid, addr, owner)
+                    self._log(
+                        f"⚠ Port conflict: {uid} and {owner} both "
+                        f"resolved to {addr} — {uid} skipped")
+                    continue
+
                 entry.state         = DeviceState.DISCOVERED
-                entry.address       = dev.address
+                entry.address       = addr
                 entry.serial_number = dev.serial_number or ""
                 entry.last_seen     = time.time()
-                self._emit(uid, DeviceState.DISCOVERED, dev.address)
+                if addr:
+                    claimed_ports[addr] = uid
+                self._emit(uid, DeviceState.DISCOVERED, addr)
 
     # ---------------------------------------------------------------- #
     #  Connect                                                          #

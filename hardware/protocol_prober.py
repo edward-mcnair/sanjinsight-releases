@@ -147,6 +147,30 @@ def probe_mecom_port(
             except Exception:
                 pass
 
+    # ── Phantom-echo deduplication ────────────────────────────────
+    # When only one Meerstetter device is on the bus, it may respond to
+    # ANY MeCom address — so address 2 (TEC) and address 1 (LDD) both
+    # get a hit with the *same* serial/identity string.  This creates a
+    # ghost device.  Keep only the first (highest-confidence) result per
+    # unique serial number.
+    if len(results) > 1:
+        seen_serials: dict[str, ProbeResult] = {}
+        deduped: List[ProbeResult] = []
+        for r in results:
+            sn = r.serial_number.strip()
+            if r.error or not sn:
+                deduped.append(r)
+                continue
+            if sn in seen_serials:
+                log.info("MeCom phantom echo: %s addr=%d same serial as addr=%d"
+                         " — dropping duplicate",
+                         port, r.mecom_address,
+                         seen_serials[sn].mecom_address)
+                continue
+            seen_serials[sn] = r
+            deduped.append(r)
+        results = deduped
+
     return results
 
 

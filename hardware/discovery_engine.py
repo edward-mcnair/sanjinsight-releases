@@ -348,6 +348,9 @@ _MCU_DESC_PATTERNS: list[tuple[list[str], str, str]] = [
     (["cp210", "esp32", "espressif"],     "esp32_cp2102",    "ESP32"),
     (["stm32", "stmicroelectronics",
       "tdg", "pt-100", "fastlaser"],      "tdg7",            "TDG-VII / PT-100"),
+    # FTDI-based Arduino Nano — only matches on *unresolved* ports (i.e. ports
+    # that MeCom probing failed on), so it won't steal Meerstetter ports.
+    (["ft232"],                           "arduino_nano_ftdi", "Arduino Nano (FTDI)"),
 ]
 
 
