@@ -83,11 +83,28 @@ class ArduinoNanoDriver(ArduinoDriver):
             # Flush any bootloader output
             self._serial.reset_input_buffer()
 
-            # Identify firmware
-            self._firmware_version = self._cmd("IDENT") or "unknown"
-            if self._firmware_version.startswith("IDENT "):
-                self._firmware_version = self._firmware_version[6:].strip()
+            # Identify firmware — the response MUST be a printable ASCII
+            # string starting with "IDENT" to confirm we're talking to an
+            # Arduino running the SanjINSIGHT I/O firmware, and NOT to a
+            # Meerstetter TEC/LDD that shares the same FTDI VID:PID.
+            raw_ident = self._cmd("IDENT")
+            if not raw_ident:
+                raise RuntimeError(
+                    f"No IDENT response from {port}. "
+                    "This port may not be an Arduino (Meerstetter TEC/LDD "
+                    "devices share the same FTDI USB ID)."
+                )
+            # Validate: must be printable ASCII and start with "IDENT"
+            _is_ascii = all(32 <= ord(c) < 127 or c in '\r\n\t' for c in raw_ident)
+            if not _is_ascii or not raw_ident.startswith("IDENT"):
+                raise RuntimeError(
+                    f"Unexpected response from {port}: {raw_ident!r:.60}  "
+                    "— this does not look like an Arduino running "
+                    "SanjINSIGHT I/O firmware. The port may belong to a "
+                    "Meerstetter TEC or LDD."
+                )
 
+            self._firmware_version = raw_ident[6:].strip() if raw_ident.startswith("IDENT ") else raw_ident
             self._connected = True
             self._port = port
             log.info("Arduino Nano connected on %s  (firmware: %s)",

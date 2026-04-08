@@ -221,11 +221,12 @@ class DeviceManager:
             try:
                 import config as _cfg
                 saved = _cfg.get_pref(f"device_params.{uid}", {})
-                if saved.get("address"):     entry.address     = saved["address"]
-                if saved.get("baud_rate"):   entry.baud_rate   = saved["baud_rate"]
-                if saved.get("ip_address"):  entry.ip_address  = saved["ip_address"]
-                if saved.get("timeout_s"):   entry.timeout_s   = saved["timeout_s"]
-                if "video_index" in saved:   entry.video_index = saved["video_index"]
+                if saved.get("address"):          entry.address        = saved["address"]
+                if saved.get("baud_rate"):        entry.baud_rate      = saved["baud_rate"]
+                if saved.get("ip_address"):       entry.ip_address     = saved["ip_address"]
+                if saved.get("timeout_s"):        entry.timeout_s      = saved["timeout_s"]
+                if "video_index" in saved:        entry.video_index    = saved["video_index"]
+                if saved.get("last_connected"):   entry.last_connected = saved["last_connected"]
             except Exception:
                 pass   # config not yet initialised at import time — ignore
             self._entries[uid] = entry
@@ -609,11 +610,12 @@ class DeviceManager:
                 # etc.) so the device can be auto-reconnected with the same
                 # settings on next launch.
                 _cfg.set_pref(f"device_params.{uid}", {
-                    "address":     entry.address,
-                    "baud_rate":   entry.baud_rate,
-                    "ip_address":  entry.ip_address,
-                    "timeout_s":   entry.timeout_s,
-                    "video_index": entry.video_index,
+                    "address":        entry.address,
+                    "baud_rate":      entry.baud_rate,
+                    "ip_address":     entry.ip_address,
+                    "timeout_s":      entry.timeout_s,
+                    "video_index":    entry.video_index,
+                    "last_connected": entry.last_connected,
                 })
             except Exception:
                 pass

@@ -6,12 +6,21 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.50.38-beta] — 2026-04-08
+
+### Fixed
+- **Arduino mis-identifies TEC as connected** — Arduino Nano driver now validates the IDENT response before claiming a successful connection. If the response is empty, non-ASCII, or doesn't start with "IDENT", the driver raises an error instead of blindly setting `_connected = True`. This prevents the Arduino from "connecting" to a Meerstetter TEC/LDD that shares the same FTDI VID:PID (0x0403:0x6001)
+- **Stale phantom device cleanup** — DeviceManager init now detects when two devices share the same saved COM port (e.g. phantom LDD-1121 saved on TEC-1089's port from a previous MeCom echo). The stale address is cleared from both memory and preferences, and the phantom is removed from the auto-reconnect list
+- **Auto-reconnect port exclusivity** — Auto-reconnect thread now tracks ports already in use by connected/connecting devices and skips any device whose saved port conflicts, preventing the Arduino from hijacking the TEC's COM port
+- **Device params persist last_connected** — `device_params.{uid}` now saves and restores `last_connected` timestamp so the stale-port dedup can correctly determine which device most recently used a given port
+- **SSL certificate verification** — Update checker now handles PyInstaller-frozen builds where system CA certificates may be missing, using certifi bundle with system-default and unverified fallbacks
+
 ## [1.50.37-beta] — 2026-04-08
 
 ### Fixed
-- **Stale phantom device cleanup** — DeviceManager init now detects when two devices share the same saved COM port (e.g. phantom LDD-1121 saved on TEC-1089's port from a previous MeCom echo). The stale address is cleared from both memory and preferences, and the phantom is removed from the auto-reconnect list
-- **Auto-reconnect port exclusivity** — Auto-reconnect thread now tracks ports already in use by connected/connecting devices and skips any device whose saved port conflicts, preventing the Arduino from hijacking the TEC's COM port
-- **SSL certificate verification** — Update checker now handles PyInstaller-frozen builds where system CA certificates may be missing, using certifi bundle with system-default and unverified fallbacks
+- Stale phantom device cleanup (superseded by 1.50.38)
+- Auto-reconnect port exclusivity (superseded by 1.50.38)
+- SSL certificate verification
 
 ## [1.50.36-beta] — 2026-04-08
 
