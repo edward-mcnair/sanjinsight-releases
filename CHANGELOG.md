@@ -6,6 +6,34 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.50.35-beta] — 2026-04-08
+
+### Added
+- **Multi-ROI model** (`acquisition/roi_model.py`) — Shared QObject singleton holding up to 16 ROIs with signals (`rois_changed`, `roi_added`, `roi_removed`, `roi_updated`, `active_changed`), auto-colour/label assignment, and `to_list()`/`from_list()` serialization
+- **Multi-ROI canvas** (`acquisition/roi_widget.py`) — `MultiRoiCanvas` with hit-testing for selection, colour-coded overlays, and `MultiRoiSelector` combining canvas + ROI list + control buttons. Backward-compatible `RoiCanvas`/`RoiSelector` aliases
+- **Extended ROI dataclass** (`acquisition/roi.py`) — Added `uid`, `label`, `color` fields with 8-colour `ROI_COLORS` palette
+- **Video export** (`acquisition/video_export.py`) — `export_video()` with OpenCV and imageio backends supporting MP4/AVI, configurable colormaps and normalization
+- **QuickControlsBar** (`ui/widgets/compact_controls.py`) — Two-row compact hardware controls (TEC + Stimulus / Exposure + Stage) with `_apply_styles()` for theme switching, embedded in acquire and live tabs
+- **LivePreviewDock** (`ui/widgets/live_preview_dock.py`) — Dockable QDockWidget showing camera feed + ROI overlays from shared model, with Native/Grayscale/False Color view modes (Ctrl+P toggle)
+- **ThemeAwareMixin** (`ui/widgets/theme_aware.py`) — Lightweight mixin enforcing the `_apply_styles()` contract with `__init_subclass__` debug warnings for subclasses that forget to override
+- **Colormap sync** — `colormap_changed` signal in `ui/app_signals.py` synchronizes colormap selection across live, acquire, and analysis tabs
+- **ROI standalone sidebar item** — ROI management accessible directly from sidebar navigation, with ROI status bar in acquire tab and ROI badge in live tab toolbar
+- **Transient, 3D Surface, Movie** restored as standalone sidebar items in Phase 2/3
+
+### Improved
+- **Full-frame capture pipeline** — All 4 pipelines (main, live, movie, transient) now capture at full sensor resolution; ROI crops applied post-averaging only. Added `full_cold_avg`/`full_hot_avg` fields to `AcquisitionResult`
+- **Theme switch reliability** — Added `_apply_styles()` to 9 widgets that were missing it: `ImagePane`, `PreflightDialog`, `ShortcutOverlay`, `AdvisorDialog`, `OrchestratorDialog`, `TransientTab`, `SurfacePlotTab`, `MovieTab`, plus `refresh_readout_styles()` helper in `tab_helpers.py`
+- **PALETTE key correctness** — Fixed non-existent keys `"fg"` → `"text"` and `"muted"` → `"textDim"` in `device_error_banner.py` and `connection_health_panel.py`; fixed `FONT.get("base")` → `FONT.get("body")` and `FONT.get("sm")` → `FONT.get("label")`
+- **Eliminated hardcoded fallbacks** — Replaced `PALETTE.get(key, '#hardcoded')` with direct `PALETTE[key]` access in `live_preview_dock.py`, `status_header.py`, `tab_helpers.py`
+- **ShortcutOverlay theme** — Card background now derived from `PALETTE['bg']` rgba instead of hardcoded dark-only `rgba(15, 15, 20, 0.96)`
+- **MeasurementReadoutStrip** — Replaced cached hex colour strings with semantic PALETTE key names; `paintEvent` now resolves colours at paint time for instant theme switching
+- **TEC panel** (`tools/tec_panel.py`) — Replaced all 7 hardcoded hex colours with PALETTE references; `TempPlot.paintEvent` reads live PALETTE values
+- **Plugin example** — Updated `docs/examples/example_tool_plugin/plugin.py` to use direct PALETTE access instead of stale fallback defaults
+
+### Fixed
+- Pipeline dead-thread detection: `pipeline.start()` no longer raises "already in progress" when state is stuck at CAPTURING with a dead thread — resets to IDLE with a warning log
+- Workspace mode switching: Expert → Guided → Expert no longer loses sidebar menu items (phase containers now explicitly restored to visible in Expert mode)
+
 ## [1.50.34-beta] — 2026-04-05
 
 ### Added
