@@ -234,11 +234,15 @@ class DiscoveryEngine:
             if not found_any:
                 report.unresolved_ports.append(port)
 
-        # ── Step 5: Camera discovery (non-serial) ────────────────────────
+        # ── Step 5: Microcontroller & delay generator discovery ─────────
+        _progress("Scanning for microcontrollers and delay generators…", 88)
+        _discover_microcontrollers(all_ports=serial_devs, report=report)
+
+        # ── Step 6: Camera discovery (non-serial) ────────────────────────
         _progress("Scanning for cameras…", 92)
         _discover_cameras(report, _progress)
 
-        # ── Step 6: Save cache ───────────────────────────────────────────
+        # ── Step 7: Save cache ───────────────────────────────────────────
         self._save_cache()
 
         report.scan_duration_s = time.monotonic() - t0
@@ -319,3 +323,86 @@ def _discover_cameras(report: DiscoveryReport, progress_cb):
     # FLIR Boson is detected via UVC (OpenCV) at connect time — not
     # enumerable without opening a video capture, so we skip it here.
     # The Boson driver handles its own auto-detection via video index scanning.
+
+
+# ---------------------------------------------------------------------------
+# Microcontroller & delay generator discovery (Arduino, ESP32, TDG-VII)
+# ---------------------------------------------------------------------------
+
+# VID:PID → (device_uid, display_name) for boards that are NOT ambiguous
+# (i.e., the VID:PID uniquely identifies the device type).
+# FTDI 0403:6001 is excluded because it's shared with Meerstetter.
+_MCU_VID_PID: dict[tuple[int, int], tuple[str, str]] = {
+    (0x1A86, 0x7523): ("arduino_nano",       "Arduino Nano (CH340)"),
+    (0x2341, 0x0043): ("arduino_uno",         "Arduino UNO R3"),
+    (0x2341, 0x0069): ("arduino_uno_r4",      "Arduino UNO R4 Minima"),
+    (0x10C4, 0xEA60): ("esp32_cp2102",        "ESP32 (CP2102)"),
+    (0x303A, 0x1001): ("esp32_native_usb",    "ESP32-S2/S3 (native USB)"),
+    (0x0483, 0x5740): ("tdg7",                "TDG-VII / PT-100 Delay Generator"),
+}
+
+# Description-string fallbacks
+_MCU_DESC_PATTERNS: list[tuple[list[str], str, str]] = [
+    (["ch340", "arduino nano"],           "arduino_nano",    "Arduino Nano (CH340)"),
+    (["arduino uno"],                     "arduino_uno",     "Arduino UNO"),
+    (["cp210", "esp32", "espressif"],     "esp32_cp2102",    "ESP32"),
+    (["stm32", "stmicroelectronics",
+      "tdg", "pt-100", "fastlaser"],      "tdg7",            "TDG-VII / PT-100"),
+]
+
+
+def _discover_microcontrollers(
+    all_ports: list,
+    report: DiscoveryReport,
+) -> None:
+    """Detect Arduino, ESP32, and TDG-VII boards by VID/PID.
+
+    These devices have unique VID:PID pairs (unlike FTDI which is shared
+    with Meerstetter), so no protocol probing is needed.  They are added
+    to the report as passively-resolved devices.
+
+    Parameters
+    ----------
+    all_ports : list[DiscoveredDevice]
+        All serial devices found by the passive scanner.
+    report : DiscoveryReport
+        The report to append resolved devices to.
+    """
+    # Ports already resolved (avoid duplicate entries)
+    resolved_ports = {d.port for d in report.resolved}
+
+    for dev in all_ports:
+        if dev.address in resolved_ports:
+            continue
+
+        vid = dev.vid
+        pid = dev.pid
+        entry = _MCU_VID_PID.get((vid, pid)) if vid and pid else None
+
+        # Fallback: description match
+        if not entry:
+            desc_lower = (dev.description or "").lower()
+            for patterns, uid, name in _MCU_DESC_PATTERNS:
+                if any(p in desc_lower for p in patterns):
+                    entry = (uid, name)
+                    break
+
+        if not entry:
+            continue
+
+        device_uid, display_name = entry
+        report.resolved.append(ResolvedDevice(
+            device_uid=device_uid,
+            display_name=display_name,
+            port=dev.address,
+            connection_type="serial",
+            confidence="passive",
+            serial_number=dev.serial_number,
+            vid=vid,
+            pid=pid,
+        ))
+        resolved_ports.add(dev.address)
+        log.info("Discovery: %s on %s (VID=%s PID=%s)",
+                 display_name, dev.address,
+                 f"{vid:04X}" if vid else "?",
+                 f"{pid:04X}" if pid else "?")

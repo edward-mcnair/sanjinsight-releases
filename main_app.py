@@ -434,6 +434,7 @@ class MainWindow(QMainWindow):
         # Bounded thread pool — prevents unbounded thread spawning from rapid button clicks
         self._thread_pool = ThreadPoolExecutor(max_workers=4,
                                                thread_name_prefix="msanj_worker")
+        self._session_save_thread = None  # tracked for clean shutdown
         self._build_ui()
         self._connect_signals()
         # Show logged-in user name in the operator slot when auth is active
@@ -3124,6 +3125,7 @@ class MainWindow(QMainWindow):
                 signals.log_message.emit(f"Session save failed: {e}")
         t = threading.Thread(target=_save, daemon=False, name="session-save")
         t.start()
+        self._session_save_thread = t
 
         # Autosave checkpoint
         try:
@@ -4615,11 +4617,30 @@ class MainWindow(QMainWindow):
         log.info("Shutdown requested")
         running = False   # legacy flag for any code that still checks it
 
+        # ── Stop persistent QTimers before any widget teardown ────
+        # Prevents timer callbacks from firing on deleted widgets
+        # ("wrapped C/C++ object has been deleted" RuntimeErrors).
+        for timer in (getattr(self, "_evidence_timer", None),
+                      getattr(self, "_auto_theme_timer", None)):
+            if timer is not None:
+                timer.stop()
+
         # ── Stop live preview processor ───────────────────────────
         try:
             self._live_tab._stop()
         except Exception as e:
             log.warning(f"Live tab stop: {e}")
+
+        # ── Wait for in-progress session save ─────────────────────
+        # The save thread is non-daemon so Python won't exit until it
+        # finishes, but we join here to ensure the file write completes
+        # before we tear down Qt widgets that the save might signal.
+        _save_t = getattr(self, "_session_save_thread", None)
+        if _save_t is not None and _save_t.is_alive():
+            log.info("Waiting for session save to finish…")
+            _save_t.join(timeout=5.0)
+            if _save_t.is_alive():
+                log.warning("Session save thread still running after 5 s — proceeding")
 
         # ── Delegate all hardware shutdown to HardwareService ─────
         # This stops all poll loops, joins threads, and closes every

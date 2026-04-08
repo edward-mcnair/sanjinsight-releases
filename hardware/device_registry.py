@@ -490,6 +490,35 @@ DEVICE_REGISTRY: dict[str, DeviceDescriptor] = {
             "Single-shot transient mode: set_trigger_mode(SINGLE_SHOT) + arm_trigger()."),
     ),
 
+    "tdg7": DeviceDescriptor(
+        uid            = "tdg7",
+        display_name   = "TDG-VII Picosecond Delay Generator",
+        manufacturer   = "Fastlaser Tech",
+        device_type    = DTYPE_FPGA,
+        connection_type= CONN_USB,
+        driver_module  = "hardware.fpga.tdg7",
+        driver_version = "builtin",
+        hot_loadable   = True,
+        usb_vid        = 0x0483,   # STM32 VCP vendor ID
+        usb_pid        = 0x5740,   # STM32 VCP product ID
+        serial_patterns= ["STM32", "STMicroelectronics", "TDG", "PT-100",
+                          "Fastlaser"],
+        default_timeout= 2.0,
+        description    = (
+            "Fastlaser Tech TDG-VII 7-channel picosecond delay/pulse generator "
+            "(also sold as the Microsanj PT-100 timing module). "
+            "Replaces the NI sbRIO FPGA as the precision timing source. "
+            "Channels 1–4: 0–999,999.99 ns (0.01 ns resolution). "
+            "Channels 5–7: 0–9,999,999.9 ns (0.1 ns resolution). "
+            "Communicates via USB-serial (STM32 Virtual COM Port)."),
+        notes          = (
+            "Requires pyserial. USB VID:PID = 0483:5740 (STM32 VCP). "
+            "On Windows install the STM32 Virtual COM Port driver if "
+            "the device is not auto-detected. "
+            "Commands are sent twice for firmware reliability. "
+            "Channel 1 = camera trigger, Channel 2 = bias gate."),
+    ),
+
     # ---------------------------------------------------------------- #
     #  Stage Controllers                                                #
     # ---------------------------------------------------------------- #

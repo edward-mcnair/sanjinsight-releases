@@ -51,7 +51,8 @@ class StageService(BaseDeviceService):
         try:
             stage = create_stage(cfg)
             self._connect_with_retry(stage.connect, label="stage")
-            app_state.stage = stage
+            with app_state:
+                app_state.stage = stage
             self.log_message.emit(f"Stage: connected ({cfg.get('driver','?')})")
             self.device_connected.emit("stage", True)
             self.startup_status.emit("stage", True, cfg.get('driver', 'connected'))
@@ -106,7 +107,8 @@ class StageService(BaseDeviceService):
         try:
             stage = SimulatedStage(cfg)
             stage.connect()
-            app_state.stage = stage
+            with app_state:
+                app_state.stage = stage
             self.log_message.emit("Stage: demo mode (simulated)")
             self.device_connected.emit("stage", True)
             self.startup_status.emit("stage", True, "Simulated")

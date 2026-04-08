@@ -52,10 +52,11 @@ class FpgaService(BaseDeviceService):
         try:
             fpga = create_fpga(cfg)
             self._connect_with_retry(fpga.open, label="fpga")
-            app_state.fpga = fpga
-            # Wire existing pipeline to FPGA if camera already up
-            if app_state.pipeline and _HAS_PIPELINE:
-                app_state.pipeline.update_hardware(fpga=fpga, bias=app_state.bias)
+            with app_state:
+                app_state.fpga = fpga
+                # Wire existing pipeline to FPGA if camera already up
+                if app_state.pipeline and _HAS_PIPELINE:
+                    app_state.pipeline.update_hardware(fpga=fpga, bias=app_state.bias)
             self.log_message.emit(f"FPGA: open ({cfg.get('driver','?')})")
             self.device_connected.emit("fpga", True)
             self.startup_status.emit("fpga", True, cfg.get('driver', 'connected'))
@@ -112,9 +113,10 @@ class FpgaService(BaseDeviceService):
             fpga = SimulatedFpga(cfg)
             fpga.open()
             fpga.start()
-            app_state.fpga = fpga
-            if app_state.pipeline and _HAS_PIPELINE:
-                app_state.pipeline.update_hardware(fpga=fpga, bias=app_state.bias)
+            with app_state:
+                app_state.fpga = fpga
+                if app_state.pipeline and _HAS_PIPELINE:
+                    app_state.pipeline.update_hardware(fpga=fpga, bias=app_state.bias)
             self.log_message.emit("FPGA: demo mode (simulated)")
             self.device_connected.emit("fpga", True)
             self.startup_status.emit("fpga", True, "Simulated")
@@ -289,3 +291,54 @@ class FpgaService(BaseDeviceService):
         fpga = app_state.fpga
         if fpga and hasattr(fpga, 'trigger_voltage_readback'):
             self._dispatch(fpga.trigger_voltage_readback)
+
+    # ── TDG-VII / PT-100 extended controls ────────────────────────────
+    # These wrap TDG-VII-specific methods for per-channel delay, width,
+    # output mode, and gate control.  Each uses hasattr() so other FPGA
+    # drivers are a safe no-op.
+
+    def fpga_set_channel_delay(self, ch: int, ns: float) -> None:
+        """Set per-channel delay in nanoseconds (TDG-VII)."""
+        fpga = app_state.fpga
+        if fpga and hasattr(fpga, 'set_channel_delay'):
+            self._dispatch(fpga.set_channel_delay, ch, ns)
+
+    def fpga_set_channel_width(self, ch: int, ns: float) -> None:
+        """Set per-channel pulse width in nanoseconds (TDG-VII)."""
+        fpga = app_state.fpga
+        if fpga and hasattr(fpga, 'set_channel_width'):
+            self._dispatch(fpga.set_channel_width, ch, ns)
+
+    def fpga_set_channel_output(self, ch: int, mode: int) -> None:
+        """Set per-channel output mode (TDG-VII: 0=TTL, 1=NIM, 2=2xTTL, 3=2xNIM)."""
+        fpga = app_state.fpga
+        if fpga and hasattr(fpga, 'set_channel_output'):
+            self._dispatch(fpga.set_channel_output, ch, mode)
+
+    def fpga_set_channel_gate(self, ch: int, enabled: bool) -> None:
+        """Enable/disable a single channel output gate (TDG-VII)."""
+        fpga = app_state.fpga
+        if fpga and hasattr(fpga, 'set_channel_gate'):
+            self._dispatch(fpga.set_channel_gate, ch, enabled)
+
+    def fpga_set_trigger_source(self, source: int) -> None:
+        """Set trigger source (TDG-VII: 0=internal, 1=ext rising, 2=ext falling)."""
+        fpga = app_state.fpga
+        if fpga and hasattr(fpga, 'set_trigger_source'):
+            self._dispatch(fpga.set_trigger_source, source)
+
+    def fpga_set_rf_output(self, enabled: bool) -> None:
+        """Enable/disable RF reference output (TDG-VII)."""
+        fpga = app_state.fpga
+        if fpga and hasattr(fpga, 'set_rf_output'):
+            self._dispatch(fpga.set_rf_output, enabled)
+
+    def fpga_read_frequency_counter(self) -> float:
+        """Read the built-in frequency counter in Hz (TDG-VII). Blocking."""
+        fpga = app_state.fpga
+        if fpga and hasattr(fpga, 'read_frequency_counter'):
+            try:
+                return fpga.read_frequency_counter()
+            except Exception as exc:
+                log.warning("fpga_read_frequency_counter failed: %s", exc)
+        return 0.0

@@ -15,6 +15,7 @@ Progress and completion are reported via callbacks so any UI can subscribe.
 
 from __future__ import annotations
 
+import queue
 import time
 import threading
 import logging
@@ -24,6 +25,72 @@ from typing import Optional, Callable
 from enum import Enum, auto
 
 log = logging.getLogger(__name__)
+
+
+# ------------------------------------------------------------------ #
+#  Async checkpoint writer                                            #
+# ------------------------------------------------------------------ #
+
+class _CheckpointWriter:
+    """Background thread that serialises checkpoint saves off the capture loop.
+
+    The capture loop pushes checkpoint dicts onto a queue; this writer
+    drains and writes them one at a time.  If the queue backs up, older
+    entries are silently dropped (only the latest matters for recovery).
+    """
+
+    _SENTINEL = object()
+
+    def __init__(self):
+        self._queue: queue.Queue = queue.Queue(maxsize=4)
+        self._thread: Optional[threading.Thread] = None
+
+    def start(self):
+        self._thread = threading.Thread(
+            target=self._run, daemon=True, name="ckpt-writer")
+        self._thread.start()
+
+    def stop(self):
+        if self._thread is not None:
+            self._queue.put(self._SENTINEL)
+            self._thread.join(timeout=3.0)
+            self._thread = None
+
+    def enqueue(self, phase: str, accumulator: np.ndarray,
+                count: int, n_frames: int):
+        item = (phase, accumulator.copy(), count, n_frames)
+        try:
+            self._queue.put_nowait(item)
+        except queue.Full:
+            # Drop oldest, enqueue latest (only the newest checkpoint matters)
+            try:
+                self._queue.get_nowait()
+            except queue.Empty:
+                pass
+            try:
+                self._queue.put_nowait(item)
+            except queue.Full:
+                pass
+
+    def _run(self):
+        while True:
+            item = self._queue.get()
+            if item is self._SENTINEL:
+                break
+            phase, acc, count, n_frames = item
+            try:
+                from acquisition.storage.autosave import acquire_autosave
+                acquire_autosave.save(
+                    arrays={f"{phase}_accumulator": acc},
+                    metadata={
+                        "phase": phase,
+                        "frames_done": count,
+                        "frames_total": n_frames,
+                        "checkpoint": True,
+                    },
+                )
+            except Exception as exc:
+                log.debug("Checkpoint write failed (non-fatal): %s", exc)
 
 
 # ------------------------------------------------------------------ #
@@ -164,8 +231,9 @@ class AcquisitionPipeline:
         self._state            = AcqState.IDLE
         self._result           = None
         self._thread           = None
-        self._abort_flag       = False
+        self._abort_event      = threading.Event()
         self._roi              = None
+        self._ckpt_writer      = _CheckpointWriter()
 
         self.on_progress: Optional[Callable[[AcquisitionProgress], None]] = None
         self.on_complete: Optional[Callable[[AcquisitionResult],   None]] = None
@@ -233,7 +301,8 @@ class AcquisitionPipeline:
             else:
                 raise RuntimeError("Acquisition already in progress.")
         self._state = AcqState.IDLE
-        self._abort_flag = False
+        self._abort_event.clear()
+        self._ckpt_writer.start()
         self._thread = threading.Thread(
             target=self._run,
             args=(n_frames, inter_phase_delay),
@@ -252,7 +321,7 @@ class AcquisitionPipeline:
 
     def abort(self) -> None:
         """Request abort. Returns immediately — check state for ABORTED."""
-        self._abort_flag = True
+        self._abort_event.set()
 
     def capture_reference(self, n_frames: int = 100) -> Optional[np.ndarray]:
         """
@@ -312,7 +381,7 @@ class AcquisitionPipeline:
                                           if self._roi else cold_full)
             self._result.cold_captured = n_frames
 
-            if self._abort_flag:
+            if self._abort_event.is_set():
                 self._state = AcqState.ABORTED
                 return
 
@@ -373,6 +442,7 @@ class AcquisitionPipeline:
             if self.on_error:
                 self.on_error(msg)
         finally:
+            self._ckpt_writer.stop()
             self._stimulus_safe_off()
 
     def _stimulus_safe_off(self) -> None:
@@ -440,7 +510,7 @@ class AcquisitionPipeline:
                             int(n_frames * self._CHECKPOINT_FRAC))
 
         while count < n_frames:
-            if self._abort_flag:
+            if self._abort_event.is_set():
                 self._state = AcqState.ABORTED
                 self._emit_progress(
                     state=AcqState.ABORTED, phase=phase,
@@ -483,20 +553,9 @@ class AcquisitionPipeline:
 
     def _save_capture_checkpoint(self, phase: str, accumulator: np.ndarray,
                                  count: int, n_frames: int) -> None:
-        """Write a mid-capture checkpoint so frames aren't lost on crash."""
-        try:
-            from acquisition.storage.autosave import acquire_autosave
-            acquire_autosave.save(
-                arrays={f"{phase}_accumulator": accumulator},
-                metadata={
-                    "phase": phase,
-                    "frames_done": count,
-                    "frames_total": n_frames,
-                    "checkpoint": True,
-                },
-            )
-        except Exception as exc:
-            log.debug("Capture checkpoint failed (non-fatal): %s", exc)
+        """Queue a mid-capture checkpoint (written asynchronously so the
+        frame loop is never blocked by disk I/O)."""
+        self._ckpt_writer.enqueue(phase, accumulator, count, n_frames)
 
     # Pixels with cold intensity below this threshold are treated as dark/noise.
     # Values below it are masked to NaN in ΔR/R to prevent garbage data.

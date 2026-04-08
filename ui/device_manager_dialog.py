@@ -45,6 +45,7 @@ from PyQt5.QtGui     import QColor, QFont, QBrush
 from hardware.device_registry import (
     DEVICE_REGISTRY,
     DTYPE_CAMERA, DTYPE_TEC, DTYPE_FPGA, DTYPE_STAGE, DTYPE_BIAS,
+    DTYPE_GPIO, DTYPE_LDD, DTYPE_PROBER, DTYPE_TURRET,
     DTYPE_UNKNOWN, CONN_SERIAL, CONN_ETHERNET, CONN_USB, CONN_PCIE)
 from hardware.device_manager  import DeviceManager, DeviceState, DeviceEntry
 from ui.font_utils import mono_font
@@ -204,14 +205,19 @@ class _QTextEditHandler(_logging.Handler):
 #  Constants                                                           #
 # ------------------------------------------------------------------ #
 
-TYPE_ORDER  = [DTYPE_CAMERA, DTYPE_TEC, DTYPE_FPGA,
-               DTYPE_STAGE,  DTYPE_BIAS, DTYPE_UNKNOWN]
+TYPE_ORDER  = [DTYPE_CAMERA, DTYPE_TEC, DTYPE_FPGA, DTYPE_GPIO,
+               DTYPE_STAGE,  DTYPE_BIAS, DTYPE_LDD,
+               DTYPE_PROBER, DTYPE_TURRET, DTYPE_UNKNOWN]
 TYPE_LABELS = {
     DTYPE_CAMERA:  "Cameras",
     DTYPE_TEC:     "TEC Controllers",
-    DTYPE_FPGA:    "FPGA / DAQ",
+    DTYPE_FPGA:    "FPGA / Timing",
+    DTYPE_GPIO:    "GPIO / LED Selector",
     DTYPE_STAGE:   "Stage Controllers",
     DTYPE_BIAS:    "Bias Sources",
+    DTYPE_LDD:     "Laser Diode Drivers",
+    DTYPE_PROBER:  "Probe Stations",
+    DTYPE_TURRET:  "Objective Turrets",
     DTYPE_UNKNOWN: "Other",
 }
 # ------------------------------------------------------------------ #

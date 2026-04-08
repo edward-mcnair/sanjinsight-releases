@@ -10,6 +10,7 @@ from .base import FpgaDriver
 _DRIVERS = {
     "ni9637":    ("hardware.fpga.ni9637",    "Ni9637Driver"),
     "bnc745":    ("hardware.fpga.bnc745",    "Bnc745Driver"),
+    "tdg7":      ("hardware.fpga.tdg7",      "Tdg7Driver"),
     "simulated": ("hardware.fpga.simulated", "SimulatedFpga"),
 }
 
@@ -25,6 +26,12 @@ _INSTALL_HINTS: dict = {
         "For USB without NI-VISA:  pip install pyvisa-py pyserial\n"
         "BNC 745 USB VID=0x0A33 — check VISA address with NI MAX or "
         "python -c \"import pyvisa; print(pyvisa.ResourceManager().list_resources())\""
+    ),
+    "tdg7": (
+        "pip install pyserial\n"
+        "TDG-VII / PT-100 uses STM32 VCP (VID 0483:5740).\n"
+        "On Windows install the STM32 Virtual COM Port driver if not "
+        "auto-detected."
     ),
 }
 

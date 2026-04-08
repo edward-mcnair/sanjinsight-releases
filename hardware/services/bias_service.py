@@ -57,9 +57,10 @@ class BiasService(BaseDeviceService):
         try:
             bias = create_bias(cfg)
             self._connect_with_retry(bias.connect, label="bias")
-            app_state.bias = bias
-            if app_state.pipeline and _HAS_PIPELINE and app_state.fpga is None:
-                app_state.pipeline.update_hardware(fpga=None, bias=bias)
+            with app_state:
+                app_state.bias = bias
+                if app_state.pipeline and _HAS_PIPELINE and app_state.fpga is None:
+                    app_state.pipeline.update_hardware(fpga=None, bias=bias)
             self.log_message.emit(f"Bias: connected ({cfg.get('driver','?')})")
             self.device_connected.emit("bias", True)
             self.startup_status.emit("bias", True, cfg.get('driver', 'connected'))
@@ -113,7 +114,8 @@ class BiasService(BaseDeviceService):
         try:
             bias = SimulatedBias(cfg)
             bias.connect()
-            app_state.bias = bias
+            with app_state:
+                app_state.bias = bias
             self.log_message.emit("Bias: demo mode (simulated)")
             self.device_connected.emit("bias", True)
             self.startup_status.emit("bias", True, "Simulated")

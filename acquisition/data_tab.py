@@ -979,6 +979,16 @@ class DataTab(QWidget):
             pane._lbl.setText("Loading…")
         self._pane_cmp.clear()
 
+        # Cancel any in-progress load to prevent stale results and
+        # accumulating orphan QThread objects on rapid session switching.
+        prev = self._active_load_worker
+        if prev is not None:
+            if prev.isRunning():
+                prev.quit()
+                prev.wait(1000)
+            prev.deleteLater()
+            self._active_load_worker = None
+
         # Load session arrays off the main thread
         worker = _SessionLoadWorker(self._mgr, uid, parent=self)
 

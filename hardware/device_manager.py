@@ -724,6 +724,9 @@ class DeviceManager:
             # BNC 745 uses a VISA resource string stored in entry.address
             if desc.uid == "bnc_745":
                 cfg["address"] = addr or "GPIB::12"
+            # TDG-VII / PT-100 uses a serial port
+            if desc.uid == "tdg7":
+                cfg["port"] = addr or ""
             # NI RIO devices (sbRIO, 9637): construct resource string from IP
             # and pull bitfile from device_params or config.yaml fallback.
             if desc.uid in ("ni_sbrio", "ni_9637", "ni_usb_6001"):
@@ -812,6 +815,7 @@ class DeviceManager:
             "ni_sbrio":                 "ni9637",
             "ni_usb_6001":              "ni9637",
             "bnc_745":                  "bnc745",
+            "tdg7":                     "tdg7",
             # Stages / prober
             "thorlabs_bsc203":          "thorlabs",
             "thorlabs_mpc320":          "thorlabs",

@@ -382,7 +382,133 @@ def scan_mecom_devices(ftdi_ports):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Section 4: Basler Camera
+# Section 4: Arduino / ESP32 / Microcontroller Boards
+# ══════════════════════════════════════════════════════════════════════════════
+
+# VID:PID → (board_name, driver_key, notes)
+_MCU_BOARDS = {
+    (0x1A86, 0x7523): ("Arduino Nano (CH340)",      "nano",  "CH340 USB-serial"),
+    (0x0403, 0x6001): ("Arduino Nano (FTDI)",        "nano",  "FTDI FT232R USB-serial"),
+    (0x2341, 0x0043): ("Arduino UNO R3",             "uno",   "ATmega16U2 USB-serial"),
+    (0x2341, 0x0069): ("Arduino UNO R4 Minima",      "uno",   "Renesas RA4M1 native USB"),
+    (0x10C4, 0xEA60): ("ESP32 (CP2102)",             "esp32", "Silicon Labs CP210x"),
+    (0x303A, 0x1001): ("ESP32-S2/S3 (native USB)",   "esp32", "Espressif native USB"),
+}
+
+# FTDI 0403:6001 is shared with Meerstetter — only flag it as Arduino if
+# NO MeCom device was already found on that port.
+_FTDI_SHARED_VID_PID = (0x0403, 0x6001)
+
+
+def scan_microcontrollers(all_ports) -> list:
+    """Detect Arduino, ESP32, and other microcontroller boards."""
+    print(f"\n{BOLD}Microcontroller Boards (Arduino / ESP32){RESET}")
+
+    if not all_ports:
+        print(f"  {WARN}  No serial ports to scan")
+        return []
+
+    # Ports already claimed by MeCom probing
+    mecom_ports = {d["port"] for d in identified_devices
+                   if "Meerstetter" in d.get("device", "")}
+
+    found = []
+    for port in sorted(all_ports, key=lambda p: p.device):
+        vid, pid = _parse_vid_pid(port.hwid)
+        if vid is None:
+            continue
+
+        entry = _MCU_BOARDS.get((vid, pid))
+        if not entry:
+            # Fallback: match description strings
+            desc_lower = (port.description or "").lower()
+            if any(kw in desc_lower for kw in ("ch340", "arduino nano")):
+                entry = ("Arduino Nano (CH340)", "nano", "description match")
+            elif any(kw in desc_lower for kw in ("arduino uno",)):
+                entry = ("Arduino UNO", "uno", "description match")
+            elif any(kw in desc_lower for kw in ("cp210", "esp32", "espressif")):
+                entry = ("ESP32", "esp32", "description match")
+
+        if not entry:
+            continue
+
+        board_name, driver_key, notes = entry
+
+        # Skip FTDI ports already claimed by Meerstetter
+        if (vid, pid) == _FTDI_SHARED_VID_PID and port.device in mecom_ports:
+            continue
+
+        print(f"  {PASS}  {port.device}: {board_name}  ({notes})")
+        print(f"         Config:  hardware.arduino.driver: \"{driver_key}\"")
+        identified_devices.append({
+            "port": port.device,
+            "device": board_name,
+            "method": "vid_pid",
+        })
+        found.append(port)
+
+    if not found:
+        print(f"  {INFO}  No microcontroller boards detected")
+        print(f"         Arduino Nano, UNO, and ESP32 boards are supported.")
+
+    return found
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Section 5: TDG-VII / PT-100 Delay Generator
+# ══════════════════════════════════════════════════════════════════════════════
+
+# STM32 VCP used by TDG-VII / PT-100
+_STM32_VCP_VID = 0x0483
+_STM32_VCP_PID = 0x5740
+
+
+def scan_tdg7(all_ports):
+    """Detect TDG-VII / PT-100 picosecond delay generators (STM32 VCP)."""
+    print(f"\n{BOLD}TDG-VII / PT-100 Delay Generator{RESET}")
+
+    if not all_ports:
+        print(f"  {WARN}  No serial ports to scan")
+        return
+
+    found = False
+    for port in sorted(all_ports, key=lambda p: p.device):
+        vid, pid = _parse_vid_pid(port.hwid)
+        if vid == _STM32_VCP_VID and pid == _STM32_VCP_PID:
+            print(f"  {PASS}  {port.device}: STM32 VCP detected (VID={vid:04X} PID={pid:04X})")
+            print(f"         This is likely a TDG-VII / PT-100 delay generator.")
+            print(f"         Config:  hardware.fpga.driver: \"tdg7\"")
+            print(f"                  hardware.fpga.port: \"{port.device}\"")
+            identified_devices.append({
+                "port": port.device,
+                "device": "TDG-VII / PT-100 delay generator",
+                "method": "vid_pid",
+            })
+            found = True
+            continue
+
+        # Fallback: description match
+        desc_lower = (port.description or "").lower()
+        if any(kw in desc_lower for kw in ("stm32", "stmicroelectronics",
+                                            "tdg", "pt-100", "fastlaser")):
+            print(f"  {PASS}  {port.device}: {port.description}")
+            print(f"         Config:  hardware.fpga.driver: \"tdg7\"")
+            identified_devices.append({
+                "port": port.device,
+                "device": "TDG-VII / PT-100 delay generator (description match)",
+                "method": "description",
+            })
+            found = True
+
+    if not found:
+        print(f"  {INFO}  No TDG-VII / PT-100 detected")
+        print(f"         The TDG-VII uses an STM32 Virtual COM Port (VID 0483:5740).")
+        print(f"         On Windows, install the STM32 VCP driver if the device")
+        print(f"         does not appear as a COM port.")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Section 6: Basler Camera
 # ══════════════════════════════════════════════════════════════════════════════
 
 def scan_basler_cameras():
@@ -542,10 +668,16 @@ def main():
     # Section 4: MeCom probe
     scan_mecom_devices(ftdi_ports)
 
-    # Section 5: Basler cameras
+    # Section 5: Microcontroller boards (Arduino / ESP32)
+    scan_microcontrollers(all_ports)
+
+    # Section 6: TDG-VII / PT-100 delay generator
+    scan_tdg7(all_ports)
+
+    # Section 7: Basler cameras
     scan_basler_cameras()
 
-    # Section 6: Summary
+    # Section 8: Summary
     found = print_summary()
     sys.exit(0 if found else 1)
 

@@ -10,11 +10,12 @@ Walks the user through:
   Page 1 — Welcome / overview  (auto-scan runs in background)
   Page 2 — TEC controllers     (Meerstetter COM port + ATEC COM port)
   Page 3 — Camera              (driver + NI camera name / Basler serial)
-  Page 4 — FPGA                (bitfile path + resource string)
-  Page 5 — Bias source / SMU   (Keithley, Rigol DP832, VISA generic)
-  Page 6 — Motorised stage     (Thorlabs, serial stage)
-  Page 7 — AI assistant        (Ollama install + model pull)
-  Page 8 — Done / summary
+  Page 4 — FPGA / Timing       (NI 9637, TDG-VII, BNC 745, or simulated)
+  Page 5 — GPIO / LED board    (Arduino Nano, UNO, ESP32, or simulated)
+  Page 6 — Bias source / SMU   (Keithley, Rigol DP832, VISA generic)
+  Page 7 — Motorised stage     (Thorlabs, serial stage)
+  Page 8 — AI assistant        (Ollama install + model pull)
+  Page 9 — Done / summary
 
 As soon as the dialog opens, a background DeviceScanner thread enumerates all
 connected hardware.  When it finishes, driver and port fields are
@@ -363,7 +364,10 @@ class _PageWelcome(_PageBase):
             "You will be asked about:\n\n"
             "  ①  TEC controllers   — Meerstetter TEC-1089 and ATEC-302\n"
             "  ②  Camera            — Basler TR camera or FLIR Boson / Boson+ IR camera\n"
-            "  ③  FPGA              — NI 9637 via NI-RIO\n\n"
+            "  ③  FPGA / Timing     — NI 9637, TDG-VII, or BNC 745\n"
+            "  ④  GPIO / LED Board  — Arduino Nano, UNO, or ESP32\n"
+            "  ⑤  Bias source       — Keithley SMU, Rigol DP832\n"
+            "  ⑥  Motorised stage   — Thorlabs, Prior, Newport\n\n"
             "Your answers are saved to  config.yaml  and can be changed at any "
             "time from  Settings → Hardware Setup.")
         body.setStyleSheet(f"font-size:{FONT['body']}pt; color:{PALETTE['text']}; line-height:1.6;")
@@ -1209,29 +1213,71 @@ class _PageCamera(_PageBase):
 
 
 class _PageFPGA(_PageBase):
+    """
+    Wizard page 4 — FPGA / Timing Source setup.
+
+    Supports three driver back-ends:
+      • ni9637   — NI sbRIO / NI 9637 via NI-RIO (bitfile + resource string)
+      • tdg7     — TDG-VII / PT-100 picosecond delay generator via USB-serial
+      • bnc745   — BNC Model 745 via VISA (GPIB / USB / Serial)
+      • simulated — software-only for testing without hardware
+    """
+    # Driver display names → config key
+    _DRIVER_MAP = [
+        ("simulated",                          "simulated"),
+        ("NI sbRIO / NI 9637 (NI-RIO)",       "ni9637"),
+        ("TDG-VII / PT-100 (USB-serial)",      "tdg7"),
+        ("BNC Model 745 (VISA)",               "bnc745"),
+    ]
+
     def __init__(self, cfg: dict, parent=None):
         fpga_cfg = cfg.get("fpga", {})
         super().__init__(
-            "FPGA — NI sbRIO / NI 9637",
-            "Specify the compiled bitfile and network resource string. "
-            "Find the resource string in NI MAX under  Remote Systems.",
+            "FPGA / Timing Source",
+            "Select the timing / stimulus source for your system.  "
+            "This can be an NI sbRIO FPGA, a TDG-VII delay generator, "
+            "a BNC 745 pulse generator, or simulated.",
             parent)
 
-        g = QGroupBox("NI sbRIO / NI 9637 FPGA")
-        g.setStyleSheet(
-            f"QGroupBox {{ color:{PALETTE['text']}; font-size:{FONT['label']}pt; border:1px solid {PALETTE['border']}; "
+        _GRP_SS = (
+            f"QGroupBox {{ color:{PALETTE['text']}; font-size:{FONT['label']}pt; "
+            f"border:1px solid {PALETTE['border']}; "
             "border-radius:5px; margin-top:8px; padding:12px; }"
             "QGroupBox::title { subcontrol-origin:margin; left:10px; padding:0 4px; }")
-        fl = QFormLayout(g)
-        fl.setSpacing(10)
+
+        # ── Driver selector ──────────────────────────────────────────
+        g_drv = QGroupBox("Driver")
+        g_drv.setStyleSheet(_GRP_SS)
+        fl_drv = QFormLayout(g_drv)
+        fl_drv.setSpacing(10)
 
         self._drv = QComboBox()
-        self._drv.addItems(["ni9637", "simulated"])
-        self._drv.setCurrentText(fpga_cfg.get("driver", "simulated"))
+        for display, _ in self._DRIVER_MAP:
+            self._drv.addItem(display)
         self._drv.setStyleSheet(_INPUT_SS)
-        fl.addRow(_lbl("Driver:"), self._drv)
+        # Set initial selection from config
+        cur_driver = fpga_cfg.get("driver", "simulated")
+        for i, (_, key) in enumerate(self._DRIVER_MAP):
+            if key == cur_driver:
+                self._drv.setCurrentIndex(i)
+                break
+        self._drv.currentIndexChanged.connect(self._on_driver_changed)
+        fl_drv.addRow(_lbl("Driver:"), self._drv)
 
-        # Bitfile row with Browse button
+        self._detection_label = QLabel("")
+        self._detection_label.setStyleSheet(_SS_BADGE_OK)
+        self._detection_label.setWordWrap(True)
+        self._detection_label.setVisible(False)
+        fl_drv.addRow(self._detection_label)
+
+        self._content.addWidget(g_drv)
+
+        # ── NI sbRIO panel ───────────────────────────────────────────
+        self._ni_group = QGroupBox("NI sbRIO / NI 9637")
+        self._ni_group.setStyleSheet(_GRP_SS)
+        fl_ni = QFormLayout(self._ni_group)
+        fl_ni.setSpacing(10)
+
         bf_row = QHBoxLayout()
         self._bitfile = QLineEdit(fpga_cfg.get("bitfile", ""))
         self._bitfile.setPlaceholderText("C:/path/to/firmware.lvbitx")
@@ -1243,29 +1289,70 @@ class _PageFPGA(_PageBase):
         browse.setStyleSheet(_BTN_SECONDARY.replace("padding:8px 22px", "padding:0 12px"))
         browse.clicked.connect(self._browse)
         bf_row.addWidget(browse)
-        fl.addRow(_lbl("Bitfile path:"), bf_row)
+        fl_ni.addRow(_lbl("Bitfile path:"), bf_row)
 
         self._resource = QLineEdit(fpga_cfg.get("resource", "RIO0"))
         self._resource.setStyleSheet(_INPUT_SS)
         self._resource.setFixedHeight(34)
-        fl.addRow(_lbl("Resource string:"), self._resource)
+        fl_ni.addRow(_lbl("Resource string:"), self._resource)
 
-        hint = QLabel(
+        hint_ni = QLabel(
             "Resource examples:  RIO0  ·  rio://169.254.x.x/RIO0  ·  rio://hostname/RIO0\n"
             "The .lvbitx file is compiled from LabVIEW — it ships separately from the software.")
-        hint.setStyleSheet(_LABEL_HINT)
-        hint.setWordWrap(True)
-        fl.addRow(hint)
+        hint_ni.setStyleSheet(_LABEL_HINT)
+        hint_ni.setWordWrap(True)
+        fl_ni.addRow(hint_ni)
 
-        # Detection badge — hidden until apply_scan() runs
-        self._detection_label = QLabel("")
-        self._detection_label.setStyleSheet(_SS_BADGE_OK)
-        self._detection_label.setWordWrap(True)
-        self._detection_label.setVisible(False)
-        fl.addRow(self._detection_label)
+        self._content.addWidget(self._ni_group)
 
-        self._content.addWidget(g)
+        # ── TDG-VII panel ────────────────────────────────────────────
+        self._tdg_group = QGroupBox("TDG-VII / PT-100 Delay Generator")
+        self._tdg_group.setStyleSheet(_GRP_SS)
+        fl_tdg = QFormLayout(self._tdg_group)
+        fl_tdg.setSpacing(10)
+
+        self._tdg_port = _PortRow("Serial port:", fpga_cfg.get("port", ""))
+        fl_tdg.addRow(self._tdg_port)
+
+        hint_tdg = QLabel(
+            "The TDG-VII uses an STM32 Virtual COM Port (VID 0483:5740).\n"
+            "On Windows, install the STM32 VCP driver if the device does not appear.")
+        hint_tdg.setStyleSheet(_LABEL_HINT)
+        hint_tdg.setWordWrap(True)
+        fl_tdg.addRow(hint_tdg)
+
+        self._content.addWidget(self._tdg_group)
+
+        # ── BNC 745 panel ────────────────────────────────────────────
+        self._bnc_group = QGroupBox("BNC Model 745 Digital Delay Generator")
+        self._bnc_group.setStyleSheet(_GRP_SS)
+        fl_bnc = QFormLayout(self._bnc_group)
+        fl_bnc.setSpacing(10)
+
+        self._bnc_address = QLineEdit(fpga_cfg.get("address", "GPIB::12"))
+        self._bnc_address.setPlaceholderText("GPIB::12  or  USB0::0x0A33::...")
+        self._bnc_address.setStyleSheet(_INPUT_SS)
+        self._bnc_address.setFixedHeight(34)
+        fl_bnc.addRow(_lbl("VISA address:"), self._bnc_address)
+
+        hint_bnc = QLabel(
+            "Find the VISA address in NI MAX (Windows) or run:\n"
+            "  python -c \"import pyvisa; print(pyvisa.ResourceManager().list_resources())\"")
+        hint_bnc.setStyleSheet(_LABEL_HINT)
+        hint_bnc.setWordWrap(True)
+        fl_bnc.addRow(hint_bnc)
+
+        self._content.addWidget(self._bnc_group)
         self._content.addStretch(1)
+
+        # Show/hide panels based on initial driver
+        self._on_driver_changed(self._drv.currentIndex())
+
+    def _on_driver_changed(self, idx: int):
+        _, key = self._DRIVER_MAP[idx]
+        self._ni_group.setVisible(key == "ni9637")
+        self._tdg_group.setVisible(key == "tdg7")
+        self._bnc_group.setVisible(key == "bnc745")
 
     def _browse(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -1276,18 +1363,36 @@ class _PageFPGA(_PageBase):
 
     def apply_scan(self, report) -> int:
         """
-        Pre-fill FPGA driver and resource string from scan results.
+        Pre-fill FPGA driver and settings from scan results.
         Accepts either a DiscoveryReport (new) or ScanReport (legacy).
-        Returns 1 if an FPGA was detected, 0 otherwise.
+        Returns 1 if a timing device was detected, 0 otherwise.
         """
         # ── New path: DiscoveryReport ────────────────────────────────────
         if hasattr(report, "resolved"):
+            # Look for any FPGA-type device
             fpga_devs = [d for d in report.resolved
-                         if "fpga" in d.device_uid or "ni9637" in d.device_uid]
+                         if d.device_uid in ("ni_9637", "ni_sbrio", "ni_usb_6001",
+                                              "tdg7", "bnc_745")]
             if fpga_devs:
                 fpga = fpga_devs[0]
-                self._drv.setCurrentText("ni9637")
-                self._resource.setText(fpga.port)
+                uid = fpga.device_uid
+
+                # Select the right driver in the combo
+                if uid == "tdg7":
+                    driver_key = "tdg7"
+                    self._tdg_port._set_value(fpga.port)
+                elif uid == "bnc_745":
+                    driver_key = "bnc745"
+                    self._bnc_address.setText(fpga.port)
+                else:
+                    driver_key = "ni9637"
+                    self._resource.setText(fpga.port)
+
+                for i, (_, key) in enumerate(self._DRIVER_MAP):
+                    if key == driver_key:
+                        self._drv.setCurrentIndex(i)
+                        break
+
                 self._detection_label.setText(
                     f"✓  Detected: {fpga.display_name}  ({fpga.port})")
                 self._detection_label.setStyleSheet(_SS_BADGE_OK)
@@ -1295,7 +1400,7 @@ class _PageFPGA(_PageBase):
                 return 1
 
             self._detection_label.setText(
-                "⚠  NI FPGA not detected — check NI-RIO drivers and cRIO connection")
+                "⚠  No timing source detected — connect hardware and re-scan")
             self._detection_label.setStyleSheet(_SS_BADGE_WARN)
             self._detection_label.setVisible(True)
             return 0
@@ -1310,25 +1415,152 @@ class _PageFPGA(_PageBase):
 
         if not fpga_devs:
             self._detection_label.setText(
-                "⚠  NI FPGA not detected — check NI-RIO drivers and cRIO connection")
+                "⚠  No timing source detected — connect hardware and re-scan")
             self._detection_label.setStyleSheet(_SS_BADGE_WARN)
             self._detection_label.setVisible(True)
             return 0
 
         fpga = fpga_devs[0]
-        self._drv.setCurrentText("ni9637")
-        self._resource.setText(fpga.address)
+        desc = fpga.descriptor
+        if desc.uid == "tdg7":
+            for i, (_, key) in enumerate(self._DRIVER_MAP):
+                if key == "tdg7":
+                    self._drv.setCurrentIndex(i)
+                    break
+            self._tdg_port._set_value(fpga.address)
+        elif desc.uid == "bnc_745":
+            for i, (_, key) in enumerate(self._DRIVER_MAP):
+                if key == "bnc745":
+                    self._drv.setCurrentIndex(i)
+                    break
+            self._bnc_address.setText(fpga.address)
+        else:
+            for i, (_, key) in enumerate(self._DRIVER_MAP):
+                if key == "ni9637":
+                    self._drv.setCurrentIndex(i)
+                    break
+            self._resource.setText(fpga.address)
+
         self._detection_label.setText(
-            f"✓  Detected: {fpga.descriptor.display_name}  ({fpga.address})")
+            f"✓  Detected: {desc.display_name}  ({fpga.address})")
         self._detection_label.setStyleSheet(_SS_BADGE_OK)
         self._detection_label.setVisible(True)
         return 1
 
     def values(self) -> dict:
+        _, driver_key = self._DRIVER_MAP[self._drv.currentIndex()]
+        vals = {"fpga.driver": driver_key}
+        if driver_key == "ni9637":
+            vals["fpga.bitfile"]  = self._bitfile.text().strip()
+            vals["fpga.resource"] = self._resource.text().strip()
+        elif driver_key == "tdg7":
+            vals["fpga.port"] = self._tdg_port.value()
+        elif driver_key == "bnc745":
+            vals["fpga.address"] = self._bnc_address.text().strip()
+        return vals
+
+
+class _PageArduino(_PageBase):
+    """
+    Wizard page — Arduino / ESP32 LED selector & GPIO board setup.
+
+    Supports:
+      • nano      — Arduino Nano (CH340 / FTDI)
+      • uno       — Arduino UNO R3 / R4
+      • esp32     — ESP32 (CP2102 / native USB)
+      • simulated — software-only for testing
+    """
+    _DRIVER_MAP = [
+        ("simulated",                        "simulated"),
+        ("Arduino Nano (CH340 / FTDI)",      "nano"),
+        ("Arduino UNO R3 / R4",              "uno"),
+        ("ESP32 (CP2102 / native USB)",      "esp32"),
+    ]
+
+    def __init__(self, cfg: dict, parent=None):
+        arduino_cfg = cfg.get("arduino", {})
+        super().__init__(
+            "LED Selector / GPIO Board",
+            "Select the microcontroller board used for LED wavelength selection "
+            "and general-purpose I/O.  Leave  simulated  if you don't have one yet.",
+            parent)
+
+        _GRP_SS = (
+            f"QGroupBox {{ color:{PALETTE['text']}; font-size:{FONT['label']}pt; "
+            f"border:1px solid {PALETTE['border']}; "
+            "border-radius:5px; margin-top:8px; padding:12px; }"
+            "QGroupBox::title { subcontrol-origin:margin; left:10px; padding:0 4px; }")
+
+        g = QGroupBox("Arduino / ESP32")
+        g.setStyleSheet(_GRP_SS)
+        fl = QFormLayout(g)
+        fl.setSpacing(10)
+
+        self._drv = QComboBox()
+        for display, _ in self._DRIVER_MAP:
+            self._drv.addItem(display)
+        self._drv.setStyleSheet(_INPUT_SS)
+        cur_driver = arduino_cfg.get("driver", "simulated")
+        for i, (_, key) in enumerate(self._DRIVER_MAP):
+            if key == cur_driver:
+                self._drv.setCurrentIndex(i)
+                break
+        fl.addRow(_lbl("Board:"), self._drv)
+
+        self._port_row = _PortRow("Serial port:", arduino_cfg.get("port", ""))
+        fl.addRow(self._port_row)
+
+        hint = QLabel(
+            "The serial port is auto-detected if left blank.\n"
+            "Supported boards: Arduino Nano (CH340), UNO R3/R4, ESP32 (CP2102 or native USB).\n"
+            "The board must be flashed with the SanjINSIGHT I/O firmware\n"
+            "(see firmware/arduino_nano/ or firmware/esp32/ in the repo).")
+        hint.setStyleSheet(_LABEL_HINT)
+        hint.setWordWrap(True)
+        fl.addRow(hint)
+
+        self._detection_label = QLabel("")
+        self._detection_label.setStyleSheet(_SS_BADGE_OK)
+        self._detection_label.setWordWrap(True)
+        self._detection_label.setVisible(False)
+        fl.addRow(self._detection_label)
+
+        self._content.addWidget(g)
+        self._content.addStretch(1)
+
+    def apply_scan(self, report) -> int:
+        """Pre-fill board driver and port from scan results."""
+        if hasattr(report, "resolved"):
+            _UID_TO_DRIVER = {
+                "arduino_nano": "nano", "arduino_uno": "uno",
+                "arduino_uno_r4": "uno", "esp32_cp2102": "esp32",
+                "esp32_native_usb": "esp32",
+            }
+            for dev in report.resolved:
+                drv = _UID_TO_DRIVER.get(dev.device_uid)
+                if drv:
+                    for i, (_, key) in enumerate(self._DRIVER_MAP):
+                        if key == drv:
+                            self._drv.setCurrentIndex(i)
+                            break
+                    self._port_row._set_value(dev.port)
+                    self._detection_label.setText(
+                        f"✓  Detected: {dev.display_name}  ({dev.port})")
+                    self._detection_label.setStyleSheet(_SS_BADGE_OK)
+                    self._detection_label.setVisible(True)
+                    return 1
+
+        self._detection_label.setText(
+            "⚠  No Arduino / ESP32 detected — leave as simulated if not needed")
+        self._detection_label.setStyleSheet(_SS_BADGE_WARN)
+        self._detection_label.setVisible(True)
+        return 0
+
+    def values(self) -> dict:
+        _, driver_key = self._DRIVER_MAP[self._drv.currentIndex()]
         return {
-            "fpga.driver":   self._drv.currentText(),
-            "fpga.bitfile":  self._bitfile.text().strip(),
-            "fpga.resource": self._resource.text().strip(),
+            "arduino.driver": driver_key,
+            "arduino.port":   self._port_row.value(),
         }
 
 
@@ -2348,7 +2580,7 @@ class FirstRunWizard(QDialog):
         pb_lay = QHBoxLayout(prog_bar)
         pb_lay.setContentsMargins(30, 0, 30, 0)
         self._dots: list[QLabel] = []
-        step_labels = ["Welcome", "Workspace", "TEC", "Camera", "FPGA", "Bias", "Stage", "AI", "Done"]
+        step_labels = ["Welcome", "Workspace", "TEC", "Camera", "FPGA", "GPIO", "Bias", "Stage", "AI", "Done"]
         for i, lbl in enumerate(step_labels):
             dot = QLabel(f"● {lbl}")
             dot.setAlignment(Qt.AlignCenter)
@@ -2367,6 +2599,7 @@ class FirstRunWizard(QDialog):
         self._page_tec       = _PageTEC(self._cfg_hw)
         self._page_camera    = _PageCamera(self._cfg_hw)
         self._page_fpga      = _PageFPGA(self._cfg_hw)
+        self._page_arduino   = _PageArduino(self._cfg_hw)
         self._page_bias      = _PageBias(self._cfg_hw)
         self._page_stage     = _PageStage(self._cfg_hw)
         self._page_ai        = _PageAI()
@@ -2375,7 +2608,7 @@ class FirstRunWizard(QDialog):
         self._stack = QStackedWidget()
         for p in [self._page_welcome, self._page_workspace,
                   self._page_tec, self._page_camera, self._page_fpga,
-                  self._page_bias, self._page_stage,
+                  self._page_arduino, self._page_bias, self._page_stage,
                   self._page_ai, self._page_done]:
             self._stack.addWidget(p)
         root.addWidget(self._stack, 1)
@@ -2427,6 +2660,7 @@ class FirstRunWizard(QDialog):
         count += self._page_tec.apply_scan(report)
         count += self._page_camera.apply_scan(report)
         count += self._page_fpga.apply_scan(report)
+        count += self._page_arduino.apply_scan(report)
         count += self._page_bias.apply_scan(report)
         count += self._page_stage.apply_scan(report)
 

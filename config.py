@@ -80,6 +80,7 @@ _DEFAULT_CONFIG: dict = {
         "imaging_system":  "hybrid",
         "camera":          {"driver": "simulated"},
         "fpga":            {"driver": "simulated"},
+        "arduino":         {"driver": "simulated", "port": ""},
         "tec_meerstetter": {"driver": "simulated", "port": ""},
         "tec_atec":        {"driver": "simulated", "port": ""},
         "stage":           {"driver": "simulated"},
@@ -198,10 +199,40 @@ def get(section: str, default=None) -> dict:
         return _config.get(section, {} if default is None else default)
 
 
+_cam_write_timer = None   # threading.Timer | None
+_cam_write_lock = threading.Lock()
+
+
+def _flush_camera_config_to_disk() -> None:
+    """Write the current in-memory camera config to disk (called by debounce timer)."""
+    with _config_lock:
+        cam_section = dict(
+            _config.get("hardware", {}).get("camera", {}))
+    try:
+        config_file = CONFIG_PATH
+        if config_file.exists():
+            with open(config_file, "r") as f:
+                on_disk = yaml.safe_load(f) or {}
+        else:
+            on_disk = {}
+        on_disk.setdefault("hardware", {}).setdefault("camera", {}).update(cam_section)
+        with open(config_file, "w") as f:
+            yaml.dump(on_disk, f, default_flow_style=False, sort_keys=False)
+        logging.getLogger(__name__).debug(
+            "Camera config flushed to disk (debounced)")
+    except Exception as exc:
+        logging.getLogger(__name__).warning(
+            "Could not persist camera config to disk: %s", exc)
+
+
 def update_camera_config(updates: dict) -> None:
     """
-    Merge *updates* into the in-memory camera config section and write the
-    result back to disk so the settings survive an app restart.
+    Merge *updates* into the in-memory camera config section and schedule
+    a debounced write to disk so the settings survive an app restart.
+
+    The in-memory update is synchronous (callers see the change
+    immediately).  The disk write is debounced by 500 ms so rapid slider
+    adjustments don't block the GUI thread with repeated YAML I/O.
 
     Only the keys present in *updates* are changed — other hardware settings
     (TEC, FPGA, polling intervals, etc.) are left untouched.
@@ -209,31 +240,19 @@ def update_camera_config(updates: dict) -> None:
     Example::
         config.update_camera_config({"width": 1280, "height": 720, "fps": 15})
     """
-    global _config
+    global _config, _cam_write_timer
     with _config_lock:
-        # Update in-memory config
+        # Update in-memory config (instant — callers see it immediately)
         cam_section = _config.setdefault("hardware", {}).setdefault("camera", {})
         cam_section.update(updates)
 
-    # Write the full config back to disk, preserving all non-camera settings.
-    try:
-        # Read the on-disk file first so we don't clobber comments or
-        # keys that exist on disk but not in _config.
-        config_file = CONFIG_PATH
-        if config_file.exists():
-            with open(config_file, "r") as f:
-                on_disk = yaml.safe_load(f) or {}
-        else:
-            on_disk = {}
-        # Apply the camera updates to the disk copy
-        on_disk.setdefault("hardware", {}).setdefault("camera", {}).update(updates)
-        with open(config_file, "w") as f:
-            yaml.dump(on_disk, f, default_flow_style=False, sort_keys=False)
-        logging.getLogger(__name__).debug(
-            "Camera config updated on disk: %s", updates)
-    except Exception as exc:
-        logging.getLogger(__name__).warning(
-            "Could not persist camera config to disk: %s", exc)
+    # Debounce the disk write — cancel any pending timer and start a new one.
+    with _cam_write_lock:
+        if _cam_write_timer is not None:
+            _cam_write_timer.cancel()
+        _cam_write_timer = threading.Timer(0.5, _flush_camera_config_to_disk)
+        _cam_write_timer.daemon = True
+        _cam_write_timer.start()
 
 
 def reload(path: str = None) -> None:

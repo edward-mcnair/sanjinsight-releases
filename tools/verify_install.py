@@ -180,6 +180,15 @@ def check_usb_serial_drivers():
           "Not installed — ESP32 GPIO will not connect",
           warn_only=True)
 
+    # STM32 VCP (TDG-VII / PT-100 delay generator)
+    stm32_vcp = reg_key_exists(winreg.HKEY_LOCAL_MACHINE,
+                               r"SYSTEM\CurrentControlSet\Services\usbser")
+    check("STM32 VCP driver (TDG-VII / PT-100)", stm32_vcp,
+          "Not installed — TDG-VII / PT-100 delay generator will not connect.\n"
+          "           Install the STM32 Virtual COM Port driver from:\n"
+          "           https://www.st.com/en/development-tools/stsw-stm32102.html",
+          warn_only=True)
+
     # Basler USB3 Vision camera driver
     basler_svc = reg_key_exists(winreg.HKEY_LOCAL_MACHINE,
                                 r"SYSTEM\CurrentControlSet\Services\BvcUsbU3v")
@@ -247,6 +256,8 @@ def check_com_ports():
             driver_hint = " (CP210x — ESP32 GPIO/LED selector)"
         elif "espressif" in name_lower or "esp32" in name_lower:
             driver_hint = " (Espressif — ESP32 native USB)"
+        elif "stm32" in name_lower or "stmicroelectronics" in name_lower:
+            driver_hint = " (STM32 VCP — TDG-VII / PT-100 delay generator)"
         elif "usbser" in name_lower:
             driver_hint = " (USB Serial)"
         print(f"  {INFO}  {port}: {name}{driver_hint}")

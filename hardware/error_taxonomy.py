@@ -230,6 +230,14 @@ def classify_error(
             support_context=ctx,
         )
 
+    # ── TDG-VII / PT-100 / STM32 errors ─────────────────────────────
+    if _is_tdg7_error(exc_lower, device_uid):
+        return _classify_tdg7(exc, device_uid, exc_str, exc_lower, ctx)
+
+    # ── Arduino / ESP32 microcontroller errors ────────────────────────
+    if _is_arduino_error(exc_lower, device_uid):
+        return _classify_arduino(exc, device_uid, exc_str, exc_lower, ctx)
+
     # ── RuntimeError with diagnostic text ──────────────────────────────
     if isinstance(exc, RuntimeError):
         return _classify_runtime(exc, device_uid, exc_str, exc_lower, ctx)
@@ -480,6 +488,156 @@ def _classify_runtime(
         category=ErrorCategory.UNKNOWN, device_uid=uid,
         message=f"{s[:120]}",
         suggested_fix="Check the log for details.",
+        raw_exception=s, exception_type=type(exc).__qualname__,
+        support_context=ctx,
+    )
+
+
+# ── TDG-VII / PT-100 classifier ─────────────────────────────────────────────
+
+_TDG7_UIDS = {"tdg7", "pt-100", "pt100", "tdg_vii"}
+_TDG7_KEYWORDS = ("tdg", "pt-100", "stm32", "fastlaser", "0483:5740",
+                   "delay generator", "stm virtual")
+
+
+def _is_tdg7_error(exc_lower: str, uid: str) -> bool:
+    """Heuristic: is this error related to a TDG-VII / PT-100?"""
+    if uid.lower() in _TDG7_UIDS:
+        return True
+    return any(kw in exc_lower for kw in _TDG7_KEYWORDS)
+
+
+def _classify_tdg7(
+    exc: Exception, uid: str, s: str, sl: str, ctx: dict,
+) -> DeviceError:
+    """Classify TDG-VII / PT-100 delay generator errors."""
+    if "not found" in sl or "no device" in sl or "not connected" in sl:
+        return DeviceError(
+            category=ErrorCategory.DEVICE_DISCONNECTED, device_uid=uid,
+            message=f"TDG-VII / PT-100 not found: {s[:80]}",
+            suggested_fix=(
+                "Check that the delay generator is connected via USB and powered on.\n"
+                "The TDG-VII uses an STM32 Virtual COM Port (VID 0483:5740).\n"
+                "On Windows, install the STM32 VCP driver if the device does not\n"
+                "appear as a COM port in Device Manager."),
+            raw_exception=s, exception_type=type(exc).__qualname__,
+            support_context=ctx,
+        )
+    if "access" in sl or "denied" in sl or "busy" in sl:
+        return DeviceError(
+            category=ErrorCategory.DEVICE_BUSY, device_uid=uid,
+            message=f"TDG-VII port in use: {s[:80]}",
+            suggested_fix=(
+                "Another application has the TDG-VII serial port open.\n"
+                "Close the Fastlaser Tech TDG software or any serial terminal, then retry."),
+            raw_exception=s, exception_type=type(exc).__qualname__,
+            support_context=ctx,
+        )
+    if "timeout" in sl:
+        return DeviceError(
+            category=ErrorCategory.TIMEOUT, device_uid=uid,
+            message=f"TDG-VII timeout: {s[:80]}",
+            suggested_fix=(
+                "The delay generator did not respond.\n"
+                "Check that the correct COM port is selected (should show as STM32 VCP).\n"
+                "Verify baud rate is 115200 (default)."),
+            raw_exception=s, exception_type=type(exc).__qualname__,
+            support_context=ctx,
+        )
+    if "stm32" in sl or "vcp" in sl:
+        return DeviceError(
+            category=ErrorCategory.MISSING_DRIVER, device_uid=uid,
+            message=f"STM32 VCP driver issue: {s[:80]}",
+            suggested_fix=(
+                "Install the STM32 Virtual COM Port driver:\n"
+                "  https://www.st.com/en/development-tools/stsw-stm32102.html\n"
+                "After installation, unplug and replug the TDG-VII."),
+            raw_exception=s, exception_type=type(exc).__qualname__,
+            support_context=ctx,
+        )
+    return DeviceError(
+        category=ErrorCategory.UNKNOWN, device_uid=uid,
+        message=f"TDG-VII error: {s[:100]}",
+        suggested_fix="Check the TDG-VII USB connection and power.\n"
+                      "Run View → Re-scan Hardware to detect the device.",
+        raw_exception=s, exception_type=type(exc).__qualname__,
+        support_context=ctx,
+    )
+
+
+# ── Arduino / ESP32 classifier ──────────────────────────────────────────────
+
+_ARDUINO_UIDS = {"arduino_nano", "arduino_uno", "arduino_uno_r4",
+                  "esp32_cp2102", "esp32_native_usb"}
+_ARDUINO_KEYWORDS = ("arduino", "esp32", "ch340", "ch341", "cp210",
+                     "nano", "uno r4", "sanjio", "led channel")
+
+
+def _is_arduino_error(exc_lower: str, uid: str) -> bool:
+    """Heuristic: is this error related to an Arduino or ESP32 board?"""
+    if uid.lower() in _ARDUINO_UIDS:
+        return True
+    return any(kw in exc_lower for kw in _ARDUINO_KEYWORDS)
+
+
+def _classify_arduino(
+    exc: Exception, uid: str, s: str, sl: str, ctx: dict,
+) -> DeviceError:
+    """Classify Arduino / ESP32 microcontroller errors."""
+    is_esp32 = "esp32" in uid.lower() or "esp32" in sl or "cp210" in sl
+
+    if "not found" in sl or "no device" in sl:
+        board = "ESP32" if is_esp32 else "Arduino"
+        return DeviceError(
+            category=ErrorCategory.DEVICE_DISCONNECTED, device_uid=uid,
+            message=f"{board} not found: {s[:80]}",
+            suggested_fix=(
+                f"Check that the {board} board is connected via USB.\n"
+                f"Verify the correct driver is installed:\n"
+                + ("  ESP32 (CP2102): Silicon Labs CP210x driver\n"
+                   "  ESP32 (native): no driver needed" if is_esp32
+                   else "  Arduino Nano: CH340 driver (usually auto-installed)\n"
+                        "  Arduino UNO: ATmega16U2 driver (included with Arduino IDE)")
+            ),
+            raw_exception=s, exception_type=type(exc).__qualname__,
+            support_context=ctx,
+        )
+    if "access" in sl or "denied" in sl or "busy" in sl:
+        return DeviceError(
+            category=ErrorCategory.DEVICE_BUSY, device_uid=uid,
+            message=f"Serial port in use: {s[:80]}",
+            suggested_fix=(
+                "Another application has the serial port open.\n"
+                "Close the Arduino IDE Serial Monitor or any other serial terminal, then retry."),
+            raw_exception=s, exception_type=type(exc).__qualname__,
+            support_context=ctx,
+        )
+    if "timeout" in sl or "no response" in sl:
+        board = "ESP32" if is_esp32 else "Arduino"
+        return DeviceError(
+            category=ErrorCategory.TIMEOUT, device_uid=uid,
+            message=f"{board} timeout: {s[:80]}",
+            suggested_fix=(
+                f"The {board} did not respond to the IDENT command.\n"
+                "Verify the SanjINSIGHT I/O firmware is flashed on the board.\n"
+                "Check baud rate is 115200 and the correct COM port is selected."),
+            raw_exception=s, exception_type=type(exc).__qualname__,
+            support_context=ctx,
+        )
+    if "firmware" in sl or "ident" in sl:
+        return DeviceError(
+            category=ErrorCategory.FIRMWARE_MISMATCH, device_uid=uid,
+            message=f"Firmware issue: {s[:80]}",
+            suggested_fix=(
+                "The board responded but the firmware may not be the SanjINSIGHT I/O firmware.\n"
+                "Flash the correct firmware from firmware/arduino_nano/ or firmware/esp32/."),
+            raw_exception=s, exception_type=type(exc).__qualname__,
+            support_context=ctx,
+        )
+    return DeviceError(
+        category=ErrorCategory.UNKNOWN, device_uid=uid,
+        message=f"Microcontroller error: {s[:100]}",
+        suggested_fix="Check the USB connection and verify the SanjINSIGHT I/O firmware is flashed.",
         raw_exception=s, exception_type=type(exc).__qualname__,
         support_context=ctx,
     )
