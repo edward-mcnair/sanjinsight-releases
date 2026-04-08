@@ -5268,6 +5268,20 @@ if __name__ == "__main__":
                 # enough for non-camera hw_service init.
                 _t.sleep(2.0)
                 dm = window._device_mgr
+
+                # ── Port exclusivity: build set of ports already in use ──
+                # hw_service.start() may have already opened COM ports for
+                # TEC, FPGA, etc.  We must not attempt to open those same
+                # ports for other devices (e.g. phantom LDD or misassigned
+                # Arduino), as it causes PermissionError on Windows and can
+                # disrupt the existing connection.
+                _ports_in_use: set = set()
+                for _uid_chk, _ent_chk in dm._entries.items():
+                    if (_ent_chk.state in (DeviceState.CONNECTED,
+                                           DeviceState.CONNECTING)
+                            and _ent_chk.address):
+                        _ports_in_use.add(_ent_chk.address)
+
                 for uid in _remembered_uids:
                     entry = dm.get(uid)
                     if entry is None:
@@ -5298,10 +5312,21 @@ if __name__ == "__main__":
 
                     _conn = entry.descriptor.connection_type
                     if entry.address or _conn == CONN_CAMERA:
+                        # ── Port conflict guard ───────────────────────
+                        if (entry.address and entry.address in _ports_in_use
+                                and _conn != CONN_CAMERA):
+                            log.warning(
+                                "Auto-reconnect: %s port %s already in use "
+                                "— skipping to avoid PermissionError",
+                                entry.descriptor.display_name, entry.address)
+                            continue
+
                         log.info("Auto-reconnect: attempting %s on %s …",
                                  entry.descriptor.display_name,
                                  entry.address or f"({_conn} enumeration)")
                         dm.connect(uid)
+                        if entry.address:
+                            _ports_in_use.add(entry.address)
                         _t.sleep(1.0)
                     else:
                         log.info("Auto-reconnect: no saved address for %s — skipping",

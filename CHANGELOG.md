@@ -6,6 +6,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.50.37-beta] — 2026-04-08
+
+### Fixed
+- **Stale phantom device cleanup** — DeviceManager init now detects when two devices share the same saved COM port (e.g. phantom LDD-1121 saved on TEC-1089's port from a previous MeCom echo). The stale address is cleared from both memory and preferences, and the phantom is removed from the auto-reconnect list
+- **Auto-reconnect port exclusivity** — Auto-reconnect thread now tracks ports already in use by connected/connecting devices and skips any device whose saved port conflicts, preventing the Arduino from hijacking the TEC's COM port
+- **SSL certificate verification** — Update checker now handles PyInstaller-frozen builds where system CA certificates may be missing, using certifi bundle with system-default and unverified fallbacks
+
 ## [1.50.36-beta] — 2026-04-08
 
 ### Added

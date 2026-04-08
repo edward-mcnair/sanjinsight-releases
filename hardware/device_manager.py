@@ -230,6 +230,86 @@ class DeviceManager:
                 pass   # config not yet initialised at import time — ignore
             self._entries[uid] = entry
 
+        # ── Stale port-conflict cleanup ──────────────────────────────
+        # Saved preferences can contain phantom port assignments from
+        # previous buggy scans (e.g. MeCom echo created a ghost
+        # LDD-1121 on the TEC's port, or the Arduino's port was saved
+        # for two devices).  Detect conflicts among restored addresses
+        # and clear the losers so auto-reconnect doesn't fight over
+        # the same port.
+        self._dedup_restored_addresses()
+
+    def _dedup_restored_addresses(self) -> None:
+        """Clear duplicate port assignments from saved preferences.
+
+        When two (or more) serial devices were saved with the same COM
+        port, keep the one most likely to be the real occupant and blank
+        the others.  Uses the ``hw.last_connected_devices`` list (most
+        recent first) to rank; falls back to ``protocol_prober`` presence
+        (devices requiring active probing are more likely phantoms).
+        Also persists the cleanup back to preferences so it sticks.
+        """
+        # Build a recency rank from the saved last_connected_devices list
+        # (most recent first → lower index = higher priority).
+        try:
+            import config as _cfg
+            _last_list = _cfg.get_pref("hw.last_connected_devices", [])
+        except Exception:
+            _last_list = []
+        _recency: dict[str, int] = {}
+        for _i, _uid in enumerate(_last_list):
+            if _uid not in _recency:          # first occurrence = latest
+                _recency[_uid] = _i
+
+        port_owners: dict[str, list[str]] = {}   # port → [uid, ...]
+        for uid, entry in self._entries.items():
+            if entry.address and not entry.ip_address:
+                # Serial port address (not IP-based devices)
+                port_owners.setdefault(entry.address, []).append(uid)
+
+        for port, uids in port_owners.items():
+            if len(uids) <= 1:
+                continue
+            # Multiple devices claim the same port — resolve conflict.
+            # Prefer the device that appears earliest in
+            # last_connected_devices (most recently connected).  Devices
+            # NOT in the list are ranked last (index = 9999).
+            # Among ties, prefer devices without protocol_prober (they
+            # can't create phantom echoes).
+            best_uid = min(
+                uids,
+                key=lambda u: (
+                    _recency.get(u, 9999),
+                    1 if getattr(self._entries[u].descriptor,
+                                 'protocol_prober', None) else 0,
+                ),
+            )
+            for uid in uids:
+                if uid == best_uid:
+                    continue
+                entry = self._entries[uid]
+                log.warning(
+                    "Stale port conflict: %s and %s both saved with "
+                    "port %s — clearing %s (keeping %s)",
+                    best_uid, uid, port, uid, best_uid,
+                )
+                entry.address = ""
+                # Persist the cleanup so the phantom doesn't return
+                try:
+                    import config as _cfg
+                    saved = _cfg.get_pref(f"device_params.{uid}", {})
+                    if saved.get("address"):
+                        saved["address"] = ""
+                        _cfg.set_pref(f"device_params.{uid}", saved)
+                    # Also remove from last_connected_devices list so
+                    # auto-reconnect doesn't try to reconnect the phantom
+                    lc = _cfg.get_pref("hw.last_connected_devices", [])
+                    if uid in lc:
+                        lc = [u for u in lc if u != uid]
+                        _cfg.set_pref("hw.last_connected_devices", lc)
+                except Exception:
+                    pass
+
     # ---------------------------------------------------------------- #
     #  Callbacks                                                        #
     # ---------------------------------------------------------------- #
