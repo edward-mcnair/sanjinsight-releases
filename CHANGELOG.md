@@ -6,6 +6,16 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.50.39-beta] — 2026-04-08
+
+### Added
+- **Arduino Nano ESP32 support** — Device registry entry for Arduino Nano ESP32 (u-blox NORA-W106, VID 2341:0070) with ESP32 driver
+- **Arduino UNO R4 WiFi support** — Device registry entry (VID 2341:1002) with Nano driver
+
+### Fixed
+- **Arduino/ESP32 port-fallback on IDENT failure** — When the saved COM port fails IDENT validation (wrong device on that port after reboot), both drivers now auto-scan ALL candidate ports and try each one until a valid Arduino/ESP32 responds. Previously a stale saved port caused permanent connection failure
+- **Multi-port auto-detection** — `_auto_detect_ports()` (plural) returns all matching serial ports instead of just the first, so the IDENT-validation loop can try every candidate
+
 ## [1.50.38-beta] — 2026-04-08
 
 ### Fixed

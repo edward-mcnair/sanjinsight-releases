@@ -21,9 +21,9 @@ Versioning scheme: Semantic Versioning  MAJOR.MINOR.PATCH[-PRERELEASE]
 """
 
 # ── Version number ────────────────────────────────────────────────────────────
-__version__    = "1.50.38-beta"
+__version__    = "1.50.39-beta"
 PRERELEASE     = "beta"             # empty string "" for GA releases
-VERSION_TUPLE  = (1, 50, 38)        # numeric-only, for < / > comparisons
+VERSION_TUPLE  = (1, 50, 39)        # numeric-only, for < / > comparisons
 BUILD_DATE     = "2026-04-08"       # set by CI/CD on release; update manually otherwise
 
 # ── Application identity ──────────────────────────────────────────────────────

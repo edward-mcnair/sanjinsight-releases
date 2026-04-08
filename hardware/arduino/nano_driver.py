@@ -64,61 +64,97 @@ class ArduinoNanoDriver(ArduinoDriver):
     def connect(self) -> None:
         import serial
 
-        port = self._port
-        if not port:
-            port = self._auto_detect_port()
-            if not port:
-                raise RuntimeError(
-                    "Arduino Nano not found. Specify 'port' in config.yaml "
-                    "or connect an Arduino Nano with CH340 USB-serial chip.")
+        # Build a list of candidate ports to try.  The saved/configured
+        # port gets priority, but if it fails IDENT validation we fall
+        # back to auto-detected ports.  This handles COM-port reassignment
+        # after reboots (common with FTDI devices that share VID:PID with
+        # Meerstetter TEC/LDD controllers).
+        saved_port = self._port
+        candidates: list[str] = []
+        if saved_port:
+            candidates.append(saved_port)
 
-        try:
-            self._serial = serial.Serial(
-                port=port,
-                baudrate=self._baud,
-                timeout=self._timeout,
-            )
-            # Arduino resets on serial open — wait for bootloader
-            time.sleep(2.0)
-            # Flush any bootloader output
-            self._serial.reset_input_buffer()
+        # Append ALL auto-detected ports that aren't already in the list.
+        # This handles COM-port reassignment after reboots and boards
+        # sharing FTDI VID:PID with Meerstetter devices.
+        for ap in self._auto_detect_ports():
+            if ap not in candidates:
+                candidates.append(ap)
 
-            # Identify firmware — the response MUST be a printable ASCII
-            # string starting with "IDENT" to confirm we're talking to an
-            # Arduino running the SanjINSIGHT I/O firmware, and NOT to a
-            # Meerstetter TEC/LDD that shares the same FTDI VID:PID.
-            raw_ident = self._cmd("IDENT")
-            if not raw_ident:
-                raise RuntimeError(
-                    f"No IDENT response from {port}. "
-                    "This port may not be an Arduino (Meerstetter TEC/LDD "
-                    "devices share the same FTDI USB ID)."
-                )
-            # Validate: must be printable ASCII and start with "IDENT"
-            _is_ascii = all(32 <= ord(c) < 127 or c in '\r\n\t' for c in raw_ident)
-            if not _is_ascii or not raw_ident.startswith("IDENT"):
-                raise RuntimeError(
-                    f"Unexpected response from {port}: {raw_ident!r:.60}  "
-                    "— this does not look like an Arduino running "
-                    "SanjINSIGHT I/O firmware. The port may belong to a "
-                    "Meerstetter TEC or LDD."
-                )
-
-            self._firmware_version = raw_ident[6:].strip() if raw_ident.startswith("IDENT ") else raw_ident
-            self._connected = True
-            self._port = port
-            log.info("Arduino Nano connected on %s  (firmware: %s)",
-                     port, self._firmware_version)
-
-        except Exception as exc:
-            self._serial = None
-            from hardware.hw_debug_log import connect_fail
-            connect_fail(log, port=port, error=exc, context={
-                "baud": self._baud, "timeout": self._timeout,
-            })
+        if not candidates:
             raise RuntimeError(
-                f"Failed to connect to Arduino Nano on {port}: {exc}"
-            ) from exc
+                "Arduino Nano not found. Specify 'port' in config.yaml "
+                "or connect an Arduino Nano with CH340 USB-serial chip.")
+
+        last_error: Optional[Exception] = None
+        for port in candidates:
+            try:
+                self._serial = serial.Serial(
+                    port=port,
+                    baudrate=self._baud,
+                    timeout=self._timeout,
+                )
+                # Arduino resets on serial open — wait for bootloader
+                time.sleep(2.0)
+                # Flush any bootloader output
+                self._serial.reset_input_buffer()
+
+                # Identify firmware — the response MUST be a printable
+                # ASCII string starting with "IDENT" to confirm we're
+                # talking to an Arduino running the SanjINSIGHT I/O
+                # firmware, and NOT to a Meerstetter TEC/LDD that shares
+                # the same FTDI VID:PID (0x0403:0x6001).
+                raw_ident = self._cmd("IDENT")
+                if not raw_ident:
+                    raise RuntimeError(
+                        f"No IDENT response from {port}. "
+                        "This port may not be an Arduino (Meerstetter "
+                        "TEC/LDD devices share the same FTDI USB ID)."
+                    )
+                # Validate: must be printable ASCII and start with "IDENT"
+                _is_ascii = all(
+                    32 <= ord(c) < 127 or c in '\r\n\t' for c in raw_ident
+                )
+                if not _is_ascii or not raw_ident.startswith("IDENT"):
+                    raise RuntimeError(
+                        f"Unexpected response from {port}: "
+                        f"{raw_ident!r:.60}  — not an Arduino."
+                    )
+
+                self._firmware_version = (
+                    raw_ident[6:].strip()
+                    if raw_ident.startswith("IDENT ")
+                    else raw_ident
+                )
+                self._connected = True
+                self._port = port
+                if port != saved_port:
+                    log.info("Arduino Nano: saved port %s failed IDENT, "
+                             "found Arduino on %s instead", saved_port, port)
+                log.info("Arduino Nano connected on %s  (firmware: %s)",
+                         port, self._firmware_version)
+                return   # ← success
+
+            except Exception as exc:
+                last_error = exc
+                log.info("Arduino Nano: port %s rejected — %s", port, exc)
+                # Close the serial port before trying the next candidate
+                if self._serial is not None:
+                    try:
+                        self._serial.close()
+                    except Exception:
+                        pass
+                    self._serial = None
+
+        # All candidates exhausted
+        from hardware.hw_debug_log import connect_fail
+        connect_fail(log, port=saved_port or "(auto)", error=last_error,
+                     context={"baud": self._baud, "timeout": self._timeout,
+                              "candidates_tried": candidates})
+        raise RuntimeError(
+            f"Failed to connect to Arduino Nano on "
+            f"{', '.join(candidates)}: {last_error}"
+        )
 
     def disconnect(self) -> None:
         if self._serial is not None:
@@ -248,42 +284,60 @@ class ArduinoNanoDriver(ArduinoDriver):
 
     @staticmethod
     def _auto_detect_port() -> Optional[str]:
-        """Scan serial ports for a CH340-based Arduino Nano."""
+        """Scan serial ports for an Arduino-compatible board.
+
+        Returns the first candidate port, or None.  Use
+        ``_auto_detect_ports()`` (plural) for the full list.
+        """
+        ports = ArduinoNanoDriver._auto_detect_ports()
+        return ports[0] if ports else None
+
+    @staticmethod
+    def _auto_detect_ports() -> list[str]:
+        """Return ALL serial ports that could be an Arduino-compatible board.
+
+        Matches by VID:PID first, then by description string fallback.
+        Ports are returned in enumeration order (typically ascending COM#).
+        """
         try:
             from serial.tools.list_ports import comports
         except ImportError:
-            return None
+            return []
 
-        # CH340 VID:PID  = 1A86:7523
-        # FTDI VID:PID   = 0403:6001  (some Nano clones)
-        # Arduino.cc      = 2341:0043  (UNO R3)
-        # Arduino.cc      = 2341:0069  (UNO R4 Minima)
+        # Known VID:PID pairs for Arduino-compatible boards
         _VIDS_PIDS = {
-            (0x1A86, 0x7523),  # CH340
-            (0x0403, 0x6001),  # FTDI FT232R
+            (0x1A86, 0x7523),  # CH340 (Nano clones, many third-party boards)
+            (0x0403, 0x6001),  # FTDI FT232R (original Nano, also Meerstetter!)
             (0x2341, 0x0043),  # Arduino UNO R3
             (0x2341, 0x0069),  # Arduino UNO R4 Minima
+            (0x2341, 0x1002),  # Arduino UNO R4 WiFi
+            (0x2341, 0x0070),  # Arduino Nano ESP32 (u-blox NORA-W106)
+            (0x10C4, 0xEA60),  # Silicon Labs CP210x (ESP32 dev boards)
+            (0x303A, 0x1001),  # Espressif native USB (ESP32-S2/S3/C3)
         }
 
+        results: list[str] = []
         for port_info in comports():
             vid = port_info.vid
             pid = port_info.pid
             if vid is not None and pid is not None:
                 if (vid, pid) in _VIDS_PIDS:
-                    log.info("Auto-detected Arduino on %s "
-                             "(VID=%04X PID=%04X)",
-                             port_info.device, vid, pid)
-                    return port_info.device
+                    log.info("Auto-detected candidate Arduino port %s "
+                             "(VID=%04X PID=%04X, desc=%s)",
+                             port_info.device, vid, pid,
+                             port_info.description)
+                    results.append(port_info.device)
+                    continue
 
             # Fallback: match description strings
             desc = (port_info.description or "").lower()
-            if any(s in desc for s in ("ch340", "arduino nano",
-                                       "arduino uno", "ttyacm")):
-                log.info("Auto-detected Arduino on %s (desc=%s)",
+            if any(s in desc for s in ("ch340", "arduino",
+                                       "ttyacm", "esp32")):
+                log.info("Auto-detected candidate Arduino port %s (desc=%s)",
                          port_info.device, port_info.description)
-                return port_info.device
+                results.append(port_info.device)
 
-        return None
+        return results
 
     @classmethod
     def preflight(cls) -> tuple:

@@ -890,6 +890,48 @@ DEVICE_REGISTRY: dict[str, DeviceDescriptor] = {
                          "No bootloader reset delay on native USB variants.",
     ),
 
+    "arduino_uno_r4_wifi": DeviceDescriptor(
+        uid            = "arduino_uno_r4_wifi",
+        display_name   = "Arduino UNO R4 WiFi",
+        manufacturer   = "Arduino / Microsanj",
+        device_type    = DTYPE_GPIO,
+        connection_type= CONN_SERIAL,
+        driver_module  = "hardware.arduino.nano_driver",
+        driver_version = "builtin",
+        hot_loadable   = True,
+        usb_vid        = 0x2341,   # Arduino SA
+        usb_pid        = 0x1002,   # UNO R4 WiFi
+        serial_patterns= ["Arduino UNO R4 WiFi", "UNO R4 WiFi"],
+        default_baud   = 115200,
+        description    = "Arduino UNO R4 WiFi (Renesas RA4M1 + ESP32-S3). "
+                         "Native USB — no external USB-serial chip. "
+                         "Same serial protocol as the Nano firmware.",
+        notes          = "The R4 WiFi has a 14-bit ADC but firmware should "
+                         "scale output to 10-bit for protocol compatibility. "
+                         "WiFi/BLE module is not used by SanjINSIGHT.",
+    ),
+
+    "arduino_nano_esp32": DeviceDescriptor(
+        uid            = "arduino_nano_esp32",
+        display_name   = "Arduino Nano ESP32",
+        manufacturer   = "Arduino / Microsanj",
+        device_type    = DTYPE_GPIO,
+        connection_type= CONN_SERIAL,
+        driver_module  = "hardware.arduino.esp32_driver",
+        driver_version = "builtin",
+        hot_loadable   = True,
+        usb_vid        = 0x2341,   # Arduino SA
+        usb_pid        = 0x0070,   # Nano ESP32 (u-blox NORA-W106)
+        serial_patterns= ["Arduino Nano ESP32", "Nano ESP32", "NORA-W106"],
+        default_baud   = 115200,
+        description    = "Arduino Nano ESP32 (u-blox NORA-W106 / ESP32-S3). "
+                         "Native USB-CDC. Same serial protocol and pin "
+                         "mapping as the ESP32 firmware variant.",
+        notes          = "Flash firmware/esp32/sanjinsight_io.ino via Arduino IDE. "
+                         "No bootloader reset delay on native USB. "
+                         "WiFi/BT disabled at boot by firmware.",
+    ),
+
     # ---------------------------------------------------------------- #
     #  ESP32 GPIO / LED Controllers                                     #
     # ---------------------------------------------------------------- #
