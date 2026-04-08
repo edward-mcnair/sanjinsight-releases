@@ -114,11 +114,15 @@ class SerialScanner:
                     log.debug("SerialScanner: VID:PID parse failed for hwid=%r — "
                               "skipping VID/PID match", hwid, exc_info=True)
 
-            # Build list of all matching descriptors for this port.
+            # Build list of matching descriptors for this port.
             # A single VID:PID (e.g. FTDI 0403:6001) may be used by
-            # multiple device types (Meerstetter TEC, ATEC, LDD).
-            # Create a discovered-device entry for each match so the user
-            # can pick the correct one in Device Manager.
+            # multiple device types (Meerstetter TEC, ATEC, LDD, Arduino).
+            #
+            # For MeCom-protocol devices (TEC, LDD) on shared FTDI VID/PID,
+            # only keep ONE representative entry — the correct device type
+            # will be resolved by MeCom protocol probing later.  Creating
+            # entries for every possible MeCom device causes phantom devices
+            # in the Device Manager (e.g. ghost LDD when only a TEC exists).
             descriptors = []
             if vid and pid:
                 descriptors = find_all_by_usb(vid, pid)
@@ -128,7 +132,20 @@ class SerialScanner:
                     descriptors = [pattern_match]
 
             if descriptors:
-                for d in descriptors:
+                # Separate MeCom-protocol descriptors from others.
+                # MeCom devices share FTDI VID/PID and need protocol probing
+                # to distinguish — create only ONE entry for the group.
+                mecom_descs = [d for d in descriptors
+                               if getattr(d, 'protocol_prober', None) == 'mecom']
+                other_descs = [d for d in descriptors
+                               if getattr(d, 'protocol_prober', None) != 'mecom']
+
+                # Keep only the first MeCom descriptor as a representative
+                # (the actual device type will be resolved by probing).
+                if mecom_descs:
+                    other_descs.append(mecom_descs[0])
+
+                for d in other_descs:
                     results.append(DiscoveredDevice(
                         connection_type = CONN_SERIAL,
                         address         = port.device,

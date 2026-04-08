@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import json
 import logging
+import ssl
 import threading
 import time
 import urllib.request
@@ -49,6 +50,38 @@ log = logging.getLogger(__name__)
 
 # Seconds to wait before the first update check (let the UI finish loading)
 _STARTUP_DELAY_S = 8
+
+
+def _ssl_context() -> ssl.SSLContext:
+    """Build an SSL context that works in PyInstaller-frozen builds.
+
+    PyInstaller bundles may not find the system CA certificates.
+    We try certifi first (pip-installed CA bundle), then the default
+    system context, then fall back to unverified as a last resort
+    (with a warning).
+    """
+    # 1. Try certifi (bundled by pip-install or PyInstaller hook)
+    try:
+        import certifi
+        ctx = ssl.create_default_context(cafile=certifi.where())
+        return ctx
+    except (ImportError, OSError):
+        pass
+
+    # 2. Try default system context
+    try:
+        ctx = ssl.create_default_context()
+        return ctx
+    except ssl.SSLError:
+        pass
+
+    # 3. Fallback — allow unverified (only for update check, not general use)
+    log.warning("SSL certificate verification unavailable — using unverified "
+                "context for update check only")
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    return ctx
 
 
 @dataclass
@@ -122,7 +155,8 @@ class UpdateChecker:
                     "Accept":     "application/vnd.github+json",
                     "User-Agent": f"SanjINSIGHT/{__version__}",
                 })
-            with urllib.request.urlopen(req, timeout=10) as resp:
+            ctx = _ssl_context()
+            with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
                 raw = json.loads(resp.read().decode("utf-8"))
             log.info("Update check: got %s release(s)",
                      len(raw) if isinstance(raw, list) else 1)

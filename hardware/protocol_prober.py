@@ -151,26 +151,35 @@ def probe_mecom_port(
     # When only one Meerstetter device is on the bus, it may respond to
     # ANY MeCom address — so address 2 (TEC) and address 1 (LDD) both
     # get a hit with the *same* serial/identity string.  This creates a
-    # ghost device.  Keep only the first (highest-confidence) result per
-    # unique serial number.
-    if len(results) > 1:
-        seen_serials: dict[str, ProbeResult] = {}
-        deduped: List[ProbeResult] = []
-        for r in results:
-            sn = r.serial_number.strip()
-            if r.error or not sn:
-                deduped.append(r)
-                continue
-            if sn in seen_serials:
-                log.info("MeCom phantom echo: %s addr=%d same serial as addr=%d"
-                         " — dropping duplicate",
-                         port, r.mecom_address,
-                         seen_serials[sn].mecom_address)
-                continue
-            seen_serials[sn] = r
-            deduped.append(r)
-        results = deduped
+    # ghost device.
+    #
+    # Strategy:
+    #   1. If two results share the same non-empty serial → phantom echo.
+    #   2. If ALL results have empty serials → can't distinguish, so keep
+    #      only the FIRST identified result (the one at the highest-
+    #      confidence factory-default address).
+    #   3. Error-only results are always kept.
+    identified = [r for r in results if r.is_identified]
+    errors     = [r for r in results if r.error]
 
+    if len(identified) > 1:
+        # Check serials — if any pair matches or all are empty, deduplicate.
+        serials = [r.serial_number.strip() for r in identified]
+        all_empty = all(not s for s in serials)
+        has_dupe  = (len(set(s for s in serials if s)) <
+                     len([s for s in serials if s]))
+
+        if all_empty or has_dupe:
+            kept = identified[0]
+            for dropped in identified[1:]:
+                log.info(
+                    "MeCom phantom echo: %s addr=%d %s — dropping "
+                    "(keeping addr=%d %s)",
+                    port, dropped.mecom_address, dropped.device_uid,
+                    kept.mecom_address, kept.device_uid)
+            identified = [kept]
+
+    results = identified + errors
     return results
 
 
