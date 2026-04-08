@@ -6,6 +6,15 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.50.40-beta] — 2026-04-08
+
+### Added
+- **Arduino UNO Q support** — Device registry entry for Arduino UNO Q (Qualcomm QRB2210 + STM32U585, VID 2341:0078). Communicates with the STM32 MCU via USB-CDC serial using the same ASCII protocol as other Arduino boards
+- **Discovery engine: UNO Q, UNO R4 WiFi, Nano ESP32** — All three boards now auto-detected by VID:PID during hardware scan, with description-string fallback patterns
+
+### Fixed
+- **Discovery engine UID typo** — CH340 Arduino Nano mapped to correct registry UID `arduino_nano_ch340` (was `arduino_nano`)
+
 ## [1.50.39-beta] — 2026-04-08
 
 ### Added

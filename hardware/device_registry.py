@@ -890,6 +890,29 @@ DEVICE_REGISTRY: dict[str, DeviceDescriptor] = {
                          "No bootloader reset delay on native USB variants.",
     ),
 
+    "arduino_uno_q": DeviceDescriptor(
+        uid            = "arduino_uno_q",
+        display_name   = "Arduino UNO Q",
+        manufacturer   = "Arduino / Microsanj",
+        device_type    = DTYPE_GPIO,
+        connection_type= CONN_SERIAL,
+        driver_module  = "hardware.arduino.nano_driver",
+        driver_version = "builtin",
+        hot_loadable   = True,
+        usb_vid        = 0x2341,   # Arduino SA
+        usb_pid        = 0x0078,   # UNO Q (Qualcomm QRB2210 + STM32U585)
+        serial_patterns= ["Arduino UNO Q", "UNO Q", "UNO-Q"],
+        default_baud   = 115200,
+        description    = "Arduino UNO Q (Qualcomm QRB2210 + STM32U585 MCU). "
+                         "Dual-brain SBC: Linux on QRB2210, Arduino sketches "
+                         "on STM32U585 Cortex-M33. USB-CDC serial to STM32. "
+                         "Same serial protocol as the Nano firmware.",
+        notes          = "SanjINSIGHT communicates with the STM32U585 MCU "
+                         "side via USB-CDC serial (same ASCII protocol). "
+                         "The Qualcomm Linux side is not used. "
+                         "EDL mode uses VID 05C6:PID 9008 — do not match.",
+    ),
+
     "arduino_uno_r4_wifi": DeviceDescriptor(
         uid            = "arduino_uno_r4_wifi",
         display_name   = "Arduino UNO R4 WiFi",

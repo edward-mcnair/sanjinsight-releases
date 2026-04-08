@@ -333,18 +333,23 @@ def _discover_cameras(report: DiscoveryReport, progress_cb):
 # (i.e., the VID:PID uniquely identifies the device type).
 # FTDI 0403:6001 is excluded because it's shared with Meerstetter.
 _MCU_VID_PID: dict[tuple[int, int], tuple[str, str]] = {
-    (0x1A86, 0x7523): ("arduino_nano",       "Arduino Nano (CH340)"),
-    (0x2341, 0x0043): ("arduino_uno",         "Arduino UNO R3"),
-    (0x2341, 0x0069): ("arduino_uno_r4",      "Arduino UNO R4 Minima"),
-    (0x10C4, 0xEA60): ("esp32_cp2102",        "ESP32 (CP2102)"),
-    (0x303A, 0x1001): ("esp32_native_usb",    "ESP32-S2/S3 (native USB)"),
-    (0x0483, 0x5740): ("tdg7",                "TDG-VII / PT-100 Delay Generator"),
+    (0x1A86, 0x7523): ("arduino_nano_ch340",  "Arduino Nano (CH340)"),
+    (0x2341, 0x0043): ("arduino_uno",          "Arduino UNO R3"),
+    (0x2341, 0x0069): ("arduino_uno_r4",       "Arduino UNO R4 Minima"),
+    (0x2341, 0x1002): ("arduino_uno_r4_wifi",  "Arduino UNO R4 WiFi"),
+    (0x2341, 0x0078): ("arduino_uno_q",        "Arduino UNO Q"),
+    (0x2341, 0x0070): ("arduino_nano_esp32",   "Arduino Nano ESP32"),
+    (0x10C4, 0xEA60): ("esp32_cp2102",         "ESP32 (CP2102)"),
+    (0x303A, 0x1001): ("esp32_native_usb",     "ESP32-S2/S3 (native USB)"),
+    (0x0483, 0x5740): ("tdg7",                 "TDG-VII / PT-100 Delay Generator"),
 }
 
 # Description-string fallbacks
 _MCU_DESC_PATTERNS: list[tuple[list[str], str, str]] = [
-    (["ch340", "arduino nano"],           "arduino_nano",    "Arduino Nano (CH340)"),
+    (["ch340", "arduino nano"],           "arduino_nano_ch340", "Arduino Nano (CH340)"),
+    (["arduino uno q", "uno-q"],          "arduino_uno_q",   "Arduino UNO Q"),
     (["arduino uno"],                     "arduino_uno",     "Arduino UNO"),
+    (["nano esp32", "nora-w106"],         "arduino_nano_esp32", "Arduino Nano ESP32"),
     (["cp210", "esp32", "espressif"],     "esp32_cp2102",    "ESP32"),
     (["stm32", "stmicroelectronics",
       "tdg", "pt-100", "fastlaser"],      "tdg7",            "TDG-VII / PT-100"),

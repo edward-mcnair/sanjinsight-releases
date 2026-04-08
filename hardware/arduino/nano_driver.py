@@ -311,6 +311,7 @@ class ArduinoNanoDriver(ArduinoDriver):
             (0x2341, 0x0043),  # Arduino UNO R3
             (0x2341, 0x0069),  # Arduino UNO R4 Minima
             (0x2341, 0x1002),  # Arduino UNO R4 WiFi
+            (0x2341, 0x0078),  # Arduino UNO Q (STM32U585 MCU)
             (0x2341, 0x0070),  # Arduino Nano ESP32 (u-blox NORA-W106)
             (0x10C4, 0xEA60),  # Silicon Labs CP210x (ESP32 dev boards)
             (0x303A, 0x1001),  # Espressif native USB (ESP32-S2/S3/C3)
@@ -332,7 +333,8 @@ class ArduinoNanoDriver(ArduinoDriver):
             # Fallback: match description strings
             desc = (port_info.description or "").lower()
             if any(s in desc for s in ("ch340", "arduino",
-                                       "ttyacm", "esp32")):
+                                       "ttyacm", "esp32",
+                                       "stm32")):
                 log.info("Auto-detected candidate Arduino port %s (desc=%s)",
                          port_info.device, port_info.description)
                 results.append(port_info.device)
