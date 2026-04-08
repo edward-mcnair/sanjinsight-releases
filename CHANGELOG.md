@@ -6,6 +6,27 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.50.36-beta] — 2026-04-08
+
+### Added
+- **TDG-VII / PT-100 driver** (`hardware/fpga/tdg7.py`) — Complete driver for the Fastlaser Tech TDG-VII 7-channel picosecond delay generator (also sold as Microsanj PT-100). Implements FpgaDriver interface with auto-detection of STM32 VCP (VID 0483:5740). Extended methods for per-channel delay/width/output/gate control, trigger source selection, RF output, and frequency counter readback
+- **ESP32 firmware** (`firmware/esp32/sanjinsight_io.ino`) — Drop-in ESP32 replacement for Arduino Nano firmware with same ASCII serial protocol (IDENT, LED, PIN, READ, ADC, STATUS). WiFi/BT disabled at boot, 12-bit ADC via ADC1 channels
+- **Extended FPGA service methods** — 7 new TDG-VII control methods in `fpga_service.py`: channel delay, width, output mode, gate, trigger source, RF output, and frequency counter readback
+- **Beta onboarding improvements** — First-run wizard FPGA page supports 4 drivers (simulated, NI sbRIO, TDG-VII, BNC 745) with show/hide panels. New Arduino/GPIO wizard page. Microcontroller and TDG-VII sections in scan_hardware.py. Error taxonomy classifiers for TDG-VII (STM32 VCP driver hints) and Arduino/ESP32 (CH340/CP210x driver hints). STM32 VCP driver check in verify_install.py
+- **Device Manager categories** — GPIO / LED Selector, Laser Diode Drivers, Probe Stations, and Objective Turrets now visible in Device Manager tree
+
+### Fixed
+- **Phantom LDD-1121 detection** — MeCom protocol prober now deduplicates results by serial number. When a single Meerstetter device (e.g. TEC-1089) echoes at multiple addresses, the duplicate is detected and dropped instead of creating a ghost LDD entry
+- **COM port collision** — Device manager enforces port exclusivity during scan integration. If two discovered devices resolve to the same serial port, the duplicate is logged and skipped
+- **Arduino FTDI auto-detection** — Added FT232 description pattern to microcontroller discovery so FTDI-based Arduino Nano boards are auto-detected on ports where MeCom probing failed
+- **Pipeline checkpoint I/O** — Capture checkpoints now write asynchronously via a background writer thread with a bounded queue, eliminating 50–200 ms frame-timing jitter during burst captures
+- **Abort flag thread safety** — Pipeline abort flag replaced with `threading.Event()` for proper cross-thread synchronisation
+- **QTimer crash on quit** — `closeEvent` now stops all persistent QTimers before widget teardown, preventing "wrapped C/C++ object has been deleted" RuntimeErrors
+- **Session save data loss** — Session-save thread is tracked and joined (5 s timeout) during shutdown to prevent file corruption if the app closes mid-write
+- **Data tab memory leak** — Stale `_SessionLoadWorker` threads are now cancelled when switching sessions, preventing orphan QThread accumulation
+- **App state race condition** — Compound `app_state` operations in bias, FPGA, and stage services wrapped in context manager for atomic read-check-write
+- **Camera config disk thrash** — `update_camera_config()` disk writes debounced by 500 ms so rapid slider adjustments don't block the GUI thread with repeated YAML I/O
+
 ## [1.50.35-beta] — 2026-04-08
 
 ### Added
