@@ -85,10 +85,13 @@ class MeasurementReadoutStrip(QWidget):
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         # ── Readout state — written by set_values(), read by paintEvent ───
+        # Colour keys are stored as semantic names ('textSub', 'warning',
+        # 'info') rather than resolved hex so that paintEvent always uses
+        # the current PALETTE values — no stale colours after theme switch.
         self._bt_text  : str  = "N/A"
-        self._bt_color : str  = PALETTE['textSub']
+        self._bt_ckey  : str  = "textSub"
         self._dt_text  : str  = "N/A"
-        self._dt_color : str  = PALETTE['textSub']
+        self._dt_ckey  : str  = "textSub"
         self._ct_text  : str  = ""
         self._ct_vis   : bool = False
 
@@ -120,26 +123,26 @@ class MeasurementReadoutStrip(QWidget):
         """
         # BT — label and value share amber so they read as one warm unit.
         if bt_c is None:
-            self._bt_text  = "N/A"
-            self._bt_color = PALETTE['textSub']
+            self._bt_text = "N/A"
+            self._bt_ckey = "textSub"
         else:
-            self._bt_text  = f"{bt_c:.1f} °C"
-            self._bt_color = _DT_POS_COLOR()
+            self._bt_text = f"{bt_c:.1f} °C"
+            self._bt_ckey = "warning"       # amber — same as _DT_POS_COLOR
 
         # dT
         if dt_c is None:
-            self._dt_text  = "N/A"
-            self._dt_color = PALETTE['textSub']
+            self._dt_text = "N/A"
+            self._dt_ckey = "textSub"
         elif dt_c > 0.005:
-            self._dt_text  = f"+{dt_c:.2f}°C"
-            self._dt_color = _DT_POS_COLOR()
+            self._dt_text = f"+{dt_c:.2f}°C"
+            self._dt_ckey = "warning"       # amber — heating
         elif dt_c < -0.005:
-            self._dt_text  = f"{dt_c:.2f}°C"
-            self._dt_color = _DT_NEG_COLOR()
+            self._dt_text = f"{dt_c:.2f}°C"
+            self._dt_ckey = "info"          # blue  — cooling
         else:
             # Effectively zero — show as "±0.00°C" in neutral colour
-            self._dt_text  = f"±{abs(dt_c):.2f}°C"
-            self._dt_color = PALETTE['textSub']
+            self._dt_text = f"±{abs(dt_c):.2f}°C"
+            self._dt_ckey = "textSub"
 
         # CT
         self._ct_vis = self._show_ct and ct_c is not None
@@ -225,7 +228,7 @@ class MeasurementReadoutStrip(QWidget):
         draw_sub("BT", bt_sub_font, QColor(_DT_POS_COLOR()))
         x += sub_w("BT", bt_sub_font) + _SUB_GAP
 
-        draw_val(self._bt_text, QColor(self._bt_color))
+        draw_val(self._bt_text, QColor(PALETTE[self._bt_ckey]))
         x += val_w(self._bt_text) + _CELL_GAP
 
         # ── Divider ────────────────────────────────────────────────────────
@@ -236,7 +239,7 @@ class MeasurementReadoutStrip(QWidget):
         draw_sub("DT", dt_sub_font, dim)
         x += sub_w("DT", dt_sub_font) + _SUB_GAP
 
-        draw_val(self._dt_text, QColor(self._dt_color))
+        draw_val(self._dt_text, QColor(PALETTE[self._dt_ckey]))
 
         # ── CT cell (optional) ─────────────────────────────────────────────
         if self._ct_vis:

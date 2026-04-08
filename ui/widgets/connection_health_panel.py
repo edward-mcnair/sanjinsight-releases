@@ -56,7 +56,7 @@ def _dot_color(state: str) -> str:
     if state == STATE_ERROR:
         return PALETTE.get("danger", "#ff4444")
     # absent / unknown
-    return PALETTE.get("muted", "#888888")
+    return PALETTE.get("textDim", "#888888")
 
 
 # ── Device row ───────────────────────────────────────────────────────────────
@@ -219,7 +219,7 @@ class _DeviceRow(QFrame):
 
         # Colour: green if healthy, amber if stale (>2× expected interval)
         stale_threshold_s = (self._expected_poll_ms * 2.5) / 1000.0
-        muted = PALETTE.get("muted", "#888888")
+        muted = PALETTE.get("textDim", "#888888")
         warning = PALETTE.get("warning", "#ffb300")
         colour = warning if age_s > stale_threshold_s else muted
 
@@ -237,8 +237,8 @@ class _DeviceRow(QFrame):
     def _apply_styles(self) -> None:
         surface = PALETTE.get("surface", "#1e1e1e")
         border = PALETTE.get("border", "#333333")
-        fg = PALETTE.get("fg", "#e0e0e0")
-        muted = PALETTE.get("muted", "#888888")
+        fg = PALETTE.get("text", "#e0e0e0")
+        muted = PALETTE.get("textDim", "#888888")
         accent = PALETTE.get("accent", "#00d479")
 
         self.setStyleSheet(
@@ -447,7 +447,7 @@ class ConnectionHealthPanel(QWidget):
         self._os_warnings_frame.setVisible(bool(failed))
 
         warning_color = PALETTE.get("warning", "#ffb300")
-        muted = PALETTE.get("muted", "#888888")
+        muted = PALETTE.get("textDim", "#888888")
         surface = PALETTE.get("surface", "#1e1e1e")
         sm = FONT.get("sm", 10)
 
@@ -487,11 +487,11 @@ class ConnectionHealthPanel(QWidget):
         """Refresh all palette-derived styles.  Called by
         ``MainWindow._swap_visual_theme()``."""
         bg = PALETTE.get("bg", "#121212")
-        fg = PALETTE.get("fg", "#e0e0e0")
+        fg = PALETTE.get("text", "#e0e0e0")
         surface = PALETTE.get("surface", "#1e1e1e")
         border = PALETTE.get("border", "#333333")
         accent = PALETTE.get("accent", "#00d479")
-        muted = PALETTE.get("muted", "#888888")
+        muted = PALETTE.get("textDim", "#888888")
 
         self.setStyleSheet(f"background: {bg};")
 

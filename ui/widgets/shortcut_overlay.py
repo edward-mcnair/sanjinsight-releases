@@ -181,7 +181,7 @@ class ShortcutOverlay(QDialog):
         self._card.setObjectName("shortcutCard")
         self._card.setStyleSheet(
             "#shortcutCard {"
-            "  background: rgba(15, 15, 20, 0.96);"
+            f"  background: rgba({self._card_rgba()});"
             f"  border: 1px solid {PALETTE['border']};"
             "  border-radius: 10px;"
             "}"
@@ -270,6 +270,26 @@ class ShortcutOverlay(QDialog):
             self.close()
         else:
             super().keyPressEvent(event)
+
+    def _apply_styles(self):
+        """Refresh the card's inline stylesheets from the current PALETTE."""
+        self._card.setStyleSheet(
+            "#shortcutCard {"
+            f"  background: rgba({self._card_rgba()});"
+            f"  border: 1px solid {PALETTE['border']};"
+            "  border-radius: 10px;"
+            "}"
+        )
+
+    @staticmethod
+    def _card_rgba() -> str:
+        """Return an rgba() string for the card background matching the theme."""
+        # Dark theme: near-black card; light theme: white card
+        bg = PALETTE['bg']
+        # Parse hex to r,g,b
+        bg = bg.lstrip('#')
+        r, g, b = int(bg[0:2], 16), int(bg[2:4], 16), int(bg[4:6], 16)
+        return f"{r}, {g}, {b}, 0.96"
 
     def mousePressEvent(self, event):  # noqa: N802
         """Close the overlay when the user clicks on the transparent backdrop."""

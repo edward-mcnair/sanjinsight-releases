@@ -29,6 +29,7 @@ from acquisition.processing import COLORMAP_OPTIONS, COLORMAP_TOOLTIPS, setup_cm
 import config as cfg_mod
 from ui.widgets.image_pane import ImagePane
 from ui.widgets.more_options import MoreOptionsPanel
+from ui.widgets.compact_controls import QuickControlsBar
 
 
 class AcquireTab(QWidget):
@@ -61,12 +62,36 @@ class AcquireTab(QWidget):
         left_scroll.setWidget(left_widget)
         root.addWidget(left_scroll, 2)
 
+        # Quick hardware controls bar
+        self._quick_controls = QuickControlsBar()
+        left.addWidget(self._quick_controls)
+
         # Live feed
         live_box = QGroupBox("Live Feed")
         ll = QVBoxLayout(live_box)
         self._live = ImagePane("", 500, 375)
         ll.addWidget(self._live)
         left.addWidget(live_box)
+
+        # ROI status bar
+        from acquisition.roi_model import roi_model
+        roi_row = QHBoxLayout()
+        roi_row.setSpacing(6)
+        self._roi_status = QLabel("No ROIs defined")
+        self._roi_status.setStyleSheet(scaled_qss(
+            f"font-family:{MONO_FONT}; font-size:8pt; "
+            f"color:{PALETTE['textDim']};"))
+        roi_row.addWidget(self._roi_status)
+        roi_row.addStretch()
+        self._roi_manage_btn = QPushButton("Manage ROIs")
+        self._roi_manage_btn.setFixedHeight(22)
+        self._roi_manage_btn.clicked.connect(self._open_roi_tab)
+        roi_row.addWidget(self._roi_manage_btn)
+        left.addLayout(roi_row)
+
+        # Subscribe to ROI model changes
+        self._roi_model = roi_model
+        roi_model.rois_changed.connect(self._update_roi_status)
 
         # Controls
         ctrl_box = QGroupBox("Capture")
@@ -135,6 +160,10 @@ class AcquireTab(QWidget):
         setup_cmap_combo(self._cmap, saved_cmap)
         self._cmap.currentTextChanged.connect(self._on_cmap_changed)
         cl.addWidget(self._cmap, 4, 1)
+
+        # Sync colormap from other tabs
+        from ui.app_signals import signals as _sig
+        _sig.colormap_changed.connect(self._on_cmap_remote)
 
         # Buttons
         btn_row = QHBoxLayout()
@@ -367,10 +396,36 @@ class AcquireTab(QWidget):
                 f"border:1px solid {acc}44; border-radius:10px; "
                 f"font-size:{FONT['sublabel']}pt; padding:0 8px; }}"
                 f"QPushButton:hover {{ background:{sur}; }}")
+        if hasattr(self, "_quick_controls"):
+            self._quick_controls._apply_styles()
 
     def set_active_recipe_name(self, name: str | None) -> None:
         """Called by MainWindow when a recipe is applied to reflect its name."""
         self._active_recipe_lbl.setText(name or "(none)")
+
+    def _update_roi_status(self):
+        count = self._roi_model.count
+        if count == 0:
+            self._roi_status.setText("No ROIs defined \u2014 full frame")
+            self._roi_status.setStyleSheet(scaled_qss(
+                f"font-family:{MONO_FONT}; font-size:8pt; "
+                f"color:{PALETTE['textDim']};"))
+        else:
+            active = self._roi_model.active_roi
+            lbl = active.label if active else ""
+            self._roi_status.setText(
+                f"{count} ROI(s) \u2022 Active: {lbl}")
+            self._roi_status.setStyleSheet(scaled_qss(
+                f"font-family:{MONO_FONT}; font-size:8pt; "
+                f"color:{PALETTE['warning']};"))
+
+    def _open_roi_tab(self):
+        """Navigate to the ROI tab."""
+        w = self.window()
+        roi_tab = getattr(w, '_roi_tab', None)
+        nav = getattr(w, '_nav', None)
+        if roi_tab is not None and nav is not None:
+            nav.navigate_to(roi_tab)
 
     def _open_recipe_manager(self):
         """Navigate to the Recipe tab (makes it visible to the user)."""
@@ -435,8 +490,22 @@ class AcquireTab(QWidget):
         except ImportError:
             pass
 
+    def _on_cmap_remote(self, cmap_name: str):
+        """Another tab changed the colormap — sync our combo."""
+        if self._cmap.currentText() != cmap_name:
+            self._cmap.blockSignals(True)
+            idx = self._cmap.findText(cmap_name)
+            if idx >= 0:
+                self._cmap.setCurrentIndex(idx)
+                if self._result and self._result.delta_r_over_r is not None:
+                    mode = "signed" if cmap_name in ("Thermal Delta", "signed") else "percentile"
+                    self._drr_pane.show_array(self._result.delta_r_over_r, mode=mode, cmap=cmap_name)
+            self._cmap.blockSignals(False)
+
     def _on_cmap_changed(self, cmap: str):
         cfg_mod.set_pref("display.colormap", cmap)
+        from ui.app_signals import signals as _sig
+        _sig.colormap_changed.emit(cmap)
         if self._result is not None and self._result.delta_r_over_r is not None:
             mode = "signed" if cmap in ("Thermal Delta", "signed") else "percentile"
             self._drr_pane.show_array(self._result.delta_r_over_r, mode=mode, cmap=cmap)

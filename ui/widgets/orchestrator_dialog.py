@@ -219,6 +219,34 @@ class OrchestratorDialog(QDialog):
             proceed_btn.clicked.connect(self.accept)
             self.layout().addWidget(proceed_btn, alignment=Qt.AlignRight)
 
+    def _apply_styles(self):
+        """Refresh inline stylesheets from the current PALETTE values."""
+        self._header.setStyleSheet(
+            f"font-size: {FONT['readoutSm']}pt; font-weight: 700; "
+            f"color: {PALETTE['text']};")
+        self._overall_bar.setStyleSheet(
+            f"QProgressBar {{ background: {PALETTE['surface']}; "
+            f"border: none; border-radius: 3px; }}"
+            f"QProgressBar::chunk {{ background: {PALETTE['accent']}; "
+            f"border-radius: 3px; }}")
+        for card in self._step_cards.values():
+            status = card.get("status", "pending")
+            if status == "running":
+                c = PALETTE['accent']
+            elif status == "complete":
+                c = PALETTE['success']
+            elif status == "failed":
+                c = PALETTE['danger']
+            else:
+                c = PALETTE['textDim']
+            card["icon"].setStyleSheet(
+                f"font-size: {FONT['readoutSm']}pt; color: {c};")
+            card["name"].setStyleSheet(
+                f"font-size: {FONT['label']}pt; font-weight: 600; "
+                f"color: {PALETTE['text']};")
+            card["msg"].setStyleSheet(
+                f"font-size: {FONT['caption']}pt; color: {PALETTE['textDim']};")
+
     def _on_skip(self) -> None:
         self._orch.skip_current_step()
 

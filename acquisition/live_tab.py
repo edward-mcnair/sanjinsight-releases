@@ -36,6 +36,7 @@ from PyQt5.QtGui  import (QImage, QPixmap, QPainter, QPen, QColor,
 from .live       import LiveProcessor, LiveConfig, LiveFrame
 from .processing import to_display, apply_colormap, setup_cmap_combo
 import config as cfg_mod
+from ui.widgets.compact_controls import QuickControlsBar
 
 
 # ------------------------------------------------------------------ #
@@ -662,6 +663,10 @@ class LiveTab(QWidget):
         self._workflow_footer = WorkflowFooter(_NEXT)
         self._workflow_footer.setVisible(False)
 
+        # Quick hardware controls bar
+        self._quick_controls = QuickControlsBar()
+        root.addWidget(self._quick_controls)
+
         self._body_splitter = QSplitter(Qt.Horizontal)
         settings_scroll = QScrollArea()
         settings_scroll.setWidgetResizable(True)
@@ -737,6 +742,8 @@ class LiveTab(QWidget):
         if hasattr(self, "_state_lbl"):
             self._state_lbl.setStyleSheet(
                 f"background:{su2}; color:{sub}; {_badge_base}")
+        if hasattr(self, "_quick_controls"):
+            self._quick_controls._apply_styles()
 
     def _build_toolbar(self) -> QWidget:
         bar = QWidget()
@@ -789,6 +796,12 @@ class LiveTab(QWidget):
         for l in [self._fps_lbl, self._cycle_lbl, self._state_lbl]:
             lay.addWidget(l)
 
+        # ROI indicator
+        from acquisition.roi_model import roi_model as _rm
+        self._roi_badge = self._badge("No ROI", PALETTE['surface2'])
+        lay.addWidget(self._roi_badge)
+        _rm.rois_changed.connect(self._update_roi_badge)
+
         lay.addStretch()
 
         # Colormap selector in toolbar
@@ -800,9 +813,12 @@ class LiveTab(QWidget):
         setup_cmap_combo(self._cmap_combo, saved_cmap)
         # _canvas is created after the toolbar; connection deferred to __init__
         self._saved_cmap = saved_cmap
-        self._cmap_combo.currentTextChanged.connect(
-            lambda c: cfg_mod.set_pref("display.colormap", c))
+        self._cmap_combo.currentTextChanged.connect(self._on_cmap_local)
         lay.addWidget(self._cmap_combo)
+
+        # Sync colormap from other tabs
+        from ui.app_signals import signals as _sig
+        _sig.colormap_changed.connect(self._on_cmap_remote)
 
         self._start_btn.clicked.connect(self._start)
         self._stop_btn.clicked.connect(self._stop)
@@ -1091,6 +1107,39 @@ class LiveTab(QWidget):
         if self._proc is not None:
             self._stop()
             self._start()
+
+    def _update_roi_badge(self):
+        from acquisition.roi_model import roi_model as _rm
+        count = _rm.count
+        if count == 0:
+            self._roi_badge.setText("No ROI")
+            self._roi_badge.setStyleSheet(
+                f"background:{PALETTE['surface2']}; color:{PALETTE['textSub']}; "
+                f"padding:0 8px; border-radius:3px; "
+                f"font-family:{MONO_FONT}; font-size:{FONT['label']}pt;")
+        else:
+            self._roi_badge.setText(f"{count} ROI(s)")
+            self._roi_badge.setStyleSheet(
+                f"background:{PALETTE['warning']}33; color:{PALETTE['warning']}; "
+                f"padding:0 8px; border-radius:3px; "
+                f"font-family:{MONO_FONT}; font-size:{FONT['label']}pt;")
+
+    def _on_cmap_local(self, cmap_name: str):
+        """User changed colormap in THIS tab — persist and broadcast."""
+        cfg_mod.set_pref("display.colormap", cmap_name)
+        from ui.app_signals import signals as _sig
+        _sig.colormap_changed.emit(cmap_name)
+
+    def _on_cmap_remote(self, cmap_name: str):
+        """Another tab changed the colormap — sync our combo."""
+        if self._cmap_combo.currentText() != cmap_name:
+            self._cmap_combo.blockSignals(True)
+            idx = self._cmap_combo.findText(cmap_name)
+            if idx >= 0:
+                self._cmap_combo.setCurrentIndex(idx)
+                if hasattr(self, "_canvas"):
+                    self._canvas.set_cmap(cmap_name)
+            self._cmap_combo.blockSignals(False)
 
     def _toggle_freeze(self):
         self._frozen = not self._frozen

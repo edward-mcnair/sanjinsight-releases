@@ -618,6 +618,12 @@ class MainWindow(QMainWindow):
         self._ai_dock.hide()
         self._ai_dock.visibilityChanged.connect(self._on_ai_dock_visibility)
 
+        # ── Live preview dock ──────────────────────────────────────
+        from ui.widgets.live_preview_dock import LivePreviewDock
+        self._preview_dock = LivePreviewDock(self)
+        self.addDockWidget(Qt.RightDockWidgetArea, self._preview_dock)
+        self._preview_dock.hide()
+
         # ── New enhancement tabs ──────────────────────────────────
         self._compare_tab  = ComparisonTab(session_manager=session_mgr)
         self._surface_tab  = SurfacePlotTab()
@@ -758,8 +764,11 @@ class MainWindow(QMainWindow):
         self._nav.add_phase(2, "IMAGE ACQUISITION",
             "Preview, focus, and verify your signal", [
             NI("Live View",     _I["Live View"],     self._live_tab),
+            NI("ROI",           _I["ROI"],           self._roi_tab),
             NI("Focus & Stage", _I["Focus & Stage"], self._focus_stage_tab),
             NI("Signal Check",  _I["Signal Check"],  self._signal_check_section),
+            NI("Transient",     _I["Transient"],     self._transient_capture_tab),
+            NI("Movie",         _I["Movie"],         self._movie_tab),
         ])
 
         # Phase 3: ANALYSIS
@@ -767,6 +776,7 @@ class MainWindow(QMainWindow):
             "Capture data and analyze results", [
             NI("Capture",     _I["Capture"],     self._capture_tab),
             NI("Calibration", _I["Calibration"], self._cal_tab),
+            NI("3D Surface",  _I["3D Surface"],  self._surface_tab),
             NI("Sessions",    _I["Sessions"],    self._data_tab),
             NI("Emissivity",  _I["Emissivity"],  self._emissivity_tab),
         ])
@@ -1503,6 +1513,10 @@ class MainWindow(QMainWindow):
 
         # Feed signal check section
         self._signal_check_section.update_frame(frame)
+
+        # Feed the dockable live preview
+        if hasattr(self, "_preview_dock"):
+            self._preview_dock.update_frame(frame.data)
 
     def _read_ir_camera_temp(self) -> float:
         """Return the mean pixel value of the latest IR frame (°C-equivalent).
@@ -2489,6 +2503,11 @@ class MainWindow(QMainWindow):
         act_rescan = view_menu.addAction("Re-scan Hardware…")
         act_rescan.setShortcut(QKeySequence("Ctrl+Shift+D"))
         act_rescan.triggered.connect(self._rescan_hardware)
+
+        view_menu.addSeparator()
+        act_preview = view_menu.addAction("Live Preview")
+        act_preview.setShortcut(QKeySequence("Ctrl+P"))
+        act_preview.triggered.connect(self._toggle_preview_dock)
 
         # ── Help menu ────────────────────────────────────────────
         help_menu = mb.addMenu("Help")
@@ -4020,6 +4039,13 @@ class MainWindow(QMainWindow):
     def _on_history_exported(self, path: str) -> None:
         """Show a transient status-bar message when a conversation is exported."""
         self._status.showMessage(f"Conversation saved → {path}", 6000)
+
+    def _toggle_preview_dock(self):
+        """Show or hide the live camera preview dock."""
+        if self._preview_dock.isVisible():
+            self._preview_dock.hide()
+        else:
+            self._preview_dock.show()
 
     def _toggle_ai_panel(self):
         """Show or hide the AI assistant dock widget."""

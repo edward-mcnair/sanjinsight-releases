@@ -58,6 +58,7 @@ class AppSignals(QObject):
     acq_saved       = pyqtSignal(object)           # Session (just persisted)
     log_message     = pyqtSignal(str)              # Informational log line
     error           = pyqtSignal(str)              # Error message → toast
+    colormap_changed = pyqtSignal(str)             # Colormap name changed by any tab
 
 
 class StateSignalBridge(QObject):

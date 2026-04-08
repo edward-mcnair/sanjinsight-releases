@@ -356,6 +356,16 @@ class SurfacePlotTab(QWidget):
 
     # ── Export ──────────────────────────────────────────────────────
 
+    def _apply_styles(self):
+        """Refresh inline stylesheets from the current PALETTE values."""
+        self._status_lbl.setStyleSheet(
+            f"color:{PALETTE['textDim']}; font-size:{FONT['label']}pt; padding:2px 4px;")
+        self._thresh_cb.setStyleSheet(
+            f"color:{PALETTE['textDim']}; font-size:{FONT['label']}pt;")
+        # Re-set matplotlib figure background colors and re-render
+        self._fig.patch.set_facecolor(PALETTE['canvas'])
+        self._replot()
+
     def _export(self):
         if self._arr is None:
             return

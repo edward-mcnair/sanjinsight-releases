@@ -70,3 +70,12 @@ class ImagePane(QWidget):
         self._lbl.setPixmap(QPixmap())
         self._lbl.setText("")
         self._stats.setText("")
+
+    def _apply_styles(self):
+        """Refresh all inline stylesheets from the current PALETTE values."""
+        self._lbl.setStyleSheet(
+            f"background:{PALETTE['canvas']}; border:1px solid {PALETTE['border']};")
+        self._title.setStyleSheet(
+            f"font-size:{FONT['body']}pt; color:{PALETTE['textSub']}; letter-spacing:1px;")
+        self._stats.setStyleSheet(
+            f"font-family:{MONO_FONT}; font-size:{FONT['body']}pt; color:{PALETTE['textSub']};")

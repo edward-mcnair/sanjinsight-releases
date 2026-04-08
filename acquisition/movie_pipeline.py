@@ -258,15 +258,16 @@ class MovieAcquisitionPipeline:
                 log.warning("Bias toggle failed: %s", e)
 
     def _grab_one(self) -> Optional[tuple]:
-        """Grab one frame; return (data_array, timestamp) or None."""
+        """Grab one full-frame; return (data_array, timestamp) or None.
+
+        ROI cropping is deferred to post-processing so that multiple
+        ROIs can be extracted from the same capture.
+        """
         frame = self._cam.grab(timeout_ms=2000)
         if frame is None:
             return None
         t = time.time()
-        data = frame.data
-        if self._roi is not None:
-            data = self._roi.crop(data)
-        return data.astype(np.float64), t
+        return frame.data.astype(np.float64), t
 
     def _run(self, n_frames: int, capture_reference: bool, settle_s: float,
              drift_correction: bool = False):

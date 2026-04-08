@@ -41,11 +41,11 @@ def make_readout(
         Pass ``"readoutLg"`` or ``"readoutSm"`` as needed.
     """
     if pal_key is not None:
-        resolved_color = PALETTE.get(pal_key, "#00d4aa")
+        resolved_color = PALETTE.get(pal_key, PALETTE['accent'])
     elif color is not None:
         resolved_color = color
     else:
-        resolved_color = PALETTE.get("accent", "#00d4aa")
+        resolved_color = PALETTE['accent']
 
     w = QWidget()
     lay = QVBoxLayout(w)
@@ -80,6 +80,23 @@ def make_sub(text: str) -> QLabel:
 
 
 # ── Inner-tab QSS (container tabs) ──────────────────────────────────
+
+def refresh_readout_styles(parent: QWidget) -> None:
+    """Refresh all readout widgets under *parent* from current PALETTE.
+
+    Called by ``_apply_styles()`` on container tabs to update any
+    ``make_readout()``-created children.
+    """
+    for child in parent.findChildren(QWidget):
+        val = getattr(child, "_val", None)
+        pal_key = getattr(child, "_pal_key", None)
+        if val is not None and hasattr(val, "setStyleSheet"):
+            color = (PALETTE.get(pal_key, PALETTE["accent"])
+                     if pal_key else PALETTE["accent"])
+            val.setStyleSheet(
+                f"font-family:{MONO_FONT}; font-size:{FONT['readout']}pt; "
+                f"color:{color};")
+
 
 def inner_tab_qss() -> str:
     """QSS for a ``QTabWidget`` embedded inside a container tab.

@@ -296,13 +296,11 @@ class TransientAcquisitionPipeline:
                             exc_info=True)
 
     def _grab_one(self) -> Optional[np.ndarray]:
+        """Grab one full-frame.  ROI crop is deferred to post-processing."""
         frame = self._cam.grab(timeout_ms=2000)
         if frame is None:
             return None
-        data = frame.data
-        if self._roi is not None:
-            data = self._roi.crop(data)
-        return data.astype(np.float64)
+        return frame.data.astype(np.float64)
 
     def _run(self,
              n_delays:         int,

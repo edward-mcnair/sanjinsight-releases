@@ -208,7 +208,7 @@ class _DevicesPopup(QWidget):
             err_lbl.setContentsMargins(38, 0, 14, 6)
             err_lbl.setWordWrap(True)
             err_lbl.setStyleSheet(
-                f"color: {PALETTE.get('textDim', '#888')}; "
+                f"color: {PALETTE['textDim']}; "
                 f"font-size: 11px;")
             outer.addWidget(err_lbl)
 

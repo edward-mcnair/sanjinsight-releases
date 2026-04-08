@@ -24,7 +24,7 @@ from PyQt5.QtGui   import QColor, QPainter, QPen, QFont
 
 import config
 from ui.font_utils import mono_font
-from ui.theme import FONT, scaled_qss
+from ui.theme import FONT, PALETTE, scaled_qss
 from hardware.tec import create_tec
 
 # How often to poll the TEC for status (ms)
@@ -46,10 +46,8 @@ class TempPlot(QWidget):
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self._actual  = collections.deque([None] * HISTORY, maxlen=HISTORY)
         self._target  = collections.deque([None] * HISTORY, maxlen=HISTORY)
-        self._bg      = QColor(30, 30, 30)
-        self._grid    = QColor(60, 60, 60)
-        self._actual_color = QColor(0, 200, 100)
-        self._target_color = QColor(255, 160, 0)
+        # Colours resolved at paint-time via _colors() for theme support
+        pass
 
     def push(self, actual: float, target: float):
         self._actual.append(actual)
@@ -61,8 +59,14 @@ class TempPlot(QWidget):
         w, h = self.width(), self.height()
         pad  = 40
 
+        bg_col     = QColor(PALETTE['canvas'])
+        grid_col   = QColor(PALETTE['canvasGrid'])
+        text_col   = QColor(PALETTE['canvasText'])
+        actual_col = QColor(PALETTE['success'])
+        target_col = QColor(PALETTE['warning'])
+
         # Background
-        p.fillRect(0, 0, w, h, self._bg)
+        p.fillRect(0, 0, w, h, bg_col)
 
         # Determine Y range
         vals = [v for v in list(self._actual) + list(self._target)
@@ -80,23 +84,23 @@ class TempPlot(QWidget):
             return int(pad + i / (HISTORY - 1) * (w - 2 * pad))
 
         # Grid lines at rounded temperature intervals
-        p.setPen(QPen(self._grid, 1))
+        p.setPen(QPen(grid_col, 1))
         step = max(1, int(span / 5))
         t    = (int(lo / step) - 1) * step
         p.setFont(mono_font(8))
-        p.setPen(QPen(self._grid, 1))
+        p.setPen(QPen(grid_col, 1))
         while t <= hi + step:
             y = to_y(t)
             if pad <= y <= h - pad:
                 p.drawLine(pad, y, w - pad, y)
-                p.setPen(QPen(QColor(150, 150, 150), 1))
+                p.setPen(QPen(text_col, 1))
                 p.drawText(2, y + 4, f"{t:.0f}°")
-                p.setPen(QPen(self._grid, 1))
+                p.setPen(QPen(grid_col, 1))
             t += step
 
         # Plot lines
-        for series, color in [(self._actual, self._actual_color),
-                               (self._target, self._target_color)]:
+        for series, color in [(self._actual, actual_col),
+                               (self._target, target_col)]:
             p.setPen(QPen(color, 2))
             pts = list(series)
             prev = None
@@ -110,13 +114,13 @@ class TempPlot(QWidget):
                 prev = (x, y)
 
         # Legend
-        p.setPen(QPen(self._actual_color, 2))
+        p.setPen(QPen(actual_col, 2))
         p.drawLine(w - 120, 12, w - 100, 12)
-        p.setPen(QPen(QColor(200, 200, 200), 1))
+        p.setPen(QPen(text_col, 1))
         p.drawText(w - 95, 16, "Actual")
-        p.setPen(QPen(self._target_color, 2))
+        p.setPen(QPen(target_col, 2))
         p.drawLine(w - 120, 26, w - 100, 26)
-        p.setPen(QPen(QColor(200, 200, 200), 1))
+        p.setPen(QPen(text_col, 1))
         p.drawText(w - 95, 30, "Target")
 
         p.end()
@@ -181,7 +185,7 @@ class TecPanel(QMainWindow):
             QGroupBox {{
                 font-weight: bold;
                 font-size: {FONT['sublabel']}pt;
-                border: 1px solid #555;
+                border: 1px solid {PALETTE['border']};
                 border-radius: 4px;
                 margin-top: 8px;
                 padding: 8px;
@@ -193,10 +197,10 @@ class TecPanel(QMainWindow):
         # --- Readouts row ---
         readout_row = QHBoxLayout()
 
-        actual_box = self._value_box("Actual Temp", "-- °C", scaled_qss("font-size:22pt; color:#00c864;"))
-        target_box = self._value_box("Setpoint",    "-- °C", scaled_qss("font-size:22pt; color:#ffa000;"))
-        power_box  = self._value_box("Output Power","-- W",  scaled_qss("font-size:18pt; color:#55aaff;"))
-        stable_box = self._value_box("Status",      "UNKNOWN",f"font-size:{FONT['heading']}pt; color:#888;")
+        actual_box = self._value_box("Actual Temp", "-- °C", scaled_qss(f"font-size:22pt; color:{PALETTE['success']};"))
+        target_box = self._value_box("Setpoint",    "-- °C", scaled_qss(f"font-size:22pt; color:{PALETTE['warning']};"))
+        power_box  = self._value_box("Output Power","-- W",  scaled_qss(f"font-size:18pt; color:{PALETTE['info']};"))
+        stable_box = self._value_box("Status",      "UNKNOWN",f"font-size:{FONT['heading']}pt; color:{PALETTE['textDim']};")
 
         for b in [actual_box, target_box, power_box, stable_box]:
             readout_row.addWidget(b)
@@ -251,8 +255,10 @@ class TecPanel(QMainWindow):
         disable_btn = QPushButton("Disable")
         enable_btn.setFixedWidth(80)
         disable_btn.setFixedWidth(80)
-        enable_btn.setStyleSheet("background:#005500; color:white;")
-        disable_btn.setStyleSheet("background:#550000; color:white;")
+        enable_btn.setStyleSheet(
+            f"background:{PALETTE['accentGhostBg']}; color:{PALETTE['success']};")
+        disable_btn.setStyleSheet(
+            f"background:{PALETTE['dangerBgFill']}; color:{PALETTE['danger']};")
         enable_btn.clicked.connect( lambda _, t=tec: self._enable(t))
         disable_btn.clicked.connect(lambda _, t=tec: self._disable(t))
         ctrl_row.addWidget(enable_btn)
@@ -267,7 +273,7 @@ class TecPanel(QMainWindow):
         v.setAlignment(Qt.AlignCenter)
         lbl = QLabel(label)
         lbl.setAlignment(Qt.AlignCenter)
-        lbl.setStyleSheet(scaled_qss("font-size:9pt; color:#aaa;"))
+        lbl.setStyleSheet(scaled_qss(f"font-size:9pt; color:{PALETTE['textDim']};"))
         val = QLabel(initial)
         val.setObjectName("value")
         val.setAlignment(Qt.AlignCenter)
@@ -301,7 +307,7 @@ class TecPanel(QMainWindow):
         if status.error:
             panel._actual_lbl.setText("ERROR")
             panel._stable_lbl.setText(status.error[:30])
-            panel._stable_lbl.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:#ff4444;")
+            panel._stable_lbl.setStyleSheet(f"font-size:{FONT['sublabel']}pt; color:{PALETTE['danger']};")
             return
 
         panel._actual_lbl.setText(f"{status.actual_temp:.2f} °C")
@@ -310,15 +316,15 @@ class TecPanel(QMainWindow):
 
         if not status.enabled:
             panel._stable_lbl.setText("DISABLED")
-            panel._stable_lbl.setStyleSheet(f"font-size:{FONT['heading']}pt; color:#888;")
+            panel._stable_lbl.setStyleSheet(f"font-size:{FONT['heading']}pt; color:{PALETTE['textDim']};")
         elif status.stable:
             panel._stable_lbl.setText("STABLE ✓")
-            panel._stable_lbl.setStyleSheet(f"font-size:{FONT['heading']}pt; color:#00c864;")
+            panel._stable_lbl.setStyleSheet(f"font-size:{FONT['heading']}pt; color:{PALETTE['success']};")
         else:
             diff = status.actual_temp - status.target_temp
             arrow = "▼" if diff > 0 else "▲"
             panel._stable_lbl.setText(f"SETTLING {arrow}")
-            panel._stable_lbl.setStyleSheet(f"font-size:{FONT['heading']}pt; color:#ffa000;")
+            panel._stable_lbl.setStyleSheet(f"font-size:{FONT['heading']}pt; color:{PALETTE['warning']};")
 
         panel._plot.push(status.actual_temp, status.target_temp)
 

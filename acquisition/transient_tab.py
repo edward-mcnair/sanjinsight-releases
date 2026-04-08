@@ -1059,6 +1059,27 @@ class TransientTab(QWidget):
     #  Helpers                                                          #
     # ---------------------------------------------------------------- #
 
+    def _apply_styles(self):
+        """Refresh inline stylesheets from the current PALETTE values."""
+        mono_base = (f"font-family:{MONO_FONT}; "
+                     f"font-size:{FONT['caption']}pt; ")
+        for lbl in [self._hw_cam_lbl, self._hw_fpga_lbl, self._hw_trig_lbl]:
+            lbl.setStyleSheet(mono_base + f"color:{PALETTE['textDim']};")
+        self._status_lbl.setStyleSheet(
+            mono_base + f"color:{PALETTE['textDim']};")
+        self._delay_time_lbl.setStyleSheet(
+            mono_base + f"color:{PALETTE['textDim']}; min-width:70px;")
+        self._vsweep_n_lbl.setStyleSheet(
+            f"color:{PALETTE['textDim']}; font-size:{FONT['caption']}pt;")
+        self._img_lbl.setStyleSheet(
+            f"background:{PALETTE['canvas']}; border:1px solid {PALETTE['border']};")
+        # Refresh result stat readout colours
+        for val in self._stats.values():
+            val.setStyleSheet(
+                f"font-family:{MONO_FONT}; font-size:{FONT['readoutSm']}pt; "
+                f"color:{PALETTE['accent']};")
+        self._refresh_hw()
+
     def _sub(self, text: str) -> QLabel:
         l = QLabel(text)
         l.setObjectName("sublabel")

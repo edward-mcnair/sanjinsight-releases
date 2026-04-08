@@ -15,9 +15,22 @@ Usage:
 """
 
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, Tuple
+import uuid
 import numpy as np
+
+# Default ROI colours — visually distinct, WCAG-friendly on dark & light BGs
+ROI_COLORS = [
+    "#00d479",  # green  (primary)
+    "#3d8bef",  # blue
+    "#f5a623",  # amber
+    "#e040fb",  # magenta
+    "#00bcd4",  # cyan
+    "#ff5252",  # red
+    "#7c4dff",  # purple
+    "#64dd17",  # lime
+]
 
 
 @dataclass
@@ -28,12 +41,19 @@ class Roi:
     x, y  — top-left corner (inclusive)
     w, h  — width and height in pixels
 
-    All values are integers.  (0,0,0,0) means "full frame" (no crop).
+    uid   — unique identifier (auto-generated if omitted)
+    label — human-readable name ("ROI 1", "Hotspot A", etc.)
+    color — hex colour string for rendering overlays
+
+    All coordinate values are integers.  (0,0,0,0) means "full frame" (no crop).
     """
     x: int = 0
     y: int = 0
     w: int = 0
     h: int = 0
+    uid: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
+    label: str = ""
+    color: str = ""
 
     # ---------------------------------------------------------------- #
 
@@ -58,12 +78,13 @@ class Roi:
         return (self.x + self.w // 2, self.y + self.h // 2)
 
     def clamp(self, frame_h: int, frame_w: int) -> "Roi":
-        """Return a copy clamped to the frame bounds."""
+        """Return a copy clamped to the frame bounds (preserves uid/label/color)."""
         x  = max(0, min(self.x,  frame_w - 1))
         y  = max(0, min(self.y,  frame_h - 1))
         x2 = max(0, min(self.x2, frame_w))
         y2 = max(0, min(self.y2, frame_h))
-        return Roi(x=x, y=y, w=x2 - x, h=y2 - y)
+        return Roi(x=x, y=y, w=x2 - x, h=y2 - y,
+                   uid=self.uid, label=self.label, color=self.color)
 
     def crop(self, image: np.ndarray) -> np.ndarray:
         """
@@ -106,12 +127,24 @@ class Roi:
         return m
 
     def to_dict(self) -> dict:
-        return {"x": self.x, "y": self.y, "w": self.w, "h": self.h}
+        d = {"x": self.x, "y": self.y, "w": self.w, "h": self.h}
+        if self.uid:
+            d["uid"] = self.uid
+        if self.label:
+            d["label"] = self.label
+        if self.color:
+            d["color"] = self.color
+        return d
 
     @staticmethod
     def from_dict(d: dict) -> "Roi":
-        return Roi(x=d.get("x", 0), y=d.get("y", 0),
-                   w=d.get("w", 0), h=d.get("h", 0))
+        return Roi(
+            x=d.get("x", 0), y=d.get("y", 0),
+            w=d.get("w", 0), h=d.get("h", 0),
+            uid=d.get("uid", uuid.uuid4().hex[:8]),
+            label=d.get("label", ""),
+            color=d.get("color", ""),
+        )
 
     @staticmethod
     def full(frame_h: int, frame_w: int) -> "Roi":
@@ -120,7 +153,8 @@ class Roi:
     def __str__(self):
         if self.is_empty:
             return "Roi(full frame)"
-        return f"Roi(x={self.x}, y={self.y}, w={self.w}, h={self.h})"
+        lbl = f" {self.label!r}" if self.label else ""
+        return f"Roi(x={self.x}, y={self.y}, w={self.w}, h={self.h}{lbl})"
 
     def __repr__(self):
         return str(self)

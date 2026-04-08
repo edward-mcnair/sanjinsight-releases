@@ -44,8 +44,15 @@ class AcquisitionResult:
     """All data produced by one complete hot/cold acquisition."""
 
     # Raw averaged frames (float64, shape H×W or H×W×3)
+    # When an ROI is active these are cropped to the ROI region.
     cold_avg:   Optional[np.ndarray] = None
     hot_avg:    Optional[np.ndarray] = None
+
+    # Full-frame averages (always full sensor resolution).
+    # Available for multi-ROI post-processing even when a single
+    # ROI was active during capture.
+    full_cold_avg: Optional[np.ndarray] = None
+    full_hot_avg:  Optional[np.ndarray] = None
 
     # Thermoreflectance signal  ΔR/R  (float64, shape H×W or H×W×3)
     # Values typically in range ±1e-4 to ±1e-2
@@ -217,8 +224,15 @@ class AcquisitionPipeline:
         inter_phase_delay:  Seconds to wait between cold and hot capture.
                             Use this time to toggle your stimulus (e.g. bias current).
         """
-        if self._state == AcqState.CAPTURING:
-            raise RuntimeError("Acquisition already in progress.")
+        if self._state in (AcqState.CAPTURING, AcqState.PROCESSING):
+            # If the thread is dead despite an active state, reset it
+            if self._thread is not None and not self._thread.is_alive():
+                log.warning("Pipeline state stuck at %s with dead thread — resetting",
+                            self._state.name)
+                self._state = AcqState.IDLE
+            else:
+                raise RuntimeError("Acquisition already in progress.")
+        self._state = AcqState.IDLE
         self._abort_flag = False
         self._thread = threading.Thread(
             target=self._run,
@@ -289,11 +303,13 @@ class AcquisitionPipeline:
                 frames_done=0, frames_total=n_frames,
                 message="Capturing cold frames (stimulus OFF)...")
 
-            cold_frames = self._capture_phase("cold", n_frames)
-            if cold_frames is None:
+            cold_full = self._capture_phase("cold", n_frames)
+            if cold_full is None:
                 return
 
-            self._result.cold_avg      = cold_frames
+            self._result.full_cold_avg = cold_full
+            self._result.cold_avg      = (self._roi.crop(cold_full)
+                                          if self._roi else cold_full)
             self._result.cold_captured = n_frames
 
             if self._abort_flag:
@@ -316,11 +332,13 @@ class AcquisitionPipeline:
                 frames_done=0, frames_total=n_frames,
                 message="Capturing hot frames (stimulus ON)...")
 
-            hot_frames = self._capture_phase("hot", n_frames)
-            if hot_frames is None:
+            hot_full = self._capture_phase("hot", n_frames)
+            if hot_full is None:
                 return
 
-            self._result.hot_avg      = hot_frames
+            self._result.full_hot_avg = hot_full
+            self._result.hot_avg      = (self._roi.crop(hot_full)
+                                         if self._roi else hot_full)
             self._result.hot_captured = n_frames
 
             # NOTE: _stimulus_safe_off() in finally handles the actual guarantee
@@ -409,8 +427,11 @@ class AcquisitionPipeline:
 
     def _capture_phase(self, phase: str, n_frames: int) -> Optional[np.ndarray]:
         """
-        Capture n_frames and return their float64 average.
-        If a ROI is set, only the cropped region is accumulated.
+        Capture n_frames at full sensor resolution and return their
+        float64 average.  ROI cropping is NOT applied here — callers
+        receive a full-frame average so that multiple ROIs can be
+        extracted in post-processing.
+
         Periodically checkpoints the accumulator for crash recovery.
         """
         accumulator = None
@@ -431,11 +452,7 @@ class AcquisitionPipeline:
             if frame is None:
                 continue
 
-            # Apply ROI crop if set
-            data = frame.data
-            if self._roi is not None:
-                data = self._roi.crop(data)
-            data = data.astype(np.float64)
+            data = frame.data.astype(np.float64)
 
             if accumulator is None:
                 accumulator = data

@@ -45,7 +45,7 @@ class SampleViewerPlugin(ToolPanelPlugin):
         title.setStyleSheet(f"""
             font-size: {FONT.get('heading', 16)}px;
             font-weight: bold;
-            color: {PALETTE.get('text', '#e8ecf4')};
+            color: {PALETTE['text']};
         """)
         layout.addWidget(title)
 
@@ -55,7 +55,7 @@ class SampleViewerPlugin(ToolPanelPlugin):
             "Data is saved to the plugin's data directory."
         )
         desc.setWordWrap(True)
-        desc.setStyleSheet(f"color: {PALETTE.get('textDim', '#8892aa')};")
+        desc.setStyleSheet(f"color: {PALETTE['textDim']};")
         layout.addWidget(desc)
 
         # Text area
@@ -63,9 +63,9 @@ class SampleViewerPlugin(ToolPanelPlugin):
         self._editor.setPlaceholderText("Sample ID, material, thickness...")
         self._editor.setStyleSheet(f"""
             QTextEdit {{
-                background: {PALETTE.get('surface', '#1a1d28')};
-                color: {PALETTE.get('text', '#e8ecf4')};
-                border: 1px solid {PALETTE.get('border', '#2e3245')};
+                background: {PALETTE['surface']};
+                color: {PALETTE['text']};
+                border: 1px solid {PALETTE['border']};
                 border-radius: 4px;
                 padding: 8px;
             }}
@@ -79,15 +79,15 @@ class SampleViewerPlugin(ToolPanelPlugin):
         save_btn = QPushButton("Save Notes")
         save_btn.setStyleSheet(f"""
             QPushButton {{
-                background: {PALETTE.get('accent', '#5b7ff5')};
-                color: #ffffff;
+                background: {PALETTE['accent']};
+                color: {PALETTE['textOnAccent']};
                 border: none;
                 border-radius: 4px;
                 padding: 8px 20px;
                 font-weight: bold;
             }}
             QPushButton:hover {{
-                background: {PALETTE.get('accentHover', '#7b9aff')};
+                background: {PALETTE['accentHover']};
             }}
         """)
         save_btn.clicked.connect(self._save_notes)

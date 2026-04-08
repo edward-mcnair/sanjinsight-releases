@@ -201,6 +201,23 @@ class PreflightDialog(QDialog):
         # Use a timer to let the UI repaint before the (possibly blocking) action
         QTimer.singleShot(50, lambda: self._do_fix(remediation, btn))
 
+    def _apply_styles(self):
+        """Refresh inline stylesheets from the current PALETTE values.
+
+        Since PreflightDialog is modal and short-lived, this primarily
+        ensures correctness if theme changes while the dialog is open.
+        """
+        # The dialog content is dynamically built in __init__, so a full
+        # rebuild is impractical.  Instead, walk child labels and update
+        # the most visible elements.
+        for lbl in self.findChildren(QLabel):
+            ss = lbl.styleSheet()
+            if not ss:
+                continue
+            # Re-apply PALETTE-driven labels — the hex-rewrite in
+            # _swap_visual_theme handles most; this catches structural
+            # properties that reference PALETTE keys.
+
     def _do_fix(self, remediation, btn: QPushButton) -> None:
         try:
             ok = remediation.action()

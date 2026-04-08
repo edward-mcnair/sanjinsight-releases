@@ -233,6 +233,13 @@ class MovieTab(QWidget):
         self._save_btn.clicked.connect(self._save)
         lay.addWidget(self._save_btn)
 
+        self._export_video_btn = QPushButton("Export Video…")
+        set_btn_icon(self._export_video_btn, "mdi.filmstrip")
+        self._export_video_btn.setEnabled(False)
+        self._export_video_btn.setFixedHeight(30)
+        self._export_video_btn.clicked.connect(self._export_video)
+        lay.addWidget(self._export_video_btn)
+
         lay.addStretch()
         self._refresh_hw()
         return w
@@ -358,6 +365,7 @@ class MovieTab(QWidget):
         self._run_btn.setEnabled(False)
         self._abort_btn.setEnabled(True)
         self._save_btn.setEnabled(False)
+        self._export_video_btn.setEnabled(False)
         self._progress.setValue(0)
         self._status_lbl.setText("Starting…")
 
@@ -419,6 +427,7 @@ class MovieTab(QWidget):
         self._abort_btn.setEnabled(False)
         self._progress.setValue(100)
         self._save_btn.setEnabled(True)
+        self._export_video_btn.setEnabled(True)
 
         self._status_lbl.setText(
             f"Complete — {result.n_frames} frames @ {result.fps_achieved:.1f} fps")
@@ -497,6 +506,38 @@ class MovieTab(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "Save Error", str(e))
 
+    def _export_video(self):
+        """Export the frame cube or ΔR/R cube as an MP4/AVI video."""
+        if self._result is None:
+            return
+        cube = self._result.delta_r_cube
+        if cube is None:
+            cube = self._result.frame_cube
+        if cube is None:
+            QMessageBox.warning(self, "No Data", "No frame data to export.")
+            return
+
+        from acquisition.video_export import available_formats
+        exts = available_formats()
+        filt = ";;".join([f"{e.upper()[1:]} video (*{e})" for e in exts])
+        filt += ";;All files (*)"
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export Video",
+            f"movie_{int(time.time())}.mp4",
+            filt)
+        if not path:
+            return
+        try:
+            from acquisition.video_export import export_video
+            fps = self._result.fps_achieved if self._result.fps_achieved > 0 else 10.0
+            export_video(cube, path, fps=fps)
+            QMessageBox.information(self, "Exported",
+                                    f"Video exported to:\n{path}")
+        except ImportError as e:
+            QMessageBox.critical(self, "Missing Dependency", str(e))
+        except Exception as e:
+            QMessageBox.critical(self, "Export Error", str(e))
+
     # ---------------------------------------------------------------- #
     #  Hardware readiness refresh                                      #
     # ---------------------------------------------------------------- #
@@ -528,6 +569,23 @@ class MovieTab(QWidget):
     # ---------------------------------------------------------------- #
     #  Helpers                                                          #
     # ---------------------------------------------------------------- #
+
+    def _apply_styles(self):
+        """Refresh inline stylesheets from the current PALETTE values."""
+        mono_base = (f"font-family:{MONO_FONT}; "
+                     f"font-size:{FONT['caption']}pt; ")
+        for lbl in [self._hw_cam_lbl, self._hw_bias_lbl, self._hw_fpga_lbl]:
+            lbl.setStyleSheet(mono_base + f"color:{PALETTE['textDim']};")
+        self._status_lbl.setStyleSheet(
+            mono_base + f"color:{PALETTE['textDim']};")
+        self._img_lbl.setStyleSheet(
+            f"background:{PALETTE['canvas']}; border:1px solid {PALETTE['border']};")
+        # Refresh result stat readout colours
+        for val in self._stats.values():
+            val.setStyleSheet(
+                f"font-family:{MONO_FONT}; font-size:{FONT['readoutSm']}pt; "
+                f"color:{PALETTE['accent']};")
+        self._refresh_hw()
 
     def _sub(self, text: str) -> QLabel:
         l = QLabel(text)

@@ -141,11 +141,11 @@ class DeviceErrorBanner(QFrame):
         danger  = PALETTE.get("danger", "#ff4444")
         surface = PALETTE.get("surface", "#1e1e1e")
         bg      = PALETTE.get("bg", "#121212")
-        fg      = PALETTE.get("fg", "#e0e0e0")
-        muted   = PALETTE.get("muted", "#888888")
+        fg      = PALETTE.get("text", "#e0e0e0")
+        muted   = PALETTE.get("textDim", "#888888")
         accent  = PALETTE.get("accent", "#00d479")
-        base    = FONT.get("base", 11)
-        sm      = FONT.get("sm", 10)
+        base    = FONT.get("body", 11)
+        sm      = FONT.get("label", 10)
 
         # Frame: amber left border, dark surface background
         self.setStyleSheet(

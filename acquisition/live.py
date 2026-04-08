@@ -283,11 +283,15 @@ class LiveProcessor:
             time.sleep(cfg.trigger_delay_ms / 1000.0)
 
     def _grab_avg(self, n: int, cfg: LiveConfig) -> Optional[np.ndarray]:
-        """Grab N frames and return their float64 average, with optional ROI crop.
+        """Grab N full-frame images and return their float64 average.
 
-        If the frame shape changes mid-accumulation (e.g. because set_resolution()
-        was called on a simulated camera), the accumulator is restarted so we never
-        attempt to add arrays of incompatible shapes.
+        ROI cropping is NOT applied here — consumers apply ROI crops
+        from the shared RoiModel so multiple ROIs can be visualised
+        simultaneously.
+
+        If the frame shape changes mid-accumulation (e.g. because
+        set_resolution() was called on a simulated camera), the
+        accumulator is restarted.
         """
         if self._cam is None:
             return self._synthetic_frame(cfg)
@@ -299,11 +303,6 @@ class LiveProcessor:
             if frame is None:
                 continue
             data = frame.data.astype(np.float64)
-
-            # Apply ROI
-            if cfg.roi_w > 0 and cfg.roi_h > 0:
-                x, y, w, h = cfg.roi_x, cfg.roi_y, cfg.roi_w, cfg.roi_h
-                data = data[y:y+h, x:x+w]
 
             # Shape-change guard: restart accumulator if the resolution changed
             # mid-accumulation so we never add arrays of incompatible shapes.
@@ -319,9 +318,8 @@ class LiveProcessor:
         return (acc / count).astype(np.float64)
 
     def _synthetic_frame(self, cfg: LiveConfig) -> np.ndarray:
-        """Generate a synthetic camera frame for simulation."""
-        h, w = (cfg.roi_h if cfg.roi_h > 0 else 240,
-                 cfg.roi_w if cfg.roi_w > 0 else 320)
+        """Generate a synthetic full-frame camera image for simulation."""
+        h, w = 480, 640
         base = np.ones((h, w), np.float32) * 2000.0
         noise = np.random.randn(h, w).astype(np.float32) * 5.0
         return base + noise

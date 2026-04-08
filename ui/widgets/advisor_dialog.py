@@ -329,6 +329,33 @@ class AdvisorDialog(QDialog):
         card_lay.addLayout(text_col, 1)
         return card
 
+    def _apply_styles(self):
+        """Refresh inline stylesheets from the current PALETTE values."""
+        bg   = PALETTE['bg']
+        text = PALETTE['text']
+        sub  = PALETTE['textSub']
+        bdr  = PALETTE['border']
+        sur2 = PALETTE['surface2']
+        acc  = PALETTE['accent']
+        self.setStyleSheet(f"QDialog {{ background:{bg}; color:{text}; }}")
+        self._content.setStyleSheet(f"background:{bg};")
+        self._thinking_lbl.setStyleSheet(
+            f"font-size:{FONT['label']}pt; color:{PALETTE['systemIndigo']}; "
+            f"font-family:{MONO_FONT};")
+        self._cancel_btn.setStyleSheet(
+            f"QPushButton {{ background:{sur2}; color:{text}; "
+            f"border:1px solid {bdr}; border-radius:5px; "
+            f"font-size:{FONT['label']}pt; font-weight:600; padding:7px 20px; }}"
+            f"QPushButton:hover {{ background:{PALETTE['danger']}18; "
+            f"color:{PALETTE['danger']}; border-color:{PALETTE['danger']}66; }}")
+        self._proceed_btn.setStyleSheet(
+            f"QPushButton {{ background:{acc}; color:{PALETTE['textOnAccent']}; "
+            f"border:none; border-radius:5px; "
+            f"font-size:{FONT['label']}pt; font-weight:600; padding:7px 24px; }}"
+            f"QPushButton:hover {{ background:{acc}dd; }}"
+            f"QPushButton:disabled {{ background:{sur2}; color:{PALETTE['textDim']}; "
+            f"border:1px solid {bdr}; }}")
+
     def _on_cancel(self) -> None:
         """Cancel inference if still thinking, then close."""
         if self._is_thinking:

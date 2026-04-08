@@ -788,17 +788,20 @@ class _Sidebar(QWidget):
         _mode_map = {"guided": 0, "standard": 1, "expert": 2}
         self._logo_hdr._mode_pill.set_index(_mode_map.get(mode, 1))
 
-        for header in self._phase_headers:
+        for i, header in enumerate(self._phase_headers):
             if mode == "expert":
                 header.setVisible(False)
+                # Ensure phase containers are visible — they may have been
+                # hidden by a prior Guided-mode collapse.
+                if i < len(self._phase_containers):
+                    self._phase_containers[i].setVisible(True)
             else:
                 header.setVisible(True)
                 # In Guided mode, collapse non-active phases
                 if mode == "guided" and self._active:
                     active_in_phase = False
-                    idx = self._phase_headers.index(header)
-                    if idx < len(self._phase_containers):
-                        container = self._phase_containers[idx]
+                    if i < len(self._phase_containers):
+                        container = self._phase_containers[i]
                         for mi in self._items:
                             if mi.parent() is container and mi._active:
                                 active_in_phase = True

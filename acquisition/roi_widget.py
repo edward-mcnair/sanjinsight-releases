@@ -1,42 +1,53 @@
 """
 acquisition/roi_widget.py
 
-RoiSelector — a QWidget that displays a camera frame and lets the user
-draw a rectangular ROI by click-dragging on the image.
+Multi-ROI selector — displays a camera frame and lets the user draw
+multiple rectangular ROIs by click-dragging on the image.
 
 Features:
-    - Click-drag to draw a new ROI
-    - Displays ROI dimensions as you drag
-    - "Clear ROI" button resets to full frame
-    - Emits roi_changed(Roi) signal whenever the ROI updates
-    - Overlays the ROI rectangle on the live image
-    - Optionally shows a semi-transparent mask outside the ROI
+    - Click-drag on empty space to draw a new ROI
+    - Click on an existing ROI to select (activate) it
+    - Each ROI rendered in its own colour (from ROI_COLORS)
+    - Active ROI has thicker border + corner handles
+    - Semi-transparent mask outside all ROIs
+    - Emits signals via the shared RoiModel
 
 Usage:
-    selector = RoiSelector()
-    selector.roi_changed.connect(my_callback)
-    selector.set_frame(frame.data)         # update displayed image
-    current_roi = selector.roi             # read current ROI
+    from acquisition.roi_widget import MultiRoiSelector
+    selector = MultiRoiSelector()
+    selector.set_frame(frame.data)
 """
+
+from __future__ import annotations
 
 import numpy as np
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout,
-                              QPushButton, QLabel, QSizePolicy)
-from PyQt5.QtCore    import Qt, pyqtSignal, QPoint, QRect
+                              QPushButton, QLabel, QSizePolicy,
+                              QListWidget, QListWidgetItem, QAbstractItemView)
+from PyQt5.QtCore    import Qt, pyqtSignal, QPoint, QRect, QSize
 from PyQt5.QtGui     import (QImage, QPixmap, QPainter, QPen, QColor,
                               QBrush, QFont, QCursor)
 
-from .roi import Roi
+from .roi       import Roi
+from .roi_model import roi_model
 from ui.icons        import set_btn_icon
 from ui.font_utils   import mono_font
 from ui.theme import FONT, PALETTE, scaled_qss, MONO_FONT
 
 
-class RoiCanvas(QWidget):
+# ────────────────────────────────────────────────────────────────────
+#  Canvas — image display + multi-ROI overlay + drawing
+# ────────────────────────────────────────────────────────────────────
+
+class MultiRoiCanvas(QWidget):
     """
-    Inner widget — shows the image and handles mouse drawing.
+    Drawing surface that renders the camera frame with all ROIs overlaid.
+    Subscribes to the shared ``roi_model`` for data.
     """
-    roi_changed = pyqtSignal(object)   # Roi
+    # Emitted when the user finishes drawing a new ROI on the canvas
+    roi_drawn = pyqtSignal(object)   # Roi
+
+    _HIT_MARGIN = 8   # pixels tolerance for click-to-select
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -46,31 +57,22 @@ class RoiCanvas(QWidget):
         self.setMinimumSize(320, 240)
 
         self._pixmap     = None
-        self._frame_hw   = (1, 1)      # (H, W) of the source frame
-        self._roi        = Roi()       # current confirmed ROI
-        self._drag_start = None        # QPoint in widget coords
-        self._drag_end   = None        # QPoint in widget coords
+        self._frame_hw   = (1, 1)
+        self._drag_start = None
+        self._drag_end   = None
         self._dragging   = False
         self._show_mask  = True
 
-    # ---------------------------------------------------------------- #
-    #  Public API                                                       #
-    # ---------------------------------------------------------------- #
+        # Repaint when model changes
+        roi_model.rois_changed.connect(self.update)
+        roi_model.active_changed.connect(lambda _: self.update())
 
-    @property
-    def roi(self) -> Roi:
-        return self._roi
-
-    def set_roi(self, roi: Roi):
-        self._roi = roi
-        self.update()
-        self.roi_changed.emit(roi)
+    # ── public ───────────────────────────────────────────────────────
 
     def set_frame(self, data: np.ndarray):
         """Update displayed frame (uint16 or uint8, 2D or 3D)."""
         self._frame_hw = data.shape[:2]
 
-        # Convert to uint8 for display
         if data.dtype != np.uint8:
             d = data.astype(np.float32)
             lo, hi = np.percentile(d, (1, 99))
@@ -88,53 +90,41 @@ class RoiCanvas(QWidget):
         self._pixmap = QPixmap.fromImage(qi)
         self.update()
 
-    def clear_roi(self):
-        self._roi      = Roi()
-        self._dragging = False
-        self.update()
-        self.roi_changed.emit(self._roi)
-
-    # ---------------------------------------------------------------- #
-    #  Coordinate transforms                                           #
-    # ---------------------------------------------------------------- #
+    # ── coordinate transforms ────────────────────────────────────────
 
     def _image_rect(self) -> QRect:
-        """QRect of the scaled image within the widget."""
         if self._pixmap is None:
             return QRect(0, 0, self.width(), self.height())
-        pw = self._pixmap.width()
-        ph = self._pixmap.height()
-        ww = self.width()
-        wh = self.height()
+        pw, ph = self._pixmap.width(), self._pixmap.height()
+        ww, wh = self.width(), self.height()
         scale = min(ww / pw, wh / ph)
-        iw = int(pw * scale)
-        ih = int(ph * scale)
-        ox = (ww - iw) // 2
-        oy = (wh - ih) // 2
-        return QRect(ox, oy, iw, ih)
+        iw, ih = int(pw * scale), int(ph * scale)
+        return QRect((ww - iw) // 2, (wh - ih) // 2, iw, ih)
 
     def _widget_to_frame(self, pt: QPoint) -> QPoint:
-        """Convert widget pixel → frame pixel."""
         r  = self._image_rect()
         fh, fw = self._frame_hw
         if r.width() == 0 or r.height() == 0:
             return QPoint(0, 0)
-        fx = int((pt.x() - r.x()) / r.width()  * fw)
-        fy = int((pt.y() - r.y()) / r.height() * fh)
-        fx = max(0, min(fx, fw - 1))
-        fy = max(0, min(fy, fh - 1))
+        fx = max(0, min(int((pt.x() - r.x()) / r.width()  * fw), fw - 1))
+        fy = max(0, min(int((pt.y() - r.y()) / r.height() * fh), fh - 1))
         return QPoint(fx, fy)
 
     def _frame_to_widget(self, pt: QPoint) -> QPoint:
-        """Convert frame pixel → widget pixel."""
         r  = self._image_rect()
         fh, fw = self._frame_hw
         wx = int(r.x() + pt.x() / fw * r.width())
         wy = int(r.y() + pt.y() / fh * r.height())
         return QPoint(wx, wy)
 
+    def _roi_to_widget_rect(self, roi: Roi) -> QRect:
+        fh, fw = self._frame_hw
+        clamped = roi.clamp(fh, fw)
+        tl = self._frame_to_widget(QPoint(clamped.x,  clamped.y))
+        br = self._frame_to_widget(QPoint(clamped.x2, clamped.y2))
+        return QRect(tl, br)
+
     def _drag_to_roi(self) -> Roi:
-        """Convert current drag points to a frame-space Roi."""
         if self._drag_start is None or self._drag_end is None:
             return Roi()
         p1 = self._widget_to_frame(self._drag_start)
@@ -145,12 +135,29 @@ class RoiCanvas(QWidget):
         h  = abs(p2.y() - p1.y())
         return Roi(x=x, y=y, w=w, h=h)
 
-    # ---------------------------------------------------------------- #
-    #  Mouse events                                                     #
-    # ---------------------------------------------------------------- #
+    # ── hit testing ──────────────────────────────────────────────────
+
+    def _hit_test(self, pos: QPoint) -> str | None:
+        """Return uid of ROI under *pos*, or None."""
+        # Check in reverse (top-most drawn last)
+        for roi in reversed(roi_model.rois):
+            wr = self._roi_to_widget_rect(roi)
+            inflated = wr.adjusted(
+                -self._HIT_MARGIN, -self._HIT_MARGIN,
+                self._HIT_MARGIN, self._HIT_MARGIN)
+            if inflated.contains(pos):
+                return roi.uid
+        return None
+
+    # ── mouse events ─────────────────────────────────────────────────
 
     def mousePressEvent(self, e):
-        if e.button() == Qt.LeftButton:
+        if e.button() != Qt.LeftButton:
+            return
+        hit_uid = self._hit_test(e.pos())
+        if hit_uid:
+            roi_model.set_active(hit_uid)
+        else:
             self._drag_start = e.pos()
             self._drag_end   = e.pos()
             self._dragging   = True
@@ -165,16 +172,13 @@ class RoiCanvas(QWidget):
             self._drag_end = e.pos()
             self._dragging = False
             new_roi = self._drag_to_roi()
-            if new_roi.area > 100:        # ignore tiny accidental clicks
-                self._roi = new_roi
-                self.roi_changed.emit(self._roi)
+            if new_roi.area > 100:
+                self.roi_drawn.emit(new_roi)
             self._drag_start = None
             self._drag_end   = None
             self.update()
 
-    # ---------------------------------------------------------------- #
-    #  Paint                                                            #
-    # ---------------------------------------------------------------- #
+    # ── paint ────────────────────────────────────────────────────────
 
     def paintEvent(self, e):
         p = QPainter(self)
@@ -184,52 +188,72 @@ class RoiCanvas(QWidget):
         p.fillRect(self.rect(), QColor(PALETTE['canvas']))
 
         # Image
-        if self._pixmap:
-            r = self._image_rect()
-            p.drawPixmap(r, self._pixmap)
+        if not self._pixmap:
+            p.end()
+            return
+        ir = self._image_rect()
+        p.drawPixmap(ir, self._pixmap)
 
-            # Semi-transparent mask outside confirmed ROI
-            if self._show_mask and not self._roi.is_empty:
-                fh, fw = self._frame_hw
-                roi    = self._roi.clamp(fh, fw)
-                r1 = self._frame_to_widget(QPoint(roi.x,  roi.y))
-                r2 = self._frame_to_widget(QPoint(roi.x2, roi.y2))
-                roi_rect = QRect(r1, r2)
+        rois = roi_model.rois
+        active_uid = roi_model.active_uid
 
-                p.setBrush(QBrush(QColor(0, 0, 0, 120)))
-                p.setPen(Qt.NoPen)
-                ir = self._image_rect()
-                # Draw 4 darkened rectangles around the ROI
-                p.drawRect(QRect(ir.x(), ir.y(),
-                                 ir.width(), roi_rect.y() - ir.y()))
-                p.drawRect(QRect(ir.x(), roi_rect.bottom(),
-                                 ir.width(), ir.bottom() - roi_rect.bottom()))
-                p.drawRect(QRect(ir.x(), roi_rect.y(),
-                                 roi_rect.x() - ir.x(), roi_rect.height()))
-                p.drawRect(QRect(roi_rect.right(), roi_rect.y(),
-                                 ir.right() - roi_rect.right(), roi_rect.height()))
+        # Semi-transparent mask outside ALL ROIs (combined)
+        if self._show_mask and rois:
+            mask_color = QColor(0, 0, 0, 100)
+            # Build list of widget rects for all ROIs
+            roi_rects = [self._roi_to_widget_rect(r) for r in rois
+                         if not r.is_empty]
+            if roi_rects:
+                # Simple approach: draw semi-transparent overlay over the
+                # whole image, then clear (punch out) each ROI rect
+                p.save()
+                p.setClipRect(ir)
+                p.setCompositionMode(QPainter.CompositionMode_SourceOver)
+                overlay = QPixmap(ir.size())
+                overlay.fill(Qt.transparent)
+                op = QPainter(overlay)
+                op.fillRect(overlay.rect(), mask_color)
+                op.setCompositionMode(QPainter.CompositionMode_Clear)
+                for wr in roi_rects:
+                    local = wr.translated(-ir.topLeft())
+                    op.fillRect(local, Qt.transparent)
+                op.end()
+                p.drawPixmap(ir.topLeft(), overlay)
+                p.restore()
 
-                # ROI border
-                p.setBrush(Qt.NoBrush)
-                p.setPen(QPen(QColor(PALETTE['accent']), 2))
-                p.drawRect(roi_rect)
+        # Draw each ROI rectangle
+        for roi in rois:
+            if roi.is_empty:
+                continue
+            wr = self._roi_to_widget_rect(roi)
+            color = QColor(roi.color) if roi.color else QColor(PALETTE['accent'])
+            is_active = (roi.uid == active_uid)
 
-                # Corner handles
-                hs = 6
-                p.setBrush(QBrush(QColor(PALETTE['accent'])))
-                for cx, cy in [(roi_rect.x(), roi_rect.y()),
-                               (roi_rect.right(), roi_rect.y()),
-                               (roi_rect.x(), roi_rect.bottom()),
-                               (roi_rect.right(), roi_rect.bottom())]:
-                    p.drawRect(cx - hs//2, cy - hs//2, hs, hs)
+            # Border
+            p.setBrush(Qt.NoBrush)
+            pen_width = 3 if is_active else 1
+            p.setPen(QPen(color, pen_width))
+            p.drawRect(wr)
+
+            # Corner handles (active ROI only)
+            if is_active:
+                hs = 7
+                p.setBrush(QBrush(color))
+                for cx, cy in [(wr.x(), wr.y()),
+                               (wr.right(), wr.y()),
+                               (wr.x(), wr.bottom()),
+                               (wr.right(), wr.bottom())]:
+                    p.drawRect(cx - hs // 2, cy - hs // 2, hs, hs)
+
+            # Label
+            if roi.label:
+                p.setFont(mono_font(8))
+                p.setPen(QPen(color))
+                p.drawText(wr.x() + 3, wr.y() - 4, roi.label)
 
         # Live drag rectangle
         if self._dragging and self._drag_start and self._drag_end:
             drag_roi = self._drag_to_roi()
-            p1 = self._frame_to_widget(
-                QPoint(drag_roi.x, drag_roi.y))
-            p2 = self._frame_to_widget(
-                QPoint(drag_roi.x2, drag_roi.y2))
             drag_rect = QRect(
                 self._drag_start.x(), self._drag_start.y(),
                 self._drag_end.x() - self._drag_start.x(),
@@ -239,9 +263,8 @@ class RoiCanvas(QWidget):
             p.setPen(QPen(QColor(PALETTE['warning']), 1, Qt.DashLine))
             p.drawRect(drag_rect)
 
-            # Dimension label
             if not drag_roi.is_empty:
-                label = f"{drag_roi.w} × {drag_roi.h} px"
+                label = f"{drag_roi.w} \u00d7 {drag_roi.h} px"
                 p.setFont(mono_font(8))
                 p.setPen(QPen(QColor(PALETTE['warning'])))
                 p.drawText(
@@ -252,15 +275,74 @@ class RoiCanvas(QWidget):
         p.end()
 
     def _apply_styles(self):
-        """Re-apply PALETTE-driven colours on theme switch."""
         self.update()
 
 
-class RoiSelector(QWidget):
+# ────────────────────────────────────────────────────────────────────
+#  ROI list widget — shows all ROIs with colour swatches
+# ────────────────────────────────────────────────────────────────────
+
+class _RoiListWidget(QListWidget):
+    """Compact list of ROIs with colour indicators."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setMaximumHeight(160)
+        self.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.setStyleSheet(scaled_qss(
+            f"QListWidget {{ background:{PALETTE['surface']}; "
+            f"border:1px solid {PALETTE['border']}; "
+            f"color:{PALETTE['text']}; font-size:9pt; }}"
+            f"QListWidget::item:selected {{ background:{PALETTE['accent']}22; }}"))
+        self.currentRowChanged.connect(self._on_row)
+        roi_model.rois_changed.connect(self._refresh)
+        roi_model.active_changed.connect(lambda _: self._sync_selection())
+
+    def _refresh(self):
+        self.blockSignals(True)
+        self.clear()
+        for roi in roi_model.rois:
+            txt = f"  {roi.label}  ({roi.w}\u00d7{roi.h})"
+            item = QListWidgetItem(txt)
+            item.setData(Qt.UserRole, roi.uid)
+            if roi.color:
+                item.setForeground(QColor(roi.color))
+            self.addItem(item)
+        self._sync_selection()
+        self.blockSignals(False)
+
+    def _sync_selection(self):
+        uid = roi_model.active_uid
+        for i in range(self.count()):
+            if self.item(i).data(Qt.UserRole) == uid:
+                self.blockSignals(True)
+                self.setCurrentRow(i)
+                self.blockSignals(False)
+                return
+
+    def _on_row(self, row: int):
+        if 0 <= row < self.count():
+            uid = self.item(row).data(Qt.UserRole)
+            roi_model.set_active(uid)
+
+    def _apply_styles(self):
+        self.setStyleSheet(scaled_qss(
+            f"QListWidget {{ background:{PALETTE['surface']}; "
+            f"border:1px solid {PALETTE['border']}; "
+            f"color:{PALETTE['text']}; font-size:9pt; }}"
+            f"QListWidget::item:selected {{ background:{PALETTE['accent']}22; }}"))
+        self._refresh()
+
+
+# ────────────────────────────────────────────────────────────────────
+#  MultiRoiSelector — canvas + list + controls
+# ────────────────────────────────────────────────────────────────────
+
+class MultiRoiSelector(QWidget):
     """
-    Full ROI selector panel: canvas + info bar + controls.
+    Full multi-ROI selector panel: canvas, ROI list, and control buttons.
+    Operates on the shared ``roi_model`` singleton.
     """
-    roi_changed = pyqtSignal(object)   # Roi
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -269,15 +351,200 @@ class RoiSelector(QWidget):
         root.setSpacing(4)
 
         # Canvas
+        self._canvas = MultiRoiCanvas()
+        self._canvas.roi_drawn.connect(self._on_new_roi)
+        root.addWidget(self._canvas, stretch=1)
+
+        # Info label (active ROI details)
+        self._info = QLabel("No ROIs defined — full frame")
+        self._info.setStyleSheet(
+            scaled_qss(f"font-family:{MONO_FONT}; font-size:9pt; "
+                        f"color:{PALETTE['textDim']};"))
+        root.addWidget(self._info)
+
+        # ROI list
+        self._list = _RoiListWidget()
+        root.addWidget(self._list)
+
+        # Button bar
+        bar = QHBoxLayout()
+        bar.setSpacing(6)
+
+        self._remove_btn = QPushButton("Remove")
+        set_btn_icon(self._remove_btn, "fa5s.trash")
+        self._remove_btn.setFixedWidth(90)
+        self._remove_btn.clicked.connect(self._remove_active)
+        bar.addWidget(self._remove_btn)
+
+        self._clear_btn = QPushButton("Clear All")
+        set_btn_icon(self._clear_btn, "fa5s.times")
+        self._clear_btn.setFixedWidth(90)
+        self._clear_btn.clicked.connect(roi_model.clear)
+        bar.addWidget(self._clear_btn)
+
+        bar.addStretch()
+
+        self._count_label = QLabel("")
+        self._count_label.setStyleSheet(
+            scaled_qss(f"font-size:8pt; color:{PALETTE['textDim']};"))
+        bar.addWidget(self._count_label)
+
+        root.addLayout(bar)
+
+        # Wire model signals
+        roi_model.rois_changed.connect(self._update_info)
+        roi_model.active_changed.connect(lambda _: self._update_info())
+        self._update_info()
+
+    # ── public ───────────────────────────────────────────────────────
+
+    def set_frame(self, data: np.ndarray):
+        self._canvas.set_frame(data)
+
+    # ── slots ────────────────────────────────────────────────────────
+
+    def _on_new_roi(self, roi: Roi):
+        roi_model.add(roi)
+
+    def _remove_active(self):
+        uid = roi_model.active_uid
+        if uid:
+            roi_model.remove(uid)
+
+    def _update_info(self):
+        active = roi_model.active_roi
+        count = roi_model.count
+        if active and not active.is_empty:
+            self._info.setText(
+                f"{active.label}  x={active.x}  y={active.y}  "
+                f"w={active.w}  h={active.h}  ({active.area:,} px)")
+        elif count == 0:
+            self._info.setText("No ROIs defined \u2014 full frame")
+        else:
+            self._info.setText(f"{count} ROI(s) defined")
+        self._count_label.setText(f"{count}/16 ROIs" if count else "")
+        self._remove_btn.setEnabled(count > 0)
+        self._clear_btn.setEnabled(count > 0)
+
+    def _apply_styles(self):
+        self._canvas._apply_styles()
+        self._list._apply_styles()
+        self._info.setStyleSheet(
+            scaled_qss(f"font-family:{MONO_FONT}; font-size:9pt; "
+                        f"color:{PALETTE['textDim']};"))
+        self._count_label.setStyleSheet(
+            scaled_qss(f"font-size:8pt; color:{PALETTE['textDim']};"))
+
+
+# ────────────────────────────────────────────────────────────────────
+#  Lightweight overlay — for embedding in non-ROI tabs
+# ────────────────────────────────────────────────────────────────────
+
+class RoiOverlay(QWidget):
+    """
+    Transparent overlay that draws ROI rectangles on top of any image
+    widget.  Install over a QLabel or similar using a stacked layout.
+
+    Does NOT handle mouse events — read-only visualisation.
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.setAttribute(Qt.WA_NoSystemBackground)
+        self._frame_hw = (1, 1)
+
+        roi_model.rois_changed.connect(self.update)
+        roi_model.active_changed.connect(lambda _: self.update())
+
+    def set_frame_size(self, h: int, w: int):
+        self._frame_hw = (h, w)
+        self.update()
+
+    def paintEvent(self, e):
+        if not roi_model.rois:
+            return
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing, False)
+        fh, fw = self._frame_hw
+        ww, wh = self.width(), self.height()
+        sx = ww / fw if fw else 1
+        sy = wh / fh if fh else 1
+
+        for roi in roi_model.rois:
+            if roi.is_empty:
+                continue
+            color = QColor(roi.color) if roi.color else QColor(PALETTE['accent'])
+            is_active = (roi.uid == roi_model.active_uid)
+            pen_width = 2 if is_active else 1
+            p.setPen(QPen(color, pen_width))
+            p.setBrush(Qt.NoBrush)
+            rx = int(roi.x * sx)
+            ry = int(roi.y * sy)
+            rw = int(roi.w * sx)
+            rh = int(roi.h * sy)
+            p.drawRect(rx, ry, rw, rh)
+
+            if roi.label and is_active:
+                p.setFont(mono_font(7))
+                p.drawText(rx + 2, ry - 3, roi.label)
+
+        p.end()
+
+    def _apply_styles(self):
+        self.update()
+
+
+# ────────────────────────────────────────────────────────────────────
+#  Backward-compatible aliases
+# ────────────────────────────────────────────────────────────────────
+
+# Legacy single-ROI classes — thin wrappers so existing imports don't break
+class RoiCanvas(MultiRoiCanvas):
+    """Backward-compatible alias for MultiRoiCanvas."""
+    roi_changed = pyqtSignal(object)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        roi_model.rois_changed.connect(self._emit_compat)
+
+    @property
+    def roi(self) -> Roi:
+        return roi_model.active_roi or Roi()
+
+    def set_roi(self, roi: Roi):
+        roi_model.clear()
+        if not roi.is_empty:
+            roi_model.add(roi)
+        self.roi_changed.emit(roi)
+
+    def clear_roi(self):
+        roi_model.clear()
+        self.roi_changed.emit(Roi())
+
+    def _emit_compat(self):
+        self.roi_changed.emit(roi_model.active_roi or Roi())
+
+
+class RoiSelector(QWidget):
+    """Backward-compatible single-ROI selector."""
+    roi_changed = pyqtSignal(object)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(4)
+
         self._canvas = RoiCanvas()
         self._canvas.roi_changed.connect(self._on_roi)
         root.addWidget(self._canvas)
 
-        # Info bar
         bar = QHBoxLayout()
-        self._info = QLabel("No ROI — full frame")
+        self._info = QLabel("No ROI \u2014 full frame")
         self._info.setStyleSheet(
-            scaled_qss(f"font-family:{MONO_FONT}; font-size:9pt; color:{PALETTE['textDim']};"))
+            scaled_qss(f"font-family:{MONO_FONT}; font-size:9pt; "
+                        f"color:{PALETTE['textDim']};"))
         bar.addWidget(self._info)
         bar.addStretch()
 
@@ -296,14 +563,14 @@ class RoiSelector(QWidget):
         self._canvas.set_frame(data)
 
     def _apply_styles(self):
-        """Re-apply PALETTE-driven colours on theme switch."""
         self._canvas._apply_styles()
         self._info.setStyleSheet(
-            scaled_qss(f"font-family:{MONO_FONT}; font-size:9pt; color:{PALETTE['textDim']};"))
+            scaled_qss(f"font-family:{MONO_FONT}; font-size:9pt; "
+                        f"color:{PALETTE['textDim']};"))
 
     def _on_roi(self, roi: Roi):
         if roi.is_empty:
-            self._info.setText("No ROI — full frame")
+            self._info.setText("No ROI \u2014 full frame")
         else:
             self._info.setText(
                 f"ROI  x={roi.x}  y={roi.y}  "
