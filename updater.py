@@ -5,15 +5,16 @@ How it works
 ------------
 1. On app startup (if auto-check is enabled in preferences), UpdateChecker
    runs on a background thread and hits the GitHub Releases API.
-2. If a newer version is available it emits update_available(info) where
-   info is an UpdateInfo dataclass with version, release notes, download URL.
+2. It parses ALL candidate releases from the API, selects the highest
+   valid version that is newer than the running build, and emits
+   update_available(info).
 3. The UI connects to this signal and shows a badge + optional dialog.
 4. Nothing is downloaded or installed automatically — the user is always
    in control.
 
 GitHub API endpoint used:
-    GET https://api.github.com/repos/edward-mcnair/sanjinsight-releases/releases/latest
-    Returns JSON with tag_name, body (markdown release notes), assets[].browser_download_url
+    GET https://api.github.com/repos/edward-mcnair/sanjinsight-releases/releases
+    Returns JSON array of releases with tag_name, body, assets[].browser_download_url
 
 Release workflow
 ----------------
@@ -38,12 +39,12 @@ import threading
 import time
 import urllib.request
 import urllib.error
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional, Callable
 
 from version import (
     UPDATE_CHECK_URL, UPDATE_CHECK_ALL_URL, RELEASES_PAGE_URL,
-    is_newer, parse_version, __version__, PRERELEASE,
+    INSTALLER_PATTERN, SemVer, CURRENT_VERSION, is_newer, __version__,
 )
 
 log = logging.getLogger(__name__)
@@ -87,11 +88,12 @@ def _ssl_context() -> ssl.SSLContext:
 @dataclass
 class UpdateInfo:
     """All information about an available update."""
-    version:        str            # e.g. "1.2.0"
+    version:        str            # e.g. "0.43.0-beta.2"
     release_notes:  str            # Markdown text from GitHub release body
     download_url:   str            # Direct .exe URL, or releases page URL
     release_url:    str            # GitHub release HTML page
     is_prerelease:  bool = False
+    asset_name:     str  = ""      # matched asset filename (empty = fallback)
 
 
 class UpdateChecker:
@@ -113,14 +115,16 @@ class UpdateChecker:
         include_prerelease: bool = False,
     ):
         self._on_update    = on_update
-        self._on_error     = on_error or (lambda msg: log.debug(f"Update check: {msg}"))
+        self._on_error     = on_error or (lambda msg: log.debug("Update check: %s", msg))
         self._on_no_update = on_no_update or (lambda: None)
         # When True, checks ALL releases (including pre-releases).
         # When False, uses /releases/latest which skips pre-releases.
-        # Users on a beta channel should always set this to True so they
-        # see newer betas.  If the current build is itself a pre-release
-        # we also force this on so the user isn't stuck on an old beta.
-        self._include_pre  = include_prerelease or bool(PRERELEASE)
+        # If the current build is itself a pre-release, we force this on
+        # so the user isn't stuck on an old beta.
+        self._include_pre  = include_prerelease or CURRENT_VERSION.is_prerelease
+        # Set to True after a successful API response — used by the
+        # caller to decide whether to record the check date.
+        self.api_succeeded = False
 
     def check_async(self, delay_s: float = 0) -> None:
         """Fire-and-forget background check. Optional startup delay."""
@@ -141,14 +145,20 @@ class UpdateChecker:
     def _run(self, delay_s: float) -> None:
         if delay_s:
             time.sleep(delay_s)
-        self._fetch()   # callbacks (_on_update / _on_no_update / _on_error) fired inside
+        self._fetch()
 
     def _fetch(self) -> Optional[UpdateInfo]:
+        log.info("─── Update check started ───")
+        log.info("  Running version:    %s", __version__)
+        log.info("  Parsed as:          %r", CURRENT_VERSION)
+        log.info("  include_prerelease: %s", self._include_pre)
+
         try:
             # Choose endpoint: /releases/latest (stable only) or
-            # /releases?per_page=5 (includes pre-releases).
+            # /releases?per_page=10 (includes pre-releases).
             url = UPDATE_CHECK_ALL_URL if self._include_pre else UPDATE_CHECK_URL
-            log.info("Update check: include_pre=%s, url=%s", self._include_pre, url)
+            log.info("  API endpoint:       %s", url)
+
             req = urllib.request.Request(
                 url,
                 headers={
@@ -156,84 +166,118 @@ class UpdateChecker:
                     "User-Agent": f"SanjINSIGHT/{__version__}",
                 })
             ctx = _ssl_context()
-            with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
+            with urllib.request.urlopen(req, timeout=15, context=ctx) as resp:
                 raw = json.loads(resp.read().decode("utf-8"))
-            log.info("Update check: got %s release(s)",
+
+            self.api_succeeded = True
+            log.info("  API response OK — got %s release(s)",
                      len(raw) if isinstance(raw, list) else 1)
 
             # /releases returns a list; /releases/latest returns a single object.
-            # Normalise to a single release dict — pick the newest that is
-            # newer than the running version.
-            if isinstance(raw, list):
-                data = self._pick_best(raw)
-                if data is None:
-                    log.debug("Up to date — no newer release in list "
-                              f"(running {__version__})")
-                    self._on_no_update()
-                    return None
-            else:
-                data = raw
+            # Normalise to a list.
+            releases = raw if isinstance(raw, list) else [raw]
 
-            remote_version = data.get("tag_name", "").lstrip("v")
-            if not remote_version:
-                self._on_error("Unexpected API response — no tag_name")
-                return None
+            # ── Deterministic release selection ──────────────────────
+            # Parse ALL candidates, pick the highest version that is
+            # newer than the running build.
+            best_data = None
+            best_ver  = CURRENT_VERSION
 
-            if not is_newer(remote_version):
-                log.debug(f"Up to date (running {__version__}, "
-                          f"latest {remote_version})")
+            for rel in releases:
+                if rel.get("draft", False):
+                    log.debug("  [skip] draft release")
+                    continue
+
+                tag = rel.get("tag_name", "").lstrip("v")
+                if not tag:
+                    log.debug("  [skip] release with no tag_name")
+                    continue
+
+                sv = SemVer.parse(tag)
+                if sv.numeric_tuple == (0, 0, 0):
+                    log.debug("  [skip] unparseable tag: %r", tag)
+                    continue
+
+                # Filter prereleases if user opted out AND running
+                # build is not itself a prerelease.
+                if sv.is_prerelease and not self._include_pre:
+                    log.debug("  [skip] prerelease %s (user opted out)", tag)
+                    continue
+
+                if sv > best_ver:
+                    log.info("  [candidate] %s (newer than %s)", tag, best_ver)
+                    best_data = rel
+                    best_ver  = sv
+                else:
+                    log.debug("  [skip] %s (not newer than %s)", tag, best_ver)
+
+            if best_data is None:
+                log.info("  Result: up to date (running %s)", __version__)
                 self._on_no_update()
                 return None
 
-            # Find Windows installer asset
-            assets       = data.get("assets", [])
-            download_url = RELEASES_PAGE_URL   # fallback to releases page
-            for asset in assets:
+            remote_version = best_data.get("tag_name", "").lstrip("v")
+            log.info("  Selected release: %s", remote_version)
+
+            # ── Tight asset matching ─────────────────────────────────
+            download_url = RELEASES_PAGE_URL   # fallback
+            asset_name   = ""
+
+            # Build the exact expected filename for this version
+            expected_name = f"SanjINSIGHT-Setup-{remote_version}.exe"
+
+            for asset in best_data.get("assets", []):
                 name = asset.get("name", "")
-                if name.lower().endswith(".exe") and "setup" in name.lower():
-                    download_url = asset.get("browser_download_url",
-                                             download_url)
+                aurl = asset.get("browser_download_url", "")
+
+                # Prefer exact version match
+                if name == expected_name:
+                    download_url = aurl
+                    asset_name   = name
+                    log.info("  Asset exact match: %s", name)
                     break
+
+                # Fall back to pattern match (handles minor naming variations)
+                if not asset_name and INSTALLER_PATTERN.match(name):
+                    download_url = aurl
+                    asset_name   = name
+                    log.info("  Asset pattern match: %s", name)
+
+            if not asset_name:
+                log.warning("  No matching installer asset found in release %s "
+                            "— falling back to release page URL: %s",
+                            remote_version, RELEASES_PAGE_URL)
 
             info = UpdateInfo(
                 version       = remote_version,
-                release_notes = data.get("body",
-                                         "_No release notes provided._"),
+                release_notes = best_data.get("body",
+                                              "_No release notes provided._"),
                 download_url  = download_url,
-                release_url   = data.get("html_url", RELEASES_PAGE_URL),
-                is_prerelease = data.get("prerelease", False),
+                release_url   = best_data.get("html_url", RELEASES_PAGE_URL),
+                is_prerelease = best_data.get("prerelease", False),
+                asset_name    = asset_name,
             )
-            log.info(f"Update available: v{remote_version} "
-                     f"(running v{__version__})")
+            log.info("  Update available: v%s (download: %s)",
+                     remote_version, download_url)
+            log.info("─── Update check complete ───")
+
             try:
                 self._on_update(info)
             except Exception as e:
-                log.warning(f"Update callback error: {e}")
+                log.warning("Update callback error: %s", e)
             return info
 
         except urllib.error.URLError as e:
+            log.warning("Update check failed — network error: %s", e.reason)
             self._on_error(f"Network error: {e.reason}")
         except json.JSONDecodeError as e:
+            log.warning("Update check failed — malformed API response: %s", e)
             self._on_error(f"Malformed API response: {e}")
         except Exception as e:
+            log.warning("Update check failed — unexpected error: %s", e)
             self._on_error(f"Unexpected error: {e}")
-        return None
 
-    def _pick_best(self, releases: list) -> Optional[dict]:
-        """From a list of GitHub releases, return the newest that is newer
-        than the running version, respecting the prerelease preference."""
-        for rel in releases:
-            if rel.get("draft", False):
-                continue
-            tag = rel.get("tag_name", "").lstrip("v")
-            if not tag:
-                continue
-            # If user opted out of pre-releases, skip them — unless the
-            # running build is itself a pre-release (always show upgrades).
-            if rel.get("prerelease", False) and not self._include_pre:
-                continue
-            if is_newer(tag):
-                return rel
+        log.info("─── Update check complete (failed) ───")
         return None
 
 
@@ -254,9 +298,13 @@ def get_check_frequency(prefs) -> str:
 def should_check_now(prefs) -> bool:
     """
     Combines auto_check + frequency to decide if a check is due.
-    'always'  → check every launch
-    'daily'   → check once per calendar day
-    'weekly'  → check once per week
+    'always'  -> check every launch
+    'daily'   -> check once per calendar day
+    'weekly'  -> check once per week
+
+    NOTE: This only decides whether to START a check.  The check date
+    is NOT recorded here — it is recorded AFTER a successful API response
+    (see main_app.py _start_update_checker).
     """
     import datetime
     if not should_check_on_startup(prefs):
@@ -285,7 +333,12 @@ def should_check_now(prefs) -> bool:
 
 
 def record_check_date(prefs) -> None:
-    """Save today's date so frequency logic knows when the last check was."""
+    """Save today's date so frequency logic knows when the last check was.
+
+    This must ONLY be called AFTER a successful API response.
+    Failed checks must NOT suppress future checks.
+    """
     import datetime
-    prefs.set_pref("updates.last_check_date",
-                   datetime.date.today().isoformat())
+    today = datetime.date.today().isoformat()
+    prefs.set_pref("updates.last_check_date", today)
+    log.info("Update check date recorded: %s", today)

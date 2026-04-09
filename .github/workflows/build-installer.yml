@@ -232,11 +232,13 @@ jobs:
           import os
           import re
           version = '${{ steps.version.outputs.version }}'
-          parts = version.split('.')
+          # Strip prerelease suffix for Windows version tuple.
+          # '0.43.0-beta.1' → '0.43.0', then split on '.'.
+          numeric_only = re.split(r'[-+]', version, maxsplit=1)[0]
+          parts = numeric_only.split('.')
           while len(parts) < 4:
               parts.append('0')
-          # Strip any non-numeric suffix (e.g. '5b' → '5') — Windows filevers
-          # tuples only accept integers.
+          # Windows file version tuples only accept integers.
           def _int_part(s):
               m = re.match(r'(\d+)', s)
               return m.group(1) if m else '0'
@@ -512,6 +514,10 @@ jobs:
       # Manual builds get a short-lived artifact so you can download and test
       # the installer without pushing a release tag.
       # 1-day retention keeps storage usage negligible.
+      #
+      # NOTE: Manual artifacts are NOT published to the public releases repo
+      # and are NOT visible to the in-app update checker.  They are for
+      # developer testing only.
       - name: Upload installer artifact
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4

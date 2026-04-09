@@ -2770,18 +2770,39 @@ class MainWindow(QMainWindow):
 
         Runs in all modes (including demo) — the user should always know
         when a newer version is available, regardless of hardware state.
+
+        IMPORTANT: The check date is recorded AFTER the API call succeeds,
+        not before.  A failed check must NOT suppress future checks.
         """
         from updater import UpdateChecker, should_check_now, record_check_date
         import config as _cfg
         if not should_check_now(_cfg):
+            log.debug("Update check skipped (frequency/pref gate)")
             return
-        record_check_date(_cfg)
         include_pre = _cfg.get_pref("updates.include_prerelease", False)
+        log.info("Starting background update check (include_pre=%s)", include_pre)
+
         checker = UpdateChecker(
             on_update=self._on_update_available,
-            on_error=lambda e: log.debug(f"Update check: {e}"),
+            on_error=lambda e: log.warning("Update check error: %s", e),
             include_prerelease=include_pre,
         )
+        # Record the check date only after the API call succeeds.
+        # We do this via a wrapper that fires after _fetch() completes.
+        _original_on_update = self._on_update_available
+        _original_on_no_update = checker._on_no_update
+
+        def _record_and_update(info):
+            record_check_date(_cfg)
+            _original_on_update(info)
+
+        def _record_and_no_update():
+            record_check_date(_cfg)
+            _original_on_no_update()
+
+        checker._on_update = _record_and_update
+        checker._on_no_update = _record_and_no_update
+
         checker.check_async(delay_s=8)
 
     def _on_update_available(self, info):

@@ -256,6 +256,8 @@ class UpdateDialog(QDialog):
         import sys
         # Only auto-download on Windows where we have a .exe installer
         if sys.platform != "win32" or not self._info.download_url.lower().endswith(".exe"):
+            log.info("Non-Windows or non-.exe URL — opening in browser: %s",
+                     self._info.download_url)
             QDesktopServices.openUrl(QUrl(self._info.download_url))
             self.accept()
             return
@@ -271,14 +273,16 @@ class UpdateDialog(QDialog):
                 import tempfile
                 import urllib.request
                 url = self._info.download_url
-                fname = url.rsplit("/", 1)[-1] if "/" in url else f"SanjINSIGHT-Setup-{self._info.version}.exe"
+                fname = (url.rsplit("/", 1)[-1] if "/" in url
+                         else f"SanjINSIGHT-Setup-{self._info.version}.exe")
                 dest = os.path.join(tempfile.gettempdir(), fname)
-                log.info("Downloading update: %s → %s", url, dest)
+                log.info("Download started: %s", url)
+                log.info("Download destination: %s", dest)
                 urllib.request.urlretrieve(url, dest)
                 log.info("Download complete: %s", dest)
                 from PyQt5.QtCore import QMetaObject, Q_ARG
                 QMetaObject.invokeMethod(
-                    self, "_launch_installer",
+                    self, "_validate_and_launch",
                     Qt.QueuedConnection,
                     Q_ARG(str, dest))
             except Exception as e:
@@ -291,12 +295,71 @@ class UpdateDialog(QDialog):
 
         threading.Thread(target=_do_download, daemon=True, name="updater.download").start()
 
+    def _validate_and_launch(self, path: str):
+        """Validate the downloaded installer before launching it.
+
+        Checks:
+          1. File exists
+          2. File size is non-zero (> 1 MB for a real installer)
+          3. Filename matches expected installer pattern
+        If any check fails, shows a clear message and offers the release page.
+        """
+        from PyQt5.QtWidgets import QMessageBox
+        from version import INSTALLER_PATTERN
+
+        fname = os.path.basename(path)
+
+        # 1. File exists
+        if not os.path.isfile(path):
+            log.error("Validation failed: file does not exist: %s", path)
+            self._validation_failed(
+                f"Downloaded file not found:\n{path}\n\n"
+                "The download may have been interrupted.")
+            return
+
+        # 2. File size sanity check (a real installer is > 1 MB)
+        size = os.path.getsize(path)
+        log.info("Downloaded file: %s (%s bytes)", fname, f"{size:,}")
+        if size < 1_000_000:
+            log.error("Validation failed: file too small (%d bytes): %s",
+                      size, path)
+            self._validation_failed(
+                f"Downloaded file is suspiciously small ({size:,} bytes):\n"
+                f"{fname}\n\n"
+                "The download may be corrupt or incomplete.")
+            return
+
+        # 3. Filename matches expected pattern
+        if not INSTALLER_PATTERN.match(fname):
+            log.warning("Validation warning: filename %r does not match "
+                        "expected pattern — proceeding anyway", fname)
+
+        log.info("Validation passed — launching installer: %s", path)
+        self._launch_installer(path)
+
+    def _validation_failed(self, message: str):
+        """Show validation failure and offer the release page."""
+        from PyQt5.QtWidgets import QMessageBox
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Update Validation Failed")
+        msg.setIcon(QMessageBox.Warning)
+        msg.setText(message)
+        msg.setInformativeText("Would you like to open the release page to download manually?")
+        msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        msg.setDefaultButton(QMessageBox.Yes)
+        if msg.exec_() == QMessageBox.Yes:
+            QDesktopServices.openUrl(QUrl(self._info.release_url))
+        self._download_btn.setEnabled(True)
+        self._download_btn.setText(f"⬇  Download v{self._info.version}")
+        self._remind_btn.setEnabled(True)
+
     def _launch_installer(self, path: str):
         """Launch the downloaded installer and quit the app."""
         import subprocess
         log.info("Launching installer: %s", path)
         try:
             subprocess.Popen([path], close_fds=True)
+            log.info("Installer process started successfully")
         except Exception as e:
             log.error("Could not launch installer: %s", e)
             from PyQt5.QtWidgets import QMessageBox
@@ -317,7 +380,7 @@ class UpdateDialog(QDialog):
         QMessageBox.warning(self, "Download Failed",
             f"Could not download the update:\n{error}\n\n"
             "Opening the release page in your browser instead.")
-        QDesktopServices.openUrl(QUrl(self._info.download_url))
+        QDesktopServices.openUrl(QUrl(self._info.release_url))
         self._download_btn.setEnabled(True)
         self._download_btn.setText(f"⬇  Download v{self._info.version}")
         self._remind_btn.setEnabled(True)

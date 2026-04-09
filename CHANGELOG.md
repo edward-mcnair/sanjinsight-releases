@@ -6,6 +6,27 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.43.0-beta.1] — 2026-04-09
+
+> **Version numbering reset.** Prerelease numbering has been reset from the
+> 1.50.x-beta track to 0.43.0-beta.1.  Existing users on the old numbering
+> must perform a one-time manual install of this version.
+
+### Changed
+- **Version numbering reset** — Moved from 1.50.x-beta to semver 0.43.0-beta.1 with proper prerelease progression (beta.1 → beta.2 → rc.1 → GA)
+- **Semver-aware version comparison** (`version.py`) — Replaced simplistic numeric-tuple comparison with full `SemVer` class that correctly orders beta.1 < beta.2 < rc.1 < GA. Handles both dotted (`beta.1`) and bare (`beta`) prerelease formats
+- **Deterministic release selection** (`updater.py`) — Update checker now parses ALL candidate releases from the GitHub API and selects the highest valid version newer than the running build, instead of trusting GitHub API ordering
+- **Tight asset matching** (`updater.py`) — Installer asset matching now uses an explicit filename pattern (`SanjINSIGHT-Setup-{version}.exe`) with exact-match preference, instead of loose ".exe + contains setup" heuristic. Falls back to release page URL with a clear log warning if no asset matches
+- **Update check bookkeeping** (`main_app.py`) — Check date is now recorded AFTER a successful API response, not before. Failed checks no longer suppress future checks
+- **Download validation** (`ui/update_dialog.py`) — Downloaded installer is validated before launch: file must exist, be > 1 MB, and match the expected naming pattern. Validation failures show a clear message and offer the release page instead of silently failing
+
+### Added
+- **`SemVer` class** (`version.py`) — Parsed semantic version with `__lt__`/`__gt__`/`__eq__` for correct prerelease ordering. `SemVer.parse()` handles `v`-prefixed tags, dotted prereleases, and bare prereleases
+- **`INSTALLER_PATTERN`** (`version.py`) — Compiled regex for expected installer filename, shared between updater and download validator
+- **Full update observability** (`updater.py`) — Every update check now logs: running version, parsed version, prerelease setting, API endpoint, response count, each candidate examined with skip reason, selected release, matched asset name and URL, and fallback decisions
+
+---
+
 ## [1.50.47-beta] — 2026-04-08
 
 ### Added
