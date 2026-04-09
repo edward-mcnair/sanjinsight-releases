@@ -244,6 +244,18 @@ class ArduinoNanoDriver(ArduinoDriver):
     #  Status                                                           #
     # ---------------------------------------------------------------- #
 
+    def get_identity(self):
+        """Return a normalized DeviceIdentity for handshake verification."""
+        from hardware.port_resolver import DeviceIdentity
+        return DeviceIdentity(
+            protocol="ident_ascii",
+            device_family="gpio",
+            model="Arduino Nano",
+            node_address=-1,
+            serial_number="",
+            firmware_version=self._firmware_version,
+        )
+
     def get_status(self) -> ArduinoStatus:
         resp = self._cmd("STATUS")
         uptime = 0

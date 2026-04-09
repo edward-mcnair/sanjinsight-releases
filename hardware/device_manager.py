@@ -985,7 +985,7 @@ class DeviceManager:
             try:
                 from hardware.port_resolver import port_ownership
                 port_ownership.release(uid)
-                log.debug("[%s] Released port ownership", uid)
+                log.info("[%s] Released port ownership", uid)
             except Exception:
                 pass
 

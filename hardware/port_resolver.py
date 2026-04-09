@@ -278,6 +278,15 @@ class _PortOwnership:
             self._port_to_uid.clear()
             self._uid_to_port.clear()
 
+    def log_state(self) -> None:
+        """Log current ownership state at INFO level for auditing."""
+        with self._lock:
+            if not self._port_to_uid:
+                log.info("PortOwnership: no active claims")
+                return
+            for port, uid in sorted(self._port_to_uid.items()):
+                log.info("PortOwnership: %s → %s", port, uid)
+
 
 # Module-level singleton — shared across DeviceManager, hw_service, drivers.
 port_ownership = _PortOwnership()
@@ -360,6 +369,14 @@ class PortResolver:
                     candidates.append((s, pi))
 
             candidates.sort(key=lambda x: x[0], reverse=True)
+
+            if not candidates:
+                # Saved fingerprint didn't match ANY port — device is
+                # disconnected, replaced, or on a different machine.
+                log.warning(
+                    "PortResolver: %s — saved fingerprint (%s) matched "
+                    "no current port.  Device may be disconnected or "
+                    "replaced.", uid, saved_fp.stable_id)
 
             if candidates:
                 best_score, best = candidates[0]
@@ -495,8 +512,16 @@ def verify_handshake(uid: str, port: str, driver_obj) -> bool:
 
     # ── Arduino / ESP32 (GPIO devices) ───────────────────────────────
     # The driver's connect() already validates IDENT response.
-    # If connect() succeeded, the handshake passed.
+    # If connect() succeeded, the handshake passed.  Log the identity
+    # if the driver exposes it.
     if dtype == "gpio":
+        if hasattr(driver_obj, "get_identity"):
+            try:
+                identity = driver_obj.get_identity()
+                log.info("[%s] GPIO handshake OK on %s (model=%s, fw=%s)",
+                         uid, port, identity.model, identity.firmware_version)
+            except Exception:
+                pass
         return True
 
     # ── Meerstetter TEC / LDD ────────────────────────────────────────

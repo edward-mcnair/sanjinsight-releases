@@ -109,7 +109,7 @@ def probe_mecom_port(
         # Claim the port for the duration of the probe so no concurrent
         # connect or second probe can open it while we're probing.
         port_ownership.claim(port, _probe_tag)
-        log.debug("probe_mecom_port: claimed %s for probing", port)
+        log.info("probe_mecom_port: claimed %s for probing", port)
     except AmbiguousPortError as clash:
         log.debug("probe_mecom_port: %s claimed by %s — skipping",
                   port, clash.uid_a)
@@ -171,11 +171,13 @@ def probe_mecom_port(
                 mcom.stop()
             except Exception:
                 pass
-        # Release probe claim so the port is available for connect
+        # Release probe claim so the port is available for connect.
+        # This runs under ALL exit paths: normal completion, exception,
+        # timeout, and KeyboardInterrupt (finally always executes).
         try:
             from hardware.port_resolver import port_ownership as _po
             _po.release(_probe_tag)
-            log.debug("probe_mecom_port: released %s", port)
+            log.info("probe_mecom_port: released claim on %s", port)
         except Exception:
             pass
 
