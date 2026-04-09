@@ -496,10 +496,10 @@ class _DeviceListPanel(QWidget):
         if len(addr) > 18:
             addr = "…" + addr[-16:]
         item.setText(self._C_ADDR, addr)
-        # Dim the address text if it's only from scan (not verified)
-        _addr_color = (PALETTE.get('textMuted', PALETTE['textSub'])
-                       if _display_observed
-                       else PALETTE['textSub'])
+        # Dim the address text if it's only from scan (not verified).
+        # Resolved/connected → textDim (readable); observed-only → textSub (dim).
+        _addr_color = (PALETTE['textSub'] if _display_observed
+                       else PALETTE['textDim'])
         item.setForeground(self._C_ADDR, QBrush(QColor(_addr_color)))
         item.setTextAlignment(
             self._C_ADDR, Qt.AlignRight | Qt.AlignVCenter)
@@ -517,12 +517,12 @@ class _DeviceListPanel(QWidget):
             "scan":        "Scan (unverified)",
             "user":        "User-configured",
         }.get(entry.resolution_method, "")
-        _method_line = f"\nResolved:  {_method_label}" if _method_label else ""
+        _method_line = f"\nResolved: {_method_label}" if _method_label else ""
         _ambig_line = ("\nPort ambiguous — multiple devices matched"
                        if entry.port_ambiguous else "")
         item.setToolTip(self._C_NAME,
             f"{entry.display_name}\n"
-            f"State:   {entry.status_label}\n"
+            f"State: {entry.status_label}\n"
             f"Address: {full_addr or '—'}"
             f"{_method_line}{_ambig_line}")
 
@@ -539,13 +539,13 @@ class _DeviceListPanel(QWidget):
             fp = load_fingerprint(entry.uid)
             if fp and not fp.is_empty():
                 if fp.serial_number:
-                    lines.append(f"USB S/N:  {fp.serial_number}")
+                    lines.append(f"USB S/N: {fp.serial_number}")
                 if fp.vid is not None and fp.pid is not None:
-                    lines.append(f"VID:PID:  {fp.vid:04X}:{fp.pid:04X}")
+                    lines.append(f"VID:PID: {fp.vid:04X}:{fp.pid:04X}")
                 if fp.location:
                     lines.append(f"Location: {fp.location}")
                 if fp.manufacturer:
-                    lines.append(f"Mfr:      {fp.manufacturer}")
+                    lines.append(f"Mfr: {fp.manufacturer}")
         except Exception:
             pass
 
@@ -2493,7 +2493,7 @@ class DeviceManagerDialog(QDialog):
         lt.addWidget(copy_btn)
 
         export_btn = QPushButton("Export")
-        export_btn.setFixedSize(58, 20)
+        export_btn.setFixedSize(62, 20)
         export_btn.setStyleSheet(
             f"QPushButton{{font-size:{FONT['small']}pt; padding:0 4px; background:{PALETTE['surface']}; "
             f"color:{PALETTE['textSub']}; border:1px solid {PALETTE['surface2']}; border-radius:3px;}}"
