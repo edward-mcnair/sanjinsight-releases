@@ -46,7 +46,8 @@ from hardware.device_registry import (
     DEVICE_REGISTRY,
     DTYPE_CAMERA, DTYPE_TEC, DTYPE_FPGA, DTYPE_STAGE, DTYPE_BIAS,
     DTYPE_GPIO, DTYPE_LDD, DTYPE_PROBER, DTYPE_TURRET,
-    DTYPE_UNKNOWN, CONN_SERIAL, CONN_ETHERNET, CONN_USB, CONN_PCIE)
+    DTYPE_UNKNOWN, CONN_SERIAL, CONN_ETHERNET, CONN_USB, CONN_PCIE,
+    CATEGORY_ORDER, CATEGORY_LABELS, category_for)
 from hardware.device_manager  import DeviceManager, DeviceState, DeviceEntry
 from ui.font_utils import mono_font
 from ui.icons import IC, set_btn_icon
@@ -205,19 +206,17 @@ class _QTextEditHandler(_logging.Handler):
 #  Constants                                                           #
 # ------------------------------------------------------------------ #
 
-TYPE_ORDER  = [DTYPE_CAMERA, DTYPE_TEC, DTYPE_FPGA, DTYPE_GPIO,
-               DTYPE_STAGE,  DTYPE_BIAS, DTYPE_LDD,
-               DTYPE_PROBER, DTYPE_TURRET, DTYPE_UNKNOWN]
-TYPE_LABELS = {
-    DTYPE_CAMERA:  "Cameras",
-    DTYPE_TEC:     "TEC Controllers",
+# Legacy per-dtype labels — used as sub-labels within category headers
+_DTYPE_SUBLABELS = {
+    DTYPE_CAMERA:  "Camera",
+    DTYPE_TEC:     "TEC Controller",
     DTYPE_FPGA:    "FPGA / Timing",
-    DTYPE_GPIO:    "GPIO / LED Selector",
-    DTYPE_STAGE:   "Stage Controllers",
-    DTYPE_BIAS:    "Bias Sources",
-    DTYPE_LDD:     "Laser Diode Drivers",
-    DTYPE_PROBER:  "Probe Stations",
-    DTYPE_TURRET:  "Objective Turrets",
+    DTYPE_GPIO:    "LED Selector",
+    DTYPE_STAGE:   "Stage Controller",
+    DTYPE_BIAS:    "Bias Source",
+    DTYPE_LDD:     "Laser Diode Driver",
+    DTYPE_PROBER:  "Probe Station",
+    DTYPE_TURRET:  "Objective Turret",
     DTYPE_UNKNOWN: "Other",
 }
 # ------------------------------------------------------------------ #
@@ -417,18 +416,19 @@ class _DeviceListPanel(QWidget):
             self._uid_to_item.clear()
 
             entries = self._mgr.all()
-            by_type: Dict[str, list] = {t: [] for t in TYPE_ORDER}
+            by_cat: Dict[str, list] = {c: [] for c in CATEGORY_ORDER}
             for e in entries:
-                by_type.setdefault(e.descriptor.device_type, []).append(e)
+                c = category_for(e.descriptor.device_type)
+                by_cat.setdefault(c, []).append(e)
 
-            for dtype in TYPE_ORDER:
-                group = by_type.get(dtype, [])
+            for cat_key in CATEGORY_ORDER:
+                group = by_cat.get(cat_key, [])
                 if not group:
                     continue
 
                 # Category header — spans all columns, not selectable
                 cat = QTreeWidgetItem(self._tree)
-                cat.setText(0, TYPE_LABELS.get(dtype, dtype).upper())
+                cat.setText(0, CATEGORY_LABELS.get(cat_key, cat_key).upper())
                 cat.setFlags(Qt.ItemIsEnabled)      # no selection
                 hdr_font = QFont()
                 hdr_font.setPointSizeF(10.0)

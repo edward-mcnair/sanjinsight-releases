@@ -6,6 +6,32 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.44.0-beta.1] — 2026-04-09
+
+### Added
+- **Hardware category panels** — Sidebar HARDWARE section restructured from 4 individual tabs (Camera, Stage, Prober, Arduino) to 5 dynamic category panels (Cameras, Stages, Stimulus, Probes, Sensors) with per-device tabs that appear/disappear on connect/disconnect
+- **DeviceStatusCard** (`ui/widgets/device_status_card.py`) — Lightweight proxy widget for hardware panels. Shows device name, connection badge, static info (model, serial, driver, resolution), and live readouts (exposure, temperature, position) without re-parenting heavyweight workflow tabs
+- **HardwareCategoryPanel** (`ui/widgets/hardware_category_panel.py`) — QStackedLayout toggling between an empty-state placeholder and a QTabWidget of device cards. Empty state offers "Open Device Manager" and "Start Demo Mode" actions
+- **HardwarePanelCoordinator** (`ui/hardware_panel_coordinator.py`) — Mediator owning panel creation, device-key routing table, card cache, static-info refresh, and live-readout updates. Extracted from main_app.py to keep MainWindow focused on signal forwarding
+- **Universal settings sync signals** (`ui/app_signals.py`) — 7 new signals with source parameter for echo-free cross-tab synchronisation: camera exposure/gain, TEC setpoint, FPGA frequency/duty, bias voltage, ROI
+- **LiveCanvas overlay API** (`acquisition/live_tab.py`) — `add_overlay()`, `remove_overlay()`, `set_overlay_visible()`, `set_overlay_opacity()` with per-layer opacity slider and toggle checkboxes
+- **Overlay compositor widget** (`ui/widgets/overlay_compositor.py`) — Standalone compositing widget for use outside LiveTab
+- **Empty state secondary button** (`ui/widgets/empty_state.py`) — `build_empty_state()` now supports a second action button in a horizontal row layout
+- 4 new MDI icon constants: DISCONNECT, GLOBE, CLIPBOARD, DOWNLOAD
+
+### Changed
+- **Category rename: Illumination → Stimulus** (`hardware/device_registry.py`) — `CAT_ILLUMINATION` renamed to `CAT_STIMULUS` with backward-compat alias. Reflects that FPGA and bias source create electrical stimulus, not illumination
+- **Stimulus sub-labels are function-first** — Timing / FPGA, Bias Source, Optical Source, GPIO / LED Selector
+- **Newport NPC3** labeled as "Newport NPC3 Piezo Controller" under Stages (categorised by functional role: positioning/motion)
+- **Camera tab settings sync** (`ui/tabs/camera_tab.py`) — `on_exposure_sync()` and `on_gain_sync()` receivers with echo guard
+- **Device Manager font sizes** bumped across all panels (8.5→10pt base, 9.5→11pt headers, row height 34→36px)
+
+### Fixed
+- **Stale card readouts on reconnect** — Live readout fields reset to "—" when a device reconnects, preventing display of values from a previous session
+- **Pixel format not refreshed** — Camera card pixel_format field was created but never updated from driver info on connect
+
+---
+
 ## [0.43.0-beta.1] — 2026-04-09
 
 > **Version numbering reset.** Prerelease numbering has been reset from the

@@ -51,6 +51,68 @@ CONN_CAMERA   = "camera"   # cameras enumerated via SDK (pypylon, NI IMAQdx)
 
 
 # ------------------------------------------------------------------ #
+#  Hardware categories                                                 #
+# ------------------------------------------------------------------ #
+#  Five user-facing categories shared by the sidebar Hardware panel
+#  and the Device Manager.  Each maps one or more device types.
+
+CAT_CAMERAS  = "cameras"
+CAT_STAGES   = "stages"
+CAT_STIMULUS = "stimulus"
+CAT_PROBES   = "probes"
+CAT_SENSORS  = "sensors"
+
+# Backward compat alias — old code may reference CAT_ILLUMINATION.
+CAT_ILLUMINATION = CAT_STIMULUS
+
+CATEGORY_ORDER = [
+    CAT_CAMERAS,
+    CAT_STAGES,
+    CAT_STIMULUS,
+    CAT_PROBES,
+    CAT_SENSORS,
+]
+
+CATEGORY_LABELS = {
+    CAT_CAMERAS:  "Cameras",
+    CAT_STAGES:   "Stages",
+    CAT_STIMULUS: "Stimulus",
+    CAT_PROBES:   "Probes",
+    CAT_SENSORS:  "Sensors",
+}
+
+# Map every device type to its parent category.
+# Internal sub-labels distinguish roles within Stimulus:
+#   FPGA      → Timing / FPGA
+#   Bias      → Bias Source
+#   LDD       → Optical Source / Illumination
+#   GPIO      → GPIO / LED Selector
+DTYPE_TO_CATEGORY = {
+    DTYPE_CAMERA:  CAT_CAMERAS,
+    DTYPE_STAGE:   CAT_STAGES,
+    DTYPE_FPGA:    CAT_STIMULUS,    # timing / modulation controller
+    DTYPE_GPIO:    CAT_STIMULUS,    # Arduino LED / laser selector
+    DTYPE_LDD:     CAT_STIMULUS,    # laser diode driver (optical source)
+    DTYPE_BIAS:    CAT_STIMULUS,    # bias source (electrical excitation)
+    DTYPE_PROBER:  CAT_PROBES,
+    DTYPE_TURRET:  CAT_PROBES,      # objective turret on probe station
+    DTYPE_TEC:     CAT_SENSORS,     # TEC temperature controller + readback
+    DTYPE_UNKNOWN: CAT_SENSORS,     # default bucket for unrecognised devices
+}
+
+
+def category_for(device_type: str) -> str:
+    """Return the hardware category for a given DTYPE_* constant."""
+    return DTYPE_TO_CATEGORY.get(device_type, CAT_SENSORS)
+
+
+def all_by_category(category: str) -> "List[DeviceDescriptor]":
+    """Return all registered devices belonging to *category*."""
+    return [d for d in DEVICE_REGISTRY.values()
+            if DTYPE_TO_CATEGORY.get(d.device_type) == category]
+
+
+# ------------------------------------------------------------------ #
 #  Descriptor                                                          #
 # ------------------------------------------------------------------ #
 

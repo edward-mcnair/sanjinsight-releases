@@ -608,15 +608,18 @@ class CameraTab(QWidget):
     def _on_exp(self):
         self._do_exp(self._exp_slider.value())
 
-    def _do_exp(self, val):
+    def _do_exp(self, val, _from_sync=False):
         if self._hw:
             self._hw.cam_set_exposure(float(val))
         else:
             cam = app_state.cam
             if cam:
                 cam.set_exposure(float(val))
+        if not _from_sync:
+            from ui.app_signals import signals
+            signals.camera_exposure_changed.emit(float(val), "camera_tab")
 
-    def _on_gain(self):
+    def _on_gain(self, _from_sync=False):
         val = self._gain_slider.value() / 10.0
         if self._hw:
             self._hw.cam_set_gain(val)
@@ -624,6 +627,9 @@ class CameraTab(QWidget):
             cam = app_state.cam
             if cam:
                 cam.set_gain(val)
+        if not _from_sync:
+            from ui.app_signals import signals
+            signals.camera_gain_changed.emit(val, "camera_tab")
 
     def _on_ir_gain_mode(self, mode_text: str) -> None:
         """Set Boson High/Low gain mode from the IR combo."""
@@ -905,6 +911,28 @@ class CameraTab(QWidget):
             cam = app_state.cam
             if cam:
                 cam.set_gain(db)
+
+    # ── Settings sync (universal sync) ───────────────────────────────
+
+    def on_exposure_sync(self, us: float, source: str) -> None:
+        """Receive exposure change from another tab."""
+        if source == "camera_tab":
+            return  # don't echo our own changes
+        val = int(max(50, min(200000, us)))
+        self._exp_slider.blockSignals(True)
+        self._exp_slider.setValue(val)
+        self._exp_slider.blockSignals(False)
+        self._do_exp(val, _from_sync=True)
+
+    def on_gain_sync(self, db: float, source: str) -> None:
+        """Receive gain change from another tab."""
+        if source == "camera_tab":
+            return
+        val = int(max(0, min(239, db * 10)))
+        self._gain_slider.blockSignals(True)
+        self._gain_slider.setValue(val)
+        self._gain_slider.blockSignals(False)
+        self._on_gain(_from_sync=True)
 
     # ── Auto-Exposure ────────────────────────────────────────────────
 

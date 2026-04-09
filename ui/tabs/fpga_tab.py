@@ -850,21 +850,27 @@ class FpgaTab(QWidget):
         self._set_freq(self._freq_spin.value())
         self._set_duty(self._duty_spin.value() / 100.0)
 
-    def _set_freq(self, val):
+    def _set_freq(self, val, _from_sync=False):
         if self._hw:
             self._hw.fpga_set_frequency(val)
         else:
             fpga = app_state.fpga
             if fpga:
                 fpga.set_frequency(val)
+        if not _from_sync:
+            from ui.app_signals import signals
+            signals.fpga_frequency_changed.emit(float(val), "fpga_tab")
 
-    def _set_duty(self, val):
+    def _set_duty(self, val, _from_sync=False):
         if self._hw:
             self._hw.fpga_set_duty_cycle(val)
         else:
             fpga = app_state.fpga
             if fpga:
                 fpga.set_duty_cycle(val)
+        if not _from_sync:
+            from ui.app_signals import signals
+            signals.fpga_duty_changed.emit(float(val), "fpga_tab")
 
     def _start(self):
         self._apply()

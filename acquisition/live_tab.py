@@ -315,6 +315,39 @@ class LiveCanvas(QWidget):
         self._limit_cache    = 1e-9   # cached abs-99.5-percentile limit
         self._limit_ts       = 0.0    # time.monotonic() of last computation
 
+        # ── Overlay layers ────────────────────────────────────────────
+        # Each overlay is a (paint_fn, visible) tuple.
+        # paint_fn signature: fn(QPainter, img_rect=(ox,oy,dw,dh), frame_hw=(h,w))
+        self._overlays: dict[str, tuple] = {}
+        self._overlay_opacity: float = 0.5
+
+    # ── Overlay API ─────────────────────────────────────────────────
+
+    def add_overlay(self, name: str, paint_fn) -> None:
+        """Register a named overlay paint callback.
+
+        ``paint_fn(painter, img_rect, frame_hw)`` is called during
+        ``paintEvent`` after the base image is drawn.  ``img_rect`` is
+        ``(ox, oy, dw, dh)`` in widget coordinates.  ``frame_hw`` is
+        the original data ``(height, width)``.
+        """
+        self._overlays[name] = (paint_fn, True)
+        self.update()
+
+    def remove_overlay(self, name: str) -> None:
+        self._overlays.pop(name, None)
+        self.update()
+
+    def set_overlay_visible(self, name: str, visible: bool) -> None:
+        if name in self._overlays:
+            fn, _ = self._overlays[name]
+            self._overlays[name] = (fn, visible)
+            self.update()
+
+    def set_overlay_opacity(self, opacity: float) -> None:
+        self._overlay_opacity = max(0.0, min(1.0, opacity))
+        self.update()
+
     def set_cmap(self, cmap: str):
         self._cmap = cmap
         # Redraw immediately so a frozen / stopped view updates at once.
@@ -426,6 +459,22 @@ class LiveCanvas(QWidget):
                 p.setPen(QColor(255, 200, 0, 220))
                 p.setFont(sans_font(10))
                 p.drawText(rx0 + 4, ry0 + 14, "ROI")
+
+        # ── Custom overlay layers ─────────────────────────────────────
+        if self._overlays and self._overlay_opacity > 0:
+            img_rect = self._draw_rect()
+            if img_rect:
+                fh = self._data.shape[0] if self._data is not None else 1
+                fw = self._data.shape[1] if self._data is not None else 1
+                p.setOpacity(self._overlay_opacity)
+                for name, (paint_fn, visible) in self._overlays.items():
+                    if not visible:
+                        continue
+                    try:
+                        paint_fn(p, img_rect, (fh, fw))
+                    except Exception:
+                        pass
+                p.setOpacity(1.0)
 
         # Zoom level indicator (when zoomed in)
         if abs(self._zoom - 1.0) > 0.05:
@@ -945,7 +994,60 @@ class LiveTab(QWidget):
         self._canvas.context_action.connect(self._on_canvas_context)
         self._canvas.roi_changed.connect(self._on_roi_changed)
         lay.addWidget(self._canvas)
+
+        # ── Overlay controls bar ─────────────────────────────────────
+        from PyQt5.QtWidgets import QSlider as _Sl, QCheckBox as _CB
+        P, F = PALETTE, FONT
+        ctl = QHBoxLayout()
+        ctl.setContentsMargins(0, 2, 0, 0)
+        ctl.setSpacing(6)
+
+        ov_lbl = QLabel("Overlay:")
+        ov_lbl.setStyleSheet(
+            f"font-size: {F['label']}pt; color: {P['textDim']};")
+        ctl.addWidget(ov_lbl)
+
+        self._overlay_slider = _Sl(Qt.Horizontal)
+        self._overlay_slider.setRange(0, 100)
+        self._overlay_slider.setValue(50)
+        self._overlay_slider.setFixedWidth(120)
+        self._overlay_slider.setToolTip("Overlay opacity")
+        self._overlay_slider.valueChanged.connect(self._on_overlay_opacity)
+        ctl.addWidget(self._overlay_slider)
+
+        self._overlay_pct = QLabel("50%")
+        self._overlay_pct.setFixedWidth(34)
+        self._overlay_pct.setStyleSheet(
+            f"font-family: {MONO_FONT}; font-size: {F['label']}pt; "
+            f"color: {P['textDim']};")
+        ctl.addWidget(self._overlay_pct)
+
+        ctl.addSpacing(12)
+
+        self._roi_overlay_cb = _CB("ROI")
+        self._roi_overlay_cb.setChecked(True)
+        self._roi_overlay_cb.setStyleSheet(
+            f"font-size: {F['label']}pt; color: {P['textDim']};")
+        self._roi_overlay_cb.toggled.connect(
+            lambda on: self._canvas.set_overlay_visible("roi", on))
+        ctl.addWidget(self._roi_overlay_cb)
+
+        self._hotspot_cb = _CB("Hotspots")
+        self._hotspot_cb.setChecked(True)
+        self._hotspot_cb.setStyleSheet(
+            f"font-size: {F['label']}pt; color: {P['textDim']};")
+        self._hotspot_cb.toggled.connect(
+            lambda on: self._canvas.set_overlay_visible("hotspots", on))
+        ctl.addWidget(self._hotspot_cb)
+
+        ctl.addStretch()
+        lay.addLayout(ctl)
+
         return w
+
+    def _on_overlay_opacity(self, value: int) -> None:
+        self._canvas.set_overlay_opacity(value / 100.0)
+        self._overlay_pct.setText(f"{value}%")
 
     def _on_canvas_context(self, action: str):
         """Dispatch context menu actions from LiveCanvas."""
@@ -963,6 +1065,60 @@ class LiveTab(QWidget):
     def _on_roi_changed(self, roi):
         """Update stored ROI whenever the canvas rubber-band selection changes."""
         self._roi = roi
+
+    # ── Overlay public API ────────────────────────────────────────────
+
+    def add_overlay(self, name: str, paint_fn, label: str = "") -> None:
+        """Register a named overlay layer on the live canvas.
+
+        Parameters
+        ----------
+        name : str
+            Unique key (e.g. ``"roi"``, ``"hotspots"``).
+        paint_fn : callable
+            ``fn(painter, img_rect, frame_hw)``
+        label : str
+            Human label for a toggle checkbox (unused for now — use
+            the built-in ROI / Hotspots checkboxes).
+        """
+        self._canvas.add_overlay(name, paint_fn)
+
+    def remove_overlay(self, name: str) -> None:
+        self._canvas.remove_overlay(name)
+
+    def set_hotspot_regions(self, regions) -> None:
+        """Feed thermal hotspot regions for overlay rendering.
+
+        Parameters
+        ----------
+        regions : list[dict]
+            Each dict has ``x``, ``y``, ``w``, ``h`` (in data coords)
+            and optional ``label``, ``severity`` (``"high"``/``"medium"``).
+        """
+        self._hotspot_regions = regions
+
+        def _paint_hotspots(painter, img_rect, frame_hw):
+            ox, oy, dw, dh = img_rect
+            fh, fw = frame_hw
+            sx = dw / fw if fw else 1
+            sy = dh / fh if fh else 1
+            for r in regions:
+                sev = r.get("severity", "medium")
+                color = QColor(255, 60, 60, 180) if sev == "high" else QColor(255, 180, 0, 160)
+                painter.setPen(QPen(color, 2))
+                painter.setBrush(QColor(color.red(), color.green(), color.blue(), 30))
+                rx = ox + int(r["x"] * sx)
+                ry = oy + int(r["y"] * sy)
+                rw = int(r["w"] * sx)
+                rh = int(r["h"] * sy)
+                painter.drawRect(rx, ry, rw, rh)
+                lbl = r.get("label", "")
+                if lbl:
+                    painter.setFont(QFont("Helvetica", 9))
+                    painter.drawText(rx + 3, ry + 13, lbl)
+            painter.setBrush(Qt.NoBrush)
+
+        self._canvas.add_overlay("hotspots", _paint_hotspots)
 
     # ---------------------------------------------------------------- #
     #  Readouts panel (right)                                           #

@@ -60,6 +60,20 @@ class AppSignals(QObject):
     error           = pyqtSignal(str)              # Error message → toast
     colormap_changed = pyqtSignal(str)             # Colormap name changed by any tab
 
+    # ── Device-settings sync ─────────────────────────────────────────
+    # Emitted by the tab that changes a setting; other tabs subscribe
+    # to stay in sync.  Each signal carries just the new value — the
+    # emitting tab is responsible for having already applied it to the
+    # hardware.  ``source`` is the emitting widget's objectName or "" —
+    # listeners can compare to avoid echo loops.
+    camera_exposure_changed = pyqtSignal(float, str)   # (microseconds, source)
+    camera_gain_changed     = pyqtSignal(float, str)   # (dB, source)
+    tec_setpoint_changed    = pyqtSignal(int, float, str)  # (tec_index, °C, source)
+    fpga_frequency_changed  = pyqtSignal(float, str)   # (Hz, source)
+    fpga_duty_changed       = pyqtSignal(float, str)   # (percent, source)
+    bias_voltage_changed    = pyqtSignal(str, float, str)  # (channel, volts, source)
+    roi_changed             = pyqtSignal(object, str)  # (ROI rect/tuple, source)
+
 
 class StateSignalBridge(QObject):
     """Bridges app_state change notifications to a Qt queued signal.

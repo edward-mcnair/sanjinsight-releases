@@ -47,6 +47,8 @@ class IC:
     BIAS          = "mdi.lightning-bolt"
     STAGE         = "mdi.arrow-all"
     PROBER        = "mdi.needle"
+    ILLUMINATION  = "mdi.lightbulb-on-outline"
+    SENSORS       = "mdi.thermometer-lines"
     ROI           = "mdi.crop"
     AUTOFOCUS     = "mdi.crosshairs-gps"
     # Setup / library
@@ -183,6 +185,13 @@ NAV_ICONS: dict[str, str] = {
     "Profiles":    IC.PROFILES,
     "Recipes":     IC.RECIPES,
     "Arduino":     "mdi.integrated-circuit-chip",
+    # Hardware categories (sidebar)
+    "Cameras":       IC.CAMERA,
+    "Stages":        IC.STAGE,
+    "Stimulus":      IC.STIMULUS,
+    "Illumination":  IC.ILLUMINATION,  # backward compat alias
+    "Probes":        IC.PROBER,
+    "Sensors":       IC.SENSORS,
     "Data":        IC.DATA,
     "Console":     IC.CONSOLE,
     "Log":         IC.LOG,

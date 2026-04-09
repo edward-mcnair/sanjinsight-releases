@@ -550,13 +550,16 @@ class BiasTab(QWidget):
         self._set_level(self._level_spin.value())
         self._set_compliance(self._comp_spin.value())
 
-    def _set_level(self, val):
+    def _set_level(self, val, _from_sync=False):
         if self._hw:
             self._hw.bias_set_level(val)
         else:
             bias = app_state.bias
             if bias:
                 bias.set_level(val)
+        if not _from_sync:
+            from ui.app_signals import signals
+            signals.bias_voltage_changed.emit("level", float(val), "bias_tab")
 
     def _set_compliance(self, val):
         if self._hw:

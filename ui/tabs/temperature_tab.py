@@ -761,7 +761,7 @@ class TemperatureTab(QWidget):
             guard.acknowledge()
         self.clear_alarm(idx)
 
-    def _set_target(self, box, val):
+    def _set_target(self, box, val, _from_sync=False):
         idx = self._panels.index(box)
         if self._hw:
             self._hw.tec_set_target(idx, val)
@@ -769,6 +769,9 @@ class TemperatureTab(QWidget):
             _tecs = app_state.tecs
             if _tecs and idx < len(_tecs):
                 _tecs[idx].set_target(val)
+        if not _from_sync:
+            from ui.app_signals import signals
+            signals.tec_setpoint_changed.emit(idx, float(val), "temperature_tab")
 
     def _enable(self, box):
         idx   = self._panels.index(box)

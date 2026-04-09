@@ -56,6 +56,7 @@ class EmptyStatePage(QWidget):
     title_lbl: QLabel
     desc_lbl: QLabel
     action_btn: QPushButton | None
+    secondary_btn: QPushButton | None
 
     def _apply_styles(self) -> None:
         """Re-apply palette colours after a theme switch."""
@@ -83,15 +84,18 @@ class EmptyStatePage(QWidget):
         self.desc_lbl.setStyleSheet(
             f"font-size: {F['label']}pt; color: {P['textSub']};")
 
-        if self.action_btn is not None:
-            self.action_btn.setStyleSheet(f"""
+        _btn_qss = f"""
                 QPushButton {{
                     background: {P['surface']}; color: {P['accent']};
                     border: 1px solid {P['accent']}66; border-radius: 5px;
                     font-size: {F['label']}pt; font-weight: 600;
                 }}
                 QPushButton:hover {{ background: {P['surface2']}; }}
-            """)
+            """
+        if self.action_btn is not None:
+            self.action_btn.setStyleSheet(_btn_qss)
+        if self.secondary_btn is not None:
+            self.secondary_btn.setStyleSheet(_btn_qss)
 
 
 def build_empty_state(
@@ -102,6 +106,8 @@ def build_empty_state(
     icon_size: int = 64,
     btn_text: str = "Open Device Manager",
     on_action=None,
+    secondary_btn_text: str = "",
+    on_secondary_action=None,
     use_mdi_icon: bool = True,
     icon_text: str = "",
     max_desc_width: int = 400,
@@ -173,30 +179,47 @@ def build_empty_state(
         f"font-size: {F['label']}pt; color: {P['textSub']};")
     desc_lbl.setMaximumWidth(max_desc_width)
 
-    # ── Action button (optional) ──────────────────────────────────────
+    # ── Action buttons (optional) ────────────────────────────────────
+    _btn_qss = f"""
+        QPushButton {{
+            background: {P['surface']}; color: {P['accent']};
+            border: 1px solid {P['accent']}66; border-radius: 5px;
+            font-size: {F['label']}pt; font-weight: 600;
+        }}
+        QPushButton:hover {{ background: {P['surface2']}; }}
+    """
     action_btn = None
     if btn_text and on_action is not None:
         action_btn = QPushButton(btn_text)
         action_btn.setFixedWidth(200)
         action_btn.setFixedHeight(36)
-        action_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: {P['surface']}; color: {P['accent']};
-                border: 1px solid {P['accent']}66; border-radius: 5px;
-                font-size: {F['label']}pt; font-weight: 600;
-            }}
-            QPushButton:hover {{ background: {P['surface2']}; }}
-        """)
+        action_btn.setStyleSheet(_btn_qss)
         action_btn.clicked.connect(on_action)
+
+    secondary_btn = None
+    if secondary_btn_text and on_secondary_action is not None:
+        secondary_btn = QPushButton(secondary_btn_text)
+        secondary_btn.setFixedWidth(200)
+        secondary_btn.setFixedHeight(36)
+        secondary_btn.setStyleSheet(_btn_qss)
+        secondary_btn.clicked.connect(on_secondary_action)
 
     # ── Layout ────────────────────────────────────────────────────────
     lay.addStretch()
     lay.addWidget(icon_lbl)
     lay.addWidget(title_lbl)
     lay.addWidget(desc_lbl)
-    if action_btn is not None:
+    if action_btn is not None or secondary_btn is not None:
+        from PyQt5.QtWidgets import QHBoxLayout
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(12)
+        btn_row.setAlignment(Qt.AlignCenter)
+        if action_btn is not None:
+            btn_row.addWidget(action_btn)
+        if secondary_btn is not None:
+            btn_row.addWidget(secondary_btn)
         lay.addSpacing(8)
-        lay.addWidget(action_btn, 0, Qt.AlignCenter)
+        lay.addLayout(btn_row)
     lay.addStretch()
 
     # Store refs for theme switching
@@ -204,5 +227,6 @@ def build_empty_state(
     page.title_lbl = title_lbl
     page.desc_lbl = desc_lbl
     page.action_btn = action_btn
+    page.secondary_btn = secondary_btn
 
     return page

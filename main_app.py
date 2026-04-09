@@ -650,6 +650,27 @@ class MainWindow(QMainWindow):
         self._library_tab           = LibraryTab(self._profile_tab, self._recipe_tab)
         self._autoscan_tab          = AutoScanTab()
 
+        # ── Hardware category panels ──────────────────────────────────
+        # Each panel is a dynamic QTabWidget that shows one tab per
+        # connected device.  Existing tab widgets are pre-registered
+        # and shown/hidden via device_connected signals.
+        from ui.hardware_panel_coordinator import HardwarePanelCoordinator
+
+        self._hw_coord = HardwarePanelCoordinator(parent=self)
+        _hw_panels = self._hw_coord.create_panels()
+        self._hw_coord.build_route_table()
+        self._hw_coord.set_display_name_resolver(self._device_display)
+        self._hw_coord.open_device_manager.connect(self._open_device_manager)
+        self._hw_coord.start_demo_mode.connect(self._activate_demo_mode)
+        self._hw_coord.navigate_requested.connect(
+            lambda lbl: self._nav.select_by_label(lbl))
+
+        self._hw_cameras_panel  = _hw_panels["cameras"]
+        self._hw_stages_panel   = _hw_panels["stages"]
+        self._hw_stimulus_panel = _hw_panels["stimulus"]
+        self._hw_probes_panel   = _hw_panels["probes"]
+        self._hw_sensors_panel  = _hw_panels["sensors"]
+
         # ── Phase-aware sections (new) ─────────────────────────────────
         self._modality_section      = ModalitySection()
         self._modality_section.open_device_manager.connect(
@@ -785,12 +806,13 @@ class MainWindow(QMainWindow):
         # ─── separator ───
         self._nav.add_separator()
 
-        # HARDWARE (collapsible — Camera, Stage, Prober controls)
+        # HARDWARE (collapsible — 5 categories matching Device Manager)
         self._nav.add_collapsible("HARDWARE", "mdi.chip", [
-            NI("Camera",  _I["Camera"],  self._camera_ctrl_tab),
-            NI("Stage",   _I["Stage"],   self._stage_tab),
-            NI("Prober",  _I["Prober"],  self._prober_tab),
-            NI("Arduino", _I["Arduino"], self._arduino_tab),
+            NI("Cameras",      _I["Cameras"],      self._hw_cameras_panel),
+            NI("Stages",       _I["Stages"],       self._hw_stages_panel),
+            NI("Stimulus",     _I["Stimulus"],     self._hw_stimulus_panel),
+            NI("Probes",       _I["Probes"],       self._hw_probes_panel),
+            NI("Sensors",      _I["Sensors"],      self._hw_sensors_panel),
         ])
 
         # SYSTEM
@@ -837,10 +859,10 @@ class MainWindow(QMainWindow):
 
         # ── Auto-hide unconfigured items ──────────────────────────────────
         _hw_cfg = config.get("hardware", {})
-        # Temperature: shown if at least one TEC is enabled
+        # Sensors (TEC): shown if at least one TEC is enabled
         if n_tecs == 0:
-            self._nav.set_item_visible("Temperature", False)
-        # Stimulus (FPGA+Bias): shown if FPGA is enabled
+            self._nav.set_item_visible("Sensors", False)
+        # Stimulus (FPGA+Bias+GPIO): shown if FPGA is enabled
         if not _hw_cfg.get("fpga", {}).get("enabled", True):
             self._nav.set_item_visible("Stimulus", False)
         # Emissivity: always shown (applies to both real + simulated IR cameras)
@@ -1056,6 +1078,22 @@ class MainWindow(QMainWindow):
         # Structured errors → health panel with actionable suggestions
         if hasattr(hw_service, 'structured_error'):
             hw_service.structured_error.connect(self._on_structured_error)
+
+        # ── Universal device-settings sync ─────────────────────────────
+        # When one tab changes a setting, broadcast to all other tabs that
+        # display the same value.  Each receiver checks the ``source``
+        # argument to skip its own emissions (no echo loops).
+        signals.camera_exposure_changed.connect(
+            self._camera_tab.on_exposure_sync)
+        signals.camera_gain_changed.connect(
+            self._camera_tab.on_gain_sync)
+        # Acquisition settings section also mirrors camera exposure/gain
+        if hasattr(self._acq_settings_section, 'on_exposure_sync'):
+            signals.camera_exposure_changed.connect(
+                self._acq_settings_section.on_exposure_sync)
+        if hasattr(self._acq_settings_section, 'on_gain_sync'):
+            signals.camera_gain_changed.connect(
+                self._acq_settings_section.on_gain_sync)
 
         # Heartbeat → health panel "last seen" display
         hw_service.heartbeat.connect(self._health_panel.on_heartbeat)
@@ -1520,6 +1558,10 @@ class MainWindow(QMainWindow):
         if hasattr(self, "_preview_dock"):
             self._preview_dock.update_frame(frame.data)
 
+        # Live feedback → camera hardware status card (throttled to ~2 Hz)
+        if frame.frame_index % max(1, int(getattr(frame, 'fps', 30) / 2)) == 0:
+            self._hw_coord.update_camera_readouts(frame)
+
     def _read_ir_camera_temp(self) -> float:
         """Return the mean pixel value of the latest IR frame (°C-equivalent).
 
@@ -1566,6 +1608,9 @@ class MainWindow(QMainWindow):
             if not self._dt_sparkline.isVisible():
                 self._dt_sparkline.setVisible(True)
 
+        # Live feedback → hardware status card
+        self._hw_coord.update_tec_readouts(index, status)
+
     def _on_fpga(self, status):
         if app_state.fpga is None and not app_state.demo_mode:
             return
@@ -1577,6 +1622,8 @@ class MainWindow(QMainWindow):
                f"FPGA error: {status.error}" if status.error else "FPGA: stopped")
         self._header.set_connected("fpga", ok, tip)
         self._cam_bar.set_peripheral("fpga", ok, tip)
+        # Live feedback → hardware status card
+        self._hw_coord.update_fpga_readouts(status)
 
     def _on_bias(self, status):
         if app_state.bias is None and not app_state.demo_mode:
@@ -1590,6 +1637,8 @@ class MainWindow(QMainWindow):
                f"Bias error: {status.error}" if status.error else "Bias: output off")
         self._header.set_connected("bias", ok, tip)
         self._cam_bar.set_peripheral("bias", ok, tip)
+        # Live feedback → hardware status card
+        self._hw_coord.update_bias_readouts(status)
 
     def _on_stage(self, status):
         # Ignore stale status updates from simulated stage drivers that
@@ -1603,6 +1652,8 @@ class MainWindow(QMainWindow):
                else f"Stage error: {status.error}")
         self._header.set_connected("stage", ok, tip)
         self._cam_bar.set_peripheral("stage", ok, tip)
+        # Live feedback → hardware status card
+        self._hw_coord.update_stage_readouts(status)
 
     def _on_cal_progress(self, prog):
         self._cal_tab.update_progress(prog)
@@ -1823,6 +1874,11 @@ class MainWindow(QMainWindow):
         }
         return _map.get(key)
 
+    # ── Hardware category panel routing ─────────────────────────────
+    # Delegated to HardwarePanelCoordinator (self._hw_coord).
+    # MainWindow only forwards signals; the coordinator owns card
+    # creation, caching, static-info refresh, and live-readout reset.
+
     def _on_startup_device_status(self, key: str, ok: bool, detail: str):
         """Populate the Connection Health panel during initial startup."""
         try:
@@ -2019,6 +2075,9 @@ class MainWindow(QMainWindow):
         # In demo mode all tabs stay fully visible.
         if not app_state.demo_mode:
             self._refresh_tab_availability(key, ok)
+
+        # ── Update hardware category panels ──────────────────────────
+        self._hw_coord.on_device_connected(key, ok)
 
         # Re-evaluate required-device readiness after every hotplug event
         self._update_safe_mode()
@@ -4071,12 +4130,12 @@ class MainWindow(QMainWindow):
         elif code == "autofocus":
             # Navigate to autofocus tab
             try:
-                self._nav.select_by_label("Camera")
+                self._nav.select_by_label("Cameras")
             except Exception:
                 log.debug("Swallowed exception", exc_info=True)
         elif code == "tec_wait":
             try:
-                self._nav.select_by_label("Temperature")
+                self._nav.select_by_label("Sensors")
             except Exception:
                 log.debug("Swallowed exception", exc_info=True)
 
