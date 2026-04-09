@@ -924,12 +924,14 @@ class SettingsTab(AISettingsMixin, QWidget):
 
         self._update_freq_enabled()
 
-        # Collect admin-gated widgets (View All Releases link is NOT gated)
+        # Collect admin-gated widgets.
+        # NOTE: _check_btn is intentionally NOT gated — any user should be
+        # able to check for updates.  Only the auto-check preferences
+        # (frequency, channel) are admin-restricted.
         self._upd_admin_widgets = [
             self._auto_check,
             self._freq_combo,
             self._channel_combo,
-            self._check_btn,
         ]
 
         return g
