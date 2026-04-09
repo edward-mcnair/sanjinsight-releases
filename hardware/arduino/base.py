@@ -173,6 +173,16 @@ class ArduinoDriver(ABC):
         return self._connected
 
     @property
+    def connected_port(self) -> Optional[str]:
+        """Return the actual COM port the driver connected on.
+
+        This may differ from the configured port if the driver's fallback
+        scan found the device on a different port.  DeviceManager reads
+        this after connect() to update entry.address.
+        """
+        return getattr(self, "_port", None)
+
+    @property
     def channels(self) -> List[LedChannel]:
         """Return the list of configured LED channels."""
         return self._channels

@@ -214,6 +214,10 @@ class DeviceManager:
         # main window refreshes camera selectors / safe-mode status.
         self._post_inject_cb: Optional[Callable[[str, object], None]] = None
 
+        # Cached port resolver (set by resolve_ports(), read by
+        # _connect_worker for fingerprint saves).
+        self._port_resolver = None
+
         # Initialise an entry for every known device and restore any
         # connection parameters (port, baud, IP) saved in a previous session.
         for uid, desc in DEVICE_REGISTRY.items():
@@ -401,26 +405,40 @@ class DeviceManager:
             log.debug("resolve_ports: no serial devices to resolve")
             return {}
 
-        results = resolver.resolve_all(device_map)
+        from hardware.port_resolver import AmbiguousPortError
+        try:
+            results = resolver.resolve_all(device_map)
+        except AmbiguousPortError as clash:
+            log.error("resolve_ports: PORT CONFLICT — %s", clash)
+            self._log(
+                f"⚠  Port conflict: {clash.uid_a} and {clash.uid_b} both "
+                f"resolved to {clash.port}.  Check USB connections and run "
+                f"Tools → Dump Serial Ports for diagnostics."
+            )
+            # Return empty — don't update any addresses with bad data
+            self._port_resolver = resolver
+            return {}
 
-        # Update entry addresses with resolved ports
-        for uid, resolved_port in results.items():
-            entry = self._entries.get(uid)
-            if entry is None:
-                continue
-            old_addr = entry.address
-            if resolved_port:
-                if resolved_port != old_addr:
-                    log.info("resolve_ports: %s port changed %s → %s",
-                             uid, old_addr, resolved_port)
-                    self._log(
-                        f"Port update: {entry.descriptor.display_name} "
-                        f"moved from {old_addr} to {resolved_port}")
-                entry.address = resolved_port
-            else:
-                if old_addr:
-                    log.info("resolve_ports: %s (was %s) not found in "
-                             "current port enumeration", uid, old_addr)
+        # Update entry addresses with resolved ports (under lock to
+        # avoid races with concurrent connect workers).
+        with self._lock:
+            for uid, resolved_port in results.items():
+                entry = self._entries.get(uid)
+                if entry is None:
+                    continue
+                old_addr = entry.address
+                if resolved_port:
+                    if resolved_port != old_addr:
+                        log.info("resolve_ports: %s port changed %s → %s",
+                                 uid, old_addr, resolved_port)
+                        self._log(
+                            f"Port update: {entry.descriptor.display_name} "
+                            f"moved from {old_addr} to {resolved_port}")
+                    entry.address = resolved_port
+                else:
+                    if old_addr:
+                        log.info("resolve_ports: %s (was %s) not found in "
+                                 "current port enumeration", uid, old_addr)
 
         # Store resolver for later use (e.g. saving fingerprints)
         self._port_resolver = resolver
@@ -611,6 +629,24 @@ class DeviceManager:
                     for issue in pf_issues:
                         log.warning("[%s] pre-flight warning: %s", uid, issue)
 
+            # ── Claim port ownership BEFORE connecting ────────────────
+            # This prevents any second code path (hw_service, hotplug,
+            # another connect click) from opening the same port.
+            _port_to_claim = entry.address
+            if _port_to_claim:
+                from hardware.port_resolver import port_ownership, AmbiguousPortError
+                try:
+                    port_ownership.claim(_port_to_claim, uid)
+                    log.info("[%s] Claimed port %s", uid, _port_to_claim)
+                except AmbiguousPortError as clash:
+                    raise RuntimeError(
+                        f"Cannot connect {desc.display_name}: port "
+                        f"{clash.port} is already claimed by "
+                        f"{clash.uid_a}.\n\n"
+                        f"Disconnect {clash.uid_a} first, or check that "
+                        f"devices have distinct USB serial numbers."
+                    ) from clash
+
             # Enforce a hard timeout on connect() so the UI is never frozen.
             # NOTE: do NOT use `with ThreadPoolExecutor` here — the context
             # manager calls shutdown(wait=True) on exit, which blocks until the
@@ -657,6 +693,18 @@ class DeviceManager:
                 entry.state          = DeviceState.CONNECTED
                 entry.last_connected = time.time()
                 entry.error_msg      = ""
+
+                # ── Read back actual port from driver ────────────────
+                # Arduino/ESP32 drivers may fall back to a different
+                # port than the one DeviceManager originally assigned.
+                # Update entry.address so we persist the CORRECT port.
+                actual_port = getattr(driver_obj, "connected_port", None)
+                if actual_port and actual_port != entry.address:
+                    log.info("[%s] Driver connected on %s (was %s) — "
+                             "updating entry.address",
+                             uid, actual_port, entry.address)
+                    entry.address = actual_port
+
                 try:
                     st = driver_obj.get_status()
                     entry.firmware_ver  = getattr(st, "firmware_version", "") or ""
@@ -665,6 +713,32 @@ class DeviceManager:
                 except Exception:
                     log.debug("[%s] get_status() for metadata failed — "
                               "firmware/serial will be blank", uid, exc_info=True)
+
+            # ── Post-connect handshake verification ──────────────────
+            # Confirm the device on the wire actually matches the UID.
+            # For Arduino/ESP32 this is already validated by connect()
+            # (IDENT check), for Meerstetter it verifies MeCom protocol.
+            if entry.address:
+                try:
+                    from hardware.port_resolver import (
+                        verify_handshake, HandshakeMismatchError
+                    )
+                    verify_handshake(uid, entry.address, driver_obj)
+                except HandshakeMismatchError as hmm:
+                    # Wrong device on this port — disconnect immediately
+                    log.error("[%s] Handshake FAILED: %s", uid, hmm)
+                    try:
+                        driver_obj.disconnect()
+                    except Exception:
+                        pass
+                    raise RuntimeError(
+                        f"{desc.display_name}: wrong device on "
+                        f"{entry.address} — {hmm}"
+                    )
+                except Exception:
+                    # Non-fatal: if we can't verify, log and proceed
+                    log.debug("[%s] Handshake check unavailable",
+                              uid, exc_info=True)
 
             self._log(f"✓  Connected: {desc.display_name}  ({entry.address})")
             self._emit(uid, DeviceState.CONNECTED)
@@ -684,8 +758,12 @@ class DeviceManager:
                 _cfg.set_pref("hw.last_connected_device", uid)
                 # Persist connection parameters (address, baud, video_index,
                 # etc.) so the device can be auto-reconnected with the same
-                # settings on next launch.
-                _cfg.set_pref(f"device_params.{uid}", {
+                # settings on next launch.  MERGE into existing dict so we
+                # don't destroy the usb_fingerprint saved below.
+                _existing = _cfg.get_pref(f"device_params.{uid}", {})
+                if not isinstance(_existing, dict):
+                    _existing = {}
+                _existing.update({
                     "address":        entry.address,
                     "baud_rate":      entry.baud_rate,
                     "ip_address":     entry.ip_address,
@@ -693,8 +771,10 @@ class DeviceManager:
                     "video_index":    entry.video_index,
                     "last_connected": entry.last_connected,
                 })
+                _cfg.set_pref(f"device_params.{uid}", _existing)
             except Exception:
-                pass
+                log.debug("[%s] Could not save device_params", uid,
+                          exc_info=True)
 
             # ── Save USB fingerprint for the port we connected on ────
             # This is the KEY to reliable reconnection: next launch we
@@ -738,6 +818,13 @@ class DeviceManager:
         except Exception as e:
             log.error("[%s] Connect failed after %.2fs: %s",
                       uid, time.time() - t0, e, exc_info=True)
+
+            # Release port ownership on failure
+            try:
+                from hardware.port_resolver import port_ownership
+                port_ownership.release(uid)
+            except Exception:
+                pass
 
             # Release any resources the driver may have partially acquired
             # (serial port locks, USB handles, NI sessions, etc.).
@@ -789,6 +876,14 @@ class DeviceManager:
         except Exception as e:
             self._log(f"Disconnect warning ({entry.display_name}): {e}")
         finally:
+            # ── Release port ownership ──────────────────────────────
+            try:
+                from hardware.port_resolver import port_ownership
+                port_ownership.release(uid)
+                log.debug("[%s] Released port ownership", uid)
+            except Exception:
+                pass
+
             with self._lock:
                 entry.driver_obj = None
                 entry.state      = (DeviceState.DISCOVERED
@@ -1066,7 +1161,10 @@ class DeviceManager:
             "arduino_nano_ftdi":        "nano",
             "arduino_uno":              "uno",
             "arduino_uno_r4":           "uno",
+            "arduino_uno_r4_wifi":      "uno",
+            "arduino_uno_q":            "nano",
             # ESP32 GPIO / LED selector
+            "arduino_nano_esp32":       "esp32",
             "esp32_cp2102":             "esp32",
             "esp32_native_usb":         "esp32",
         }

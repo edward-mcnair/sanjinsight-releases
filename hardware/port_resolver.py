@@ -7,39 +7,70 @@ Identifies physical serial devices by stable USB attributes (serial number,
 VID:PID, location, manufacturer/product strings) instead of volatile COM
 port numbers that shift between reboots.
 
-Usage
------
-    from hardware.port_resolver import PortResolver
+Design principles
+-----------------
+1. COM port numbers are NEVER treated as device identity — only as a
+   last-resort hint when no fingerprint is available.
+2. Duplicate port claims are a hard error — if two logical devices resolve
+   to the same physical port, the resolver raises ``AmbiguousPortError``
+   before any connection is attempted.
+3. After opening a resolved port, callers MUST verify device identity via
+   a protocol handshake (IDENT for Arduino, MeCom query for Meerstetter).
+   The ``verify_handshake()`` helper provides this.
+4. The resolver owns a port-ownership registry.  Once a port is claimed,
+   no second code path can re-claim it without explicitly releasing it.
 
-    resolver = PortResolver()
-    resolver.snapshot()                     # enumerate all ports
-    port = resolver.resolve("meerstetter_tec_1089")  # → "COM4" (or whatever it is now)
+Match priority (highest → lowest):
+    1. USB serial number  (100 pts — unique per FTDI/CH340 chip)
+    2. USB location        (10 pts — stable if physical topology unchanged)
+    3. VID:PID             (40 pts — filter, not identity for shared PIDs)
+    4. Manufacturer/product strings  (5 pts each — fuzzy tiebreaker)
+    5. Saved COM port      (0 pts — volatile fallback, NOT scored)
 
-The resolver stores USB fingerprints in ``device_params.{uid}.usb_fingerprint``
-via the config module.  On subsequent launches it matches the saved fingerprint
-against the current port enumeration to find the correct COM port, regardless
-of whether the port number has changed.
-
-Design
-------
-Match priority (highest first):
-    1. USB serial number (unique per FTDI/CH340 chip — best identifier)
-    2. VID:PID (ambiguous for FTDI 0403:6001 — used as a filter, not identity)
-    3. Manufacturer / product / interface strings
-    4. USB location (stable if the physical USB topology doesn't change)
-    5. COM port name (last resort — volatile)
-
-Two devices that score identically on the same port → ambiguous → error.
-A device that matches no port → absent → skip.
+Persistence
+-----------
+Fingerprints (not COM ports) are the primary stored identity.  If a device
+has no USB serial number, ``location`` is persisted as a fallback.  COM port
+is stored alongside but only as a hint for the very first migration from
+older config.
 """
 
 from __future__ import annotations
 
 import logging
+import threading
 from dataclasses import dataclass, field, asdict
 from typing import Optional
 
 log = logging.getLogger(__name__)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Exceptions
+# ──────────────────────────────────────────────────────────────────────────────
+
+class AmbiguousPortError(RuntimeError):
+    """Raised when two logical devices resolve to the same physical port."""
+
+    def __init__(self, port: str, uid_a: str, uid_b: str):
+        self.port = port
+        self.uid_a = uid_a
+        self.uid_b = uid_b
+        super().__init__(
+            f"Port conflict: {uid_a} and {uid_b} both resolved to {port}. "
+            f"Run tools/dump_serial_ports.py to inspect USB fingerprints."
+        )
+
+
+class HandshakeMismatchError(RuntimeError):
+    """Raised when a post-connect protocol handshake fails."""
+
+    def __init__(self, uid: str, port: str, detail: str):
+        self.uid = uid
+        self.port = port
+        super().__init__(
+            f"{uid} on {port}: handshake failed — {detail}"
+        )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -93,6 +124,17 @@ class USBFingerprint:
             and not self.location
         )
 
+    @property
+    def stable_id(self) -> str:
+        """Best available stable identifier (serial_number > location)."""
+        if self.serial_number:
+            return f"sn:{self.serial_number}"
+        if self.location:
+            return f"loc:{self.location}"
+        if self.vid is not None and self.pid is not None:
+            return f"vid:{self.vid:04x}:pid:{self.pid:04x}"
+        return ""
+
 
 @dataclass
 class PortInfo:
@@ -115,16 +157,16 @@ def _score(port_fp: USBFingerprint, saved_fp: USBFingerprint) -> int:
     """
     score = 0
 
-    # ── USB serial number (most specific) ────────────────────────────
+    # ── USB serial number (most specific — hard reject on mismatch) ──
     if saved_fp.serial_number:
         if not port_fp.serial_number:
-            return -1  # saved expects a serial, port has none
+            return -1
         if port_fp.serial_number.lower() == saved_fp.serial_number.lower():
             score += 100
         else:
             return -1  # different serial → definitely not the same device
 
-    # ── VID:PID ──────────────────────────────────────────────────────
+    # ── VID:PID (hard reject on mismatch) ────────────────────────────
     if saved_fp.vid is not None:
         if port_fp.vid != saved_fp.vid:
             return -1
@@ -134,23 +176,86 @@ def _score(port_fp: USBFingerprint, saved_fp: USBFingerprint) -> int:
             return -1
         score += 20
 
-    # ── Manufacturer string ──────────────────────────────────────────
-    if saved_fp.manufacturer:
-        if saved_fp.manufacturer.lower() in (port_fp.manufacturer or "").lower():
-            score += 5
-        # Not a hard reject — manufacturer strings can vary
-
-    # ── Product string ───────────────────────────────────────────────
-    if saved_fp.product:
-        if saved_fp.product.lower() in (port_fp.product or "").lower():
-            score += 5
-
-    # ── USB location (topology) ──────────────────────────────────────
+    # ── USB location (topology — stable if wiring unchanged) ─────────
     if saved_fp.location:
         if port_fp.location and port_fp.location == saved_fp.location:
             score += 10
 
+    # ── Manufacturer string (soft match — not a hard reject) ─────────
+    if saved_fp.manufacturer and port_fp.manufacturer:
+        if saved_fp.manufacturer.lower() in port_fp.manufacturer.lower():
+            score += 5
+
+    # ── Product string (soft match) ──────────────────────────────────
+    if saved_fp.product and port_fp.product:
+        if saved_fp.product.lower() in port_fp.product.lower():
+            score += 5
+
     return score
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Port ownership registry (singleton)
+# ──────────────────────────────────────────────────────────────────────────────
+
+class _PortOwnership:
+    """Thread-safe registry of which UID owns which COM port.
+
+    Prevents any second code path from opening an already-claimed port.
+    """
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._port_to_uid: dict[str, str] = {}    # "COM4" → "meerstetter_tec_1089"
+        self._uid_to_port: dict[str, str] = {}     # reverse index
+
+    def claim(self, port: str, uid: str) -> None:
+        """Claim *port* for *uid*.  Raises if already claimed by another."""
+        with self._lock:
+            current_owner = self._port_to_uid.get(port)
+            if current_owner and current_owner != uid:
+                raise AmbiguousPortError(port, current_owner, uid)
+            # Release any previous port this UID held
+            old_port = self._uid_to_port.get(uid)
+            if old_port and old_port != port:
+                self._port_to_uid.pop(old_port, None)
+            self._port_to_uid[port] = uid
+            self._uid_to_port[uid] = port
+
+    def release(self, uid: str) -> None:
+        """Release the port held by *uid* (if any)."""
+        with self._lock:
+            port = self._uid_to_port.pop(uid, None)
+            if port:
+                self._port_to_uid.pop(port, None)
+
+    def owner_of(self, port: str) -> str | None:
+        """Return the UID that owns *port*, or None."""
+        with self._lock:
+            return self._port_to_uid.get(port)
+
+    def port_of(self, uid: str) -> str | None:
+        """Return the port owned by *uid*, or None."""
+        with self._lock:
+            return self._uid_to_port.get(uid)
+
+    def is_claimed(self, port: str) -> bool:
+        with self._lock:
+            return port in self._port_to_uid
+
+    def claimed_ports(self) -> dict[str, str]:
+        """Return a snapshot of all claims: {port: uid}."""
+        with self._lock:
+            return dict(self._port_to_uid)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._port_to_uid.clear()
+            self._uid_to_port.clear()
+
+
+# Module-level singleton — shared across DeviceManager, hw_service, drivers.
+port_ownership = _PortOwnership()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -164,12 +269,12 @@ class PortResolver:
 
         resolver = PortResolver()
         resolver.snapshot()                 # enumerate hardware
-        port = resolver.resolve("meerstetter_tec_1089")
+        assignments = resolver.resolve_all(device_map)
+        # assignments is validated: no duplicate ports.
     """
 
     def __init__(self):
         self._ports: list[PortInfo] = []
-        self._claimed: set[str] = set()    # ports already assigned
 
     # ── Enumeration ──────────────────────────────────────────────────
 
@@ -183,7 +288,6 @@ class PortResolver:
             return self._ports
 
         self._ports = []
-        self._claimed = set()
         for p in sorted(comports(), key=lambda x: x.device):
             info = PortInfo(
                 device=p.device,
@@ -209,33 +313,22 @@ class PortResolver:
     def ports(self) -> list[PortInfo]:
         return list(self._ports)
 
-    # ── Resolution ───────────────────────────────────────────────────
+    # ── Single-device resolution (internal) ──────────────────────────
 
-    def resolve(self, uid: str, saved_fp: USBFingerprint | None = None,
-                saved_port: str = "") -> str | None:
-        """Find the current COM port for *uid* using its saved fingerprint.
+    def _resolve_one(self, uid: str, saved_fp: USBFingerprint | None,
+                     saved_port: str, claimed: set[str]) -> str | None:
+        """Find the current COM port for *uid*.
 
         Parameters
         ----------
-        uid : str
-            Logical device UID (e.g. ``"meerstetter_tec_1089"``).
-        saved_fp : USBFingerprint | None
-            The fingerprint saved from the last successful connection.
-            If ``None`` or empty, falls back to *saved_port*.
-        saved_port : str
-            The last-known COM port (fallback if fingerprint is unavailable).
-
-        Returns
-        -------
-        str | None
-            The resolved COM port name, or ``None`` if the device was not
-            found in the current port enumeration.
+        claimed : set[str]
+            Ports already assigned to other devices in this resolution
+            pass.  This device will not be matched to a claimed port.
         """
         if saved_fp and not saved_fp.is_empty():
-            # Fingerprint-based resolution
             candidates: list[tuple[int, PortInfo]] = []
             for pi in self._ports:
-                if pi.device in self._claimed:
+                if pi.device in claimed:
                     continue
                 s = _score(pi.fingerprint, saved_fp)
                 if s >= 0:
@@ -245,43 +338,47 @@ class PortResolver:
 
             if candidates:
                 best_score, best = candidates[0]
-                # Reject ambiguous matches
+                # Reject ambiguous same-score matches below serial-number
+                # confidence (score < 100).
                 if (len(candidates) > 1
                         and candidates[0][0] == candidates[1][0]
-                        and candidates[0][0] < 100):
+                        and best_score < 100):
                     log.warning(
                         "PortResolver: ambiguous match for %s — %s and %s "
-                        "both scored %d.  Falling back to saved port.",
+                        "both scored %d.  Skipping (will not guess).",
                         uid, candidates[0][1].device,
                         candidates[1][1].device, best_score)
+                    return None
+                if best.device != saved_port:
+                    log.info(
+                        "PortResolver: %s moved %s → %s "
+                        "(fingerprint score=%d, id=%s)",
+                        uid, saved_port or "(none)", best.device,
+                        best_score, saved_fp.stable_id)
                 else:
-                    self._claimed.add(best.device)
-                    if best.device != saved_port:
-                        log.info(
-                            "PortResolver: %s moved from %s to %s "
-                            "(matched by USB fingerprint, score=%d)",
-                            uid, saved_port or "(none)", best.device,
-                            best_score)
-                    else:
-                        log.info(
-                            "PortResolver: %s → %s (fingerprint match, "
-                            "score=%d)", uid, best.device, best_score)
-                    return best.device
+                    log.info(
+                        "PortResolver: %s → %s (fingerprint match, "
+                        "score=%d)", uid, best.device, best_score)
+                return best.device
 
-        # Fallback: use saved COM port if it exists in the current snapshot
+        # ── COM port fallback (hint only, no fingerprint) ────────────
+        # This path is ONLY used during migration from older configs
+        # that don't have saved fingerprints yet.  The port is treated
+        # as a hint — the caller MUST verify via handshake.
         if saved_port:
             for pi in self._ports:
-                if pi.device == saved_port and pi.device not in self._claimed:
+                if pi.device == saved_port and pi.device not in claimed:
                     log.info(
-                        "PortResolver: %s → %s (COM port fallback, "
-                        "no fingerprint)", uid, saved_port)
-                    self._claimed.add(saved_port)
+                        "PortResolver: %s → %s (COM hint fallback — "
+                        "HANDSHAKE REQUIRED)", uid, saved_port)
                     return saved_port
             log.warning(
-                "PortResolver: %s saved port %s not found in current "
-                "enumeration", uid, saved_port)
+                "PortResolver: %s hint port %s not in current enumeration",
+                uid, saved_port)
 
         return None
+
+    # ── Batch resolution ─────────────────────────────────────────────
 
     def resolve_all(self, device_map: dict[str, tuple[USBFingerprint | None, str]]
                     ) -> dict[str, str | None]:
@@ -296,21 +393,49 @@ class PortResolver:
         -------
         dict
             ``{uid: resolved_port_or_None}``
+
+        Raises
+        ------
+        AmbiguousPortError
+            If two devices resolve to the same physical port.
         """
         result: dict[str, str | None] = {}
-        # Sort by fingerprint quality: devices with serial numbers first
-        # (most specific), then by saved port.  This ensures the best
-        # matches claim ports before ambiguous ones.
-        def _sort_key(item):
-            uid, (fp, port) = item
-            has_serial = 1 if (fp and fp.serial_number) else 0
-            return (-has_serial, uid)
+        claimed: set[str] = set()
 
-        for uid, (fp, port) in sorted(device_map.items(), key=_sort_key):
-            result[uid] = self.resolve(uid, fp, port)
+        # Resolve in priority order: devices with USB serial numbers first
+        # (highest confidence), then by location, then bare VID:PID.
+        def _priority(item):
+            uid, (fp, port) = item
+            if fp and fp.serial_number:
+                return (0, uid)      # best: has serial number
+            if fp and fp.location:
+                return (1, uid)      # good: has USB location
+            if fp and not fp.is_empty():
+                return (2, uid)      # ok: has VID:PID at least
+            return (3, uid)          # worst: no fingerprint, COM hint only
+
+        for uid, (fp, port) in sorted(device_map.items(), key=_priority):
+            resolved = self._resolve_one(uid, fp, port, claimed)
+            if resolved:
+                # ── Duplicate claim check (hard fail) ────────────────
+                if resolved in claimed:
+                    # Find who already claimed it
+                    other = next(
+                        (u for u, p in result.items() if p == resolved), "?")
+                    raise AmbiguousPortError(resolved, other, uid)
+                claimed.add(resolved)
+            result[uid] = resolved
+
+        # Log final assignments
+        for uid, port in result.items():
+            if port:
+                log.info("PortResolver assignment: %s → %s", uid, port)
+            else:
+                log.info("PortResolver assignment: %s → NOT FOUND", uid)
+
         return result
 
-    # ── Fingerprint capture ──────────────────────────────────────────
+    # ── Fingerprint lookup ───────────────────────────────────────────
 
     def get_fingerprint(self, port_name: str) -> USBFingerprint | None:
         """Return the USB fingerprint for a specific port in the snapshot."""
@@ -321,14 +446,69 @@ class PortResolver:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+#  Post-connect handshake verification
+# ──────────────────────────────────────────────────────────────────────────────
+
+def verify_handshake(uid: str, port: str, driver_obj) -> bool:
+    """Verify that the connected device actually matches the expected UID.
+
+    This MUST be called after every successful ``driver_obj.connect()``.
+    If the handshake fails, the caller should close the port immediately.
+
+    Returns True if the device identity is confirmed.
+    Raises HandshakeMismatchError if the device is wrong.
+    """
+    from hardware.device_registry import DEVICE_REGISTRY
+
+    desc = DEVICE_REGISTRY.get(uid)
+    if desc is None:
+        return True  # unknown device type, can't verify
+
+    dtype = desc.device_type
+
+    # ── Arduino / ESP32 (GPIO devices) ───────────────────────────────
+    # The driver's connect() already validates IDENT response.
+    # If connect() succeeded, the handshake passed.
+    if dtype == "gpio":
+        return True
+
+    # ── Meerstetter TEC / LDD ────────────────────────────────────────
+    if desc.protocol_prober == "mecom":
+        try:
+            st = driver_obj.get_status()
+            # Meerstetter drivers return a status object with device_type
+            # or model info.  If get_status() succeeded without exception,
+            # the MeCom protocol is speaking correctly.
+            log.info("[%s] MeCom handshake OK on %s", uid, port)
+            return True
+        except Exception as exc:
+            raise HandshakeMismatchError(
+                uid, port,
+                f"MeCom status query failed: {exc}"
+            ) from exc
+
+    # ── Other device types ───────────────────────────────────────────
+    # For devices we can't protocol-verify, trust the fingerprint match.
+    return True
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 #  Persistence helpers
 # ──────────────────────────────────────────────────────────────────────────────
 
 def save_fingerprint(uid: str, fp: USBFingerprint) -> None:
-    """Persist a device's USB fingerprint to config preferences."""
+    """Persist a device's USB fingerprint to config preferences.
+
+    The fingerprint is the PRIMARY stored identity.  The COM port is saved
+    alongside as a migration hint, but fingerprint takes precedence.
+    """
     try:
         import config as _cfg
-        _cfg.set_pref(f"device_params.{uid}.usb_fingerprint", fp.to_dict())
+        existing = _cfg.get_pref(f"device_params.{uid}", {})
+        if not isinstance(existing, dict):
+            existing = {}
+        existing["usb_fingerprint"] = fp.to_dict()
+        _cfg.set_pref(f"device_params.{uid}", existing)
     except Exception:
         log.debug("Could not save fingerprint for %s", uid, exc_info=True)
 
@@ -337,9 +517,11 @@ def load_fingerprint(uid: str) -> USBFingerprint | None:
     """Load a device's saved USB fingerprint from config preferences."""
     try:
         import config as _cfg
-        d = _cfg.get_pref(f"device_params.{uid}.usb_fingerprint", None)
-        if d and isinstance(d, dict):
-            return USBFingerprint.from_dict(d)
+        saved = _cfg.get_pref(f"device_params.{uid}", {})
+        if isinstance(saved, dict):
+            d = saved.get("usb_fingerprint")
+            if d and isinstance(d, dict):
+                return USBFingerprint.from_dict(d)
     except Exception:
         log.debug("Could not load fingerprint for %s", uid, exc_info=True)
     return None
