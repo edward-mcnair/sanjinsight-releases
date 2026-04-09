@@ -485,12 +485,22 @@ class _DeviceListPanel(QWidget):
         item.setForeground(self._C_NAME, QBrush(QColor(name_color)))
 
         # Address (truncated, monospace) — full address in tooltip
+        # Display address: prefer authoritative (resolver/connection),
+        # fall back to observed (scan) for display only.
         full_addr = entry.address or ""
+        _display_observed = False
+        if not full_addr and getattr(entry, 'observed_address', ''):
+            full_addr = entry.observed_address
+            _display_observed = True
         addr = full_addr
         if len(addr) > 18:
             addr = "…" + addr[-16:]
         item.setText(self._C_ADDR, addr)
-        item.setForeground(self._C_ADDR, QBrush(QColor(PALETTE['textSub'])))
+        # Dim the address text if it's only from scan (not verified)
+        _addr_color = (PALETTE.get('textMuted', PALETTE['textSub'])
+                       if _display_observed
+                       else PALETTE['textSub'])
+        item.setForeground(self._C_ADDR, QBrush(QColor(_addr_color)))
         item.setTextAlignment(
             self._C_ADDR, Qt.AlignRight | Qt.AlignVCenter)
         addr_font = mono_font(9)

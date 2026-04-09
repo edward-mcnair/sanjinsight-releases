@@ -595,13 +595,10 @@ class DeviceManager:
                 entry.last_seen        = time.time()
                 entry.port_ambiguous   = addr in ambiguous_ports
 
-                # If this device has no resolver-assigned address yet,
-                # promote the observed address as a starting point so the
-                # user sees it in the UI — but mark the method as "scan"
-                # to distinguish it from a verified assignment.
-                if addr and not entry.address:
-                    entry.address          = addr
-                    entry.resolution_method = "scan"
+                # Scan NEVER writes entry.address — that field is set only
+                # by the resolver (fingerprint/com_hint) or a verified
+                # successful connection.  The UI reads observed_address
+                # for display when address is empty.
 
                 if addr:
                     claimed_ports[addr] = uid

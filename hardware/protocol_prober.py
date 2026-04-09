@@ -98,19 +98,33 @@ def probe_mecom_port(
         return [ProbeResult(port=port, error="port locked by another process")]
 
     # Check if port is claimed by the port ownership registry
-    # (i.e. a live connection is using it — don't probe it)
+    # (i.e. a live connection or another probe is using it).
+    _probe_tag = f"__probe__{port}"
     try:
-        from hardware.port_resolver import port_ownership
+        from hardware.port_resolver import port_ownership, AmbiguousPortError
         owner = port_ownership.owner_of(port)
         if owner:
             log.debug("probe_mecom_port: %s is owned by %s — skipping", port, owner)
             return [ProbeResult(port=port, error=f"port claimed by {owner}")]
+        # Claim the port for the duration of the probe so no concurrent
+        # connect or second probe can open it while we're probing.
+        port_ownership.claim(port, _probe_tag)
+        log.debug("probe_mecom_port: claimed %s for probing", port)
+    except AmbiguousPortError as clash:
+        log.debug("probe_mecom_port: %s claimed by %s — skipping",
+                  port, clash.uid_a)
+        return [ProbeResult(port=port, error=f"port claimed by {clash.uid_a}")]
     except Exception:
         pass
 
     try:
         from mecom import MeCom
     except ImportError:
+        # Release probe claim before returning
+        try:
+            port_ownership.release(_probe_tag)
+        except Exception:
+            pass
         return [ProbeResult(port=port, error="pyMeCom not installed")]
 
     results: List[ProbeResult] = []
@@ -157,6 +171,13 @@ def probe_mecom_port(
                 mcom.stop()
             except Exception:
                 pass
+        # Release probe claim so the port is available for connect
+        try:
+            from hardware.port_resolver import port_ownership as _po
+            _po.release(_probe_tag)
+            log.debug("probe_mecom_port: released %s", port)
+        except Exception:
+            pass
 
     # ── Phantom-echo deduplication ────────────────────────────────
     # When only one Meerstetter device is on the bus, it may respond to

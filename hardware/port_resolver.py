@@ -78,6 +78,22 @@ class HandshakeMismatchError(RuntimeError):
 # ──────────────────────────────────────────────────────────────────────────────
 
 @dataclass
+class DeviceIdentity:
+    """Normalized identity returned by a driver after connection.
+
+    This allows verify_handshake() to check explicit identity fields
+    rather than inferring device family from status-response shape.
+    Drivers that implement ``get_identity()`` return one of these.
+    """
+    protocol:         str = ""     # "mecom", "ident_ascii", "visa", etc.
+    device_family:    str = ""     # "tec", "ldd", "gpio", "camera", etc.
+    model:            str = ""     # "TEC-1089", "LDD-1121", "Arduino Nano"
+    node_address:     int = -1     # protocol address (MeCom: 0–7)
+    serial_number:    str = ""     # device serial if available
+    firmware_version: str = ""     # firmware/driver version string
+
+
+@dataclass
 class USBFingerprint:
     """Stable identity attributes for a USB-serial device."""
     vid: Optional[int] = None
@@ -485,6 +501,41 @@ def verify_handshake(uid: str, port: str, driver_obj) -> bool:
 
     # ── Meerstetter TEC / LDD ────────────────────────────────────────
     if desc.protocol_prober == "mecom":
+        # Prefer explicit identity if the driver implements get_identity()
+        identity = None
+        if hasattr(driver_obj, "get_identity"):
+            try:
+                identity = driver_obj.get_identity()
+            except Exception:
+                log.debug("[%s] get_identity() failed, falling back to "
+                          "status-field inference", uid, exc_info=True)
+
+        if identity and identity.protocol == "mecom":
+            # ── Explicit identity verification ───────────────────
+            expected_addr = getattr(desc, "mecom_address", None)
+            if (expected_addr is not None
+                    and identity.node_address >= 0
+                    and expected_addr != identity.node_address):
+                raise HandshakeMismatchError(
+                    uid, port,
+                    f"MeCom address mismatch: expected {expected_addr}, "
+                    f"got {identity.node_address} — this may be a "
+                    f"different Meerstetter device (TEC vs LDD)"
+                )
+            if dtype and identity.device_family and dtype != identity.device_family:
+                raise HandshakeMismatchError(
+                    uid, port,
+                    f"Device family mismatch: expected {dtype}, "
+                    f"got {identity.device_family} "
+                    f"(model: {identity.model})"
+                )
+            log.info("[%s] MeCom handshake OK on %s (identity: "
+                     "family=%s, model=%s, address=%d)",
+                     uid, port, identity.device_family,
+                     identity.model, identity.node_address)
+            return True
+
+        # ── Fallback: status-field inference ─────────────────────
         try:
             st = driver_obj.get_status()
         except Exception as exc:
@@ -493,8 +544,6 @@ def verify_handshake(uid: str, port: str, driver_obj) -> bool:
                 f"MeCom status query failed: {exc}"
             ) from exc
 
-        # Verify MeCom address matches the registry expectation.
-        # The driver stores the actual address used to communicate.
         expected_addr = getattr(desc, "mecom_address", None)
         actual_addr = getattr(driver_obj, "_address", None)
         if (expected_addr is not None and actual_addr is not None
@@ -506,8 +555,6 @@ def verify_handshake(uid: str, port: str, driver_obj) -> bool:
                 f"device (TEC vs LDD)"
             )
 
-        # Verify device family: TEC drivers should have temperature
-        # fields, LDD drivers should have current fields.
         _is_tec_driver = hasattr(st, "actual_temp") or hasattr(st, "sink_temp")
         _is_ldd_driver = hasattr(st, "actual_current_a") and not _is_tec_driver
         if dtype == "tec" and _is_ldd_driver:
@@ -521,7 +568,8 @@ def verify_handshake(uid: str, port: str, driver_obj) -> bool:
                 "Expected LDD but got TEC-type status response"
             )
 
-        log.info("[%s] MeCom handshake OK on %s (address=%s)",
+        log.info("[%s] MeCom handshake OK on %s (address=%s, "
+                 "inferred from status fields)",
                  uid, port, actual_addr)
         return True
 

@@ -325,6 +325,18 @@ class MeerstetterDriver(TecDriver):
                 value=float(degrees_per_second),
                 address=self._address, parameter_instance=1)
 
+    def get_identity(self):
+        """Return a normalized DeviceIdentity for handshake verification."""
+        from hardware.port_resolver import DeviceIdentity
+        return DeviceIdentity(
+            protocol="mecom",
+            device_family="tec",
+            model="TEC-1089",
+            node_address=self._address,
+            serial_number="",
+            firmware_version="",
+        )
+
     def get_status(self) -> TecStatus:
         import time as _time
         try:

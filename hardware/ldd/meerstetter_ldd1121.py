@@ -163,6 +163,18 @@ class MeerstetterLdd1121(LddDriver):
     #  Readback                                                         #
     # ---------------------------------------------------------------- #
 
+    def get_identity(self):
+        """Return a normalized DeviceIdentity for handshake verification."""
+        from hardware.port_resolver import DeviceIdentity
+        return DeviceIdentity(
+            protocol="mecom",
+            device_family="ldd",
+            model="LDD-1121",
+            node_address=self._address,
+            serial_number="",
+            firmware_version="",
+        )
+
     def get_status(self) -> LddStatus:
         import time as _time
         try:
