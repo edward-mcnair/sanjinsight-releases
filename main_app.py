@@ -5269,12 +5269,20 @@ if __name__ == "__main__":
                 _t.sleep(2.0)
                 dm = window._device_mgr
 
+                # ── Resolve ports by USB fingerprint ─────────────────
+                # COM port numbers are volatile — they shift between
+                # reboots.  Resolve each device to its CURRENT COM port
+                # by matching saved USB serial number / VID:PID / location
+                # against the live port enumeration.  This replaces the
+                # stale saved COM port with the correct current one.
+                try:
+                    dm.resolve_ports()
+                except Exception:
+                    log.warning("Auto-reconnect: port resolution failed, "
+                                "falling back to saved COM ports",
+                                exc_info=True)
+
                 # ── Port exclusivity: build set of ports already in use ──
-                # hw_service.start() may have already opened COM ports for
-                # TEC, FPGA, etc.  We must not attempt to open those same
-                # ports for other devices (e.g. phantom LDD or misassigned
-                # Arduino), as it causes PermissionError on Windows and can
-                # disrupt the existing connection.
                 _ports_in_use: set = set()
                 for _uid_chk, _ent_chk in dm._entries.items():
                     if (_ent_chk.state in (DeviceState.CONNECTED,

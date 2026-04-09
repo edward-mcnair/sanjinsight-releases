@@ -6,6 +6,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.50.42-beta] — 2026-04-08
+
+### Added
+- **USB fingerprint port resolver** (`hardware/port_resolver.py`) — Identifies devices by stable USB attributes (serial number, VID:PID, location, manufacturer/product strings) instead of volatile COM port numbers. Scores candidates by specificity: USB serial number (100pts) > VID:PID (40pts) > location (10pts) > strings (5pts). Rejects hard mismatches. Detects and blocks ambiguous matches.
+- **Fingerprint persistence** — After every successful connection, the USB fingerprint of the connected port is saved to `device_params.{uid}.usb_fingerprint`. On next launch, the resolver uses this to find the device's current COM port regardless of Windows port reassignment.
+- **Port resolution at startup** — Auto-reconnect now calls `dm.resolve_ports()` before connecting, updating stale saved COM addresses with fresh USB-fingerprint-resolved ports.
+- **Diagnostic tool** (`tools/dump_serial_ports.py`) — Prints full USB metadata for all serial ports (VID, PID, serial number, location, manufacturer, product). Run with devices connected to build fingerprint map.
+
+### Fixed
+- **FTDI removed from Arduino auto-detect** — VID 0403:6001 is shared with Meerstetter TEC/LDD; the Arduino driver no longer auto-discovers this ambiguous VID:PID during fallback scanning
+- **Excluded ports in Arduino/ESP32 drivers** — DeviceManager passes all claimed ports to drivers so fallback scans never try another device's port
+
 ## [1.50.41-beta] — 2026-04-08
 
 ### Fixed

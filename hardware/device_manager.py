@@ -351,6 +351,82 @@ class DeviceManager:
                 log.debug("DeviceManager: log callback failed", exc_info=True)
 
     # ---------------------------------------------------------------- #
+    #  USB fingerprint port resolution                                  #
+    # ---------------------------------------------------------------- #
+
+    def resolve_ports(self) -> dict[str, str | None]:
+        """Re-resolve all device addresses using USB fingerprints.
+
+        Enumerates all serial ports, matches each remembered device to
+        its physical port by USB serial number / VID:PID / location
+        (not volatile COM port number), and updates entry.address
+        to the current COM port.
+
+        Call this BEFORE auto-reconnect to ensure devices are connected
+        on their correct (current) ports, even if Windows reassigned
+        COM numbers since the last session.
+
+        Returns a dict of ``{uid: resolved_port_or_None}``.
+        """
+        from hardware.port_resolver import (
+            PortResolver, load_fingerprint, USBFingerprint
+        )
+
+        resolver = PortResolver()
+        resolver.snapshot()
+
+        # Build the map: uid → (saved_fingerprint, saved_port)
+        device_map: dict[str, tuple[USBFingerprint | None, str]] = {}
+        try:
+            import config as _cfg
+            remembered = _cfg.get_pref("hw.last_connected_devices", [])
+        except Exception:
+            remembered = []
+
+        for uid in remembered:
+            entry = self._entries.get(uid)
+            if entry is None:
+                continue
+            if entry.state in (DeviceState.CONNECTED, DeviceState.CONNECTING):
+                continue  # don't disturb live connections
+            # Skip non-serial devices (cameras, Ethernet, etc.)
+            conn = entry.descriptor.connection_type
+            if conn not in ("serial", "usb"):
+                continue
+
+            fp = load_fingerprint(uid)
+            device_map[uid] = (fp, entry.address)
+
+        if not device_map:
+            log.debug("resolve_ports: no serial devices to resolve")
+            return {}
+
+        results = resolver.resolve_all(device_map)
+
+        # Update entry addresses with resolved ports
+        for uid, resolved_port in results.items():
+            entry = self._entries.get(uid)
+            if entry is None:
+                continue
+            old_addr = entry.address
+            if resolved_port:
+                if resolved_port != old_addr:
+                    log.info("resolve_ports: %s port changed %s → %s",
+                             uid, old_addr, resolved_port)
+                    self._log(
+                        f"Port update: {entry.descriptor.display_name} "
+                        f"moved from {old_addr} to {resolved_port}")
+                entry.address = resolved_port
+            else:
+                if old_addr:
+                    log.info("resolve_ports: %s (was %s) not found in "
+                             "current port enumeration", uid, old_addr)
+
+        # Store resolver for later use (e.g. saving fingerprints)
+        self._port_resolver = resolver
+        return results
+
+    # ---------------------------------------------------------------- #
     #  Scan integration                                                 #
     # ---------------------------------------------------------------- #
 
@@ -619,6 +695,36 @@ class DeviceManager:
                 })
             except Exception:
                 pass
+
+            # ── Save USB fingerprint for the port we connected on ────
+            # This is the KEY to reliable reconnection: next launch we
+            # match by USB serial number / VID:PID / location instead
+            # of volatile COM port number.
+            if entry.address:
+                try:
+                    from hardware.port_resolver import (
+                        save_fingerprint, USBFingerprint
+                    )
+                    resolver = getattr(self, '_port_resolver', None)
+                    if resolver:
+                        fp = resolver.get_fingerprint(entry.address)
+                    else:
+                        # No resolver cached — do a quick lookup
+                        from serial.tools.list_ports import comports
+                        fp = None
+                        for p in comports():
+                            if p.device == entry.address:
+                                fp = USBFingerprint.from_port_info(p)
+                                break
+                    if fp and not fp.is_empty():
+                        save_fingerprint(uid, fp)
+                        log.info("[%s] Saved USB fingerprint: serial=%r "
+                                 "vid=0x%04X pid=0x%04X loc=%r",
+                                 uid, fp.serial_number,
+                                 fp.vid or 0, fp.pid or 0, fp.location)
+                except Exception:
+                    log.debug("[%s] Could not save USB fingerprint",
+                              uid, exc_info=True)
 
             if self._post_inject_cb:
                 try:
