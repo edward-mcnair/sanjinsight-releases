@@ -56,6 +56,10 @@ class ArduinoNanoDriver(ArduinoDriver):
         self._lock = threading.Lock()
         self._firmware_version: str = ""
         self._active_led: int = -1
+        # Ports already claimed by other devices — the driver must never
+        # attempt to open these during fallback scanning.  Populated by
+        # DeviceManager._instantiate_driver() from its claimed_ports set.
+        self._excluded_ports: set[str] = set(cfg.get("_excluded_ports", []))
 
     # ---------------------------------------------------------------- #
     #  Lifecycle                                                        #
@@ -71,14 +75,13 @@ class ArduinoNanoDriver(ArduinoDriver):
         # Meerstetter TEC/LDD controllers).
         saved_port = self._port
         candidates: list[str] = []
-        if saved_port:
+        if saved_port and saved_port not in self._excluded_ports:
             candidates.append(saved_port)
 
-        # Append ALL auto-detected ports that aren't already in the list.
-        # This handles COM-port reassignment after reboots and boards
-        # sharing FTDI VID:PID with Meerstetter devices.
+        # Append auto-detected ports that aren't already in the list
+        # and aren't claimed by other devices.
         for ap in self._auto_detect_ports():
-            if ap not in candidates:
+            if ap not in candidates and ap not in self._excluded_ports:
                 candidates.append(ap)
 
         if not candidates:
@@ -304,10 +307,14 @@ class ArduinoNanoDriver(ArduinoDriver):
         except ImportError:
             return []
 
-        # Known VID:PID pairs for Arduino-compatible boards
+        # Known VID:PID pairs for Arduino-compatible boards.
+        # NOTE: FTDI FT232R (0403:6001) is deliberately EXCLUDED — it is
+        # shared with Meerstetter TEC/LDD controllers.  FTDI-based Arduinos
+        # are discovered by the device scanner and assigned their port via
+        # the device registry; auto-detect must not re-discover them here
+        # or the fallback loop will try to open the TEC's port.
         _VIDS_PIDS = {
             (0x1A86, 0x7523),  # CH340 (Nano clones, many third-party boards)
-            (0x0403, 0x6001),  # FTDI FT232R (original Nano, also Meerstetter!)
             (0x2341, 0x0043),  # Arduino UNO R3
             (0x2341, 0x0069),  # Arduino UNO R4 Minima
             (0x2341, 0x1002),  # Arduino UNO R4 WiFi

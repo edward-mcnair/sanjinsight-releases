@@ -892,6 +892,19 @@ class DeviceManager:
             from hardware.ldd.factory import create_ldd
             return create_ldd(cfg)
         elif dtype == DTYPE_GPIO:
+            # Tell Arduino/ESP32 drivers which ports are already claimed
+            # by other devices so their fallback scan never tries to open
+            # a Meerstetter (or any other) device's port.
+            claimed: list[str] = []
+            for _uid, _ent in self._entries.items():
+                if _uid == entry.uid:
+                    continue   # skip self
+                if (_ent.address
+                        and _ent.state in (DeviceState.CONNECTED,
+                                           DeviceState.CONNECTING,
+                                           DeviceState.DISCOVERED)):
+                    claimed.append(_ent.address)
+            cfg["_excluded_ports"] = claimed
             from hardware.arduino.factory import create_arduino
             return create_arduino(cfg)
         else:

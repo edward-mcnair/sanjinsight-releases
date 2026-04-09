@@ -69,6 +69,8 @@ class Esp32Driver(ArduinoDriver):
         self._lock = threading.Lock()
         self._firmware_version: str = ""
         self._active_led: int = -1
+        # Ports already claimed by other devices — never try these.
+        self._excluded_ports: set[str] = set(cfg.get("_excluded_ports", []))
 
         # Use ESP32 default pin map if no custom channels were loaded
         if not cfg.get("led_channels"):
@@ -82,12 +84,13 @@ class Esp32Driver(ArduinoDriver):
         import serial
 
         # Build candidate list: saved port first, then auto-detected ports.
+        # Skip ports already claimed by other devices.
         saved_port = self._port
         candidates: list[str] = []
-        if saved_port:
+        if saved_port and saved_port not in self._excluded_ports:
             candidates.append(saved_port)
         for ap in self._auto_detect_ports():
-            if ap not in candidates:
+            if ap not in candidates and ap not in self._excluded_ports:
                 candidates.append(ap)
 
         if not candidates:

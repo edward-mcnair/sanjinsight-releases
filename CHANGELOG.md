@@ -6,6 +6,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.50.41-beta] — 2026-04-08
+
+### Fixed
+- **Arduino fallback scan steals TEC port** — Removed FTDI FT232R (0403:6001) from Arduino/ESP32 auto-detect VID:PID list since it is shared with Meerstetter TEC/LDD controllers. FTDI-based Arduinos are correctly identified by the discovery engine; the driver's fallback scan should not re-discover ambiguous ports
+- **Excluded ports passed to Arduino/ESP32 drivers** — DeviceManager now injects a list of ports already claimed by connected/connecting/discovered devices into the driver config. Both Arduino and ESP32 drivers skip excluded ports during saved-port and fallback attempts, preventing PermissionError from opening another device's port
+
 ## [1.50.40-beta] — 2026-04-08
 
 ### Added
