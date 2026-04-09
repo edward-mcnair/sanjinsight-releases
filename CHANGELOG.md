@@ -6,6 +6,55 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.50.47-beta] — 2026-04-08
+
+### Added
+- **Probe claim timeout watchdog** — `_PortOwnership` tracks claim timestamps. `check_stale_claims()` warns if any probe claim (`__probe__*`) is held longer than 30 seconds, indicating a leaked claim. `release_stale_probes()` force-releases them as a safety net. Runs automatically during `resolve_ports()` and `generate_identity_report()`
+- **Port resolver integration tests** (`tests/test_port_resolver.py`) — 44 unit tests covering `_score()` (13 cases: serial match/mismatch, VID:PID, location, manufacturer, product, case sensitivity), `PortResolver` (16 cases: serial resolution, port movement, missing devices, COM hint fallback, claimed-port skipping, ambiguous low-confidence rejection, batch resolution, swapped ports, stale fingerprints, priority ordering), `_PortOwnership` (12 cases: claim/release, conflicts, port movement, snapshot, watchdog timing), and `USBFingerprint` (6 cases: stable_id variants, is_empty, dict round-trip)
+- **QA test checklist** (`tools/qa_device_identity.md`) — 7-scenario manual QA plan for device identity pipeline: repeated reboot stability, plug-order permutations, missing device handling, stale fingerprint rejection, scan during active connection, interrupted startup recovery, and TEC/LDD FTDI collision
+
+### Changed
+- Port ownership `log_state()` now includes claim age in seconds for each entry
+
+## [1.50.46-beta] — 2026-04-08
+
+### Added
+- **Startup identity report** — `DeviceManager.generate_identity_report()` produces a per-device diagnostic summary after auto-reconnect (saved fingerprint, observed address, resolved address, resolution method, ambiguity flag, handshake identity). Logged at INFO level and available for export
+- **Export identity log** — "Export" button in Device Manager log toolbar writes identity report + port ownership snapshot + raw log to `~/.microsanj/identity_logs/identity_log_YYYYMMDD_HHMMSS.txt` and opens the containing folder
+- **`get_identity()` on all serial drivers** — Arduino Nano, ESP32, TEC-1089, and LDD-1121 drivers implement `get_identity()` returning a `DeviceIdentity` dataclass for explicit post-connect verification
+
+### Fixed
+- Claim/release logging upgraded from DEBUG to INFO so ownership events are visible in the Device Manager log panel
+- Stale fingerprint (saved serial matched no current port) now logs a WARNING with the fingerprint's `stable_id`
+
+## [1.50.45-beta] — 2026-04-08
+
+### Changed
+- **Scan is advisory-only** — `update_from_scan()` writes `observed_address` only; never promotes scan results into `entry.address`. Only the resolver or a verified connection sets the authoritative address
+- **Probe claims port during probe** — `probe_mecom_port()` claims the port via `port_ownership` before opening, releases in `finally`. Prevents concurrent connect or second probe from racing
+- **DeviceIdentity contract** — New `DeviceIdentity` dataclass in `port_resolver.py` for normalized driver identity (protocol, device_family, model, node_address, serial_number, firmware_version). `verify_handshake()` prefers explicit `get_identity()` over status-field inference
+
+## [1.50.44-beta] — 2026-04-08
+
+### Changed
+- **Drivers respect resolver** — When `resolver_provided=True`, Arduino Nano and ESP32 drivers connect to exactly the resolved port with no fallback scanning. On failure they raise `RuntimeError` with diagnostics instead of silently probing other ports
+- **Probing checks ownership** — `probe_mecom_port()` checks `port_ownership.owner_of()` before opening and skips owned ports
+
+### Added
+- **DeviceEntry fields** — `observed_address` (scan-discovered port, not persisted), `resolution_method` ("fingerprint"/"com_hint"/"scan"/"user"), `port_ambiguous` (True if port had multiple candidate devices)
+- **Identity audit log** — `_log_identity_audit()` traces every resolution decision per device during `resolve_ports()`
+- **UI: ambiguous port indicator** — Amber dot and "(ambiguous)" label for contested ports in Device Manager; address tooltip shows USB fingerprint and resolution method
+
+## [1.50.43-beta] — 2026-04-08
+
+### Added
+- **Port ownership registry** — Thread-safe `_PortOwnership` singleton in `port_resolver.py` tracks which device UID owns which COM port. `claim()` raises `AmbiguousPortError` if a port is already held by another device. Used by connect, disconnect, and probing code paths
+- **Post-connect handshake verification** — `verify_handshake()` checks device identity after every `driver.connect()`. For MeCom devices, verifies both the protocol address (TEC=2, LDD=1) and device family (TEC vs LDD via status-field shape). Raises `HandshakeMismatchError` on mismatch
+- **`AmbiguousPortError`** — Hard failure when two logical devices resolve to the same physical port, raised before any connection attempt
+- **`HandshakeMismatchError`** — Raised when post-connect protocol handshake detects the wrong device type (e.g. TEC on LDD's port)
+
+---
+
 ## [1.50.42-beta] — 2026-04-08
 
 ### Added

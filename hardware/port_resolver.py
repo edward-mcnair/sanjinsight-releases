@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from dataclasses import dataclass, field, asdict
 from typing import Optional
 
@@ -229,10 +230,14 @@ class _PortOwnership:
     Prevents any second code path from opening an already-claimed port.
     """
 
+    # Probe claims older than this (seconds) are considered leaked.
+    PROBE_CLAIM_TIMEOUT = 30.0
+
     def __init__(self):
         self._lock = threading.Lock()
         self._port_to_uid: dict[str, str] = {}    # "COM4" → "meerstetter_tec_1089"
         self._uid_to_port: dict[str, str] = {}     # reverse index
+        self._claim_times: dict[str, float] = {}   # uid → monotonic timestamp
 
     def claim(self, port: str, uid: str) -> None:
         """Claim *port* for *uid*.  Raises if already claimed by another."""
@@ -246,6 +251,7 @@ class _PortOwnership:
                 self._port_to_uid.pop(old_port, None)
             self._port_to_uid[port] = uid
             self._uid_to_port[uid] = port
+            self._claim_times[uid] = time.monotonic()
 
     def release(self, uid: str) -> None:
         """Release the port held by *uid* (if any)."""
@@ -253,6 +259,7 @@ class _PortOwnership:
             port = self._uid_to_port.pop(uid, None)
             if port:
                 self._port_to_uid.pop(port, None)
+            self._claim_times.pop(uid, None)
 
     def owner_of(self, port: str) -> str | None:
         """Return the UID that owns *port*, or None."""
@@ -277,6 +284,7 @@ class _PortOwnership:
         with self._lock:
             self._port_to_uid.clear()
             self._uid_to_port.clear()
+            self._claim_times.clear()
 
     def log_state(self) -> None:
         """Log current ownership state at INFO level for auditing."""
@@ -284,8 +292,48 @@ class _PortOwnership:
             if not self._port_to_uid:
                 log.info("PortOwnership: no active claims")
                 return
+            now = time.monotonic()
             for port, uid in sorted(self._port_to_uid.items()):
-                log.info("PortOwnership: %s → %s", port, uid)
+                age = now - self._claim_times.get(uid, now)
+                log.info("PortOwnership: %s → %s (held %.1fs)", port, uid, age)
+
+    def check_stale_claims(self) -> list[tuple[str, str, float]]:
+        """Warn about probe claims that have been held too long.
+
+        Returns a list of ``(uid, port, age_seconds)`` for any probe
+        claim (uid starts with ``__probe__``) older than
+        ``PROBE_CLAIM_TIMEOUT``.  Each stale claim is logged at WARNING.
+        Regular device claims are never flagged — they are expected to
+        be long-lived.
+        """
+        stale: list[tuple[str, str, float]] = []
+        now = time.monotonic()
+        with self._lock:
+            for uid, port in self._uid_to_port.items():
+                if not uid.startswith("__probe__"):
+                    continue
+                age = now - self._claim_times.get(uid, now)
+                if age > self.PROBE_CLAIM_TIMEOUT:
+                    stale.append((uid, port, age))
+        for uid, port, age in stale:
+            log.warning(
+                "PortOwnership: STALE probe claim — %s on %s held for "
+                "%.1fs (threshold %.0fs).  Possible leaked claim.",
+                uid, port, age, self.PROBE_CLAIM_TIMEOUT)
+        return stale
+
+    def release_stale_probes(self) -> int:
+        """Release any probe claims older than ``PROBE_CLAIM_TIMEOUT``.
+
+        Returns the number of claims released.  Intended as a safety net
+        — callers should fix the root cause rather than relying on this.
+        """
+        stale = self.check_stale_claims()
+        for uid, port, age in stale:
+            self.release(uid)
+            log.warning("PortOwnership: force-released stale probe %s on %s "
+                        "(was held %.1fs)", uid, port, age)
+        return len(stale)
 
 
 # Module-level singleton — shared across DeviceManager, hw_service, drivers.

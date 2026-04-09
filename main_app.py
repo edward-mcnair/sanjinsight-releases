@@ -5340,6 +5340,17 @@ if __name__ == "__main__":
                         log.info("Auto-reconnect: no saved address for %s — skipping",
                                  uid)
 
+                # ── Post-reconnect identity report ──────────────────
+                # Wait for connections to settle, then emit a full
+                # diagnostic summary of every serial device's identity
+                # pipeline state.  This appears in the Device Manager
+                # log panel and can be exported for beta diagnostics.
+                _t.sleep(3.0)
+                try:
+                    dm.generate_identity_report()
+                except Exception:
+                    log.debug("Identity report failed", exc_info=True)
+
             threading.Thread(
                 target=_auto_reconnect_normal, daemon=True,
                 name="hw.auto_reconnect"

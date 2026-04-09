@@ -457,6 +457,10 @@ class DeviceManager:
         # Store resolver for later use (e.g. saving fingerprints)
         self._port_resolver = resolver
 
+        # ── Watchdog: warn about stale probe claims ──────────────────
+        from hardware.port_resolver import port_ownership
+        port_ownership.check_stale_claims()
+
         # ── Audit log: trace every identity decision ─────────────────
         self._log_identity_audit(resolver, results, device_map)
 
@@ -511,6 +515,94 @@ class DeviceManager:
                 log.info("  Ambiguous:          %s", entry.port_ambiguous)
 
         log.info("=" * 60)
+
+    # ---------------------------------------------------------------- #
+    #  Startup diagnostic report                                        #
+    # ---------------------------------------------------------------- #
+
+    def generate_identity_report(self) -> list[dict]:
+        """Generate a per-device identity summary for diagnostics.
+
+        Returns a list of dicts, one per serial device, containing:
+          uid, display_name, saved_fingerprint, observed_address,
+          resolved_address, resolution_method, ambiguous, state,
+          connected_port, handshake_identity
+
+        Call AFTER auto-reconnect completes for the fullest picture.
+        Also logs the report at INFO level.
+        """
+        from hardware.port_resolver import load_fingerprint
+        report: list[dict] = []
+
+        for uid, entry in sorted(self._entries.items()):
+            conn = entry.descriptor.connection_type
+            if conn not in ("serial", "usb"):
+                continue
+
+            # Saved fingerprint
+            fp = load_fingerprint(uid)
+            fp_summary = ""
+            if fp and not fp.is_empty():
+                parts = []
+                if fp.serial_number:
+                    parts.append(f"sn={fp.serial_number}")
+                if fp.vid is not None:
+                    parts.append(f"vid:pid={fp.vid:04X}:{(fp.pid or 0):04X}")
+                if fp.location:
+                    parts.append(f"loc={fp.location}")
+                fp_summary = ", ".join(parts)
+
+            # Handshake identity
+            identity_str = ""
+            if entry.driver_obj and hasattr(entry.driver_obj, "get_identity"):
+                try:
+                    ident = entry.driver_obj.get_identity()
+                    identity_str = (
+                        f"{ident.protocol}/{ident.device_family} "
+                        f"model={ident.model} addr={ident.node_address}"
+                    )
+                    if ident.firmware_version:
+                        identity_str += f" fw={ident.firmware_version}"
+                except Exception:
+                    identity_str = "(get_identity failed)"
+
+            row = {
+                "uid":                uid,
+                "display_name":       entry.display_name,
+                "saved_fingerprint":  fp_summary or "(none)",
+                "observed_address":   entry.observed_address or "",
+                "resolved_address":   entry.address or "",
+                "resolution_method":  entry.resolution_method or "",
+                "ambiguous":          entry.port_ambiguous,
+                "state":              entry.status_label,
+                "connected_port":     entry.address if entry.is_connected else "",
+                "handshake_identity": identity_str or "",
+            }
+            report.append(row)
+
+        # ── Watchdog: check for stale probe claims ────────────────────
+        from hardware.port_resolver import port_ownership
+        stale = port_ownership.check_stale_claims()
+        if stale:
+            port_ownership.release_stale_probes()
+
+        # Log the report
+        log.info("=" * 70)
+        log.info("DEVICE IDENTITY REPORT — %d serial device(s)", len(report))
+        log.info("=" * 70)
+        for r in report:
+            log.info("── %s (%s) ──", r["display_name"], r["uid"])
+            log.info("  State:              %s", r["state"])
+            log.info("  Saved fingerprint:  %s", r["saved_fingerprint"])
+            log.info("  Observed address:   %s", r["observed_address"] or "—")
+            log.info("  Resolved address:   %s", r["resolved_address"] or "—")
+            log.info("  Resolution method:  %s", r["resolution_method"] or "—")
+            log.info("  Ambiguous:          %s", r["ambiguous"])
+            log.info("  Connected port:     %s", r["connected_port"] or "—")
+            log.info("  Handshake identity: %s", r["handshake_identity"] or "—")
+        log.info("=" * 70)
+
+        return report
 
     # ---------------------------------------------------------------- #
     #  Scan integration                                                 #

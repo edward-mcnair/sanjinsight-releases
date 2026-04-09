@@ -2491,6 +2491,16 @@ class DeviceManagerDialog(QDialog):
             f"QPushButton:hover{{color:{PALETTE['textDim']}; border-color:{PALETTE['surface2']};}}")
         copy_btn.clicked.connect(self._copy_log)
         lt.addWidget(copy_btn)
+
+        export_btn = QPushButton("Export")
+        export_btn.setFixedSize(58, 20)
+        export_btn.setStyleSheet(
+            f"QPushButton{{font-size:{FONT['small']}pt; padding:0 4px; background:{PALETTE['surface']}; "
+            f"color:{PALETTE['textSub']}; border:1px solid {PALETTE['surface2']}; border-radius:3px;}}"
+            f"QPushButton:hover{{color:{PALETTE['textDim']}; border-color:{PALETTE['surface2']};}}")
+        export_btn.setToolTip("Export device identity log to file")
+        export_btn.clicked.connect(self._export_identity_log)
+        lt.addWidget(export_btn)
         ll.addWidget(log_toolbar)
 
         self._log_edit = QTextEdit()
@@ -2649,6 +2659,75 @@ class DeviceManagerDialog(QDialog):
             QApplication.clipboard().setText(self._log_edit.toPlainText())
         except Exception:
             pass
+
+    def _export_identity_log(self):
+        """Export device identity report + log to a timestamped file."""
+        import datetime
+        from pathlib import Path
+
+        try:
+            out_dir = Path.home() / ".microsanj" / "identity_logs"
+            out_dir.mkdir(parents=True, exist_ok=True)
+
+            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            out_file = out_dir / f"identity_log_{ts}.txt"
+
+            lines = []
+            lines.append(f"SanjINSIGHT Device Identity Log — {ts}")
+            lines.append("=" * 60)
+
+            # Identity report from DeviceManager
+            try:
+                report = self._mgr.generate_identity_report()
+                for r in report:
+                    lines.append(f"\n── {r['display_name']} ({r['uid']}) ──")
+                    lines.append(f"  State:              {r['state']}")
+                    lines.append(f"  Saved fingerprint:  {r['saved_fingerprint']}")
+                    lines.append(f"  Observed address:   {r['observed_address'] or '—'}")
+                    lines.append(f"  Resolved address:   {r['resolved_address'] or '—'}")
+                    lines.append(f"  Resolution method:  {r['resolution_method'] or '—'}")
+                    lines.append(f"  Ambiguous:          {r['ambiguous']}")
+                    lines.append(f"  Connected port:     {r['connected_port'] or '—'}")
+                    lines.append(f"  Handshake identity: {r['handshake_identity'] or '—'}")
+            except Exception as exc:
+                lines.append(f"\n(Report generation failed: {exc})")
+
+            # Port ownership state
+            lines.append("\n" + "=" * 60)
+            lines.append("PORT OWNERSHIP")
+            lines.append("=" * 60)
+            try:
+                from hardware.port_resolver import port_ownership
+                claims = port_ownership.claimed_ports()
+                if claims:
+                    for port, uid in sorted(claims.items()):
+                        lines.append(f"  {port} → {uid}")
+                else:
+                    lines.append("  (no active claims)")
+            except Exception:
+                lines.append("  (unavailable)")
+
+            # Full log panel text
+            lines.append("\n" + "=" * 60)
+            lines.append("RAW LOG OUTPUT")
+            lines.append("=" * 60)
+            lines.append(self._log_edit.toPlainText())
+
+            out_file.write_text("\n".join(lines), encoding="utf-8")
+
+            # Open the containing folder
+            import subprocess, sys
+            if sys.platform == "win32":
+                subprocess.Popen(["explorer", "/select,", str(out_file)])
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", "-R", str(out_file)])
+            else:
+                subprocess.Popen(["xdg-open", str(out_dir)])
+
+            self._append_log(f"Identity log exported to {out_file}")
+
+        except Exception as exc:
+            log.error("Export identity log failed: %s", exc, exc_info=True)
 
     # ---------------------------------------------------------------- #
     #  Initial quick scan (serial + USB only, no network)              #
