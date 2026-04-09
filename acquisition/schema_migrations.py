@@ -20,13 +20,62 @@ migration in order and arrive at the current schema.
 from __future__ import annotations
 
 import logging
+import os
+import shutil
 
 log = logging.getLogger(__name__)
 
 CURRENT_SCHEMA: int = 5
 
 
-def migrate(data: dict, from_version: int) -> dict:
+class FutureSchemaError(Exception):
+    """Raised when a session file has a schema_version newer than we support."""
+
+
+def backup_before_migration(session_json_path: str, from_version: int) -> str | None:
+    """Create a backup of session.json before migrating.
+
+    The backup is named ``session.json.v{N}.bak`` where *N* is the
+    original schema version.  If the backup already exists (a previous
+    migration was interrupted and retried) the existing backup is kept
+    and no new copy is made.
+
+    Returns the backup path, or ``None`` if the backup could not be
+    created (logged as a warning; migration proceeds anyway).
+    """
+    if not session_json_path or not os.path.isfile(session_json_path):
+        return None
+    bak_path = f"{session_json_path}.v{from_version}.bak"
+    if os.path.exists(bak_path):
+        log.debug("Migration backup already exists: %s", bak_path)
+        return bak_path
+    try:
+        shutil.copy2(session_json_path, bak_path)
+        log.info("Created pre-migration backup: %s", bak_path)
+        return bak_path
+    except OSError as exc:
+        log.warning("Could not create migration backup for %s: %s",
+                     session_json_path, exc)
+        return None
+
+
+def reject_future_schema(version: int, path: str = "") -> None:
+    """Raise ``FutureSchemaError`` if *version* is from a newer build.
+
+    Called by ``SessionMeta.from_dict()`` so that a session written by a
+    newer SanjINSIGHT version is refused cleanly rather than silently
+    dropping unknown fields.
+    """
+    if version > CURRENT_SCHEMA:
+        raise FutureSchemaError(
+            f"Session at '{path or '(unknown)'}' has schema v{version}, "
+            f"but this build only supports up to v{CURRENT_SCHEMA}. "
+            f"Upgrade SanjINSIGHT to open this session."
+        )
+
+
+def migrate(data: dict, from_version: int, *,
+            session_json_path: str = "") -> dict:
     """Migrate *data* dict from *from_version* up to CURRENT_SCHEMA.
 
     Each step is applied in sequence so a v0 file passes through every
@@ -38,6 +87,9 @@ def migrate(data: dict, from_version: int) -> dict:
         Raw dict read from session.json.
     from_version:
         The schema_version found in the file (0 if the key was absent).
+    session_json_path:
+        Optional path to the file on disk.  If provided a backup is
+        created before the first migration step is applied.
 
     Returns
     -------
@@ -45,6 +97,10 @@ def migrate(data: dict, from_version: int) -> dict:
         A *new* dict (the original is never mutated) upgraded to
         CURRENT_SCHEMA.
     """
+    # Create a safety backup before touching anything
+    if session_json_path:
+        backup_before_migration(session_json_path, from_version)
+
     if from_version < 1:
         data = _v0_to_v1(data)
     if from_version < 2:

@@ -20,9 +20,10 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from dataclasses import dataclass, field
 from typing import Optional
+
+from ai.output_parser import parse_json_response, advisor_schema_prompt
 
 log = logging.getLogger(__name__)
 
@@ -204,36 +205,12 @@ def build_advisor_prompt(
             if cloud else f"Issues:\n{diagnostics_summary}\n"
         )
 
-    if cloud:
-        user_content += (
-            "Analyse this profile against the instrument state. "
-            "Respond with a JSON object in this format:\n"
-            "```json\n"
-            "{\n"
-            '  "summary": "1-2 sentence overall assessment",\n'
-            '  "conflicts": [\n'
-            '    {"issue": "what is wrong and WHY it matters physically",\n'
-            '     "param": "setting_name", "value": suggested_value, "unit": "unit"}\n'
-            "  ],\n"
-            '  "suggestions": [\n'
-            '    {"param": "setting_name", "value": suggested_value,\n'
-            '     "unit": "unit", "reason": "physics-based explanation"}\n'
-            "  ],\n"
-            '  "ready": true\n'
-            "}\n"
-            "```\n"
-            "Set ready=false if acquisition would produce poor results. "
-            "Explain each conflict in terms of measurement physics "
-            "(lock-in timing, SNR impact, thermal settling, saturation, etc.)."
-        )
-    else:
-        user_content += (
-            "\nRespond with ONLY this JSON:\n"
-            '{"conflicts":[{"issue":"...","param":"...","value":N,"unit":"..."}],'
-            '"suggestions":[{"param":"...","value":N,"unit":"...","reason":"..."}],'
-            '"ready":true}\n'
-            "ready=false if acquisition would fail without fixes. Be concise."
-        )
+    # Use tier-aware schema prompt from output_parser
+    tier = 3 if cloud else 2
+    user_content += (
+        "\nAnalyse this profile against the instrument state. "
+        + advisor_schema_prompt(tier)
+    )
 
     return [
         {"role": "system", "content": _build_advisor_system(
@@ -283,25 +260,20 @@ def parse_advice(raw_text: str) -> AdvisorResult:
     """
     Parse the AI response into an AdvisorResult.
 
-    Tries to extract JSON from the response.  If the model returned prose
-    instead of JSON, returns a result with parse_ok=False and the raw text
-    so the dialog can display it as fallback.
+    Uses ``output_parser.parse_json_response`` for robust JSON extraction
+    with automatic repair of common small-model issues (trailing commas,
+    unclosed braces, markdown fences, prose preamble).
+
+    Falls back to a result with ``parse_ok=False`` and the raw text so the
+    dialog can display it as prose.
     """
     result = AdvisorResult(raw_text=raw_text.strip())
 
-    # Try to find JSON in the response (may be wrapped in ```json ... ```)
-    json_str = _extract_json(raw_text)
-    if not json_str:
+    parsed = parse_json_response(raw_text)
+    if not parsed.parse_ok or parsed.data is None:
         return result
 
-    try:
-        data = json.loads(json_str)
-    except json.JSONDecodeError:
-        return result
-
-    if not isinstance(data, dict):
-        return result
-
+    data = parsed.data
     result.parse_ok = True
     result.ready = data.get("ready", True)
     result.summary = data.get("summary", "")
@@ -325,16 +297,3 @@ def parse_advice(raw_text: str) -> AdvisorResult:
             ))
 
     return result
-
-
-def _extract_json(text: str) -> Optional[str]:
-    """Pull a JSON object from text, handling ```json fences."""
-    # Try fenced code block first
-    m = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
-    if m:
-        return m.group(1)
-    # Try bare JSON object
-    m = re.search(r"\{.*\}", text, re.DOTALL)
-    if m:
-        return m.group(0)
-    return None

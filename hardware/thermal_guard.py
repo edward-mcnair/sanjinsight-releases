@@ -19,6 +19,13 @@ recovered from.
 Hysteresis prevents oscillation at the boundary: the alarm clears
 only when temperature returns `hysteresis` °C inside the limit.
 
+Thread-safety
+-------------
+All state mutations happen under ``_lock``.  External side-effects —
+``tec.disable()``, ``on_alarm()``, ``on_warning()``, ``on_clear()`` —
+are executed **outside** the lock to prevent deadlock if a callback
+re-enters the guard or acquires other locks.
+
 Usage (called from HardwareService._run_tec poll loop)
 ------
     guard = ThermalGuard(
@@ -38,6 +45,7 @@ Usage (called from HardwareService._run_tec poll loop)
 
 from __future__ import annotations
 import logging
+import math
 import threading
 from enum import Enum, auto
 from typing import Callable, Optional
@@ -51,6 +59,14 @@ class AlarmState(Enum):
     NORMAL  = auto()
     WARNING = auto()
     ALARM   = auto()
+
+
+# Internal action descriptors — returned by locked state-decision code,
+# executed outside the lock by the caller.
+_ACTION_NONE    = "none"
+_ACTION_ALARM   = "alarm"
+_ACTION_WARNING = "warning"
+_ACTION_CLEAR   = "clear"
 
 
 class ThermalGuard:
@@ -134,13 +150,18 @@ class ThermalGuard:
         Clears the latch so the TEC can be re-enabled.
         Does NOT automatically re-enable the TEC.
         """
+        fire_clear = False
         with self._lock:
             if self._state == AlarmState.ALARM:
                 self._state        = AlarmState.NORMAL
                 self._acknowledged = True
                 self._disabled_by_guard = False
                 log.info(f"ThermalGuard[{self._index}]: alarm acknowledged")
-                self._on_clear(self._index)
+                fire_clear = True
+
+        # Callback outside lock
+        if fire_clear:
+            self._on_clear(self._index)
 
     def update_limits(self, temp_min: float, temp_max: float,
                       warning_margin: float = None):
@@ -170,21 +191,53 @@ class ThermalGuard:
 
         actual = status.actual_temp
 
-        with self._lock:
-            prev_state = self._state
+        # Guard against None / NaN / non-finite readings — treat as
+        # untrustworthy, just like an explicit error flag.
+        if actual is None or not isinstance(actual, (int, float)):
+            log.warning("ThermalGuard[%d]: actual_temp is %r — skipping check",
+                        self._index, actual)
+            return self._state
+        if not math.isfinite(actual):
+            log.warning("ThermalGuard[%d]: actual_temp is %s — skipping check",
+                        self._index, actual)
+            return self._state
 
+        # Phase 1: decide state transition under lock (no external calls)
+        action, action_args = self._evaluate(actual)
+
+        # Phase 2: execute side-effects outside lock
+        if action == _ACTION_ALARM:
+            self._do_alarm(actual, *action_args)
+        elif action == _ACTION_WARNING:
+            self._on_warning(*action_args)
+        elif action == _ACTION_CLEAR:
+            self._on_clear(self._index)
+
+        return self._state
+
+    # ── Private: lock-protected state decision ─────────────────────────
+
+    def _evaluate(self, actual: float):
+        """Decide the state transition under lock.
+
+        Returns (action, action_args) describing what side-effects to fire.
+        No external calls are made inside this method.
+        """
+        with self._lock:
             # ── Already in latched ALARM — don't re-evaluate ──────────
             if self._state == AlarmState.ALARM:
-                return AlarmState.ALARM
+                return _ACTION_NONE, ()
 
             # ── Check hard limits ─────────────────────────────────────
             if actual < self._temp_min:
-                self._transition_alarm(actual, self._temp_min, "LOW")
-                return AlarmState.ALARM
+                self._state        = AlarmState.ALARM
+                self._acknowledged = False
+                return _ACTION_ALARM, (self._temp_min, "LOW")
 
             if actual > self._temp_max:
-                self._transition_alarm(actual, self._temp_max, "HIGH")
-                return AlarmState.ALARM
+                self._state        = AlarmState.ALARM
+                self._acknowledged = False
+                return _ACTION_ALARM, (self._temp_max, "HIGH")
 
             # ── Check warning zone ────────────────────────────────────
             warn_lo = self._temp_min + self._warning_margin
@@ -202,11 +255,12 @@ class ThermalGuard:
                         msg = (f"TEC {self._index+1} approaching high limit: "
                                f"{actual:.2f}°C  (max {limit:.1f}°C)")
                     log.warning(f"ThermalGuard[{self._index}]: WARNING — {msg}")
-                    self._on_warning(self._index, msg, actual,
-                                     self._temp_min if actual < warn_lo else self._temp_max)
-                return AlarmState.WARNING
+                    return _ACTION_WARNING, (
+                        self._index, msg, actual,
+                        self._temp_min if actual < warn_lo else self._temp_max)
+                return _ACTION_NONE, ()
 
-            # ── Temperature is comfortably within limits ───────────────
+            # ── Temperature is comfortably within limits ──────────────
             # Apply hysteresis: only clear WARNING if we're a full margin inside
             if self._state == AlarmState.WARNING:
                 inner_lo = self._temp_min + self._warning_margin + self._HYSTERESIS_C
@@ -214,17 +268,17 @@ class ThermalGuard:
                 if inner_lo <= actual <= inner_hi:
                     self._state = AlarmState.NORMAL
                     log.info(f"ThermalGuard[{self._index}]: WARNING cleared")
-                    self._on_clear(self._index)
+                    return _ACTION_CLEAR, ()
 
-            return self._state
+            return _ACTION_NONE, ()
 
-    # ── Private ────────────────────────────────────────────────────────
+    # ── Private: side-effects (outside lock) ───────────────────────────
 
-    def _transition_alarm(self, actual: float, limit: float, direction: str):
-        """Transition to ALARM: disable TEC, latch, fire callback."""
-        self._state        = AlarmState.ALARM
-        self._acknowledged = False
+    def _do_alarm(self, actual: float, limit: float, direction: str):
+        """Execute alarm side-effects: disable TEC, fire callback.
 
+        Called OUTSIDE the lock.
+        """
         direction_word = "below minimum" if direction == "LOW" else "above maximum"
         msg = (f"TEC {self._index+1} TEMPERATURE {direction} LIMIT — "
                f"{actual:.2f}°C  ({direction_word} {limit:.1f}°C). "
@@ -238,7 +292,18 @@ class ThermalGuard:
             self._disabled_by_guard = True
             log.info(f"ThermalGuard[{self._index}]: TEC output disabled by guard")
         except Exception as e:
-            log.error(f"ThermalGuard[{self._index}]: failed to disable TEC: {e}")
+            # CRITICAL: TEC disable failed — the device may still be heating.
+            # Log at CRITICAL so operators and monitoring tools notice.
+            log.critical(
+                "ThermalGuard[%d]: FAILED to disable TEC — manual intervention "
+                "required! (actual=%.2f°C, limit=%.1f°C): %s",
+                self._index, actual, limit, e,
+            )
+            # Append failure note to alarm message so the UI shows it
+            msg += (
+                " \u26a0 CRITICAL: automatic TEC disable FAILED — "
+                "disconnect power manually!"
+            )
 
         # Fire callback (will emit Qt signal in HardwareService)
         self._on_alarm(self._index, msg, actual, limit)

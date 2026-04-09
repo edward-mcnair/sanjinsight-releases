@@ -40,6 +40,7 @@ class AdvisorDialog(QDialog):
     """
 
     proceed_clicked  = pyqtSignal(list)
+    quick_fix        = pyqtSignal(dict)   # single fix dict: {param, value, unit}
     cancel_requested = pyqtSignal()   # emitted when user cancels during thinking
 
     def __init__(self, parent=None):
@@ -155,13 +156,17 @@ class AdvisorDialog(QDialog):
         self._cancel_btn.setEnabled(True)
         self._status_lbl.setText("Analysing profile vs instrument state…")
 
-    def show_result(self, result) -> None:
+    def show_result(self, result, repaired: bool = False) -> None:
         """
         Populate the dialog with an AdvisorResult.
 
         Parameters
         ----------
         result : ai.advisor.AdvisorResult
+        repaired : bool
+            True if the AI's JSON output needed repair (trailing commas,
+            unclosed braces, etc.).  Shows a subtle indicator so the user
+            knows the output quality was degraded.
         """
         self._is_thinking = False
         self._thinking_lbl.setVisible(False)
@@ -183,6 +188,22 @@ class AdvisorDialog(QDialog):
         text = PALETTE['text']
         sub  = PALETTE['textSub']
         bdr  = PALETTE['border']
+
+        # ── Repaired-output indicator ──
+        if repaired:
+            repair_lbl = QLabel("⚙  Output was auto-repaired from malformed JSON")
+            repair_lbl.setWordWrap(True)
+            repair_lbl.setStyleSheet(
+                f"font-size:{FONT['caption']}pt; color:{PALETTE['textDim']}; "
+                f"background:{PALETTE['surface2']}; "
+                f"border:1px solid {PALETTE['warning']}33; border-radius:3px; "
+                f"padding:4px 8px;")
+            repair_lbl.setToolTip(
+                "The AI model produced slightly malformed JSON that was\n"
+                "automatically fixed (e.g. trailing commas, unclosed braces).\n"
+                "Results may be less reliable than clean output.\n\n"
+                "Consider upgrading to a larger model for more consistent output.")
+            self._content_lay.addWidget(repair_lbl)
 
         # ── Summary (cloud models provide a physics-based assessment) ──
         if result.summary:
@@ -207,15 +228,17 @@ class AdvisorDialog(QDialog):
                 f"color:{PALETTE['warning'] if not result.ready else PALETTE['accent']};")
 
             for c in result.conflicts:
+                fix = ({"param": c.param, "value": c.value, "unit": c.unit}
+                       if c.param and c.value is not None else None)
                 card = self._make_card(
                     icon="⚠", icon_color=PALETTE['warning'],
                     title=c.issue,
                     detail=(f"Suggested: set {c.param} to {c.value} {c.unit}"
-                            if c.param else ""))
+                            if c.param else ""),
+                    fix_dict=fix)
                 self._content_lay.addWidget(card)
-                if c.param and c.value is not None:
-                    self._fixes.append({
-                        "param": c.param, "value": c.value, "unit": c.unit})
+                if fix:
+                    self._fixes.append(fix)
         else:
             self._status_lbl.setText("No conflicts found — instrument looks good.")
             self._status_lbl.setStyleSheet(
@@ -235,14 +258,16 @@ class AdvisorDialog(QDialog):
                     detail = f"Set {s.param} to {s.value} {s.unit}"
                 if s.reason:
                     detail += f" — {s.reason}" if detail else s.reason
+                fix = ({"param": s.param, "value": s.value, "unit": s.unit}
+                       if s.param and s.value is not None else None)
                 card = self._make_card(
                     icon="→", icon_color=PALETTE['accent'],
                     title=detail or s.reason,
-                    detail="")
+                    detail="",
+                    fix_dict=fix)
                 self._content_lay.addWidget(card)
-                if s.param and s.value is not None:
-                    self._fixes.append({
-                        "param": s.param, "value": s.value, "unit": s.unit})
+                if fix:
+                    self._fixes.append(fix)
 
         self._content_lay.addStretch()
 
@@ -288,9 +313,34 @@ class AdvisorDialog(QDialog):
         self._proceed_btn.setText("Proceed")
         self._proceed_btn.setEnabled(True)
 
+    # Parameters considered safe for one-click quick-fix application.
+    # Must match the allowlist in MainWindow._on_advisor_proceed().
+    _SAFE_PARAMS: set[str] = {
+        "exposure", "exposure_us", "gain", "gain_db",
+        "stimulus_freq", "stimulus_freq_hz", "stimulus_duty",
+        "tec_setpoint", "tec_setpoint_c", "n_frames",
+    }
+
+    _PARAM_UNITS: dict[str, str] = {
+        "exposure": "µs", "exposure_us": "µs",
+        "gain": "dB", "gain_db": "dB",
+        "stimulus_freq": "Hz", "stimulus_freq_hz": "Hz",
+        "stimulus_duty": "%",
+        "tec_setpoint": "°C", "tec_setpoint_c": "°C",
+        "n_frames": "",
+    }
+
     def _make_card(self, icon: str, icon_color: str,
-                   title: str, detail: str) -> QFrame:
-        """Build a compact issue/suggestion card."""
+                   title: str, detail: str,
+                   fix_dict: dict | None = None) -> QFrame:
+        """Build a compact issue/suggestion card.
+
+        Parameters
+        ----------
+        fix_dict : dict | None
+            If provided and the param is in _SAFE_PARAMS, a quick-apply
+            button is shown on the card.
+        """
         card = QFrame()
         card.setStyleSheet(
             f"QFrame {{ background:{PALETTE['surface']}; "
@@ -327,7 +377,44 @@ class AdvisorDialog(QDialog):
             text_col.addWidget(detail_w)
 
         card_lay.addLayout(text_col, 1)
+
+        # Quick-apply button for safe, reversible parameter changes
+        if (fix_dict and fix_dict.get("param") in self._SAFE_PARAMS
+                and fix_dict.get("value") is not None):
+            param = fix_dict["param"]
+            value = fix_dict["value"]
+            unit  = fix_dict.get("unit") or self._PARAM_UNITS.get(param, "")
+            apply_btn = QPushButton(f"Apply {value}{' ' + unit if unit else ''}")
+            apply_btn.setCursor(QCursor(Qt.PointingHandCursor))
+            apply_btn.setFixedHeight(24)
+            apply_btn.setMaximumWidth(140)
+            apply_btn.setStyleSheet(
+                f"QPushButton {{ background:{PALETTE['surface2']}; "
+                f"color:{PALETTE['accent']}; "
+                f"border:1px solid {PALETTE['accent']}44; border-radius:3px; "
+                f"font-size:{FONT['caption']}pt; padding:2px 8px; }}"
+                f"QPushButton:hover {{ background:{PALETTE['accent']}18; "
+                f"border-color:{PALETTE['accent']}88; }}"
+                f"QPushButton:pressed {{ background:{PALETTE['accent']}30; }}")
+            apply_btn.setToolTip(
+                f"Apply this single change now: {param} → {value} {unit}")
+            _fix = dict(fix_dict)  # capture for lambda
+            apply_btn.clicked.connect(
+                lambda checked, f=_fix, b=apply_btn: self._on_quick_apply(f, b))
+            card_lay.addWidget(apply_btn)
+
         return card
+
+    def _on_quick_apply(self, fix: dict, btn: QPushButton) -> None:
+        """Emit a single fix and visually confirm the button was clicked."""
+        self.quick_fix.emit(fix)
+        btn.setText("✓ Applied")
+        btn.setEnabled(False)
+        btn.setStyleSheet(
+            f"QPushButton {{ background:{PALETTE['surface2']}; "
+            f"color:{PALETTE['success']}; "
+            f"border:1px solid {PALETTE['success']}44; border-radius:3px; "
+            f"font-size:{FONT['caption']}pt; padding:2px 8px; }}")
 
     def _apply_styles(self):
         """Refresh inline stylesheets from the current PALETTE values."""

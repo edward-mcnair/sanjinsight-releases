@@ -160,28 +160,56 @@ class TestSessionSchemaMigration:
         assert meta.label == "meta_test", \
             f"Unexpected label after load_meta migration: {meta.label!r}"
 
-    def test_unknown_fields_are_ignored(self, minimal_result, tmp_path):
+    def test_unknown_fields_at_current_schema_are_ignored(self, minimal_result, tmp_path):
         """
-        Extra keys in session.json (from a newer version) must be silently
-        ignored — forward-compatibility guard.
+        Extra keys in session.json at the CURRENT schema version are silently
+        ignored — forward-compatibility guard for additive field additions
+        within the same schema version.
         """
         from acquisition.session import Session
 
         session = Session.from_result(minimal_result, label="fwd_compat")
         path    = session.save(str(tmp_path))
 
-        # Inject a hypothetical future field
+        # Inject a hypothetical future field at the CURRENT schema version
         json_path = os.path.join(path, "session.json")
         with open(json_path) as f:
             data = json.load(f)
         data["future_field_xyz"] = "some_value"
-        data["schema_version"]   = 999   # far-future schema
+        # Keep schema_version at CURRENT — only unknown *fields* are new
         with open(json_path, "w") as f:
             json.dump(data, f)
 
         # Must not raise — unknown keys are ignored by from_dict()
         loaded = Session.load(path)
         assert loaded.meta.label == "fwd_compat"
+
+    def test_future_schema_version_is_rejected(self, minimal_result, tmp_path):
+        """
+        A session.json with schema_version > CURRENT_SCHEMA is hard-rejected
+        to prevent data corruption from silently dropping unknown fields.
+        """
+        import pytest
+        from acquisition.session import Session
+        from acquisition.schema_migrations import FutureSchemaError
+
+        session = Session.from_result(minimal_result, label="future_reject")
+        path    = session.save(str(tmp_path))
+
+        # Inject a far-future schema version
+        json_path = os.path.join(path, "session.json")
+        with open(json_path) as f:
+            data = json.load(f)
+        data["schema_version"] = 999
+        with open(json_path, "w") as f:
+            json.dump(data, f)
+
+        # Must raise FutureSchemaError
+        with pytest.raises(FutureSchemaError):
+            Session.load(path)
+
+        # load_meta should return None (graceful skip) rather than crash
+        assert Session.load_meta(path) is None
 
 
 # ================================================================== #

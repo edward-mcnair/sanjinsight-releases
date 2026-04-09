@@ -358,22 +358,43 @@ class SessionCard(QFrame):
 # ------------------------------------------------------------------ #
 
 class _SessionLoadWorker(QThread):
-    """Loads a session off the main thread to avoid UI freezes."""
+    """Loads a session off the main thread to avoid UI freezes.
+
+    Supports cooperative cancellation via ``requestInterruption()`` and
+    a generation token so stale results from a superseded worker are
+    never emitted.
+    """
 
     loaded = pyqtSignal(object)   # Session or None
     error  = pyqtSignal(str)
+
+    # Monotonically increasing generation counter — each new worker gets
+    # a unique token so the ``_on_loaded`` closure can reject stale results.
+    _next_gen = 0
 
     def __init__(self, manager: SessionManager, uid: str, parent=None):
         super().__init__(parent)
         self._mgr = manager
         self._uid = uid
+        _SessionLoadWorker._next_gen += 1
+        self.generation = _SessionLoadWorker._next_gen
 
     def run(self):  # noqa: D401 — Qt override
         try:
+            # Check for cancellation before the (potentially slow) load
+            if self.isInterruptionRequested():
+                return
             session = self._mgr.load(self._uid)
+            # Check again after load — the user may have clicked another
+            # session while we were blocked in I/O.
+            if self.isInterruptionRequested():
+                if session is not None:
+                    session.unload()
+                return
             self.loaded.emit(session)
         except Exception as exc:
-            self.error.emit(str(exc))
+            if not self.isInterruptionRequested():
+                self.error.emit(str(exc))
 
 
 class DataImagePane(QWidget):
@@ -979,20 +1000,29 @@ class DataTab(QWidget):
             pane._lbl.setText("Loading…")
         self._pane_cmp.clear()
 
-        # Cancel any in-progress load to prevent stale results and
-        # accumulating orphan QThread objects on rapid session switching.
+        # Cancel any in-progress load via cooperative interruption.
+        # We do NOT call deleteLater() here — the worker may still be
+        # running (blocked in I/O).  Instead we request interruption and
+        # let it clean itself up when it finishes.  The generation token
+        # ensures we ignore results from superseded workers.
         prev = self._active_load_worker
         if prev is not None:
-            if prev.isRunning():
-                prev.quit()
-                prev.wait(1000)
-            prev.deleteLater()
+            prev.requestInterruption()
+            # Let the finished signal schedule cleanup when it's actually done
+            prev.finished.connect(prev.deleteLater)
             self._active_load_worker = None
 
         # Load session arrays off the main thread
         worker = _SessionLoadWorker(self._mgr, uid, parent=self)
+        gen = worker.generation  # capture for closure
 
         def _on_loaded(session):
+            # Reject stale result from a superseded worker
+            if (self._active_load_worker is None
+                    or self._active_load_worker.generation != gen):
+                if session is not None:
+                    session.unload()
+                return
             self._active_load_worker = None
             if session is None:
                 for pane in (self._pane_cold, self._pane_hot,
@@ -1012,6 +1042,9 @@ class DataTab(QWidget):
             session.unload()   # free memory after display
 
         def _on_error(msg):
+            if (self._active_load_worker is None
+                    or self._active_load_worker.generation != gen):
+                return  # stale error from superseded worker
             self._active_load_worker = None
             for pane in (self._pane_cold, self._pane_hot,
                          self._pane_diff, self._pane_drr):
@@ -1019,6 +1052,7 @@ class DataTab(QWidget):
 
         worker.loaded.connect(_on_loaded)
         worker.error.connect(_on_error)
+        worker.finished.connect(worker.deleteLater)
         self._active_load_worker = worker
         worker.start()
 

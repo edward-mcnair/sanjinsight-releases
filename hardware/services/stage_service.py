@@ -74,6 +74,13 @@ class StageService(BaseDeviceService):
                     consecutive_errors = 0
                 except Exception as e:
                     consecutive_errors += 1
+                    if consecutive_errors == 1:
+                        log.debug("[stage] Poll error (1/%d): %s",
+                                  self._MAX_CONSECUTIVE_ERRORS, e)
+                    else:
+                        log.warning("[stage] Poll error (%d/%d): %s",
+                                    consecutive_errors,
+                                    self._MAX_CONSECUTIVE_ERRORS, e)
                     from hardware.stage.base import StageStatus
                     self.status_update.emit(StageStatus(error=str(e)))
                     if consecutive_errors >= self._MAX_CONSECUTIVE_ERRORS:

@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 from pathlib import Path
 from typing import Any, Optional
 
@@ -66,6 +67,7 @@ class UserPrefs:
         self._uid      = uid
         self._is_admin = is_admin
         self._path     = _USERS_DIR / uid / "prefs.json"
+        self._lock     = threading.Lock()   # cheap hardening for future cross-thread use
         self._prefs: dict = {}
         self._load()
 
@@ -93,11 +95,12 @@ class UserPrefs:
             log.exception("UserPrefs: failed to load %s", self._path)
             self._prefs = {}
 
-    def _save(self) -> None:
+    def _save(self, snapshot=None) -> None:
+        data = snapshot if snapshot is not None else self._prefs
         try:
             self._path.parent.mkdir(parents=True, exist_ok=True)
-            with open(self._path, "w", encoding="utf-8") as f:
-                json.dump(self._prefs, f, indent=2)
+            from utils import atomic_write_json
+            atomic_write_json(str(self._path), data)
         except Exception:
             log.exception("UserPrefs: failed to save %s", self._path)
 
@@ -136,7 +139,8 @@ class UserPrefs:
           2. Global config.get_pref() (for keys not in _USER_ONLY_KEYS)
           3. *default*
         """
-        val = self._get_nested(self._prefs, key)
+        with self._lock:
+            val = self._get_nested(self._prefs, key)
         if val is not _MISSING:
             return val
 
@@ -158,8 +162,11 @@ class UserPrefs:
                 raise PermissionError(
                     f"Preference '{key}' requires administrator privileges."
                 )
-        self._set_nested(self._prefs, key, value)
-        self._save()
+        import copy
+        with self._lock:
+            self._set_nested(self._prefs, key, value)
+            snapshot = copy.deepcopy(self._prefs)
+        self._save(snapshot)
 
     def get_global(self, key: str, default: Any = None) -> Any:
         """Read directly from the global config.get_pref() (bypasses user file)."""
@@ -178,23 +185,28 @@ class UserPrefs:
 
     def has_user_override(self, key: str) -> bool:
         """True if the user has explicitly set this key in their own file."""
-        return self._get_nested(self._prefs, key) is not _MISSING
+        with self._lock:
+            return self._get_nested(self._prefs, key) is not _MISSING
 
     def reset(self, key: str) -> None:
         """Remove a user-level override, reverting to the global default."""
-        parts = key.split(".")
-        node  = self._prefs
-        for p in parts[:-1]:
-            if not isinstance(node, dict) or p not in node:
-                return
-            node = node[p]
-        node.pop(parts[-1], None)
-        self._save()
+        import copy
+        with self._lock:
+            parts = key.split(".")
+            node  = self._prefs
+            for p in parts[:-1]:
+                if not isinstance(node, dict) or p not in node:
+                    return
+                node = node[p]
+            node.pop(parts[-1], None)
+            snapshot = copy.deepcopy(self._prefs)
+        self._save(snapshot)
 
     def reset_all(self) -> None:
         """Wipe all user-level preferences (resets to global / built-in defaults)."""
-        self._prefs = {}
-        self._save()
+        with self._lock:
+            self._prefs = {}
+        self._save({})
 
     def uid(self) -> str:
         return self._uid

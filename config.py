@@ -216,8 +216,11 @@ def _flush_camera_config_to_disk() -> None:
         else:
             on_disk = {}
         on_disk.setdefault("hardware", {}).setdefault("camera", {}).update(cam_section)
-        with open(config_file, "w") as f:
-            yaml.dump(on_disk, f, default_flow_style=False, sort_keys=False)
+        from utils import atomic_write
+        atomic_write(
+            str(config_file),
+            lambda f: yaml.dump(on_disk, f, default_flow_style=False, sort_keys=False),
+        )
         logging.getLogger(__name__).debug(
             "Camera config flushed to disk (debounced)")
     except Exception as exc:
@@ -342,15 +345,21 @@ def _load_prefs() -> dict:
     return {}
 
 
-def _save_prefs():
+def _save_prefs(snapshot=None):
+    """Persist preferences to disk.
+
+    Parameters
+    ----------
+    snapshot : dict or None
+        A frozen copy of ``_prefs`` taken under ``_prefs_lock``.
+        If None, falls back to reading ``_prefs`` directly (only safe
+        when called at import time before threads exist).
+    """
+    data = snapshot if snapshot is not None else _prefs
     try:
         _PREFS_PATH.parent.mkdir(parents=True, exist_ok=True)
-        # Keep a backup so a crash mid-write doesn't lose preferences
-        if _PREFS_PATH.exists():
-            import shutil
-            shutil.copy2(_PREFS_PATH, _PREFS_PATH.with_suffix(".json.bak"))
-        with open(_PREFS_PATH, "w") as f:
-            json.dump(_prefs, f, indent=2)
+        from utils import atomic_write_json
+        atomic_write_json(str(_PREFS_PATH), data)
     except Exception:
         _prefs_log.exception("Preferences save failed (%s)", _PREFS_PATH)
 
@@ -402,27 +411,258 @@ AUTH_DEFAULT_LOCK_TIMEOUT_S          = 1800
 AUTH_DEFAULT_SUPERVISOR_OVERRIDE_S   = 900
 
 
+# ── Centralised preference defaults & validation ────────────────────────────
+#
+# One source of truth for default values and type constraints.
+#
+# get_pref() checks this registry as the *first* fallback before using the
+# caller-supplied default.  This means existing call sites that pass their
+# own default continue to work unchanged — but if a key is registered here,
+# the registry value takes precedence over an omitted (None) default.
+#
+# Callers are migrated incrementally: once a key is registered, call sites
+# can drop their explicit default.
+#
+# _PREF_VALIDATORS maps keys to a callable(value) → validated_value.
+# If validation fails it should raise (ValueError / TypeError); get_pref()
+# catches and falls back to the registered default.
+
+_PREF_DEFAULTS: dict[str, Any] = {
+    # ── UI ──────────────────────────────────────────────────────────────
+    "ui.theme":               "auto",
+    "ui.colors":              "standard",
+    "ui.workspace":           "standard",
+    "ui.license_prompted":    False,
+
+    # ── Display ─────────────────────────────────────────────────────────
+    "display.colormap":       "Thermal Delta",
+
+    # ── Auth ────────────────────────────────────────────────────────────
+    "auth.require_login":     AUTH_DEFAULT_REQUIRE_LOGIN,
+    "auth.lock_timeout_s":    AUTH_DEFAULT_LOCK_TIMEOUT_S,
+    "auth.supervisor_override_timeout_s": AUTH_DEFAULT_SUPERVISOR_OVERRIDE_S,
+
+    # ── Acquisition ─────────────────────────────────────────────────────
+    "acquisition.preflight_enabled": True,
+
+    # ── Autofocus ───────────────────────────────────────────────────────
+    "autofocus.strategy":     "sweep",
+    "autofocus.metric":       "laplacian",
+    "autofocus.z_start":      -500.0,
+    "autofocus.z_end":        500.0,
+    "autofocus.coarse_step":  50.0,
+    "autofocus.fine_step":    5.0,
+    "autofocus.n_avg":        2,
+    "autofocus.settle_ms":    50,
+    "autofocus.before_capture": False,
+
+    # ── AutoScan ────────────────────────────────────────────────────────
+    "autoscan.last_objective_mag": 10,
+
+    # ── Lab ─────────────────────────────────────────────────────────────
+    "lab.require_operator":   False,
+    "lab.confirm_at_scan":    False,
+    "lab.active_operator":    "",
+    "lab.operators":          [],
+
+    # ── AI ──────────────────────────────────────────────────────────────
+    "ai.enabled":             False,
+    "ai.model_path":          "",
+    "ai.n_gpu_layers":        0,
+    "ai.persona":             "default",
+    "ai.cloud.provider":      "claude",
+    "ai.cloud.api_key":       "",
+    "ai.cloud.model":         "",
+    "ai.ollama.model":        "",
+
+    # ── Updates ─────────────────────────────────────────────────────────
+    "updates.auto_check":     True,
+    "updates.frequency":      "always",
+    "updates.include_prerelease": False,
+
+    # ── Logging ─────────────────────────────────────────────────────────
+    "logging.hardware_debug": False,
+
+    # ── Plugins ─────────────────────────────────────────────────────────
+    # plugin-specific keys use "plugins.<id>.enabled" / "plugins.<id>.config"
+    # — no defaults needed here; get_pref() call sites supply their own.
+}
+
+
+def _validate_bool(v: Any) -> bool:
+    """Coerce to bool; reject non-boolean-ish values."""
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, int) and v in (0, 1):
+        return bool(v)
+    if isinstance(v, str) and v.lower() in ("true", "false", "1", "0"):
+        return v.lower() in ("true", "1")
+    raise TypeError(f"expected bool, got {type(v).__name__}: {v!r}")
+
+
+def _validate_positive_int(v: Any) -> int:
+    """Coerce to int ≥ 0."""
+    v = int(v)
+    if v < 0:
+        raise ValueError(f"expected non-negative int, got {v}")
+    return v
+
+
+def _validate_positive_float(v: Any) -> float:
+    """Coerce to float > 0."""
+    v = float(v)
+    if v <= 0:
+        raise ValueError(f"expected positive float, got {v}")
+    return v
+
+
+def _validate_float(v: Any) -> float:
+    """Coerce to float (any sign)."""
+    return float(v)
+
+
+def _validate_str(v: Any) -> str:
+    """Coerce to str."""
+    if not isinstance(v, str):
+        raise TypeError(f"expected str, got {type(v).__name__}: {v!r}")
+    return v
+
+
+def _validate_str_list(v: Any) -> list:
+    """Validate a list of strings."""
+    if not isinstance(v, list):
+        raise TypeError(f"expected list, got {type(v).__name__}")
+    return [str(item) for item in v]
+
+
+def _make_choice_validator(*choices):
+    """Return a validator that accepts only the given string values."""
+    valid = set(choices)
+    def _validate(v: Any) -> str:
+        s = str(v)
+        if s not in valid:
+            raise ValueError(f"expected one of {sorted(valid)}, got {s!r}")
+        return s
+    return _validate
+
+
+_PREF_VALIDATORS: dict[str, Any] = {
+    # ── UI ──────────────────────────────────────────────────────────────
+    "ui.theme":             _make_choice_validator("auto", "dark", "light"),
+    "ui.colors":            _make_choice_validator("standard", "deuteranopia",
+                                                   "protanopia", "tritanopia"),
+    "ui.workspace":         _make_choice_validator("standard", "expert"),
+    "ui.license_prompted":  _validate_bool,
+
+    # ── Auth ────────────────────────────────────────────────────────────
+    "auth.require_login":   _validate_bool,
+    "auth.lock_timeout_s":  _validate_positive_int,
+    "auth.supervisor_override_timeout_s": _validate_positive_int,
+
+    # ── Acquisition ─────────────────────────────────────────────────────
+    "acquisition.preflight_enabled": _validate_bool,
+
+    # ── Autofocus ───────────────────────────────────────────────────────
+    "autofocus.strategy":   _make_choice_validator("sweep", "hillclimb",
+                                                    "binary_search"),
+    "autofocus.metric":     _make_choice_validator("laplacian", "variance",
+                                                    "gradient", "tenengrad"),
+    "autofocus.z_start":    _validate_float,
+    "autofocus.z_end":      _validate_float,
+    "autofocus.coarse_step": _validate_positive_float,
+    "autofocus.fine_step":   _validate_positive_float,
+    "autofocus.n_avg":       _validate_positive_int,
+    "autofocus.settle_ms":   _validate_positive_int,
+    "autofocus.before_capture": _validate_bool,
+
+    # ── Lab ─────────────────────────────────────────────────────────────
+    "lab.require_operator":  _validate_bool,
+    "lab.confirm_at_scan":   _validate_bool,
+    "lab.active_operator":   _validate_str,
+    "lab.operators":         _validate_str_list,
+
+    # ── AI ──────────────────────────────────────────────────────────────
+    "ai.enabled":            _validate_bool,
+    "ai.n_gpu_layers":       _validate_positive_int,
+
+    # ── Updates ─────────────────────────────────────────────────────────
+    "updates.auto_check":    _validate_bool,
+    "updates.frequency":     _make_choice_validator("always", "daily",
+                                                     "weekly", "never"),
+    "updates.include_prerelease": _validate_bool,
+
+    # ── Logging ─────────────────────────────────────────────────────────
+    "logging.hardware_debug": _validate_bool,
+}
+
+
 def get_pref(key: str, default: Any = None) -> Any:
-    """Read a user preference.  e.g. get_pref('ui.mode', 'standard')"""
+    """Read a user preference.  e.g. get_pref('ui.mode', 'standard')
+
+    Lookup order:
+      1. Persisted value in preferences.json (with validation)
+      2. Caller-supplied *default*
+      3. ``_PREF_DEFAULTS`` registry
+
+    If a persisted value fails validation, a warning is logged and the
+    value is treated as absent (falls through to default / registry).
+    """
+    # Resolve the effective default: caller-supplied wins, then registry.
+    effective_default = default if default is not None else _PREF_DEFAULTS.get(key)
+
     keys = key.split(".")
     with _prefs_lock:
         val = _prefs
         for k in keys:
             if not isinstance(val, dict):
-                return default
+                return effective_default
             val = val.get(k, None)
             if val is None:
-                return default
-        return val
+                return effective_default
+
+    # Validate if a validator is registered
+    validator = _PREF_VALIDATORS.get(key)
+    if validator is not None:
+        try:
+            val = validator(val)
+        except (TypeError, ValueError) as exc:
+            _prefs_log.warning(
+                "Preference %r has invalid persisted value %r: %s — "
+                "using default %r", key, val, exc, effective_default)
+            return effective_default
+
+    return val
+
+
+def pref_default(key: str) -> Any:
+    """Return the registered default for *key*, or None if not registered.
+
+    Useful for UI widgets that need to show "default" without hardcoding
+    the value in the widget itself.
+    """
+    return _PREF_DEFAULTS.get(key)
 
 
 def set_pref(key: str, value: Any) -> None:
-    """Write and immediately persist a user preference."""
+    """Write and immediately persist a user preference.
+
+    If a validator is registered for *key*, the value is validated before
+    writing.  Invalid values raise ValueError / TypeError to the caller
+    so UI code can catch and reject the input.
+    """
+    validator = _PREF_VALIDATORS.get(key)
+    if validator is not None:
+        value = validator(value)   # raises on invalid — caller should handle
+
     keys = key.split(".")
     with _prefs_lock:
         node = _prefs
         for k in keys[:-1]:
             node = node.setdefault(k, {})
         node[keys[-1]] = value
-    _save_prefs()
+        import copy
+        snapshot = copy.deepcopy(_prefs)
+    # Serialize outside the lock — the snapshot is an independent copy,
+    # so concurrent set_pref() calls can proceed without blocking on I/O.
+    _save_prefs(snapshot)
 

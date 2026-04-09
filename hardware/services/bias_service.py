@@ -82,6 +82,13 @@ class BiasService(BaseDeviceService):
                     consecutive_errors = 0
                 except Exception as e:
                     consecutive_errors += 1
+                    if consecutive_errors == 1:
+                        log.debug("[bias] Poll error (1/%d): %s",
+                                  self._MAX_CONSECUTIVE_ERRORS, e)
+                    else:
+                        log.warning("[bias] Poll error (%d/%d): %s",
+                                    consecutive_errors,
+                                    self._MAX_CONSECUTIVE_ERRORS, e)
                     from hardware.bias.base import BiasStatus
                     self.status_update.emit(BiasStatus(error=str(e)))
                     if consecutive_errors >= self._MAX_CONSECUTIVE_ERRORS:

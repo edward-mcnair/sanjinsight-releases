@@ -13,6 +13,7 @@ from typing import List, Optional, Dict
 
 import config as cfg_mod
 from .session import Session, SessionMeta
+from ._atomic import atomic_write_json
 
 log = logging.getLogger(__name__)
 
@@ -119,26 +120,30 @@ class SessionManager:
             return None
 
     def _update_field(self, uid: str, field: str, value):
-        """Update a single metadata field on both the in-memory index and disk."""
+        """Update a single metadata field on both disk and the in-memory index.
+
+        Disk is written first via atomic_write_json.  The in-memory index
+        is updated only after the disk commit succeeds, so the two never
+        diverge on I/O failure.
+        """
         import json
         with self._lock:
             meta = self._index.get(uid)
             if meta is None:
                 return
-            setattr(meta, field, value)
             p = os.path.join(meta.path, "session.json")
             if os.path.exists(p):
                 try:
                     with open(p) as f:
                         d = json.load(f)
                     d[field] = value
-                    tmp = p + ".tmp"
-                    with open(tmp, "w") as f:
-                        json.dump(d, f, indent=2)
-                    os.replace(tmp, p)
+                    atomic_write_json(p, d)
                 except (OSError, json.JSONDecodeError) as e:
                     log.warning("SessionManager._update_field(%s, %s): %s",
                                 uid, field, e)
+                    return   # disk write failed — leave memory unchanged
+            # Disk committed (or no file on disk yet) — safe to update memory
+            setattr(meta, field, value)
 
     def update_label(self, uid: str, label: str):
         """Rename a session label in-place."""
@@ -153,17 +158,26 @@ class SessionManager:
         self._update_field(uid, "status", status)
 
     def delete(self, uid: str) -> bool:
-        """Delete session folder from disk and remove from index."""
+        """Delete session folder from disk, then remove from index.
+
+        The folder is deleted *before* the index is updated so that a failed
+        ``shutil.rmtree()`` leaves the session visible in the manager
+        (the user can retry or inspect the folder).  Only on successful
+        disk deletion is the in-memory index entry removed.
+        """
         with self._lock:
-            meta = self._index.pop(uid, None)
+            meta = self._index.get(uid)
         if meta is None:
             return False
         try:
             shutil.rmtree(meta.path)
-            return True
         except Exception as e:
-            log.warning("SessionManager.delete(%s): %s", uid, e)
+            log.warning("SessionManager.delete(%s): disk delete failed: %s", uid, e)
             return False
+        # Disk delete succeeded — now safe to remove from index
+        with self._lock:
+            self._index.pop(uid, None)
+        return True
 
     # ---------------------------------------------------------------- #
     #  Comparison helpers                                               #

@@ -37,6 +37,10 @@ class _CheckpointWriter:
     The capture loop pushes checkpoint dicts onto a queue; this writer
     drains and writes them one at a time.  If the queue backs up, older
     entries are silently dropped (only the latest matters for recovery).
+
+    ``start()`` and ``stop()`` are idempotent and thread-safe: calling
+    ``start()`` twice is harmless, and ``stop()`` on an already-stopped
+    writer is a no-op.
     """
 
     _SENTINEL = object()
@@ -44,17 +48,36 @@ class _CheckpointWriter:
     def __init__(self):
         self._queue: queue.Queue = queue.Queue(maxsize=4)
         self._thread: Optional[threading.Thread] = None
+        self._lock = threading.Lock()
 
     def start(self):
-        self._thread = threading.Thread(
-            target=self._run, daemon=True, name="ckpt-writer")
-        self._thread.start()
+        with self._lock:
+            if self._thread is not None and self._thread.is_alive():
+                return  # already running — idempotent
+            # Drain any stale items from a previous run
+            while not self._queue.empty():
+                try:
+                    self._queue.get_nowait()
+                except queue.Empty:
+                    break
+            self._thread = threading.Thread(
+                target=self._run, daemon=True, name="ckpt-writer")
+            self._thread.start()
 
     def stop(self):
-        if self._thread is not None:
-            self._queue.put(self._SENTINEL)
-            self._thread.join(timeout=3.0)
+        with self._lock:
+            thread = self._thread
+            if thread is None:
+                return  # already stopped — idempotent
             self._thread = None
+        # Signal and join outside the lock to avoid deadlock
+        try:
+            self._queue.put(self._SENTINEL, timeout=1.0)
+        except queue.Full:
+            pass
+        thread.join(timeout=3.0)
+        if thread.is_alive():
+            log.warning("Checkpoint writer did not stop within timeout")
 
     def enqueue(self, phase: str, accumulator: np.ndarray,
                 count: int, n_frames: int):
@@ -232,6 +255,7 @@ class AcquisitionPipeline:
         self._result           = None
         self._thread           = None
         self._abort_event      = threading.Event()
+        self._lifecycle_lock   = threading.Lock()
         self._roi              = None
         self._ckpt_writer      = _CheckpointWriter()
 
@@ -285,29 +309,33 @@ class AcquisitionPipeline:
 
     def start(self, n_frames: int = 100,
               inter_phase_delay: float = 0.0) -> None:
-        """
-        Start acquisition in a background thread (non-blocking).
+        """Start acquisition in a background thread (non-blocking).
+
+        Thread-safe: a lifecycle lock serialises ``start()`` / ``abort()``
+        so two concurrent ``start()`` calls cannot race.
 
         n_frames:           Number of frames to capture per phase (hot + cold)
         inter_phase_delay:  Seconds to wait between cold and hot capture.
                             Use this time to toggle your stimulus (e.g. bias current).
         """
-        if self._state in (AcqState.CAPTURING, AcqState.PROCESSING):
-            # If the thread is dead despite an active state, reset it
-            if self._thread is not None and not self._thread.is_alive():
-                log.warning("Pipeline state stuck at %s with dead thread — resetting",
-                            self._state.name)
-                self._state = AcqState.IDLE
-            else:
-                raise RuntimeError("Acquisition already in progress.")
-        self._state = AcqState.IDLE
-        self._abort_event.clear()
-        self._ckpt_writer.start()
-        self._thread = threading.Thread(
-            target=self._run,
-            args=(n_frames, inter_phase_delay),
-            daemon=True)
-        self._thread.start()
+        with self._lifecycle_lock:
+            if self._state in (AcqState.CAPTURING, AcqState.PROCESSING):
+                # If the thread is dead despite an active state, reset it
+                if self._thread is not None and not self._thread.is_alive():
+                    log.warning("Pipeline state stuck at %s with dead thread "
+                                "— resetting", self._state.name)
+                    self._state = AcqState.IDLE
+                else:
+                    raise RuntimeError("Acquisition already in progress.")
+            self._state = AcqState.IDLE
+            self._result = None
+            self._abort_event.clear()
+            self._ckpt_writer.start()
+            self._thread = threading.Thread(
+                target=self._run,
+                args=(n_frames, inter_phase_delay),
+                daemon=True)
+            self._thread.start()
 
     def run(self, n_frames: int = 100,
             inter_phase_delay: float = 0.0) -> AcquisitionResult:
@@ -320,8 +348,12 @@ class AcquisitionPipeline:
         return self._result
 
     def abort(self) -> None:
-        """Request abort. Returns immediately — check state for ABORTED."""
-        self._abort_event.set()
+        """Request abort. Returns immediately — check state for ABORTED.
+
+        Thread-safe via the lifecycle lock.
+        """
+        with self._lifecycle_lock:
+            self._abort_event.set()
 
     def capture_reference(self, n_frames: int = 100) -> Optional[np.ndarray]:
         """
@@ -376,9 +408,14 @@ class AcquisitionPipeline:
             if cold_full is None:
                 return
 
-            self._result.full_cold_avg = cold_full
-            self._result.cold_avg      = (self._roi.crop(cold_full)
-                                          if self._roi else cold_full)
+            # Store full-frame as float32 to halve memory; _compute()
+            # up-casts to float64 internally where precision matters.
+            cold_full_f32 = cold_full.astype(np.float32)
+            del cold_full  # release float64 copy early
+
+            self._result.full_cold_avg = cold_full_f32
+            self._result.cold_avg      = (self._roi.crop(cold_full_f32)
+                                          if self._roi else cold_full_f32)
             self._result.cold_captured = n_frames
 
             if self._abort_event.is_set():
@@ -405,13 +442,13 @@ class AcquisitionPipeline:
             if hot_full is None:
                 return
 
-            self._result.full_hot_avg = hot_full
-            self._result.hot_avg      = (self._roi.crop(hot_full)
-                                         if self._roi else hot_full)
-            self._result.hot_captured = n_frames
+            hot_full_f32 = hot_full.astype(np.float32)
+            del hot_full
 
-            # NOTE: _stimulus_safe_off() in finally handles the actual guarantee
-            # that the stimulus is off; the explicit call was removed here.
+            self._result.full_hot_avg = hot_full_f32
+            self._result.hot_avg      = (self._roi.crop(hot_full_f32)
+                                         if self._roi else hot_full_f32)
+            self._result.hot_captured = n_frames
 
             # --- Processing ---
             self._state = AcqState.PROCESSING
@@ -421,6 +458,13 @@ class AcquisitionPipeline:
                 message="Computing ΔR/R...")
 
             self._compute(self._result)
+
+            # Release full-frame copies if an ROI was active — the
+            # session only persists the cropped cold_avg / hot_avg.
+            if self._roi:
+                self._result.full_cold_avg = None
+                self._result.full_hot_avg  = None
+
             self._result.duration_s = time.time() - t_start
             self._state = AcqState.COMPLETE
 
@@ -488,8 +532,9 @@ class AcquisitionPipeline:
                     self._bias.enable()
                 else:
                     self._bias.disable()
-            except Exception:
-                pass
+            except Exception as exc:
+                log.warning("Bias %s failed: %s",
+                            "enable" if active else "disable", exc)
 
     # Checkpoint every 25% of frames (at least every 50 frames)
     _CHECKPOINT_FRAC = 0.25
@@ -650,7 +695,10 @@ class AcquisitionPipeline:
 
         difference = (hot - cold).astype(np.float64)
 
-        result.delta_r_over_r = delta_r_r.astype(np.float64)
-        result.difference     = difference
+        # Store results as float32 — ΔR/R values are small (1e-4 to 1e-2)
+        # and 23 bits of mantissa gives ~7 decimal digits, which is more
+        # than sufficient.  This halves the memory footprint of the result.
+        result.delta_r_over_r = delta_r_r.astype(np.float32)
+        result.difference     = difference.astype(np.float32)
         result.dark_pixel_count = int(dark_mask_2d.sum())
         result.dark_pixel_fraction = float(dark_mask_2d.mean())

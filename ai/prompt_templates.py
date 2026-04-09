@@ -164,6 +164,7 @@ def explain_tab(
     context_json: str,
     system_prompt: str = SYSTEM_PROMPT,
     manual_context: str = "",
+    tier: int = 2,
 ) -> list[dict]:
     """
     Ask the model to explain the active tab and what the user should do next.
@@ -172,6 +173,8 @@ def explain_tab(
     ----------
     manual_context : str
         Optional User Manual snippet retrieved by manual_rag for this tab.
+    tier : int
+        AITier integer — controls response depth.
 
     Returns a messages list ready for create_chat_completion().
     """
@@ -179,6 +182,7 @@ def explain_tab(
         f"\n\nRelevant User Manual sections:\n{manual_context}"
         if manual_context else ""
     )
+    instruction = _TIER_EXPLAIN_INSTRUCTION.get(tier, _TIER_EXPLAIN_INSTRUCTION[2])
     return [
         {"role": "system", "content": system_prompt},
         {
@@ -186,8 +190,7 @@ def explain_tab(
             "content": (
                 f"Instrument state: {context_json}\n\n"
                 f"I am looking at the '{tab_name}' tab. "
-                "In 2-3 sentences, explain what this tab does and what I should "
-                "check or adjust given the current instrument state."
+                + instruction
                 + extra
             ),
         },
@@ -198,6 +201,7 @@ def diagnose(
     context_json: str,
     system_prompt: str = SYSTEM_PROMPT,
     manual_context: str = "",
+    tier: int = 2,
 ) -> list[dict]:
     """
     Ask the model to review current issues and suggest fixes.
@@ -206,6 +210,8 @@ def diagnose(
     ----------
     manual_context : str
         Optional User Manual snippet retrieved by manual_rag for the active tab.
+    tier : int
+        AITier integer — controls diagnostic depth.
 
     Returns a messages list.
     """
@@ -213,15 +219,15 @@ def diagnose(
         f"\n\nRelevant User Manual sections:\n{manual_context}"
         if manual_context else ""
     )
+    instruction = _TIER_DIAGNOSE_INSTRUCTION.get(tier, _TIER_DIAGNOSE_INSTRUCTION[2])
     return [
         {"role": "system", "content": system_prompt},
         {
             "role": "user",
             "content": (
                 f"Instrument state: {context_json}\n\n"
-                "Review the instrument state above. List any problems you see and, "
-                "for each, suggest one concrete fix. Be specific about settings or "
-                "actions. If everything looks good, say so briefly."
+                "Review the instrument state above. "
+                + instruction
                 + extra
             ),
         },
@@ -233,6 +239,7 @@ def free_ask(
     context_json: str,
     system_prompt: str = SYSTEM_PROMPT,
     manual_context: str = "",
+    tier: int = 2,
 ) -> list[dict]:
     """
     Free-form question with instrument context.
@@ -242,6 +249,8 @@ def free_ask(
     manual_context : str
         Optional snippet from the User Manual retrieved by manual_rag.retrieve().
         Injected after the question so the model can cite manual details.
+    tier : int
+        AITier integer — controls response depth.
 
     Returns a messages list.
     """
@@ -249,13 +258,14 @@ def free_ask(
         f"\n\nRelevant User Manual sections:\n{manual_context}"
         if manual_context else ""
     )
+    instruction = _TIER_CHAT_INSTRUCTION.get(tier, _TIER_CHAT_INSTRUCTION[2])
     return [
         {"role": "system", "content": system_prompt},
         {
             "role": "user",
             "content": (
                 f"Instrument state: {context_json}\n\n"
-                f"Question: {question}"
+                f"Question: {question}\n\n{instruction}"
                 + extra
             ),
         },
@@ -267,6 +277,7 @@ def session_report(
     context_json: str,
     system_prompt: str = SYSTEM_PROMPT,
     manual_context: str = "",
+    tier: int = 2,
 ) -> list[dict]:
     """
     Ask the model to generate a one-paragraph post-acquisition quality report.
@@ -287,6 +298,9 @@ def session_report(
     manual_context : str
         Optional User Manual snippet retrieved by manual_rag for acquisition
         quality topics (SNR, dark pixels, exposure, calibration).
+    tier : int
+        AITier integer (1=BASIC, 2=STANDARD, 3=FULL) — controls response
+        complexity and length.
 
     Returns a messages list ready for create_chat_completion().
     """
@@ -322,15 +336,15 @@ def session_report(
         if manual_context else ""
     )
 
+    # Tier-specific task envelope
+    task_instruction = _TIER_REPORT_INSTRUCTION.get(tier, _TIER_REPORT_INSTRUCTION[2])
+
     content = (
         f"Instrument state: {context_json}\n\n"
         f"Acquisition just completed. Pre-acquisition grade: {grade}.\n"
         f"{issue_lines}"
         f"Result metrics:\n" + "\n".join(f"  {m}" for m in metrics) + "\n\n"
-        "In 3-4 sentences, give a quality assessment of this acquisition. "
-        "Comment on SNR, dark pixel fraction, and any pre-existing issues that "
-        "may have affected the result. Suggest one concrete improvement for the "
-        "next acquisition if warranted. Plain text only."
+        + task_instruction
         + extra
     )
 
@@ -338,3 +352,73 @@ def session_report(
         {"role": "system", "content": system_prompt},
         {"role": "user",   "content": content},
     ]
+
+
+# ── Tier-specific task envelopes ─────────────────────────────────────────────
+#
+# Small models need narrower, more directive asks.  Large models benefit
+# from richer synthesis instructions.  These envelopes shape the task
+# independently of the persona (which shapes tone).
+
+_TIER_CHAT_INSTRUCTION: dict[int, str] = {
+    1: "Answer in 1-2 sentences. Plain text only. One concrete suggestion.",
+    2: "Answer in 2-4 sentences. Be specific about settings. Plain text only.",
+    3: ("Answer thoroughly in 3-6 sentences. Reference specific instrument "
+        "readings from the state above. Explain the reasoning. Plain text only."),
+}
+
+_TIER_DIAGNOSE_INSTRUCTION: dict[int, str] = {
+    1: ("List the single most important problem and one fix. "
+        "One sentence each. Plain text only."),
+    2: ("List any problems you see and, for each, suggest one concrete fix. "
+        "Be specific about settings or actions. If everything looks good, "
+        "say so briefly."),
+    3: ("Review the instrument state above thoroughly. For each problem: "
+        "state the issue, explain why it matters for measurement quality, "
+        "and suggest a specific fix with the exact setting to change. "
+        "If everything looks good, confirm readiness briefly."),
+}
+
+_TIER_EXPLAIN_INSTRUCTION: dict[int, str] = {
+    1: "In 1-2 sentences, say what this tab does and what to check.",
+    2: ("In 2-3 sentences, explain what this tab does and what I should "
+        "check or adjust given the current instrument state."),
+    3: ("In 3-5 sentences, explain what this tab does, how it relates to "
+        "the current measurement workflow, and what I should check or "
+        "adjust given the current instrument state. Reference specific "
+        "readings where relevant."),
+}
+
+_TIER_REPORT_INSTRUCTION: dict[int, str] = {
+    1: ("In 2 sentences, assess this acquisition quality. "
+        "Note the biggest issue. Plain text only."),
+    2: ("In 3-4 sentences, give a quality assessment of this acquisition. "
+        "Comment on SNR, dark pixel fraction, and any pre-existing issues that "
+        "may have affected the result. Suggest one concrete improvement for the "
+        "next acquisition if warranted. Plain text only."),
+    3: ("In 4-6 sentences, give a detailed quality assessment. Comment on SNR, "
+        "dark pixel fraction, frame completeness, and any pre-existing issues. "
+        "Explain how each issue affects the measurement result. Suggest 1-2 "
+        "concrete improvements for the next acquisition, with specific settings "
+        "to change. Plain text only."),
+}
+
+
+def get_tier_instruction(task_type: str, tier: int) -> str:
+    """Return the tier-appropriate task instruction for the given task type.
+
+    Parameters
+    ----------
+    task_type : str
+        One of 'chat', 'diagnose', 'explain_tab', 'session_report'.
+    tier : int
+        AITier integer (1=BASIC, 2=STANDARD, 3=FULL).
+    """
+    tables = {
+        "chat":           _TIER_CHAT_INSTRUCTION,
+        "diagnose":       _TIER_DIAGNOSE_INSTRUCTION,
+        "explain_tab":    _TIER_EXPLAIN_INSTRUCTION,
+        "session_report": _TIER_REPORT_INSTRUCTION,
+    }
+    table = tables.get(task_type, _TIER_CHAT_INSTRUCTION)
+    return table.get(tier, table.get(2, ""))

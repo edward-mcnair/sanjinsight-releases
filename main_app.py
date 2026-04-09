@@ -1077,6 +1077,7 @@ class MainWindow(QMainWindow):
         self._ai_service.tier_changed.connect(self._settings_tab.set_ai_tier)
         self._ai_service.response_token.connect(self._on_ai_token)
         self._ai_service.response_complete.connect(self._on_ai_response_complete)
+        self._ai_service.response_meta.connect(self._ai_panel.on_response_meta)
         self._ai_service.ai_error.connect(self._on_ai_error)
 
         # AI panel → service
@@ -1648,19 +1649,22 @@ class MainWindow(QMainWindow):
             self._toasts.show_warning("Scan failed or was aborted",
                                       auto_dismiss_ms=5000)
             return
-        # ── Autosave checkpoint (scan) ────────────────────────────────
-        try:
-            from acquisition.autosave import scan_autosave
-            _sarr = {"drr_map": result.drr_map}
-            if hasattr(result, "dt_map") and result.dt_map is not None:
-                _sarr["dt_map"] = result.dt_map
-            scan_autosave.save(
-                _sarr,
-                {"n_cols": result.n_cols, "n_rows": result.n_rows,
-                 "step_x_um": result.step_x_um, "step_y_um": result.step_y_um,
-                 "label": time.strftime("scan_%Y%m%d_%H%M%S")})
-        except Exception as _se:
-            log.debug("Autosave (scan) failed: %s", _se)
+        # ── Autosave checkpoint (scan) — off main thread ──────────────
+        def _autosave_scan():
+            try:
+                from acquisition.autosave import scan_autosave
+                _sarr = {"drr_map": result.drr_map}
+                if hasattr(result, "dt_map") and result.dt_map is not None:
+                    _sarr["dt_map"] = result.dt_map
+                scan_autosave.save(
+                    _sarr,
+                    {"n_cols": result.n_cols, "n_rows": result.n_rows,
+                     "step_x_um": result.step_x_um, "step_y_um": result.step_y_um,
+                     "label": time.strftime("scan_%Y%m%d_%H%M%S")})
+            except Exception as _se:
+                log.debug("Autosave (scan) failed: %s", _se)
+        threading.Thread(target=_autosave_scan, daemon=True,
+                         name="autosave-scan").start()
 
         # ── Run manifest (scan) ───────────────────────────────────────
         # Scans are not yet saved through SessionManager, so there is no
@@ -2659,7 +2663,7 @@ class MainWindow(QMainWindow):
         from ui.dialogs.support_dialog import SupportDialog
         context_json = ""
         try:
-            context_json = self._ai_service._ctx.build()
+            context_json = self._ai_service.build_instrument_context()
         except Exception:
             log.debug("_show_support_dialog: context build failed — "
                       "sending empty context", exc_info=True)
@@ -3148,20 +3152,23 @@ class MainWindow(QMainWindow):
         t.start()
         self._session_save_thread = t
 
-        # Autosave checkpoint
-        try:
-            from acquisition.autosave import acquire_autosave
-            _arrays = {}
-            if drr_map is not None:
-                _arrays["drr"] = drr_map
-            if dt_map is not None:
-                _arrays["dt"] = dt_map
-            acquire_autosave.save(
-                _arrays,
-                {"label": time.strftime("acq_%Y%m%d_%H%M%S"),
-                 "snr_db": float(getattr(r, "snr_db", 0))})
-        except Exception as _ae:
-            log.debug("Autosave (acquire) failed: %s", _ae)
+        # Autosave checkpoint — run off the main thread (best-effort I/O)
+        def _autosave_acquire():
+            try:
+                from acquisition.autosave import acquire_autosave
+                _arrays = {}
+                if drr_map is not None:
+                    _arrays["drr"] = drr_map
+                if dt_map is not None:
+                    _arrays["dt"] = dt_map
+                acquire_autosave.save(
+                    _arrays,
+                    {"label": time.strftime("acq_%Y%m%d_%H%M%S"),
+                     "snr_db": float(getattr(r, "snr_db", 0))})
+            except Exception as _ae:
+                log.debug("Autosave (acquire) failed: %s", _ae)
+        threading.Thread(target=_autosave_acquire, daemon=True,
+                         name="autosave-acq").start()
 
     # ── Central state store observer ──────────────────────────────────
 
@@ -3273,7 +3280,7 @@ class MainWindow(QMainWindow):
         def _on_diag_done(text: str, _elapsed: float) -> None:
             self._diag_active = False
             self._disconnect_diag_handlers()
-            self._ai_service._set_status("ready")
+            self._ai_service.set_status("ready")
             summary = text.strip()[:300]
             if summary:
                 self._log_tab.append(f"AI diagnosis: {summary}")
@@ -3281,7 +3288,7 @@ class MainWindow(QMainWindow):
         def _on_diag_err(msg: str) -> None:
             self._diag_active = False
             self._disconnect_diag_handlers()
-            self._ai_service._set_status("ready")
+            self._ai_service.set_status("ready")
 
         self._diag_token_handler = _on_diag_token
         self._diag_done_handler = _on_diag_done
@@ -3293,8 +3300,8 @@ class MainWindow(QMainWindow):
 
         # Build a standalone diagnosis prompt (no history injection)
         from ai import prompt_templates as tmpl
-        sp = self._ai_service._active_system_prompt()
-        ctx_json = self._ai_service._ctx.build()
+        sp = self._ai_service.system_prompt()
+        ctx_json = self._ai_service.build_instrument_context()
         messages = tmpl.diagnose(ctx_json, sp, "")
         # Replace the user message with the specific error
         messages[-1] = {"role": "user", "content":
@@ -3302,14 +3309,9 @@ class MainWindow(QMainWindow):
             f"Briefly: likely cause and fix?"}
 
         # Fire inference directly — bypasses _run() so no history pollution
-        if (self._ai_service._active_backend == "remote"
-                and self._ai_service._remote_runner is not None):
-            self._ai_service._remote_runner.infer(
-                messages, max_tokens=256, temperature=0.3)
-        else:
-            self._ai_service._runner.infer(
-                messages, max_tokens=256, temperature=0.3)
-        self._ai_service._set_status("thinking")
+        self._ai_service.infer_direct(
+            messages, max_tokens=256, temperature=0.3)
+        self._ai_service.set_status("thinking")
 
     # ── TEC alarm handlers ────────────────────────────────────────────
 
@@ -3763,6 +3765,15 @@ class MainWindow(QMainWindow):
         to the ``MeasurementOrchestrator`` state machine.  Otherwise falls
         back to the legacy inline implementation.
         """
+        # Guard: reject if a pipeline acquisition is already running
+        pl = getattr(app_state, "pipeline", None)
+        if pl is not None:
+            from acquisition.pipeline import AcqState
+            if pl.state in (AcqState.CAPTURING, AcqState.PROCESSING):
+                log.warning("Acquisition already in progress — ignoring "
+                            "duplicate start request")
+                return
+
         if self._use_orchestrator:
             return self._on_acquire_via_orchestrator(n_frames, delay)
         return self._on_acquire_legacy(n_frames, delay)
@@ -3788,8 +3799,18 @@ class MainWindow(QMainWindow):
         self._measurement_orch.start_measurement(
             n_frames, delay, workflow=self._active_workflow)
 
-        # If the orchestrator reached CAPTURING synchronously, start pipeline
+        # If the orchestrator reached CAPTURING synchronously, start pipeline.
+        # Guard against double-start: when a grade/preflight dialog was shown
+        # and accepted, the dialog handler already called start_acquisition()
+        # (via provide_decision → CAPTURING).  The signal fires synchronously
+        # inside start_measurement(), so by this point the pipeline may
+        # already be running.
         if self._measurement_orch.phase == MeasurementPhase.CAPTURING:
+            from acquisition.pipeline import AcqState
+            pl = getattr(app_state, "pipeline", None)
+            if pl is not None and pl.state in (AcqState.CAPTURING,
+                                                AcqState.PROCESSING):
+                return  # already started via decision-dialog path
             # Sync snapshots for legacy consumers
             ctx = self._measurement_orch.context
             self._acq_start_grade = ctx.grade
@@ -4089,11 +4110,8 @@ class MainWindow(QMainWindow):
         self._header.set_ai_status(status)
         self._settings_tab.set_ai_status(status)
         # Also update cloud / Ollama status labels when the remote backend is active
-        if self._ai_service._active_backend == "remote":
-            provider = getattr(self._ai_service, "_runner", None)
-            # Determine which remote backend is active
-            remote = self._ai_service._remote_runner
-            remote_provider = getattr(remote, "_provider", "") if remote else ""
+        if self._ai_service.active_backend == "remote":
+            remote_provider = self._ai_service.remote_provider
             if remote_provider == "ollama":
                 self._settings_tab.set_ollama_status(status)
             else:
@@ -4178,7 +4196,7 @@ class MainWindow(QMainWindow):
                 self._diag_active = False
                 self._disconnect_diag_handlers()
             self._ai_service.cancel()
-            self._ai_service._set_status("ready")
+            self._ai_service.set_status("ready")
             # Defer launch to let the cancelled worker thread finish
             self._pending_advisor_profile = profile
             self._advisor_retry_count = 0
@@ -4221,11 +4239,7 @@ class MainWindow(QMainWindow):
             return
 
         # Check if the runner is still busy (cancel not yet drained)
-        runner = (self._ai_service._remote_runner
-                  if (self._ai_service._active_backend == "remote"
-                      and self._ai_service._remote_runner is not None)
-                  else self._ai_service._runner)
-        if getattr(runner, "_busy", False):
+        if self._ai_service.is_runner_busy():
             # Still draining — retry again shortly
             from PyQt5.QtCore import QTimer
             self._advisor_retry_count = retry_count + 1
@@ -4234,7 +4248,7 @@ class MainWindow(QMainWindow):
 
         self._pending_advisor_profile = None
 
-        self._ai_service._set_status("ready")
+        self._ai_service.set_status("ready")
         if not self._ai_service.can("proactive_advisor"):
             return
         try:
@@ -4256,13 +4270,13 @@ class MainWindow(QMainWindow):
         modality    = getattr(app_state, "active_modality", "thermoreflectance")
 
         # Build the analysis prompt
-        ctx_json    = self._ai_service._ctx.build()
+        ctx_json    = self._ai_service.build_instrument_context()
         profile_sum = profile_to_summary(profile, camera_type=camera_type)
 
         # Gather diagnostic issues (if engine is available)
         diag_text = ""
         try:
-            engine = self._ai_service._ctx._diagnostics
+            engine = self._ai_service.diagnostics
             if engine is not None:
                 results = engine.evaluate()
                 issues  = [r for r in results if r.severity in ("fail", "warn")]
@@ -4273,9 +4287,8 @@ class MainWindow(QMainWindow):
         except Exception:
             log.debug("Swallowed exception", exc_info=True)
 
-        is_cloud = (self._ai_service._active_backend == "remote"
-                    and getattr(self._ai_service._remote_runner, "_provider", "")
-                    != "ollama")
+        is_cloud = (self._ai_service.active_backend == "remote"
+                    and self._ai_service.remote_provider != "ollama")
         messages = build_advisor_prompt(
             profile_sum, ctx_json, diag_text,
             cloud=is_cloud, modality=modality)
@@ -4283,6 +4296,7 @@ class MainWindow(QMainWindow):
         # Create and show the dialog
         dlg = AdvisorDialog(parent=self)
         dlg.proceed_clicked.connect(self._on_advisor_proceed)
+        dlg.quick_fix.connect(self._on_advisor_quick_fix)
         dlg.cancel_requested.connect(self._on_advisor_cancelled)
         dlg.show_thinking()
         dlg.show()
@@ -4305,15 +4319,10 @@ class MainWindow(QMainWindow):
         self._ai_service.ai_error.connect(self._on_advisor_error)
 
         # Fire the inference (bypasses the normal _run to avoid history injection)
-        if (self._ai_service._active_backend == "remote"
-                and self._ai_service._remote_runner is not None):
-            self._ai_service._remote_runner.infer(
-                messages, max_tokens=max_tok, temperature=0.0)
-        else:
-            self._ai_service._runner.infer(
-                messages, max_tokens=max_tok, temperature=0.0)
+        self._ai_service.infer_direct(
+            messages, max_tokens=max_tok, temperature=0.0)
 
-        self._ai_service._set_status("thinking")
+        self._ai_service.set_status("thinking")
         self._log_tab.append(
             f"AI Advisor analysing profile: {getattr(profile, 'name', '?')}")
         log.info("AI Advisor launched for %s profile %r (camera=%s, modality=%s)",
@@ -4328,8 +4337,18 @@ class MainWindow(QMainWindow):
     def _on_advisor_complete(self, text: str, elapsed: float) -> None:
         """Parse advisor response and show results in the dialog."""
         from ai.advisor import parse_advice
+        from ai.output_parser import parse_json_response
 
         result = parse_advice(text)
+
+        # Record parse metrics and detect repair status
+        parsed = parse_json_response(text)
+        _repaired = parsed.repaired if parsed.parse_ok else False
+        if hasattr(self._ai_service, 'ai_metrics'):
+            if parsed.parse_ok:
+                self._ai_service.ai_metrics.on_parse_success(parsed.repaired)
+            else:
+                self._ai_service.ai_metrics.on_parse_failed()
 
         # Retry once with a stricter nudge if JSON parsing failed
         if (not result.parse_ok
@@ -4345,13 +4364,8 @@ class MainWindow(QMainWindow):
                          "That was not valid JSON. Respond with ONLY a JSON "
                          "object — no prose, no markdown. Start with {"})
             max_tok = getattr(self, "_advisor_max_tok", 512)
-            if (self._ai_service._active_backend == "remote"
-                    and self._ai_service._remote_runner is not None):
-                self._ai_service._remote_runner.infer(
-                    msgs, max_tokens=max_tok, temperature=0.0)
-            else:
-                self._ai_service._runner.infer(
-                    msgs, max_tokens=max_tok, temperature=0.0)
+            self._ai_service.infer_direct(
+                msgs, max_tokens=max_tok, temperature=0.0)
             return
 
         self._advisor_active = False
@@ -4363,16 +4377,16 @@ class MainWindow(QMainWindow):
         except TypeError:
             pass
 
-        self._ai_service._set_status("ready")
+        self._ai_service.set_status("ready")
 
         dlg = getattr(self, "_advisor_dlg", None)
         if dlg is None:
             return
 
-        dlg.show_result(result)
-        log.info("AI Advisor: %d conflicts, %d suggestions (%.1fs, parse_ok=%s)",
+        dlg.show_result(result, repaired=_repaired)
+        log.info("AI Advisor: %d conflicts, %d suggestions (%.1fs, parse_ok=%s, repaired=%s)",
                  len(result.conflicts), len(result.suggestions),
-                 elapsed, result.parse_ok)
+                 elapsed, result.parse_ok, _repaired)
 
         # Log advisor findings to the session log tab
         if result.parse_ok:
@@ -4420,7 +4434,7 @@ class MainWindow(QMainWindow):
         except TypeError:
             pass
 
-        self._ai_service._set_status("ready")
+        self._ai_service.set_status("ready")
 
         dlg = getattr(self, "_advisor_dlg", None)
         if dlg is not None:
@@ -4480,6 +4494,10 @@ class MainWindow(QMainWindow):
                 f"{brief}: {', '.join(applied)}")
         else:
             self._status.showMessage("AI Advisor: no changes applied", 3000)
+
+    def _on_advisor_quick_fix(self, fix: dict) -> None:
+        """Apply a single advisor fix via the quick-apply button."""
+        self._on_advisor_proceed([fix])
 
     # ── AI enable/disable ─────────────────────────────────────────────
 

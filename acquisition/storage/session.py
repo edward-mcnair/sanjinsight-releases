@@ -32,7 +32,10 @@ import numpy as np
 from dataclasses import dataclass, field, asdict
 from typing import List, Optional
 
-from acquisition.schema_migrations import CURRENT_SCHEMA, migrate
+from acquisition.schema_migrations import (
+    CURRENT_SCHEMA, migrate, reject_future_schema, FutureSchemaError,
+)
+from acquisition.storage._atomic import atomic_write_json
 
 log = logging.getLogger(__name__)
 
@@ -120,17 +123,22 @@ class SessionMeta:
 
     @staticmethod
     def from_dict(d: dict, path: str = "") -> "SessionMeta":
+        """Deserialise a metadata dict, migrating old schemas on the fly.
+
+        Raises ``FutureSchemaError`` if the file was written by a newer
+        SanjINSIGHT build (schema_version > CURRENT_SCHEMA).  This is a
+        hard reject — silently ignoring unknown fields could corrupt data
+        if the session is later re-saved with the missing fields dropped.
+        """
         version = d.get("schema_version", 0)
-        if version > CURRENT_SCHEMA:
-            log.warning(
-                "Session at '%s' was written by a newer version of SanjINSIGHT "
-                "(schema v%d, this build supports up to v%d). "
-                "Fields added in newer versions will be ignored. "
-                "Upgrade the software to read this session fully.",
-                path or "(unknown)", version, CURRENT_SCHEMA,
-            )
-        elif version < CURRENT_SCHEMA:
-            d = migrate(d, from_version=version)
+
+        # Hard-reject sessions from the future
+        reject_future_schema(version, path)
+
+        if version < CURRENT_SCHEMA:
+            json_path = os.path.join(path, "session.json") if path else ""
+            d = migrate(d, from_version=version,
+                        session_json_path=json_path)
         m = SessionMeta(path=path)
         for k, v in d.items():
             if hasattr(m, k):
@@ -273,11 +281,18 @@ class Session:
         )
 
     def save(self, sessions_root: str) -> str:
+        """Persist session to *sessions_root*/<uid>/.
+
+        Write ordering: arrays first (idempotent — can be rewritten safely),
+        then metadata JSON via atomic write.  ``meta.path`` is only set after
+        the JSON is durably committed, so in-memory state never disagrees
+        with disk on a crash.
+        """
         with self._lock:
             folder = os.path.join(sessions_root, self.meta.uid)
             os.makedirs(folder, exist_ok=True)
-            self.meta.path = folder
 
+            # 1. Arrays (order doesn't matter; each is self-contained)
             for name, arr in [
                 ("cold_avg",       self._cold_avg),
                 ("hot_avg",        self._hot_avg),
@@ -287,12 +302,19 @@ class Session:
                 if arr is not None:
                     np.save(os.path.join(folder, f"{name}.npy"), arr)
 
+            # 2. Thumbnail (best-effort, non-critical)
             if self._delta_r_over_r is not None:
                 self._save_thumbnail(folder)
 
-            with open(os.path.join(folder, "session.json"), "w") as f:
-                json.dump(self.meta.to_dict(), f, indent=2)
+            # 3. Metadata — atomic write (temp + flush + fsync + rename)
+            #    Build the dict with the target path so ``from_dict`` can
+            #    reconstruct later, but don't mutate self.meta.path yet.
+            meta_snapshot = self.meta.to_dict()
+            json_path = os.path.join(folder, "session.json")
+            atomic_write_json(json_path, meta_snapshot)
 
+            # 4. Commit in-memory path only after disk write succeeds
+            self.meta.path = folder
             return folder
 
     def _save_thumbnail(self, folder: str):
@@ -311,6 +333,11 @@ class Session:
 
     @staticmethod
     def load(folder: str) -> "Session":
+        """Load a session from *folder*.
+
+        Raises ``FileNotFoundError`` if session.json is missing and
+        ``FutureSchemaError`` if the file was written by a newer build.
+        """
         p = os.path.join(folder, "session.json")
         if not os.path.exists(p):
             raise FileNotFoundError(f"No session.json in {folder}")
@@ -329,6 +356,9 @@ class Session:
         except json.JSONDecodeError as exc:
             log.error("Session at '%s' has corrupt JSON: %s — skipping.", folder, exc)
             return None
+        except FutureSchemaError as exc:
+            log.warning("Skipping session: %s", exc)
+            return None
         except Exception:
             log.debug("Could not load session meta from '%s'", folder, exc_info=True)
             return None
@@ -338,14 +368,19 @@ class Session:
     # ---------------------------------------------------------------- #
 
     def save_analysis(self, result) -> None:
-        """Persist an AnalysisResult alongside the session on disk."""
+        """Persist an AnalysisResult alongside the session on disk.
+
+        Write ordering: arrays first, then metadata JSON via atomic write.
+        ``self.meta.analysis_result`` is updated only after the JSON is
+        durably committed so memory and disk stay consistent on failure.
+        """
         with self._lock:
             folder = self.meta.path
             if not folder or not os.path.isdir(folder):
                 log.warning("Cannot save analysis — session has no path on disk")
                 return
 
-            # Save overlay and mask as .npy
+            # 1. Arrays (idempotent)
             if result.overlay_rgb is not None:
                 np.save(os.path.join(folder, "analysis_overlay.npy"),
                         result.overlay_rgb)
@@ -353,11 +388,18 @@ class Session:
                 np.save(os.path.join(folder, "analysis_mask.npy"),
                         result.binary_mask)
 
-            # Attach serialised dict to meta and re-write session.json
-            self.meta.analysis_result = result.to_dict()
-            json_path = os.path.join(folder, "session.json")
-            with open(json_path, "w") as f:
-                json.dump(self.meta.to_dict(), f, indent=2)
+            # 2. Build JSON with the new analysis attached, but don't
+            #    mutate self.meta yet — write disk first.
+            analysis_dict = result.to_dict()
+            old_analysis = self.meta.analysis_result
+            self.meta.analysis_result = analysis_dict
+            try:
+                json_path = os.path.join(folder, "session.json")
+                atomic_write_json(json_path, self.meta.to_dict())
+            except Exception:
+                # Disk write failed — roll back in-memory change
+                self.meta.analysis_result = old_analysis
+                raise
 
     def load_analysis(self):
         """Reconstruct an AnalysisResult from disk, or return None."""

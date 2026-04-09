@@ -451,7 +451,10 @@ class AIPanelWidget(QWidget):
 
     def on_tier_changed(self, tier_value: int) -> None:
         """Update the tier badge and gate UI features by capability level."""
-        from ai.capability_tier import AITier, tier_display_name, tier_description, can
+        from ai.capability_tier import (
+            AITier, tier_display_name, tier_description, can,
+            available_features, _FEATURE_GATES,
+        )
 
         self._current_tier = tier_value
         tier = AITier(tier_value)
@@ -475,9 +478,31 @@ class AIPanelWidget(QWidget):
             f"font-size:{FONT['caption']}pt; color:{color}; "
             f"background:{PALETTE['surface2']}; border:1px solid {color}44; "
             f"border-radius:3px; padding:1px 5px; font-weight:600;")
-        self._tier_badge.setToolTip(
-            f"AI Tier: {name}\n{desc}\n\n"
-            "Upgrade to a larger model or cloud provider for more features.")
+        # Build feature visibility tooltip
+        enabled  = available_features(tier)
+        all_feats = sorted(_FEATURE_GATES.keys())
+        locked   = [f for f in all_feats if f not in enabled]
+
+        # Human-readable feature labels
+        _labels = {
+            "chat": "Chat Q&A", "explain_tab": "Tab Explanations",
+            "diagnose": "Diagnostics", "session_report": "Session Reports",
+            "manual_rag": "Manual Search", "quickstart_guide": "Quickstart Guide",
+            "proactive_advisor": "AI Advisor",
+            "structured_response": "Smart Suggestions",
+            "voice_commands": "Voice Commands",
+            "ai_acquisition": "AI Acquisition",
+            "batch_insights": "Batch Insights",
+            "explain_diagnostics": "Diagnostic Insights",
+        }
+        enabled_lines = "  ".join(f"✓ {_labels.get(f, f)}" for f in enabled[:6])
+        locked_lines  = "  ".join(f"✗ {_labels.get(f, f)}" for f in locked[:4])
+
+        tip = f"AI Tier: {name}\n{desc}\n\nEnabled: {enabled_lines}"
+        if locked_lines:
+            tip += f"\nLocked:  {locked_lines}"
+            tip += "\n\nUpgrade to a larger model or cloud provider to unlock more."
+        self._tier_badge.setToolTip(tip)
         self._tier_badge.setVisible(True)
 
         # Gate quick-action buttons by tier
@@ -512,8 +537,16 @@ class AIPanelWidget(QWidget):
         sb = self._display.verticalScrollBar()
         sb.setValue(sb.maximum())
 
+    def on_response_meta(self, meta: dict) -> None:
+        """Store response metadata for the grounding badge.
+
+        Called by AIService.response_meta *before* response_complete,
+        so the badge text is ready when the separator is drawn.
+        """
+        self._pending_meta = meta
+
     def on_response_complete(self, text: str, elapsed: float) -> None:
-        """Append a turn separator and show token rate after a response completes."""
+        """Append a turn separator (with grounding badge) and show token rate."""
         tok_count = len(text.split())
         rate = tok_count / elapsed if elapsed > 0 else 0
         self._rate_lbl.setText(f"{rate:.0f} tok/s  ·  {elapsed:.1f}s")
@@ -521,11 +554,26 @@ class AIPanelWidget(QWidget):
         if hasattr(self, "_display"):
             cursor = self._display.textCursor()
             cursor.movePosition(cursor.End)
+
+            # ── Grounding badge ──────────────────────────────────────
+            meta = getattr(self, "_pending_meta", {})
+            badges: list[str] = []
+            if meta.get("rag_used"):
+                badges.append("📖 Manual")
+            badges.append("📊 Live State")
+            if badges:
+                badge_text = "  ".join(badges)
+                fmt_badge = QTextCharFormat()
+                fmt_badge.setForeground(QColor(PALETTE['textDim']))
+                fmt_badge.setFont(mono_font(8))
+                cursor.insertText(f"\n  Sources: {badge_text}\n", fmt_badge)
+            self._pending_meta = {}
+
             fmt_sep = QTextCharFormat()
             fmt_sep.setForeground(QColor(_MUTED()))
             fmt_sep.setFont(mono_font(9))
             cursor.insertText(
-                "\n─────────────────────────────────────────────\n\n",
+                "─────────────────────────────────────────────\n\n",
                 fmt_sep)
             self._display.setTextCursor(cursor)
             sb = self._display.verticalScrollBar()

@@ -109,6 +109,13 @@ class TecService(BaseDeviceService):
                     consecutive_errors = 0
                 except Exception as e:
                     consecutive_errors += 1
+                    if consecutive_errors == 1:
+                        log.debug("[%s] Poll error (1/%d): %s", key,
+                                  self._MAX_CONSECUTIVE_ERRORS, e)
+                    else:
+                        log.warning("[%s] Poll error (%d/%d): %s", key,
+                                    consecutive_errors,
+                                    self._MAX_CONSECUTIVE_ERRORS, e)
                     from hardware.tec.base import TecStatus
                     self.status_update.emit(idx, TecStatus(error=str(e)))
                     if consecutive_errors >= self._MAX_CONSECUTIVE_ERRORS:

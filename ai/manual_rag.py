@@ -56,6 +56,11 @@ _MIN_SCORE: float = 0.01
 _BM25_K1: float = 1.5   # term saturation: higher → more weight on TF
 _BM25_B:  float = 0.75  # length normalisation: 1.0 = full, 0.0 = none
 
+# Section-title boost: BM25 score from heading tokens is multiplied by this
+# factor before adding to body score.  Helps surface sections whose heading
+# directly matches the query (e.g. "## Calibration" for a calibration query).
+_TITLE_BOOST: float = 2.5
+
 
 # ── Synonym normalisation ─────────────────────────────────────────────────────
 #
@@ -100,6 +105,27 @@ _SYNONYMS: dict[str, str] = {
     "analyze":      "analysis",
     "analyzed":     "analysis",
     "analyzing":    "analysis",
+    # Domain-specific synonyms for thermoreflectance
+    "wavelength":   "wavelength",
+    "led":          "illumination",
+    "laser":        "illumination",
+    "modulation":   "fpga",
+    "stimulus":     "fpga",
+    "lock-in":      "lockin",
+    "lockin":       "lockin",
+    "roi":          "region",
+    "autofocus":    "focus",
+    "focusing":     "focus",
+    "focused":      "focus",
+    "scanning":     "scan",
+    "scanned":      "scan",
+    "temperature":  "thermal",
+    "heating":      "thermal",
+    "cooling":      "thermal",
+    "objective":    "magnification",
+    "objectives":   "magnification",
+    "profile":      "material",
+    "profiles":     "material",
 }
 
 
@@ -166,7 +192,7 @@ def _load_sections() -> list[tuple[str, str, frozenset[str]]]:
 # ── BM25 index ────────────────────────────────────────────────────────────────
 
 @lru_cache(maxsize=1)
-def _load_bm25_index() -> tuple[dict, list, list, float]:
+def _load_bm25_index() -> tuple[dict, list, list, list, float]:
     """
     Build a BM25 index over all manual sections.  Cached after first call.
 
@@ -177,25 +203,30 @@ def _load_bm25_index() -> tuple[dict, list, list, float]:
     term_freqs : list[Counter]
         Per-section term frequency counters (one Counter per section,
         same order as _load_sections()).
+    title_freqs : list[Counter]
+        Per-section title-only term frequency counters (for title boosting).
     doc_lengths : list[int]
         Total token count per section.
     avgdl : float
         Average document length across all sections.
 
-    If the manual is not available, returns ({}, [], [], 1.0).
+    If the manual is not available, returns ({}, [], [], [], 1.0).
     """
     sections = _load_sections()
     if not sections:
-        return {}, [], [], 1.0
+        return {}, [], [], [], 1.0
 
     n          = len(sections)
-    term_freqs: list[Counter] = []
-    doc_lengths: list[int]   = []
+    term_freqs:  list[Counter] = []
+    title_freqs: list[Counter] = []
+    doc_lengths: list[int]     = []
 
     for heading, body, _ in sections:
         tokens = _tokenize_list(heading + " " + body)
         term_freqs.append(Counter(tokens))
         doc_lengths.append(len(tokens))
+        # Title-only tokens for boosting
+        title_freqs.append(Counter(_tokenize_list(heading)))
 
     avgdl = sum(doc_lengths) / n if n else 1.0
 
@@ -211,7 +242,7 @@ def _load_bm25_index() -> tuple[dict, list, list, float]:
         for term, freq in df.items()
     }
 
-    return idf, term_freqs, doc_lengths, avgdl
+    return idf, term_freqs, title_freqs, doc_lengths, avgdl
 
 
 # ── Scoring & retrieval ───────────────────────────────────────────────────────
@@ -262,16 +293,38 @@ def _truncate(text: str, max_words: int) -> str:
     return " ".join(words[:max_words]) + " \u2026"
 
 
+def _normalize_query(query: str) -> str:
+    """Lightweight query normalization for better retrieval.
+
+    Strips common question prefixes ("how do I", "where is", "what is")
+    that add noise without improving retrieval, and normalizes whitespace.
+    """
+    q = query.strip()
+    # Strip common question prefixes (case-insensitive)
+    for prefix in (
+        "how do i ", "how to ", "how can i ", "where is ",
+        "where do i ", "what is ", "what are ", "why is ",
+        "why does ", "can you ", "please ", "help me ",
+        "i want to ", "i need to ",
+    ):
+        if q.lower().startswith(prefix):
+            q = q[len(prefix):]
+            break
+    return q.strip()
+
+
 def retrieve(
     query: str,
     n_sections: int = 2,
     min_score: float = _MIN_SCORE,
+    max_words: int = _MAX_WORDS_PER_SECTION,
 ) -> str:
     """
     Retrieve the top-N most relevant User Manual sections for *query*.
 
     Sections are filtered by Jaccard similarity ≥ min_score (stable API
-    contract), then re-ranked by BM25 score for better result ordering.
+    contract), then re-ranked by BM25 score (with title boosting) for
+    better result ordering.
 
     Parameters
     ----------
@@ -282,6 +335,8 @@ def retrieve(
     min_score : float
         Minimum Jaccard score (0–1); sections below this threshold are
         discarded even if they score well under BM25.
+    max_words : int
+        Maximum words per section in the returned snippet.
 
     Returns
     -------
@@ -294,21 +349,29 @@ def retrieve(
     if not sections:
         return ""
 
-    q_tokens = _tokenize(query)
+    # Normalize query for better matching
+    normalized = _normalize_query(query)
+    q_tokens = _tokenize(normalized) if normalized else _tokenize(query)
     if not q_tokens:
         return ""
 
     # Build BM25 index (cached after first call)
-    idf, term_freqs, doc_lengths, avgdl = _load_bm25_index()
+    idf, term_freqs, title_freqs, doc_lengths, avgdl = _load_bm25_index()
 
-    # Score each section: filter by Jaccard threshold, rank by BM25
-    scored: list[tuple[str, str, float]] = []   # (heading, body, bm25_score)
+    # Score each section: filter by Jaccard threshold, rank by BM25 + title boost
+    scored: list[tuple[str, str, float]] = []   # (heading, body, boosted_score)
     for i, (heading, body, tokens) in enumerate(sections):
         jac = _jaccard(q_tokens, tokens)
         if jac < min_score:
             continue
-        bm = _bm25(q_tokens, idf, term_freqs[i], doc_lengths[i], avgdl)
-        scored.append((heading, body, bm))
+        # Body BM25 score
+        body_score = _bm25(q_tokens, idf, term_freqs[i], doc_lengths[i], avgdl)
+        # Title-specific BM25 score (boosted)
+        title_len = sum(title_freqs[i].values()) or 1
+        title_score = _bm25(q_tokens, idf, title_freqs[i], title_len, 5.0)
+        # Combined score with title boost
+        combined = body_score + title_score * _TITLE_BOOST
+        scored.append((heading, body, combined))
 
     if not scored:
         return ""
@@ -317,6 +380,6 @@ def retrieve(
     top = [(h, b) for h, b, _ in scored[:n_sections]]
 
     return "\n\n".join(
-        f"{heading}\n{_truncate(body, _MAX_WORDS_PER_SECTION)}"
+        f"{heading}\n{_truncate(body, max_words)}"
         for heading, body in top
     )
