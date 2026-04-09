@@ -130,6 +130,13 @@ def _check_com_port_locks() -> list[OSCheckResult]:
             # Only check FTDI ports (our main serial adapters)
             if port_info.vid != 0x0403:
                 continue
+            # Skip ports already claimed by a live connection
+            try:
+                from hardware.port_resolver import port_ownership
+                if port_ownership.is_claimed(port):
+                    continue
+            except Exception:
+                pass
             try:
                 import serial
                 s = serial.Serial(port, timeout=0.1)

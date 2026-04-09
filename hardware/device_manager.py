@@ -132,7 +132,7 @@ class DeviceEntry:
 
     descriptor:     DeviceDescriptor
     state:          DeviceState     = DeviceState.ABSENT
-    address:        str             = ""   # current port / IP / resource
+    address:        str             = ""   # authoritative port (set by resolver or verified connection)
     serial_number:  str             = ""
     firmware_ver:   str             = ""
     driver_ver:     str             = ""
@@ -140,6 +140,14 @@ class DeviceEntry:
     last_seen:      float           = 0.0
     last_connected: float           = 0.0
     driver_obj:     object          = None   # live driver instance
+
+    # ── Identity pipeline fields ─────────────────────────────────────
+    # observed_address: set by passive scan — advisory, not authoritative.
+    # resolution_method: how the current address was determined.
+    # port_ambiguous: True if scan found multiple candidates on same port.
+    observed_address:  str  = ""    # scan-discovered port (not persisted)
+    resolution_method: str  = ""    # "fingerprint", "com_hint", "scan", "user", ""
+    port_ambiguous:    bool = False # True if port had multiple candidate devices
 
     # Connection params (may be overridden by user in settings)
     baud_rate:   int   = 0
@@ -373,7 +381,7 @@ class DeviceManager:
         Returns a dict of ``{uid: resolved_port_or_None}``.
         """
         from hardware.port_resolver import (
-            PortResolver, load_fingerprint, USBFingerprint
+            PortResolver, ResolveResult, load_fingerprint, USBFingerprint
         )
 
         resolver = PortResolver()
@@ -421,20 +429,26 @@ class DeviceManager:
 
         # Update entry addresses with resolved ports (under lock to
         # avoid races with concurrent connect workers).
+        port_map: dict[str, str | None] = {}
         with self._lock:
-            for uid, resolved_port in results.items():
+            for uid, rr in results.items():
                 entry = self._entries.get(uid)
                 if entry is None:
                     continue
                 old_addr = entry.address
-                if resolved_port:
-                    if resolved_port != old_addr:
-                        log.info("resolve_ports: %s port changed %s → %s",
-                                 uid, old_addr, resolved_port)
+                port_map[uid] = rr.port
+                if rr.port:
+                    entry.address           = rr.port
+                    entry.resolution_method = rr.method
+                    entry.port_ambiguous    = False
+                    if rr.port != old_addr:
+                        log.info("resolve_ports: %s port changed %s → %s "
+                                 "(method=%s, score=%d)",
+                                 uid, old_addr, rr.port, rr.method, rr.score)
                         self._log(
                             f"Port update: {entry.descriptor.display_name} "
-                            f"moved from {old_addr} to {resolved_port}")
-                    entry.address = resolved_port
+                            f"moved from {old_addr} to {rr.port}"
+                            f" ({rr.method})")
                 else:
                     if old_addr:
                         log.info("resolve_ports: %s (was %s) not found in "
@@ -442,7 +456,61 @@ class DeviceManager:
 
         # Store resolver for later use (e.g. saving fingerprints)
         self._port_resolver = resolver
-        return results
+
+        # ── Audit log: trace every identity decision ─────────────────
+        self._log_identity_audit(resolver, results, device_map)
+
+        return port_map
+
+    def _log_identity_audit(self, resolver, results, device_map) -> None:
+        """Log a per-device identity trace for debugging port conflicts.
+
+        This produces one block per serial device showing:
+        - raw port fingerprint from hardware
+        - whether a saved fingerprint existed
+        - resolver score and match method
+        - whether the port was ambiguous
+        - port ownership claim/release events
+        """
+        from hardware.port_resolver import load_fingerprint
+        log.info("=" * 60)
+        log.info("IDENTITY AUDIT — %d serial device(s)", len(results))
+        log.info("=" * 60)
+
+        for uid, rr in results.items():
+            saved_fp_data = device_map.get(uid, (None, ""))
+            saved_fp, saved_port = saved_fp_data if saved_fp_data else (None, "")
+            entry = self._entries.get(uid)
+            display = entry.descriptor.display_name if entry else uid
+
+            log.info("── %s (%s) ──", display, uid)
+            log.info("  Saved fingerprint:  %s",
+                     f"serial={saved_fp.serial_number!r} "
+                     f"vid=0x{saved_fp.vid or 0:04X} "
+                     f"pid=0x{saved_fp.pid or 0:04X} "
+                     f"loc={saved_fp.location!r}"
+                     if saved_fp and not saved_fp.is_empty()
+                     else "(none)")
+            log.info("  Saved COM port:     %s", saved_port or "(none)")
+            log.info("  Resolved port:      %s", rr.port or "NOT FOUND")
+            log.info("  Resolution method:  %s", rr.method or "—")
+            log.info("  Fingerprint score:  %d", rr.score)
+            log.info("  Stable ID match:    %s", rr.stable_id or "—")
+
+            # Show the hardware fingerprint at the resolved port
+            if rr.port and resolver:
+                hw_fp = resolver.get_fingerprint(rr.port)
+                if hw_fp:
+                    log.info("  Hardware at %s:     serial=%r "
+                             "vid=0x%04X pid=0x%04X loc=%r mfr=%r",
+                             rr.port, hw_fp.serial_number,
+                             hw_fp.vid or 0, hw_fp.pid or 0,
+                             hw_fp.location, hw_fp.manufacturer)
+
+            if entry:
+                log.info("  Ambiguous:          %s", entry.port_ambiguous)
+
+        log.info("=" * 60)
 
     # ---------------------------------------------------------------- #
     #  Scan integration                                                 #
@@ -474,7 +542,30 @@ class DeviceManager:
                         and entry.address):
                     claimed_ports[entry.address] = uid
 
-            # Update entries for discovered devices
+            # ── Phase 1: Collect scan evidence per port ────────────
+            # Group discovered devices by address to detect ambiguity
+            # (multiple candidates for the same physical port).
+            port_candidates: dict[str, list] = {}   # port → [dev, ...]
+            for dev in report.devices:
+                if dev.descriptor is None:
+                    continue
+                addr = dev.address or ""
+                if addr:
+                    port_candidates.setdefault(addr, []).append(dev)
+
+            # Identify ambiguous ports (multiple candidates)
+            ambiguous_ports: set[str] = {
+                port for port, devs in port_candidates.items()
+                if len(devs) > 1
+            }
+            if ambiguous_ports:
+                log.info("Scan: ambiguous ports (multiple candidates): %s",
+                         ambiguous_ports)
+
+            # ── Phase 2: Update entries from scan ─────────────────
+            # Scan results are ADVISORY — they update observed_address
+            # and state, but do NOT overwrite the authoritative address
+            # (which is set only by the resolver or verified connection).
             for dev in report.devices:
                 if dev.descriptor is None:
                     continue
@@ -486,23 +577,32 @@ class DeviceManager:
                                    DeviceState.CONNECTING):
                     continue   # don't disturb live connections
 
-                # ── Port exclusivity check ────────────────────────
                 addr = dev.address or ""
+
+                # Track port collisions with live connections
                 if addr and addr in claimed_ports:
                     owner = claimed_ports[addr]
                     log.warning(
-                        "Port collision: %s claims %s but it is already "
-                        "assigned to %s — skipping duplicate",
+                        "Port collision: %s claims %s but it is held by "
+                        "connected device %s — marking ambiguous",
                         uid, addr, owner)
-                    self._log(
-                        f"⚠ Port conflict: {uid} and {owner} both "
-                        f"resolved to {addr} — {uid} skipped")
+                    entry.port_ambiguous = True
                     continue
 
-                entry.state         = DeviceState.DISCOVERED
-                entry.address       = addr
-                entry.serial_number = dev.serial_number or ""
-                entry.last_seen     = time.time()
+                entry.state            = DeviceState.DISCOVERED
+                entry.observed_address = addr
+                entry.serial_number    = dev.serial_number or ""
+                entry.last_seen        = time.time()
+                entry.port_ambiguous   = addr in ambiguous_ports
+
+                # If this device has no resolver-assigned address yet,
+                # promote the observed address as a starting point so the
+                # user sees it in the UI — but mark the method as "scan"
+                # to distinguish it from a verified assignment.
+                if addr and not entry.address:
+                    entry.address          = addr
+                    entry.resolution_method = "scan"
+
                 if addr:
                     claimed_ports[addr] = uid
                 self._emit(uid, DeviceState.DISCOVERED, addr)
@@ -656,9 +756,13 @@ class DeviceManager:
             # We use shutdown(wait=False) so the stuck thread is abandoned and
             # _connect_worker can report failure immediately.
             addr_str = entry.address or entry.ip_address or "(video-only)"
-            self._log(f"Connecting {desc.display_name} on {addr_str} …")
-            log.info("[%s] Connecting %s on %s …",
-                     uid, desc.display_name, addr_str)
+            _method_tag = (f" [{entry.resolution_method}]"
+                           if entry.resolution_method else "")
+            self._log(f"Connecting {desc.display_name} on "
+                      f"{addr_str}{_method_tag} …")
+            log.info("[%s] Connecting %s on %s (resolution=%s) …",
+                     uid, desc.display_name, addr_str,
+                     entry.resolution_method or "none")
             import sys as _sys
             # Cameras (especially FLIR Boson) need a longer timeout because
             # auto-detect probes multiple video device indices on Windows.
@@ -694,15 +798,16 @@ class DeviceManager:
                 entry.last_connected = time.time()
                 entry.error_msg      = ""
 
-                # ── Read back actual port from driver ────────────────
-                # Arduino/ESP32 drivers may fall back to a different
-                # port than the one DeviceManager originally assigned.
-                # Update entry.address so we persist the CORRECT port.
+                # ── Verify driver didn't wander to a different port ────
+                # Now that drivers are prevented from fallback scanning
+                # when a resolver-provided port is set, this should be
+                # a no-op.  Log a warning if it ever happens — it means
+                # a driver bypassed the resolver.
                 actual_port = getattr(driver_obj, "connected_port", None)
                 if actual_port and actual_port != entry.address:
-                    log.info("[%s] Driver connected on %s (was %s) — "
-                             "updating entry.address",
-                             uid, actual_port, entry.address)
+                    log.warning("[%s] Driver connected on %s but resolver "
+                                "assigned %s — possible resolver bypass!",
+                                uid, actual_port, entry.address)
                     entry.address = actual_port
 
                 try:
@@ -740,7 +845,10 @@ class DeviceManager:
                     log.debug("[%s] Handshake check unavailable",
                               uid, exc_info=True)
 
-            self._log(f"✓  Connected: {desc.display_name}  ({entry.address})")
+            _conn_method = (f", {entry.resolution_method}"
+                            if entry.resolution_method else "")
+            self._log(f"✓  Connected: {desc.display_name}  "
+                      f"({entry.address}{_conn_method})")
             self._emit(uid, DeviceState.CONNECTED)
             self._inject_into_app(uid, driver_obj)
 

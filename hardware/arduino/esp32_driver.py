@@ -83,15 +83,25 @@ class Esp32Driver(ArduinoDriver):
     def connect(self) -> None:
         import serial
 
-        # Build candidate list: saved port first, then auto-detected ports.
-        # Skip ports already claimed by other devices.
+        # If the resolver (or user) provided a specific port, try ONLY
+        # that port — do NOT fall back to scanning other ports.  This
+        # prevents the driver from stealing another device's port.
+        # Auto-detection is only used when no port was provided at all.
         saved_port = self._port
+        resolver_provided = bool(saved_port)
         candidates: list[str] = []
-        if saved_port and saved_port not in self._excluded_ports:
+
+        if resolver_provided:
+            if saved_port in self._excluded_ports:
+                raise RuntimeError(
+                    f"Port {saved_port} is claimed by another device. "
+                    f"Run a hardware scan to re-resolve port assignments."
+                )
             candidates.append(saved_port)
-        for ap in self._auto_detect_ports():
-            if ap not in candidates and ap not in self._excluded_ports:
-                candidates.append(ap)
+        else:
+            for ap in self._auto_detect_ports():
+                if ap not in self._excluded_ports:
+                    candidates.append(ap)
 
         if not candidates:
             raise RuntimeError(

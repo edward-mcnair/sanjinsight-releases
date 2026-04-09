@@ -97,6 +97,17 @@ def probe_mecom_port(
         log.debug("probe_mecom_port: %s is locked — skipping", port)
         return [ProbeResult(port=port, error="port locked by another process")]
 
+    # Check if port is claimed by the port ownership registry
+    # (i.e. a live connection is using it — don't probe it)
+    try:
+        from hardware.port_resolver import port_ownership
+        owner = port_ownership.owner_of(port)
+        if owner:
+            log.debug("probe_mecom_port: %s is owned by %s — skipping", port, owner)
+            return [ProbeResult(port=port, error=f"port claimed by {owner}")]
+    except Exception:
+        pass
+
     try:
         from mecom import MeCom
     except ImportError:

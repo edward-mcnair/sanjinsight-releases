@@ -460,16 +460,28 @@ class _DeviceListPanel(QWidget):
         item.setData(self._C_DOT, Qt.UserRole, entry.uid)
 
         # ● dot — color reflects connection state; size scales for HiDPI
+        # Amber override if the port is ambiguous (multiple candidates).
         item.setText(self._C_DOT, "●")
         dot_font = QFont()
         _dot_pt = 10.0 if sys.platform == 'win32' else 9.0
         dot_font.setPointSizeF(_dot_pt)
         item.setFont(self._C_DOT, dot_font)
-        item.setForeground(self._C_DOT, QBrush(QColor(entry.status_color)))
+        if (entry.port_ambiguous
+                and entry.state not in (DeviceState.CONNECTED,
+                                        DeviceState.CONNECTING)):
+            # Amber dot: port has multiple candidate devices
+            item.setForeground(self._C_DOT, QBrush(QColor(PALETTE.get('warning', '#ffb300'))))
+        else:
+            item.setForeground(self._C_DOT, QBrush(QColor(entry.status_color)))
 
-        # Device name
+        # Device name — append "(ambiguous)" label when port is contested
         name_color = PALETTE['textDim'] if entry.state != DeviceState.ABSENT else PALETTE['textSub']
-        item.setText(self._C_NAME, entry.display_name)
+        _name_text = entry.display_name
+        if (entry.port_ambiguous
+                and entry.state not in (DeviceState.CONNECTED,
+                                        DeviceState.CONNECTING)):
+            _name_text += "  (ambiguous)"
+        item.setText(self._C_NAME, _name_text)
         item.setForeground(self._C_NAME, QBrush(QColor(name_color)))
 
         # Address (truncated, monospace) — full address in tooltip
@@ -483,13 +495,58 @@ class _DeviceListPanel(QWidget):
             self._C_ADDR, Qt.AlignRight | Qt.AlignVCenter)
         addr_font = mono_font(9)
         item.setFont(self._C_ADDR, addr_font)
-        # Full address tooltip on the address column (especially useful when truncated)
-        item.setToolTip(self._C_ADDR, full_addr or "—")
 
+        # Address tooltip: include USB fingerprint when available
+        _addr_tip = self._build_address_tooltip(entry, full_addr)
+        item.setToolTip(self._C_ADDR, _addr_tip)
+
+        # Name tooltip: include resolution method
+        _method_label = {
+            "fingerprint": "USB fingerprint",
+            "com_hint":    "COM port hint (unverified)",
+            "scan":        "Scan (unverified)",
+            "user":        "User-configured",
+        }.get(entry.resolution_method, "")
+        _method_line = f"\nResolved:  {_method_label}" if _method_label else ""
+        _ambig_line = ("\nPort ambiguous — multiple devices matched"
+                       if entry.port_ambiguous else "")
         item.setToolTip(self._C_NAME,
             f"{entry.display_name}\n"
             f"State:   {entry.status_label}\n"
-            f"Address: {full_addr or '—'}")
+            f"Address: {full_addr or '—'}"
+            f"{_method_line}{_ambig_line}")
+
+    @staticmethod
+    def _build_address_tooltip(entry: DeviceEntry, full_addr: str) -> str:
+        """Build a rich tooltip for the address column with fingerprint info."""
+        if not full_addr:
+            return "—"
+        lines = [full_addr]
+
+        # Try to get the cached fingerprint from saved prefs
+        try:
+            from hardware.port_resolver import load_fingerprint
+            fp = load_fingerprint(entry.uid)
+            if fp and not fp.is_empty():
+                if fp.serial_number:
+                    lines.append(f"USB S/N:  {fp.serial_number}")
+                if fp.vid is not None and fp.pid is not None:
+                    lines.append(f"VID:PID:  {fp.vid:04X}:{fp.pid:04X}")
+                if fp.location:
+                    lines.append(f"Location: {fp.location}")
+                if fp.manufacturer:
+                    lines.append(f"Mfr:      {fp.manufacturer}")
+        except Exception:
+            pass
+
+        if entry.resolution_method:
+            _labels = {"fingerprint": "fingerprint match",
+                       "com_hint": "COM hint (unverified)",
+                       "scan": "scan discovery",
+                       "user": "user-configured"}
+            lines.append(f"Resolved: {_labels.get(entry.resolution_method, entry.resolution_method)}")
+
+        return "\n".join(lines)
 
     # ── Interaction ───────────────────────────────────────────────── #
 

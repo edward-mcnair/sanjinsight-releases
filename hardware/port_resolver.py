@@ -145,6 +145,15 @@ class PortInfo:
     fingerprint: USBFingerprint = field(default_factory=USBFingerprint)
 
 
+@dataclass
+class ResolveResult:
+    """Result of resolving a single device to a port."""
+    port: str | None = None             # resolved COM port (None = not found)
+    method: str = ""                    # "fingerprint", "com_hint", "" (not found)
+    score: int = 0                      # fingerprint match score
+    stable_id: str = ""                 # fingerprint stable_id that matched
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 #  Scoring
 # ──────────────────────────────────────────────────────────────────────────────
@@ -316,7 +325,7 @@ class PortResolver:
     # ── Single-device resolution (internal) ──────────────────────────
 
     def _resolve_one(self, uid: str, saved_fp: USBFingerprint | None,
-                     saved_port: str, claimed: set[str]) -> str | None:
+                     saved_port: str, claimed: set[str]) -> ResolveResult:
         """Find the current COM port for *uid*.
 
         Parameters
@@ -348,7 +357,7 @@ class PortResolver:
                         "both scored %d.  Skipping (will not guess).",
                         uid, candidates[0][1].device,
                         candidates[1][1].device, best_score)
-                    return None
+                    return ResolveResult()
                 if best.device != saved_port:
                     log.info(
                         "PortResolver: %s moved %s → %s "
@@ -359,7 +368,9 @@ class PortResolver:
                     log.info(
                         "PortResolver: %s → %s (fingerprint match, "
                         "score=%d)", uid, best.device, best_score)
-                return best.device
+                return ResolveResult(
+                    port=best.device, method="fingerprint",
+                    score=best_score, stable_id=saved_fp.stable_id)
 
         # ── COM port fallback (hint only, no fingerprint) ────────────
         # This path is ONLY used during migration from older configs
@@ -371,17 +382,17 @@ class PortResolver:
                     log.info(
                         "PortResolver: %s → %s (COM hint fallback — "
                         "HANDSHAKE REQUIRED)", uid, saved_port)
-                    return saved_port
+                    return ResolveResult(port=saved_port, method="com_hint")
             log.warning(
                 "PortResolver: %s hint port %s not in current enumeration",
                 uid, saved_port)
 
-        return None
+        return ResolveResult()
 
     # ── Batch resolution ─────────────────────────────────────────────
 
     def resolve_all(self, device_map: dict[str, tuple[USBFingerprint | None, str]]
-                    ) -> dict[str, str | None]:
+                    ) -> dict[str, ResolveResult]:
         """Resolve multiple devices at once.
 
         Parameters
@@ -392,14 +403,14 @@ class PortResolver:
         Returns
         -------
         dict
-            ``{uid: resolved_port_or_None}``
+            ``{uid: ResolveResult}``
 
         Raises
         ------
         AmbiguousPortError
             If two devices resolve to the same physical port.
         """
-        result: dict[str, str | None] = {}
+        result: dict[str, ResolveResult] = {}
         claimed: set[str] = set()
 
         # Resolve in priority order: devices with USB serial numbers first
@@ -415,21 +426,21 @@ class PortResolver:
             return (3, uid)          # worst: no fingerprint, COM hint only
 
         for uid, (fp, port) in sorted(device_map.items(), key=_priority):
-            resolved = self._resolve_one(uid, fp, port, claimed)
-            if resolved:
+            rr = self._resolve_one(uid, fp, port, claimed)
+            if rr.port:
                 # ── Duplicate claim check (hard fail) ────────────────
-                if resolved in claimed:
-                    # Find who already claimed it
+                if rr.port in claimed:
                     other = next(
-                        (u for u, p in result.items() if p == resolved), "?")
-                    raise AmbiguousPortError(resolved, other, uid)
-                claimed.add(resolved)
-            result[uid] = resolved
+                        (u for u, r in result.items() if r.port == rr.port), "?")
+                    raise AmbiguousPortError(rr.port, other, uid)
+                claimed.add(rr.port)
+            result[uid] = rr
 
         # Log final assignments
-        for uid, port in result.items():
-            if port:
-                log.info("PortResolver assignment: %s → %s", uid, port)
+        for uid, rr in result.items():
+            if rr.port:
+                log.info("PortResolver assignment: %s → %s (method=%s, "
+                         "score=%d)", uid, rr.port, rr.method, rr.score)
             else:
                 log.info("PortResolver assignment: %s → NOT FOUND", uid)
 
@@ -476,16 +487,43 @@ def verify_handshake(uid: str, port: str, driver_obj) -> bool:
     if desc.protocol_prober == "mecom":
         try:
             st = driver_obj.get_status()
-            # Meerstetter drivers return a status object with device_type
-            # or model info.  If get_status() succeeded without exception,
-            # the MeCom protocol is speaking correctly.
-            log.info("[%s] MeCom handshake OK on %s", uid, port)
-            return True
         except Exception as exc:
             raise HandshakeMismatchError(
                 uid, port,
                 f"MeCom status query failed: {exc}"
             ) from exc
+
+        # Verify MeCom address matches the registry expectation.
+        # The driver stores the actual address used to communicate.
+        expected_addr = getattr(desc, "mecom_address", None)
+        actual_addr = getattr(driver_obj, "_address", None)
+        if (expected_addr is not None and actual_addr is not None
+                and expected_addr != actual_addr):
+            raise HandshakeMismatchError(
+                uid, port,
+                f"MeCom address mismatch: expected {expected_addr}, "
+                f"got {actual_addr} — this may be a different Meerstetter "
+                f"device (TEC vs LDD)"
+            )
+
+        # Verify device family: TEC drivers should have temperature
+        # fields, LDD drivers should have current fields.
+        _is_tec_driver = hasattr(st, "actual_temp") or hasattr(st, "sink_temp")
+        _is_ldd_driver = hasattr(st, "actual_current_a") and not _is_tec_driver
+        if dtype == "tec" and _is_ldd_driver:
+            raise HandshakeMismatchError(
+                uid, port,
+                "Expected TEC but got LDD-type status response"
+            )
+        if dtype == "ldd" and _is_tec_driver:
+            raise HandshakeMismatchError(
+                uid, port,
+                "Expected LDD but got TEC-type status response"
+            )
+
+        log.info("[%s] MeCom handshake OK on %s (address=%s)",
+                 uid, port, actual_addr)
+        return True
 
     # ── Other device types ───────────────────────────────────────────
     # For devices we can't protocol-verify, trust the fingerprint match.
