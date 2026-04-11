@@ -33,11 +33,25 @@ from typing import Optional
 log = logging.getLogger(__name__)
 
 
+# ── Error domain (broad classification) ─────────────────────────────────────
+
+class ErrorDomain(enum.Enum):
+    """Which subsystem produced the error."""
+
+    HARDWARE     = "hardware"        # connection, communication, driver
+    CONFIG       = "config"          # validation, incompatible settings
+    ACQUISITION  = "acquisition"     # pipeline state, workflow preconditions
+    PERSISTENCE  = "persistence"     # save/load, filesystem, schema
+    AI           = "ai"              # model/provider, parse, auth
+    ENVIRONMENT  = "environment"     # OS, deps, permissions, resources
+
+
 # ── Error categories ────────────────────────────────────────────────────────
 
 class ErrorCategory(enum.Enum):
-    """Coarse classification of hardware errors."""
+    """Specific classification of the error within its domain."""
 
+    # Hardware (domain=HARDWARE)
     MISSING_DRIVER      = "missing_driver"
     WRONG_DRIVER_VERSION = "wrong_driver_version"
     PERMISSION_DENIED   = "permission_denied"
@@ -47,14 +61,135 @@ class ErrorCategory(enum.Enum):
     BANDWIDTH_LIMIT     = "bandwidth_limit"
     NETWORK_CONFIG      = "network_config"
     FIRMWARE_MISMATCH   = "firmware_mismatch"
+    DEVICE_COMM_ERROR   = "device_comm_error"       # transient read/write failure
+
+    # Config / validation (domain=CONFIG)
+    INVALID_SETTING     = "invalid_setting"
+    INCOMPATIBLE_CONFIG = "incompatible_config"
+    MISSING_PARAMETER   = "missing_parameter"
+
+    # Acquisition / workflow (domain=ACQUISITION)
+    PRECONDITION_FAILED = "precondition_failed"
+    PIPELINE_CONFLICT   = "pipeline_conflict"
+    OPERATION_CANCELED  = "operation_canceled"
+
+    # Persistence / filesystem (domain=PERSISTENCE)
+    SAVE_FAILED         = "save_failed"
+    LOAD_FAILED         = "load_failed"
+    FILE_PERMISSION     = "file_permission"
+    CORRUPT_FILE        = "corrupt_file"
+    SCHEMA_REJECTED     = "schema_rejected"
+
+    # AI / provider (domain=AI)
+    AI_PROVIDER_UNAVAILABLE = "ai_provider_unavailable"
+    AI_TIMEOUT          = "ai_timeout"
+    AI_PARSE_FAILED     = "ai_parse_failed"
+    AI_AUTH_FAILED      = "ai_auth_failed"
+    AI_RATE_LIMITED     = "ai_rate_limited"
+
+    # Environment / OS (domain=ENVIRONMENT)
+    MISSING_DEPENDENCY  = "missing_dependency"
+    UNSUPPORTED_OS      = "unsupported_os"
+    BLOCKED_PERMISSION  = "blocked_permission"
+    LOW_RESOURCES       = "low_resources"
+
+    # Catch-all
     UNKNOWN             = "unknown"
+
+
+# ── Severity ────────────────────────────────────────────────────────────────
+
+class Severity(enum.IntEnum):
+    """How urgently the issue needs attention.
+
+    IntEnum so comparisons work naturally: ``if sev >= Severity.ERROR``.
+    """
+
+    INFO     = 0   # informational, no user action needed
+    WARNING  = 1   # degraded but system usable, user should be aware
+    DEGRADED = 2   # feature impaired, workaround possible
+    ERROR    = 3   # blocking — feature unavailable until resolved
+    CRITICAL = 4   # safety-critical — immediate user action required
+
+
+# ── Transience ──────────────────────────────────────────────────────────────
+
+class Transience(enum.Enum):
+    """Whether the issue is expected to resolve on its own."""
+
+    TRANSIENT  = "transient"    # retry may succeed (timeout, brief disconnect)
+    PERSISTENT = "persistent"   # will not resolve without user/admin action
+    UNKNOWN    = "unknown"      # cannot determine automatically
+
+
+# ── Category → domain / default severity mapping ───────────────────────────
+
+_CATEGORY_META: dict[ErrorCategory, tuple[ErrorDomain, Severity, Transience]] = {
+    # Hardware
+    ErrorCategory.MISSING_DRIVER:      (ErrorDomain.HARDWARE,     Severity.ERROR,    Transience.PERSISTENT),
+    ErrorCategory.WRONG_DRIVER_VERSION:(ErrorDomain.HARDWARE,     Severity.ERROR,    Transience.PERSISTENT),
+    ErrorCategory.PERMISSION_DENIED:   (ErrorDomain.HARDWARE,     Severity.ERROR,    Transience.PERSISTENT),
+    ErrorCategory.DEVICE_BUSY:         (ErrorDomain.HARDWARE,     Severity.ERROR,    Transience.TRANSIENT),
+    ErrorCategory.DEVICE_DISCONNECTED: (ErrorDomain.HARDWARE,     Severity.ERROR,    Transience.UNKNOWN),
+    ErrorCategory.TIMEOUT:             (ErrorDomain.HARDWARE,     Severity.WARNING,  Transience.TRANSIENT),
+    ErrorCategory.BANDWIDTH_LIMIT:     (ErrorDomain.HARDWARE,     Severity.DEGRADED, Transience.PERSISTENT),
+    ErrorCategory.NETWORK_CONFIG:      (ErrorDomain.HARDWARE,     Severity.ERROR,    Transience.PERSISTENT),
+    ErrorCategory.FIRMWARE_MISMATCH:   (ErrorDomain.HARDWARE,     Severity.ERROR,    Transience.PERSISTENT),
+    ErrorCategory.DEVICE_COMM_ERROR:   (ErrorDomain.HARDWARE,     Severity.WARNING,  Transience.TRANSIENT),
+    # Config
+    ErrorCategory.INVALID_SETTING:     (ErrorDomain.CONFIG,       Severity.WARNING,  Transience.PERSISTENT),
+    ErrorCategory.INCOMPATIBLE_CONFIG: (ErrorDomain.CONFIG,       Severity.ERROR,    Transience.PERSISTENT),
+    ErrorCategory.MISSING_PARAMETER:   (ErrorDomain.CONFIG,       Severity.ERROR,    Transience.PERSISTENT),
+    # Acquisition
+    ErrorCategory.PRECONDITION_FAILED: (ErrorDomain.ACQUISITION,  Severity.ERROR,    Transience.TRANSIENT),
+    ErrorCategory.PIPELINE_CONFLICT:   (ErrorDomain.ACQUISITION,  Severity.ERROR,    Transience.TRANSIENT),
+    ErrorCategory.OPERATION_CANCELED:  (ErrorDomain.ACQUISITION,  Severity.INFO,     Transience.TRANSIENT),
+    # Persistence
+    ErrorCategory.SAVE_FAILED:         (ErrorDomain.PERSISTENCE,  Severity.ERROR,    Transience.UNKNOWN),
+    ErrorCategory.LOAD_FAILED:         (ErrorDomain.PERSISTENCE,  Severity.ERROR,    Transience.PERSISTENT),
+    ErrorCategory.FILE_PERMISSION:     (ErrorDomain.PERSISTENCE,  Severity.ERROR,    Transience.PERSISTENT),
+    ErrorCategory.CORRUPT_FILE:        (ErrorDomain.PERSISTENCE,  Severity.ERROR,    Transience.PERSISTENT),
+    ErrorCategory.SCHEMA_REJECTED:     (ErrorDomain.PERSISTENCE,  Severity.ERROR,    Transience.PERSISTENT),
+    # AI
+    ErrorCategory.AI_PROVIDER_UNAVAILABLE: (ErrorDomain.AI,       Severity.DEGRADED, Transience.TRANSIENT),
+    ErrorCategory.AI_TIMEOUT:          (ErrorDomain.AI,           Severity.WARNING,  Transience.TRANSIENT),
+    ErrorCategory.AI_PARSE_FAILED:     (ErrorDomain.AI,           Severity.WARNING,  Transience.TRANSIENT),
+    ErrorCategory.AI_AUTH_FAILED:      (ErrorDomain.AI,           Severity.ERROR,    Transience.PERSISTENT),
+    ErrorCategory.AI_RATE_LIMITED:     (ErrorDomain.AI,           Severity.WARNING,  Transience.TRANSIENT),
+    # Environment
+    ErrorCategory.MISSING_DEPENDENCY:  (ErrorDomain.ENVIRONMENT,  Severity.ERROR,    Transience.PERSISTENT),
+    ErrorCategory.UNSUPPORTED_OS:      (ErrorDomain.ENVIRONMENT,  Severity.ERROR,    Transience.PERSISTENT),
+    ErrorCategory.BLOCKED_PERMISSION:  (ErrorDomain.ENVIRONMENT,  Severity.ERROR,    Transience.PERSISTENT),
+    ErrorCategory.LOW_RESOURCES:       (ErrorDomain.ENVIRONMENT,  Severity.WARNING,  Transience.TRANSIENT),
+    # Catch-all
+    ErrorCategory.UNKNOWN:             (ErrorDomain.HARDWARE,     Severity.WARNING,  Transience.UNKNOWN),
+}
+
+
+def domain_of(cat: ErrorCategory) -> ErrorDomain:
+    """Return the domain for a category."""
+    return _CATEGORY_META.get(cat, (ErrorDomain.HARDWARE, Severity.WARNING, Transience.UNKNOWN))[0]
+
+
+def default_severity(cat: ErrorCategory) -> Severity:
+    """Return the default severity for a category."""
+    return _CATEGORY_META.get(cat, (ErrorDomain.HARDWARE, Severity.WARNING, Transience.UNKNOWN))[1]
+
+
+def default_transience(cat: ErrorCategory) -> Transience:
+    """Return the default transience for a category."""
+    return _CATEGORY_META.get(cat, (ErrorDomain.HARDWARE, Severity.WARNING, Transience.UNKNOWN))[2]
 
 
 # ── Structured error ────────────────────────────────────────────────────────
 
 @dataclass
 class DeviceError:
-    """Structured, actionable description of a hardware error."""
+    """Structured, actionable description of an application error.
+
+    Despite the name (kept for backward compatibility), this class is used
+    for errors across all domains, not just hardware devices.
+    """
 
     category:        ErrorCategory
     device_uid:      str   = ""
@@ -63,6 +198,44 @@ class DeviceError:
     raw_exception:   str   = ""       # original str(exc)
     exception_type:  str   = ""       # e.g. "serial.SerialException"
     support_context: dict  = field(default_factory=dict)
+
+    # ── Extended fields (added Phase 1 taxonomy expansion) ────────────
+    severity:        Optional[Severity]    = None   # None → use default_severity(category)
+    domain:          Optional[ErrorDomain]  = None   # None → use domain_of(category)
+    transience:      Optional[Transience]   = None   # None → use default_transience(category)
+    user_correctable: Optional[bool]       = None   # True = user can fix; False = needs support
+    error_code:      str   = ""       # stable machine-readable code, e.g. "HW_TIMEOUT"
+
+    # ── Resolved accessors (fall back to category defaults) ────────
+    @property
+    def resolved_severity(self) -> Severity:
+        return self.severity if self.severity is not None else default_severity(self.category)
+
+    @property
+    def resolved_domain(self) -> ErrorDomain:
+        return self.domain if self.domain is not None else domain_of(self.category)
+
+    @property
+    def resolved_transience(self) -> Transience:
+        return self.transience if self.transience is not None else default_transience(self.category)
+
+    @property
+    def is_blocking(self) -> bool:
+        """True if this error prevents the affected feature from working."""
+        return self.resolved_severity >= Severity.ERROR
+
+    @property
+    def is_user_correctable(self) -> bool:
+        """True if the user can fix this without developer/support help."""
+        if self.user_correctable is not None:
+            return self.user_correctable
+        # Heuristic: most hardware and config issues are user-correctable;
+        # persistence corruption and unknown errors are not.
+        return self.category not in (
+            ErrorCategory.CORRUPT_FILE,
+            ErrorCategory.SCHEMA_REJECTED,
+            ErrorCategory.UNKNOWN,
+        )
 
     @property
     def short_message(self) -> str:
@@ -81,6 +254,59 @@ class DeviceError:
         """One-line plain-English summary (≤120 chars)."""
         from hardware.error_narration import short_narrate
         return short_narrate(self)
+
+    def to_dict(self) -> dict:
+        """Serialize for support bundle / JSON logging."""
+        return {
+            "category": self.category.value,
+            "domain": self.resolved_domain.value,
+            "severity": self.resolved_severity.name,
+            "transience": self.resolved_transience.value,
+            "device_uid": self.device_uid,
+            "message": self.message,
+            "suggested_fix": self.suggested_fix,
+            "raw_exception": self.raw_exception,
+            "exception_type": self.exception_type,
+            "error_code": self.error_code,
+            "user_correctable": self.is_user_correctable,
+            "is_blocking": self.is_blocking,
+        }
+
+
+# ── Convenience factory for non-hardware errors ─────────────────────────────
+
+def make_error(
+    category: ErrorCategory,
+    message: str,
+    *,
+    suggested_fix: str = "",
+    device_uid: str = "",
+    severity: Optional[Severity] = None,
+    transience: Optional[Transience] = None,
+    user_correctable: Optional[bool] = None,
+    exc: Optional[Exception] = None,
+    error_code: str = "",
+    context: Optional[dict] = None,
+) -> DeviceError:
+    """Create a DeviceError for any domain — not just hardware.
+
+    This is the preferred factory for config, acquisition, persistence,
+    AI, and environment errors where ``classify_error()`` (which
+    pattern-matches vendor exceptions) is not applicable.
+    """
+    return DeviceError(
+        category=category,
+        device_uid=device_uid,
+        message=message,
+        suggested_fix=suggested_fix,
+        raw_exception=str(exc) if exc else "",
+        exception_type=type(exc).__qualname__ if exc else "",
+        support_context=context or {},
+        severity=severity,
+        transience=transience,
+        user_correctable=user_correctable,
+        error_code=error_code,
+    )
 
 
 # ── Install hints (reused from factory modules) ────────────────────────────

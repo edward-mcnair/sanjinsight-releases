@@ -40,11 +40,11 @@ WORKFLOW_STEPS: list[WorkflowStep] = [
     # Phase 1: CONFIGURATION
     WorkflowStep(
         1, "camera_selected", "Select your camera",
-        "Modality", IC.CAMERA,
+        "Measurement Setup", IC.CAMERA,
         "Choose the camera for this measurement (TR or IR)."),
     WorkflowStep(
         1, "profile_selected", "Select a material profile",
-        "Modality", IC.LIBRARY,
+        "Measurement Setup", IC.LIBRARY,
         "Pick a profile to auto-fill stimulus, temperature, and analysis settings."),
     WorkflowStep(
         1, "stimulus_configured", "Verify stimulus settings",
@@ -82,7 +82,7 @@ WORKFLOW_STEPS: list[WorkflowStep] = [
     # Phase 4: HARDWARE AUTOMATION
     WorkflowStep(
         4, "hardware_ready", "Verify hardware readiness",
-        "Camera", IC.CONNECT,
+        "Cameras", IC.CONNECT,
         "Run the readiness check to ensure all hardware is configured."),
     WorkflowStep(
         4, "optimization_applied", "Apply optimization suggestions",

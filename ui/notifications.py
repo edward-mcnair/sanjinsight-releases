@@ -538,9 +538,12 @@ class ToastNotification(QWidget):
     def __init__(self, title: str, message: str, level: str = "error",
                  guidance: list[str] | None = None,
                  auto_dismiss_ms: int = 0,
+                 action_text: str = "",
+                 action_callback=None,
                  parent=None):
         super().__init__(parent)
         self.setFixedWidth(380)
+        self._action_callback = action_callback
 
         color   = self.level_color(level)
         icon    = self.ICONS.get(level, "●")
@@ -642,11 +645,33 @@ class ToastNotification(QWidget):
             root.addWidget(guide_header)
             root.addWidget(guide_body)
 
+        # ── Action button (optional) ──────────────────────────────────
+        if action_text and action_callback:
+            action_btn = QPushButton(action_text)
+            action_btn.setCursor(Qt.PointingHandCursor)
+            action_btn.setFixedHeight(28)
+            action_btn.setStyleSheet(scaled_qss(f"""
+                QPushButton {{
+                    background: {color}22; color: {color};
+                    border: 1px solid {color}66; border-radius: 4px;
+                    font-size: {FONT['label']}pt; font-weight: 600;
+                    padding: 0 14px;
+                }}
+                QPushButton:hover {{ background: {color}44; }}
+            """))
+            action_btn.clicked.connect(self._on_action)
+            root.addWidget(action_btn, 0, Qt.AlignLeft)
+
         self.adjustSize()
 
         # ── Auto-dismiss ──────────────────────────────────────────────
         if auto_dismiss_ms > 0:
             QTimer.singleShot(auto_dismiss_ms, self._dismiss)
+
+    def _on_action(self):
+        if self._action_callback:
+            self._action_callback()
+        self._dismiss()
 
     def _dismiss(self):
         self.dismissed.emit(self)
@@ -710,8 +735,55 @@ class ToastManager(QObject):
 
     # ── Internal ───────────────────────────────────────────────────────
 
+    def show_structured_error(self, dev_err, action_callback=None) -> None:
+        """Show a toast from a structured DeviceError.
+
+        Translates severity to toast level, and uses the taxonomy's
+        narration + suggested fix as guidance.
+
+        Parameters
+        ----------
+        dev_err
+            A ``DeviceError`` from ``hardware.error_taxonomy``.
+        action_callback
+            Optional callable for an action button (e.g., "Create Bundle").
+        """
+        from hardware.error_taxonomy import Severity
+        sev = getattr(dev_err, 'severity', None)
+        if sev is not None and sev >= Severity.ERROR:
+            level = "error"
+        elif sev is not None and sev >= Severity.DEGRADED:
+            level = "warning"
+        elif sev is not None and sev >= Severity.WARNING:
+            level = "warning"
+        else:
+            level = "info"
+
+        title = getattr(dev_err, 'short_message', '') or "Device Error"
+        message = getattr(dev_err, 'message', str(dev_err))
+
+        guidance = []
+        fix = getattr(dev_err, 'suggested_fix', '')
+        if fix:
+            guidance.append(fix)
+        cat = getattr(dev_err, 'category', None)
+        if cat:
+            guidance.append(f"Category: {cat.value}")
+        correctable = getattr(dev_err, 'user_correctable', None)
+        if correctable:
+            guidance.append("This issue can likely be resolved without support")
+
+        action_text = ""
+        if action_callback:
+            action_text = "Create Support Bundle"
+
+        auto_ms = 0 if level == "error" else 10000
+        self._show(title, message, level, guidance, auto_ms,
+                   action_text=action_text, action_callback=action_callback)
+
     def _show(self, title: str = "", message: str = "", level: str = "error",
-              guidance: list[str] | None = None, auto_dismiss_ms: int = 0):
+              guidance: list[str] | None = None, auto_dismiss_ms: int = 0,
+              action_text: str = "", action_callback=None):
         # Deduplicate: if the same message is already showing, skip it.
         # This prevents identical hardware errors from flooding the UI.
         for existing in self._toasts:
@@ -731,6 +803,8 @@ class ToastManager(QObject):
             level=level,
             guidance=guidance,
             auto_dismiss_ms=auto_dismiss_ms,
+            action_text=action_text,
+            action_callback=action_callback,
             parent=self._window
         )
         toast._msg_key = f"{level}:{title}:{message}"
@@ -794,3 +868,37 @@ class ToastManager(QObject):
                 QEvent.Resize, QEvent.Move, QEvent.Show):
             self._restack_toasts()
         return False
+
+
+# ================================================================== #
+#  4.  Module-level convenience                                      #
+# ================================================================== #
+
+def show_toast(
+    parent_window,
+    title: str,
+    detail: str = "",
+    level: str = "warning",
+    action_text: str = "",
+    action_callback=None,
+    duration: int = 10000,
+) -> None:
+    """Show a one-off toast on the given window.
+
+    Creates a temporary ToastManager if the window doesn't already have
+    one attached (attribute ``_toast_manager``).  This is the function
+    called by ``main_app._on_bundle_suggested()`` and similar handlers
+    that need a quick toast without importing the full manager.
+    """
+    mgr = getattr(parent_window, '_toast_manager', None)
+    if mgr is None:
+        mgr = ToastManager(parent_window)
+        parent_window._toast_manager = mgr
+    mgr._show(
+        title=title,
+        message=detail,
+        level=level,
+        auto_dismiss_ms=duration,
+        action_text=action_text,
+        action_callback=action_callback,
+    )

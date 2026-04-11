@@ -551,7 +551,7 @@ _PREF_VALIDATORS: dict[str, Any] = {
     "ui.theme":             _make_choice_validator("auto", "dark", "light"),
     "ui.colors":            _make_choice_validator("standard", "deuteranopia",
                                                    "protanopia", "tritanopia"),
-    "ui.workspace":         _make_choice_validator("standard", "expert"),
+    "ui.workspace":         _make_choice_validator("guided", "standard", "expert"),
     "ui.license_prompted":  _validate_bool,
 
     # ── Auth ────────────────────────────────────────────────────────────

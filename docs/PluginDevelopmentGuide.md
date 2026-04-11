@@ -1,6 +1,6 @@
 # SanjINSIGHT Plugin Development Guide
 
-**Plugin API v1** | SanjINSIGHT v1.5.0+
+**Plugin API v1** | SanjINSIGHT v0.44.0+
 
 ---
 
@@ -75,7 +75,7 @@ Every plugin must include a `manifest.json` in its root directory:
         "plugins": []
     },
 
-    "min_app_version": "1.5.0",
+    "min_app_version": "0.44.0",
     "platforms": ["win32", "darwin", "linux"]
 }
 ```
@@ -402,7 +402,7 @@ class TestMyPlugin(unittest.TestCase):
 
 | Plugin API Version | SanjINSIGHT Version | Notes |
 |--------------------|---------------------|-------|
-| 1 | 1.5.0+ | Initial release |
+| 1 | 0.44.0+ | Initial release |
 
 When the plugin API evolves, the `api_version` field ensures backward
 compatibility. Plugins targeting API v1 will continue to load on hosts

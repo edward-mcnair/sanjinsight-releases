@@ -79,6 +79,11 @@ class SettingsTab(AISettingsMixin, QWidget):
     ollama_connect_requested      = pyqtSignal(str)   # model_id
     ollama_disconnect_requested   = pyqtSignal()
 
+    # Hardware setup profiles
+    profile_save_requested        = pyqtSignal(str)   # profile name
+    profile_load_requested        = pyqtSignal(str)   # profile name
+    profile_delete_requested      = pyqtSignal(str)   # profile name
+
     def __init__(self, parent=None, auth=None, auth_session=None):
         super().__init__(parent)
         self._auth         = auth
@@ -153,6 +158,9 @@ class SettingsTab(AISettingsMixin, QWidget):
 
         # ── Appearance ────────────────────────────────────────────────
         lay.addWidget(self._build_appearance_group())
+
+        # ── Hardware Profiles ─────────────────────────────────────────
+        lay.addWidget(self._build_hardware_profiles_group())
 
         # ── Lab / Operator ────────────────────────────────────────────
         lay.addWidget(self._build_lab_group())
@@ -308,6 +316,134 @@ class SettingsTab(AISettingsMixin, QWidget):
         mode = ("guided", "standard", "expert")[idx]
         self._ws_desc_lbl.setText(MODE_DESCRIPTORS.get(mode, ""))
         self.workspace_changed.emit(mode)
+
+    # ── Hardware Profiles section ────────────────────────────────────────
+
+    def _build_hardware_profiles_group(self) -> QGroupBox:
+        """Hardware Setup Profiles: save/load/delete named profiles, auto-restore toggle."""
+        grp = _group("Hardware Profiles")
+        lay = QVBoxLayout(grp)
+        lay.setSpacing(10)
+
+        lay.addWidget(_h2("Setup Profiles"))
+        lay.addWidget(_body(
+            "Save and restore complete hardware configurations. "
+            "Camera settings are applied automatically; TEC, FPGA, and Bias "
+            "settings are loaded as pending values — use each tab's "
+            "Apply / Set button to activate."))
+
+        # Auto-restore toggle
+        self._profile_auto_restore_cb = QCheckBox(
+            "Restore last-used settings on startup")
+        self._profile_auto_restore_cb.setStyleSheet(_CHECK())
+        self._profile_auto_restore_cb.setChecked(
+            cfg_mod.get_pref("hardware.auto_restore_profile", True))
+        self._profile_auto_restore_cb.toggled.connect(
+            lambda v: cfg_mod.set_pref("hardware.auto_restore_profile", v))
+        lay.addWidget(self._profile_auto_restore_cb)
+
+        lay.addWidget(_sep())
+
+        # Profile selector row
+        sel_row = QHBoxLayout()
+        sel_row.setSpacing(6)
+
+        sel_lbl = QLabel("Profile:")
+        sel_lbl.setStyleSheet(
+            f"font-size:{FONT['label']}pt; color:{_MUTED()};")
+        sel_row.addWidget(sel_lbl)
+
+        self._profile_combo = QComboBox()
+        self._profile_combo.setMinimumWidth(200)
+        self._profile_combo.setStyleSheet(_COMBO())
+        self._profile_combo.setFixedHeight(30)
+        sel_row.addWidget(self._profile_combo, 1)
+
+        lay.addLayout(sel_row)
+
+        # Action buttons row
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(6)
+
+        self._profile_load_btn = QPushButton("Load")
+        self._profile_load_btn.setStyleSheet(_BTN_PRIMARY())
+        self._profile_load_btn.setFixedHeight(32)
+        self._profile_load_btn.setToolTip(
+            "Load the selected profile into hardware tabs")
+        self._profile_load_btn.clicked.connect(self._on_profile_load)
+        btn_row.addWidget(self._profile_load_btn)
+
+        self._profile_save_btn = QPushButton("Save Current…")
+        self._profile_save_btn.setStyleSheet(_BTN_SECONDARY())
+        self._profile_save_btn.setFixedHeight(32)
+        self._profile_save_btn.setToolTip(
+            "Save the current hardware settings as a named profile")
+        self._profile_save_btn.clicked.connect(self._on_profile_save)
+        btn_row.addWidget(self._profile_save_btn)
+
+        self._profile_delete_btn = QPushButton("Delete")
+        self._profile_delete_btn.setStyleSheet(_BTN_SECONDARY())
+        self._profile_delete_btn.setFixedHeight(32)
+        self._profile_delete_btn.setToolTip("Delete the selected profile")
+        self._profile_delete_btn.clicked.connect(self._on_profile_delete)
+        btn_row.addWidget(self._profile_delete_btn)
+
+        lay.addLayout(btn_row)
+
+        # Status label — shows last restore summary
+        self._profile_status_lbl = QLabel("")
+        self._profile_status_lbl.setStyleSheet(
+            f"font-size:{FONT['sublabel']}pt; color:{_MUTED()};")
+        self._profile_status_lbl.setWordWrap(True)
+        lay.addWidget(self._profile_status_lbl)
+
+        return grp
+
+    def refresh_profile_list(self, names: list):
+        """Update the profile combo with current profile names."""
+        combo = self._profile_combo
+        combo.blockSignals(True)
+        current = combo.currentText()
+        combo.clear()
+        for n in names:
+            combo.addItem(n)
+        # Restore previous selection if still present
+        idx = combo.findText(current)
+        if idx >= 0:
+            combo.setCurrentIndex(idx)
+        combo.blockSignals(False)
+        self._profile_delete_btn.setEnabled(combo.count() > 0)
+        self._profile_load_btn.setEnabled(combo.count() > 0)
+
+    def set_profile_status(self, text: str):
+        """Update the profile status label (e.g. after restore)."""
+        self._profile_status_lbl.setText(text)
+
+    def _on_profile_save(self):
+        from PyQt5.QtWidgets import QInputDialog
+        name, ok = QInputDialog.getText(
+            self, "Save Hardware Profile",
+            "Profile name:")
+        if ok and name.strip():
+            self.profile_save_requested.emit(name.strip())
+
+    def _on_profile_load(self):
+        name = self._profile_combo.currentText()
+        if name:
+            self.profile_load_requested.emit(name)
+
+    def _on_profile_delete(self):
+        name = self._profile_combo.currentText()
+        if not name:
+            return
+        from PyQt5.QtWidgets import QMessageBox
+        r = QMessageBox.question(
+            self, "Delete Profile",
+            f"Delete hardware profile \"{name}\"?\n\n"
+            "This cannot be undone.",
+            QMessageBox.Yes | QMessageBox.No)
+        if r == QMessageBox.Yes:
+            self.profile_delete_requested.emit(name)
 
     def _build_lab_group(self) -> QGroupBox:
         """Lab / Operator settings: active operator, saved list, scan preferences."""

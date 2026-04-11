@@ -181,11 +181,25 @@ class _DeviceRow(QFrame):
             f"font-size: {FONT.get('sm', 10)}pt;"
         )
 
-        # Error message
+        # Error message — color-coded by severity prefix [Critical/Error/Degraded/Warning]
         has_error = bool(error_msg) and state in (STATE_ERROR, STATE_ABSENT)
         self._error_lbl.setVisible(has_error)
         if has_error:
             self._error_lbl.setText(error_msg)
+            # Pick color from severity prefix if present
+            err_color = PALETTE.get("danger", "#ff4444")
+            if error_msg.startswith("[Critical]"):
+                err_color = PALETTE.get("danger", "#ff4444")
+            elif error_msg.startswith("[Degraded]"):
+                err_color = PALETTE.get("warning", "#ffb300")
+            elif error_msg.startswith("[Warning]"):
+                err_color = PALETTE.get("warning", "#ffb300")
+            elif error_msg.startswith("[Info]"):
+                err_color = PALETTE.get("textSub", "#888888")
+            self._error_lbl.setStyleSheet(
+                f"color: {err_color}; font-size: {FONT.get('sm', 10)}pt; "
+                f"padding-left: 24px; border: none;"
+            )
 
         # Reconnect button visibility
         self._reconnect_btn.setVisible(state in (STATE_ERROR, STATE_ABSENT))

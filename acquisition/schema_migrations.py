@@ -25,7 +25,7 @@ import shutil
 
 log = logging.getLogger(__name__)
 
-CURRENT_SCHEMA: int = 5
+CURRENT_SCHEMA: int = 7
 
 
 class FutureSchemaError(Exception):
@@ -111,6 +111,10 @@ def migrate(data: dict, from_version: int, *,
         data = _v3_to_v4(data)
     if from_version < 5:
         data = _v4_to_v5(data)
+    if from_version < 6:
+        data = _v5_to_v6(data)
+    if from_version < 7:
+        data = _v6_to_v7(data)
     return data
 
 
@@ -193,4 +197,48 @@ def _v4_to_v5(data: dict) -> dict:
     data = dict(data)
     data.setdefault("analysis_result", None)
     data["schema_version"] = 5
+    return data
+
+
+def _v5_to_v6(data: dict) -> dict:
+    """v5 → v6: Add result_type discriminator and scan_params.
+
+    Distinguishes acquisition modalities so the session browser and
+    persistence layer can handle single-point, grid, transient, and movie
+    results correctly.  Existing sessions default to "single_point".
+
+    Fields added
+    ------------
+    result_type : str
+        One of "single_point", "grid", "transient", "movie".
+    scan_params : dict | None
+        Grid-specific metadata (n_rows, n_cols, step sizes, tile count).
+        None for non-grid sessions.
+    """
+    log.info("Migrating session schema v5 → v6")
+    data = dict(data)
+    data.setdefault("result_type", "single_point")
+    data.setdefault("scan_params", None)
+    data["schema_version"] = 6
+    return data
+
+
+def _v6_to_v7(data: dict) -> dict:
+    """v6 → v7: Add cube_params for transient/movie sessions.
+
+    Stores modality-specific metadata for cube-based acquisitions
+    (transient and movie) separately from grid scan_params.
+
+    Fields added
+    ------------
+    cube_params : dict | None
+        Transient: n_delays, n_averages, delay_start_s, delay_end_s,
+                   pulse_dur_us, hw_triggered.
+        Movie: n_frames, fps_achieved.
+        None for non-cube sessions.
+    """
+    log.info("Migrating session schema v6 → v7")
+    data = dict(data)
+    data.setdefault("cube_params", None)
+    data["schema_version"] = 7
     return data

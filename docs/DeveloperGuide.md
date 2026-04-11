@@ -1,6 +1,6 @@
 # SanjINSIGHT — Developer Guide
 
-**Version**: 1.50.34-beta
+**Version**: 0.44.0-beta.1
 **Platform**: Windows 10/11 (64-bit); macOS/Linux supported for development
 **Stack**: Python 3.10 · PyQt5 · NumPy · PyInstaller · Inno Setup
 **Repository**: Private source (`edward-mcnair/sanjinsight`) · Public releases (`edward-mcnair/sanjinsight-releases`)
@@ -271,7 +271,7 @@ sanjinsight/
 - **No global module-level state.** Hardware references live in `ApplicationState`; preferences live in `config`; signals live in `AppSignals`.
 - **Factory pattern for all drivers.** Each device type has an abstract base class and a `factory.py` that reads `config.yaml` and instantiates the correct implementation.
 - **Simulated drivers for every device.** Demo mode or development without hardware is always possible.
-- **Auth is planned for v1.5.0.** The `auth/` package and `ui/operator/` shell do not exist yet. When implemented, auth will be opt-in — `auth.require_login` defaults to `false`.
+- **Auth is planned.** The `auth/` package and `ui/operator/` shell do not exist yet. When implemented, auth will be opt-in — `auth.require_login` defaults to `false`.
 
 ---
 
@@ -855,7 +855,7 @@ When all checks pass, acquisition starts immediately (no dialog). When any check
 | NumPy (`.npy`) | float64 (native) | Full array preserved | Direct `np.save` |
 | MATLAB (`.mat`) | float64 | Full array preserved | Via `scipy.io.savemat` |
 
-### 5.11 New Module APIs (v1.5.0)
+### 5.11 New Module APIs (v0.43.0)
 
 #### FpsOptimizer (`acquisition/fps_optimizer.py`)
 
@@ -1414,7 +1414,7 @@ Each plugin directory must contain a `manifest.json`:
   "author": "Microsanj",
   "description": "Picosecond optical sampling heating for thermal property extraction",
   "platforms": ["win32", "darwin", "linux"],
-  "min_app_version": "1.5.0"
+  "min_app_version": "0.44.0"
 }
 ```
 
@@ -1451,7 +1451,7 @@ For the complete plugin developer API, see `docs/PluginDevelopmentGuide.md`.
 
 ---
 
-## 10. Auth & RBAC System *(Planned for v1.5.0)*
+## 10. Auth & RBAC System *(Planned)*
 
 > **Note:** This section describes the planned authentication and role-based access control system. It is not yet implemented — the `auth/` package does not exist in the current codebase. The design is documented here for forward reference.
 
@@ -1468,7 +1468,7 @@ When `auth.require_login` is `false` (the default), the auth system is bypassed 
 
 ---
 
-## 11. Operator Shell *(Planned for v1.5.0)*
+## 11. Operator Shell *(Planned)*
 
 > **Note:** This section describes the planned Operator Shell UI for Technician users. It is not yet implemented — `ui/operator/` does not exist in the current codebase.
 
@@ -1774,7 +1774,7 @@ main_app.MainWindow.__init__()
 ### 17.1 GitHub Actions (`.github/workflows/build-installer.yml`)
 
 **Triggers:**
-- `git push origin v1.5.0-beta.1` — builds + creates GitHub Release on `sanjinsight`
+- `git push origin v0.44.0-beta.1` — builds + cross-publishes to `sanjinsight-releases`
 - Manual **Run workflow** in Actions UI — builds only (artifact available for 1 day)
 
 **Steps:**
@@ -1794,19 +1794,19 @@ main_app.MainWindow.__init__()
 ```bash
 # 1. Update version
 # Edit version.py: __version__, PRERELEASE, VERSION_TUPLE, BUILD_DATE
-# Beta example:  __version__ = "1.5.0-beta.1",  PRERELEASE = "beta.2"
+# Beta example:  __version__ = "0.44.0-beta.1",  PRERELEASE = "beta.1"
 # GA example:    __version__ = "1.4.1",          PRERELEASE = ""
 
-# 2. Update CHANGELOG.md: add ## [1.5.0-beta.1] — YYYY-MM-DD section
+# 2. Update CHANGELOG.md: add ## [0.44.0-beta.1] — YYYY-MM-DD section
 
 # 3. Commit
 git add version.py CHANGELOG.md
-git commit -m "chore: bump to v1.5.0-beta.1"
+git commit -m "chore: bump to v0.44.0-beta.1"
 
 # 4. Tag and push — this triggers CI
-git tag v1.5.0-beta.1
+git tag v0.44.0-beta.1
 git push origin main
-git push origin v1.5.0-beta.1
+git push origin v0.44.0-beta.1
 
 # 5. CI builds installer and publishes release automatically
 # 6. Verify at https://github.com/edward-mcnair/sanjinsight-releases/releases
@@ -2151,5 +2151,5 @@ pytest>=7.4            Test runner
 
 ---
 
-*This document was last updated for SanjINSIGHT v1.5.0-beta.1 (2026-03-25).
+*This document was last updated for SanjINSIGHT v0.44.0-beta.1 (2026-04-10).
 Update it whenever significant architectural changes are made.*

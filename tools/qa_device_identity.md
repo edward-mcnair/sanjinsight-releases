@@ -1,6 +1,6 @@
 # Device Identity Pipeline — QA Test Checklist
 
-Version: v1.50.46+
+Version: v0.44.0+
 Date: 2026-04-08
 
 ## Setup

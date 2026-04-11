@@ -55,6 +55,9 @@ class IC:
     LIBRARY       = "mdi.bookshelf"
     PROFILES      = "mdi.layers"
     RECIPES       = "mdi.clipboard-list-outline"
+    # Workflow
+    QUICK_START   = "mdi.rocket-launch-outline"
+    RUN_LOG       = "mdi.table-large"
     # Tools
     DATA          = "mdi.database"
     CONSOLE       = "mdi.console"
@@ -146,7 +149,8 @@ class IC:
 
 NAV_ICONS: dict[str, str] = {
     # ── Phase 1: CONFIGURATION ────────────────────────────────────────────────
-    "Modality":              IC.CAMERA,
+    "Measurement Setup":     IC.CAMERA,
+    "Modality":              IC.CAMERA,     # backward compat alias
     "Stimulus":              IC.STIMULUS,
     "Timing":                IC.TIMING,
     "Temperature":           IC.TEMPERATURE,
@@ -186,15 +190,19 @@ NAV_ICONS: dict[str, str] = {
     "Recipes":     IC.RECIPES,
     "Arduino":     "mdi.integrated-circuit-chip",
     # Hardware categories (sidebar)
-    "Cameras":       IC.CAMERA,
-    "Stages":        IC.STAGE,
-    "Stimulus":      IC.STIMULUS,
-    "Illumination":  IC.ILLUMINATION,  # backward compat alias
-    "Probes":        IC.PROBER,
-    "Sensors":       IC.SENSORS,
-    "Data":        IC.DATA,
-    "Console":     IC.CONSOLE,
-    "Log":         IC.LOG,
+    "Cameras":             IC.CAMERA,
+    "Stages":              IC.STAGE,
+    "Thermal Control":     IC.TEMPERATURE,
+    "Stimulus & Timing":   IC.STIMULUS,
+    "Stimulus":            IC.STIMULUS,       # backward compat (workflow tab)
+    "Illumination":        IC.ILLUMINATION,   # backward compat alias
+    "Probes":              IC.PROBER,
+    "Sensors":             IC.SENSORS,
+    "Data":           IC.DATA,
+    "Console":        IC.CONSOLE,
+    "Log":            IC.LOG,
+    # "Quick Start" removed — replaced by Measurement Setup
+    "Experiment Log": IC.RUN_LOG,
 }
 
 # ── Collapsible group header icons ────────────────────────────────────────────

@@ -115,6 +115,13 @@ class SessionMeta:
     # ── Analysis result persistence (v5) ─────────────────────────
     analysis_result: Optional[dict] = None  # AnalysisResult.to_dict()
 
+    # ── Result type discriminator (v6) ───────────────────────────
+    result_type:  str            = "single_point"  # "single_point" | "grid" | "transient" | "movie"
+    scan_params:  Optional[dict] = None            # grid-specific metadata
+
+    # ── Cube metadata (v7) ───────────────────────────────────────
+    cube_params:  Optional[dict] = None            # transient/movie-specific metadata
+
     def to_dict(self) -> dict:
         d = asdict(self)
         d.pop("path", None)
@@ -160,8 +167,16 @@ class Session:
     _delta_r_over_r:  Optional[np.ndarray] = field(default=None, repr=False)
     _difference:      Optional[np.ndarray] = field(default=None, repr=False)
 
+    # ── Cube arrays (transient / movie) ──────────────────────────
+    _delta_r_cube:    Optional[np.ndarray] = field(default=None, repr=False)
+    _reference:       Optional[np.ndarray] = field(default=None, repr=False)
+    _delay_times_s:   Optional[np.ndarray] = field(default=None, repr=False)
+    _timestamps_s:    Optional[np.ndarray] = field(default=None, repr=False)
+
     def __post_init__(self):
         self._lock = threading.RLock()
+
+    # ── 2D array properties (single-point / grid) ────────────────
 
     @property
     def cold_avg(self) -> Optional[np.ndarray]:
@@ -191,13 +206,49 @@ class Session:
                 self._difference = self._load("difference.npy")
             return self._difference
 
+    # ── Cube array properties (transient / movie) ────────────────
+
+    @property
+    def delta_r_cube(self) -> Optional[np.ndarray]:
+        """(N, H, W) ΔR/R cube — transient delays or movie frames."""
+        with self._lock:
+            if self._delta_r_cube is None:
+                self._delta_r_cube = self._load("delta_r_cube.npy")
+            return self._delta_r_cube
+
+    @property
+    def reference(self) -> Optional[np.ndarray]:
+        """(H, W) pre-pulse / pre-bias baseline frame."""
+        with self._lock:
+            if self._reference is None:
+                self._reference = self._load("reference.npy")
+            return self._reference
+
+    @property
+    def delay_times_s(self) -> Optional[np.ndarray]:
+        """(N,) delay times in seconds from pulse edge (transient only)."""
+        with self._lock:
+            if self._delay_times_s is None:
+                self._delay_times_s = self._load("delay_times_s.npy")
+            return self._delay_times_s
+
+    @property
+    def timestamps_s(self) -> Optional[np.ndarray]:
+        """(N,) relative capture times in seconds (movie only)."""
+        with self._lock:
+            if self._timestamps_s is None:
+                self._timestamps_s = self._load("timestamps_s.npy")
+            return self._timestamps_s
+
     def _load(self, filename: str) -> Optional[np.ndarray]:
         p = os.path.join(self.meta.path, filename)
         return np.load(p, mmap_mode="r") if os.path.exists(p) else None
 
     def unload(self):
         with self._lock:
-            for attr in ("_cold_avg", "_hot_avg", "_delta_r_over_r", "_difference"):
+            for attr in ("_cold_avg", "_hot_avg", "_delta_r_over_r",
+                         "_difference", "_delta_r_cube", "_reference",
+                         "_delay_times_s", "_timestamps_s"):
                 arr = getattr(self, attr, None)
                 if isinstance(arr, np.memmap):
                     del arr
@@ -222,20 +273,84 @@ class Session:
                     status: str = "",
                     tags: Optional[List[str]] = None,
                     camera_id: str = "",
-                    notes_log: Optional[List[dict]] = None) -> "Session":
+                    notes_log: Optional[List[dict]] = None,
+                    result_type: str = "single_point",
+                    scan_params: Optional[dict] = None,
+                    cube_params: Optional[dict] = None) -> "Session":
         ts     = time.time()
         ts_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts))
         slug   = label.replace(" ", "_").replace("/", "-") if label else "unnamed"
         uid    = f"{time.strftime('%Y%m%d_%H%M%S')}_{slug}"
 
-        h, w = 0, 0
-        for arr in [result.cold_avg, result.hot_avg, result.delta_r_over_r]:
-            if arr is not None:
-                h, w = arr.shape[:2]; break
+        # ── Extract arrays and dimensions based on result type ────
+        # Cube-specific arrays (transient / movie)
+        delta_r_cube = None
+        reference    = None
+        delay_times  = None
+        timestamps   = None
+
+        if result_type == "grid":
+            # Grid scans have drr_map / dt_map (2D stitched arrays)
+            drr = getattr(result, "drr_map", None)
+            dt  = getattr(result, "dt_map", None)
+            h, w = 0, 0
+            if drr is not None:
+                h, w = drr.shape[:2]
+            elif dt is not None:
+                h, w = dt.shape[:2]
+            cold_avg = None
+            hot_avg  = None
+            difference = dt  # store dt_map in difference slot
+
+        elif result_type == "transient":
+            # Transient: delta_r_cube (N, H, W), reference (H, W),
+            #            delay_times_s (N,)
+            delta_r_cube = getattr(result, "delta_r_cube", None)
+            reference    = getattr(result, "reference", None)
+            delay_times  = getattr(result, "delay_times_s", None)
+            h, w = 0, 0
+            if delta_r_cube is not None:
+                h, w = delta_r_cube.shape[1], delta_r_cube.shape[2]
+            elif reference is not None:
+                h, w = reference.shape[:2]
+            drr = None
+            cold_avg = None
+            hot_avg  = None
+            difference = None
+
+        elif result_type == "movie":
+            # Movie: delta_r_cube (N, H, W), reference (H, W),
+            #        timestamps_s (N,).  frame_cube is NOT persisted.
+            delta_r_cube = getattr(result, "delta_r_cube", None)
+            reference    = getattr(result, "reference", None)
+            timestamps   = getattr(result, "timestamps_s", None)
+            h, w = 0, 0
+            if delta_r_cube is not None:
+                h, w = delta_r_cube.shape[1], delta_r_cube.shape[2]
+            elif reference is not None:
+                h, w = reference.shape[:2]
+            drr = None
+            cold_avg = None
+            hot_avg  = None
+            difference = None
+
+        else:
+            # Single-point acquisition (default)
+            drr = getattr(result, "delta_r_over_r", None)
+            cold_avg   = getattr(result, "cold_avg", None)
+            hot_avg    = getattr(result, "hot_avg", None)
+            difference = getattr(result, "difference", None)
+            h, w = 0, 0
+            for arr in [cold_avg, hot_avg, drr]:
+                if arr is not None:
+                    h, w = arr.shape[:2]; break
 
         roi_dict = None
         if hasattr(result, "roi") and result.roi is not None:
             roi_dict = result.roi.to_dict()
+
+        # For transient sessions, has_drr reflects whether we have cube data
+        has_drr = (drr is not None) or (delta_r_cube is not None)
 
         meta = SessionMeta(
             uid           = uid,
@@ -244,7 +359,8 @@ class Session:
             timestamp_str = ts_str,
             imaging_mode  = imaging_mode,
             wavelength_nm = wavelength_nm,
-            n_frames      = getattr(result, "n_frames",    0),
+            n_frames      = getattr(result, "n_frames", 0) or
+                            getattr(result, "n_delays", 0) or 0,
             exposure_us   = getattr(result, "exposure_us", 0.0),
             gain_db       = getattr(result, "gain_db",     0.0),
             duration_s    = getattr(result, "duration_s",  0.0),
@@ -262,7 +378,7 @@ class Session:
             ct_value          = ct_value,
             notes         = getattr(result, "notes",       ""),
             roi           = roi_dict,
-            has_drr       = result.delta_r_over_r is not None,
+            has_drr       = has_drr,
             operator      = operator,
             device_id     = device_id,
             project       = project,
@@ -270,14 +386,21 @@ class Session:
             tags          = list(tags) if tags else [],
             camera_id     = camera_id,
             notes_log     = list(notes_log) if notes_log else [],
+            result_type   = result_type,
+            scan_params   = scan_params,
+            cube_params   = cube_params,
         )
 
         return Session(
             meta            = meta,
-            _cold_avg       = result.cold_avg,
-            _hot_avg        = result.hot_avg,
-            _delta_r_over_r = result.delta_r_over_r,
-            _difference     = result.difference,
+            _cold_avg       = cold_avg,
+            _hot_avg        = hot_avg,
+            _delta_r_over_r = drr,
+            _difference     = difference,
+            _delta_r_cube   = delta_r_cube,
+            _reference      = reference,
+            _delay_times_s  = delay_times,
+            _timestamps_s   = timestamps,
         )
 
     def save(self, sessions_root: str) -> str:
@@ -292,7 +415,7 @@ class Session:
             folder = os.path.join(sessions_root, self.meta.uid)
             os.makedirs(folder, exist_ok=True)
 
-            # 1. Arrays (order doesn't matter; each is self-contained)
+            # 1. 2D arrays (single-point / grid)
             for name, arr in [
                 ("cold_avg",       self._cold_avg),
                 ("hot_avg",        self._hot_avg),
@@ -302,18 +425,30 @@ class Session:
                 if arr is not None:
                     np.save(os.path.join(folder, f"{name}.npy"), arr)
 
-            # 2. Thumbnail (best-effort, non-critical)
+            # 2. Cube arrays (transient / movie)
+            for name, arr in [
+                ("delta_r_cube",   self._delta_r_cube),
+                ("reference",      self._reference),
+                ("delay_times_s",  self._delay_times_s),
+                ("timestamps_s",   self._timestamps_s),
+            ]:
+                if arr is not None:
+                    np.save(os.path.join(folder, f"{name}.npy"), arr)
+
+            # 3. Thumbnail (best-effort, non-critical)
             if self._delta_r_over_r is not None:
                 self._save_thumbnail(folder)
+            elif self._delta_r_cube is not None:
+                self._save_cube_thumbnail(folder)
 
-            # 3. Metadata — atomic write (temp + flush + fsync + rename)
+            # 4. Metadata — atomic write (temp + flush + fsync + rename)
             #    Build the dict with the target path so ``from_dict`` can
             #    reconstruct later, but don't mutate self.meta.path yet.
             meta_snapshot = self.meta.to_dict()
             json_path = os.path.join(folder, "session.json")
             atomic_write_json(json_path, meta_snapshot)
 
-            # 4. Commit in-memory path only after disk write succeeds
+            # 5. Commit in-memory path only after disk write succeeds
             self.meta.path = folder
             return folder
 
@@ -330,6 +465,27 @@ class Session:
             cv2.imwrite(os.path.join(folder, "thumbnail.png"), thumb)
         except Exception:
             log.debug("Thumbnail save failed for %s", folder, exc_info=True)
+
+    def _save_cube_thumbnail(self, folder: str):
+        """Generate thumbnail from the middle frame of a cube session.
+
+        Uses a deterministic frame index (N//2) for fast, reproducible
+        thumbnails.  Same red/blue diverging colourmap as 2D thumbnails.
+        """
+        try:
+            cube = self._delta_r_cube
+            mid  = cube.shape[0] // 2
+            frame = cube[mid].astype(np.float32)
+            limit = float(np.percentile(np.abs(frame), 99.5)) or 1e-9
+            normed = np.clip(frame / limit, -1.0, 1.0)
+            r = (np.clip( normed, 0, 1) * 255).astype(np.uint8)
+            b = (np.clip(-normed, 0, 1) * 255).astype(np.uint8)
+            g = np.zeros_like(r)
+            import cv2
+            thumb = cv2.resize(np.stack([r, g, b], axis=-1), (160, 120))
+            cv2.imwrite(os.path.join(folder, "thumbnail.png"), thumb)
+        except Exception:
+            log.debug("Cube thumbnail save failed for %s", folder, exc_info=True)
 
     @staticmethod
     def load(folder: str) -> "Session":

@@ -53,36 +53,41 @@ CONN_CAMERA   = "camera"   # cameras enumerated via SDK (pypylon, NI IMAQdx)
 # ------------------------------------------------------------------ #
 #  Hardware categories                                                 #
 # ------------------------------------------------------------------ #
-#  Five user-facing categories shared by the sidebar Hardware panel
+#  Six user-facing categories shared by the sidebar Hardware panel
 #  and the Device Manager.  Each maps one or more device types.
+#  Categorized by what the hardware does for the user, not board type.
 
-CAT_CAMERAS  = "cameras"
-CAT_STAGES   = "stages"
-CAT_STIMULUS = "stimulus"
-CAT_PROBES   = "probes"
-CAT_SENSORS  = "sensors"
+CAT_CAMERAS         = "cameras"
+CAT_STAGES          = "stages"
+CAT_THERMAL_CONTROL = "thermal_control"
+CAT_STIMULUS        = "stimulus_timing"
+CAT_PROBES          = "probes"
+CAT_SENSORS         = "sensors"
 
-# Backward compat alias — old code may reference CAT_ILLUMINATION.
-CAT_ILLUMINATION = CAT_STIMULUS
+# Backward compat aliases — old code may reference the previous names.
+CAT_ILLUMINATION    = CAT_STIMULUS
+CAT_STIMULUS_TIMING = CAT_STIMULUS  # canonical alias (same value)
 
 CATEGORY_ORDER = [
     CAT_CAMERAS,
     CAT_STAGES,
+    CAT_THERMAL_CONTROL,
     CAT_STIMULUS,
     CAT_PROBES,
     CAT_SENSORS,
 ]
 
 CATEGORY_LABELS = {
-    CAT_CAMERAS:  "Cameras",
-    CAT_STAGES:   "Stages",
-    CAT_STIMULUS: "Stimulus",
-    CAT_PROBES:   "Probes",
-    CAT_SENSORS:  "Sensors",
+    CAT_CAMERAS:         "Cameras",
+    CAT_STAGES:          "Stages",
+    CAT_THERMAL_CONTROL: "Thermal Control",
+    CAT_STIMULUS:        "Stimulus & Timing",
+    CAT_PROBES:          "Probes",
+    CAT_SENSORS:         "Sensors",
 }
 
 # Map every device type to its parent category.
-# Internal sub-labels distinguish roles within Stimulus:
+# Internal sub-labels distinguish roles within Stimulus & Timing:
 #   FPGA      → Timing / FPGA
 #   Bias      → Bias Source
 #   LDD       → Optical Source / Illumination
@@ -90,14 +95,14 @@ CATEGORY_LABELS = {
 DTYPE_TO_CATEGORY = {
     DTYPE_CAMERA:  CAT_CAMERAS,
     DTYPE_STAGE:   CAT_STAGES,
-    DTYPE_FPGA:    CAT_STIMULUS,    # timing / modulation controller
-    DTYPE_GPIO:    CAT_STIMULUS,    # Arduino LED / laser selector
-    DTYPE_LDD:     CAT_STIMULUS,    # laser diode driver (optical source)
-    DTYPE_BIAS:    CAT_STIMULUS,    # bias source (electrical excitation)
+    DTYPE_TEC:     CAT_THERMAL_CONTROL,  # active temperature control
+    DTYPE_FPGA:    CAT_STIMULUS,         # timing / modulation controller
+    DTYPE_GPIO:    CAT_STIMULUS,         # Arduino LED / laser selector
+    DTYPE_LDD:     CAT_STIMULUS,         # laser diode driver (optical source)
+    DTYPE_BIAS:    CAT_STIMULUS,         # bias source (electrical excitation)
     DTYPE_PROBER:  CAT_PROBES,
-    DTYPE_TURRET:  CAT_PROBES,      # objective turret on probe station
-    DTYPE_TEC:     CAT_SENSORS,     # TEC temperature controller + readback
-    DTYPE_UNKNOWN: CAT_SENSORS,     # default bucket for unrecognised devices
+    DTYPE_TURRET:  CAT_PROBES,           # objective turret on probe station
+    DTYPE_UNKNOWN: CAT_SENSORS,          # default bucket for unrecognised devices
 }
 
 

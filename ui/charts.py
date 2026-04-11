@@ -52,7 +52,7 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QSplitter, QSizePolicy,
 )
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui  import QFont, QColor
 
 from ui.theme import FONT, PALETTE
@@ -471,23 +471,31 @@ class TransientTraceChart(QWidget):
     Plots mean ΔR/R vs delay time with:
       • proper axis labels and grid
       • zero-reference line
-      • cursor line linked to the delay-index slider
+      • draggable cursor line linked to the delay-index slider
+      • click-on-chart to move cursor to nearest delay index
+      • multiple ROI curves (coloured by ROI colour)
       • user-zoomable / pannable (PyQtGraph native)
 
-    API is a superset of the old ``TransientCurve.update_data()``:
+    Signals
+    -------
+    cursor_moved(int)
+        Emitted when the user clicks on the chart or drags the cursor line.
+        Payload is the nearest delay/frame index.
 
+    API
+    ---
         chart.update_data(values, times_s, cursor_idx)
-
-    Parameters accepted by ``update_data``
-    ----------------------------------------
-    values    : (N,) array of mean ΔR/R values, one per delay step
-    times_s   : (N,) array of delay times in seconds
-    cursor_idx: int — current delay-slider index; a vertical cursor is drawn
+        chart.set_roi_curves(roi_curves)
     """
+
+    cursor_moved = pyqtSignal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setMinimumSize(200, 120)
+
+        self._ts_ms: Optional[np.ndarray] = None   # cached for click→index
+        self._roi_items: list = []                  # PlotDataItem refs
 
         if not _PG_OK:
             lay = QVBoxLayout(self)
@@ -504,11 +512,12 @@ class TransientTraceChart(QWidget):
         # Persistent plot items (updated in update_data)
         accent = PALETTE['accent']
         self._curve_item   = self._plot.plot([], [],
-                                             pen=pg.mkPen(color=accent, width=2))
+                                             pen=pg.mkPen(color=accent, width=2),
+                                             name="Full frame")
         self._cursor_line  = pg.InfiniteLine(
             pos=0, angle=90,
-            pen=pg.mkPen(color=PALETTE['warning'], width=1, style=Qt.DashLine),
-            movable=False)
+            pen=pg.mkPen(color=PALETTE['warning'], width=2, style=Qt.DashLine),
+            movable=True)
         self._zero_line    = pg.InfiniteLine(
             pos=0, angle=0,
             pen=pg.mkPen(color=PALETTE['border'], width=1,
@@ -517,19 +526,54 @@ class TransientTraceChart(QWidget):
         self._plot.addItem(self._cursor_line)
         self._plot.addItem(self._zero_line)
 
+        # Cursor drag → snap to nearest index and emit
+        self._cursor_line.sigPositionChangeFinished.connect(
+            self._on_cursor_dragged)
+
+        # Click on plot background → move cursor
+        self._plot.scene().sigMouseClicked.connect(self._on_plot_clicked)
+
+    # ------------------------------------------------------------------ #
+    #  Click / drag → index resolution                                    #
+    # ------------------------------------------------------------------ #
+
+    def _nearest_index(self, x_ms: float) -> int:
+        """Return the delay/frame index nearest to *x_ms* (milliseconds)."""
+        if self._ts_ms is None or len(self._ts_ms) == 0:
+            return 0
+        return int(np.argmin(np.abs(self._ts_ms - x_ms)))
+
+    def _on_cursor_dragged(self):
+        idx = self._nearest_index(self._cursor_line.value())
+        # snap to exact grid position
+        if self._ts_ms is not None and 0 <= idx < len(self._ts_ms):
+            self._cursor_line.setValue(self._ts_ms[idx])
+        self.cursor_moved.emit(idx)
+
+    def _on_plot_clicked(self, event):
+        if event.button() != Qt.LeftButton:
+            return
+        vb = self._plot.plotItem.vb
+        pos = vb.mapSceneToView(event.scenePos())
+        idx = self._nearest_index(pos.x())
+        if self._ts_ms is not None and 0 <= idx < len(self._ts_ms):
+            self._cursor_line.setValue(self._ts_ms[idx])
+        self.cursor_moved.emit(idx)
+
     # ------------------------------------------------------------------ #
 
     def update_data(self,
                     values:     np.ndarray,
                     times_s:    np.ndarray,
                     cursor_idx: int = -1) -> None:
-        """Update the chart.  Mirrors the old TransientCurve.update_data() API."""
+        """Update the primary (full-frame) curve and cursor position."""
         if not _PG_OK:
             return
 
         vals = np.asarray(values,  dtype=float)
         ts   = np.asarray(times_s, dtype=float)
         ts_ms = ts * 1e3   # convert to milliseconds for display
+        self._ts_ms = ts_ms
 
         finite = vals[np.isfinite(vals)]
         if finite.size < 2:
@@ -543,9 +587,155 @@ class TransientTraceChart(QWidget):
         else:
             self._cursor_line.setVisible(False)
 
+    # ------------------------------------------------------------------ #
+    #  Multi-ROI curves                                                    #
+    # ------------------------------------------------------------------ #
+
+    def set_roi_curves(self,
+                       roi_curves: list[tuple[str, str, np.ndarray]],
+                       ) -> None:
+        """Add / replace per-ROI curves.
+
+        Parameters
+        ----------
+        roi_curves : list of (label, hex_color, values_1d)
+            Each entry produces a coloured curve.  *values_1d* must have the
+            same length as the most recent ``times_s`` passed to
+            ``update_data``.
+        """
+        if not _PG_OK:
+            return
+        # Remove old ROI items
+        for item in self._roi_items:
+            self._plot.removeItem(item)
+        self._roi_items.clear()
+
+        if self._ts_ms is None:
+            return
+
+        for label, color, vals in roi_curves:
+            vals = np.asarray(vals, dtype=float)
+            if len(vals) != len(self._ts_ms):
+                continue
+            item = self._plot.plot(
+                x=self._ts_ms, y=vals,
+                pen=pg.mkPen(color=color, width=2),
+                name=label)
+            self._roi_items.append(item)
+
+    # ------------------------------------------------------------------ #
+    #  Annotations — peak marker, baseline band                           #
+    # ------------------------------------------------------------------ #
+
+    def set_peak_marker(self, time_s: float, value: float) -> None:
+        """Show a marker at the peak position (vertical line + dot).
+
+        Parameters
+        ----------
+        time_s : float
+            Delay time of the peak in *seconds* (converted to ms internally).
+        value : float
+            ΔR/R value at the peak.
+        """
+        if not _PG_OK:
+            return
+        t_ms = time_s * 1e3
+        if not hasattr(self, '_peak_vline') or self._peak_vline is None:
+            self._peak_vline = pg.InfiniteLine(
+                pos=t_ms, angle=90,
+                pen=pg.mkPen(color=PALETTE['danger'], width=1,
+                             style=Qt.DashDotLine),
+                movable=False)
+            self._plot.addItem(self._peak_vline)
+            self._peak_dot = pg.ScatterPlotItem(
+                [t_ms], [value], size=8,
+                brush=pg.mkBrush(color=PALETTE['danger']),
+                pen=pg.mkPen(color=PALETTE['danger'], width=1))
+            self._plot.addItem(self._peak_dot)
+        else:
+            self._peak_vline.setValue(t_ms)
+            self._peak_vline.setVisible(True)
+            self._peak_dot.setData([t_ms], [value])
+            self._peak_dot.setVisible(True)
+
+    def set_baseline_band(self, end_time_s: float,
+                          mean_val: float, std_val: float) -> None:
+        """Show a shaded band over the baseline window.
+
+        Parameters
+        ----------
+        end_time_s : float
+            Right edge of the baseline window in seconds.
+        mean_val : float
+            Baseline mean (drawn as horizontal line).
+        std_val : float
+            Baseline σ (band spans mean ± σ).
+        """
+        if not _PG_OK:
+            return
+        end_ms = end_time_s * 1e3
+        if not hasattr(self, '_bl_region') or self._bl_region is None:
+            bl_color = QColor(PALETTE['accent'])
+            bl_color.setAlpha(30)
+            self._bl_region = pg.LinearRegionItem(
+                values=[0, end_ms], orientation='vertical',
+                brush=pg.mkBrush(bl_color),
+                pen=pg.mkPen(color=PALETTE['accent'], width=1,
+                             style=Qt.DotLine),
+                movable=False)
+            self._plot.addItem(self._bl_region)
+
+            # Horizontal mean ± σ band
+            bl_fill = QColor(PALETTE['accent'])
+            bl_fill.setAlpha(20)
+            self._bl_fill = pg.FillBetweenItem(
+                pg.PlotDataItem([0, end_ms], [mean_val - std_val] * 2),
+                pg.PlotDataItem([0, end_ms], [mean_val + std_val] * 2),
+                brush=bl_fill)
+            self._plot.addItem(self._bl_fill)
+
+            self._bl_mean_line = pg.InfiniteLine(
+                pos=mean_val, angle=0,
+                pen=pg.mkPen(color=PALETTE['accent'], width=1,
+                             style=Qt.DashLine),
+                movable=False)
+            self._plot.addItem(self._bl_mean_line)
+        else:
+            self._bl_region.setRegion([0, end_ms])
+            self._bl_region.setVisible(True)
+            # Update fill
+            bl_fill_color = QColor(PALETTE['accent'])
+            bl_fill_color.setAlpha(20)
+            self._plot.removeItem(self._bl_fill)
+            self._bl_fill = pg.FillBetweenItem(
+                pg.PlotDataItem([0, end_ms], [mean_val - std_val] * 2),
+                pg.PlotDataItem([0, end_ms], [mean_val + std_val] * 2),
+                brush=bl_fill_color)
+            self._plot.addItem(self._bl_fill)
+            self._bl_mean_line.setValue(mean_val)
+            self._bl_mean_line.setVisible(True)
+
+    def clear_annotations(self) -> None:
+        """Remove peak marker and baseline band."""
+        if not _PG_OK:
+            return
+        for attr in ('_peak_vline', '_peak_dot'):
+            item = getattr(self, attr, None)
+            if item is not None:
+                item.setVisible(False)
+        for attr in ('_bl_region', '_bl_fill', '_bl_mean_line'):
+            item = getattr(self, attr, None)
+            if item is not None:
+                item.setVisible(False)
+
     def clear(self) -> None:
         if _PG_OK:
             self._curve_item.setData([], [])
+            for item in self._roi_items:
+                self._plot.removeItem(item)
+            self._roi_items.clear()
+            self._ts_ms = None
+            self.clear_annotations()
 
     def _apply_styles(self) -> None:
         if not _PG_OK:
@@ -554,10 +744,21 @@ class TransientTraceChart(QWidget):
         accent = PALETTE['accent']
         self._curve_item.setPen(pg.mkPen(color=accent, width=2))
         self._cursor_line.setPen(
-            pg.mkPen(color=PALETTE['warning'], width=1, style=Qt.DashLine))
+            pg.mkPen(color=PALETTE['warning'], width=2, style=Qt.DashLine))
         self._zero_line.setPen(
             pg.mkPen(color=PALETTE['border'], width=1,
                      style=Qt.DotLine))
+        # Re-style annotations if they exist
+        if getattr(self, '_peak_vline', None) is not None:
+            self._peak_vline.setPen(
+                pg.mkPen(color=PALETTE['danger'], width=1,
+                         style=Qt.DashDotLine))
+        if getattr(self, '_peak_dot', None) is not None:
+            self._peak_dot.setBrush(pg.mkBrush(color=PALETTE['danger']))
+        if getattr(self, '_bl_mean_line', None) is not None:
+            self._bl_mean_line.setPen(
+                pg.mkPen(color=PALETTE['accent'], width=1,
+                         style=Qt.DashLine))
 
 
 # ─────────────────────────────────────────────────────────────────────────────

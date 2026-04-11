@@ -291,6 +291,15 @@ def generate_html_report(session: Session,
                 parts.append(f"<li>{_esc(rec)}</li>")
             parts.append("</ul>")
 
+    # ── Transient section ────────────────────────────────────────
+    rt = getattr(meta, "result_type", "single_point") or "single_point"
+    if cfg.transient_section and rt == "transient":
+        parts.append(_render_transient_section(session, meta))
+
+    # ── Movie section ────────────────────────────────────────────
+    if cfg.movie_section and rt == "movie":
+        parts.append(_render_movie_section(session, meta))
+
     # ── Notes ─────────────────────────────────────────────────────
     if report_notes:
         parts.append("<h2>Notes</h2>")
@@ -319,6 +328,204 @@ def generate_html_report(session: Session,
 
 # ------------------------------------------------------------------ #
 #  Helpers                                                             #
+# ------------------------------------------------------------------ #
+
+# ------------------------------------------------------------------ #
+#  Transient report section                                           #
+# ------------------------------------------------------------------ #
+
+def _render_transient_section(session, meta) -> str:
+    """Render the transient acquisition report section as HTML."""
+    import numpy as np
+    from acquisition.transient_metrics import (
+        compute_transient_metrics, compute_all_roi_metrics)
+    from acquisition.roi_extraction import extract_roi_signals
+
+    cp = getattr(meta, "cube_params", None) or {}
+    parts = ['<h2>Transient Acquisition</h2>']
+
+    # ── Acquisition metadata table ────────────────────────────────
+    parts.append(_kv_table([
+        ("Delays", str(cp.get("n_delays", meta.n_frames or "—"))),
+        ("Averages / delay", str(cp.get("n_averages", "—"))),
+        ("Pulse width", f"{cp.get('pulse_dur_us', 0):.1f} µs"),
+        ("Delay range",
+         f"{cp.get('delay_start_s', 0)*1e3:.3f}–"
+         f"{cp.get('delay_end_s', 0)*1e3:.2f} ms"),
+        ("HW Trigger", "Yes" if cp.get("hw_triggered") else "No (SW)"),
+        ("Exposure", f"{meta.exposure_us:.0f} µs"),
+        ("Gain", f"{meta.gain_db:.1f} dB"),
+        ("Duration", f"{meta.duration_s:.1f} s"),
+    ]))
+
+    # ── Peak-frame thermal thumbnail ──────────────────────────────
+    cube = session.delta_r_cube
+    ts = session.delay_times_s
+    if cube is not None and cube.ndim == 3 and cube.shape[0] > 0:
+        n = cube.shape[0]
+        ff_signal = np.nanmean(cube.reshape(n, -1), axis=1)
+        peak_idx = int(np.nanargmax(np.abs(ff_signal)))
+        peak_frame = cube[peak_idx]
+
+        b64 = _array_to_b64(peak_frame, mode="percentile",
+                            cmap="Thermal Delta", size=(500, 360))
+        if b64:
+            peak_time_ms = (ts[peak_idx] * 1e3
+                            if ts is not None and peak_idx < len(ts)
+                            else 0)
+            parts.append(
+                f'<div class="img-container">'
+                f'<img src="{b64}" alt="Peak frame ΔR/R"></div>')
+            parts.append(
+                f'<p class="caption">Peak-frame ΔR/R at delay index '
+                f'{peak_idx} ({peak_time_ms:.3f} ms)</p>')
+
+        # ── Trace chart as inline SVG-style table (text-based) ────
+        # Render a simple ASCII-friendly trace summary since we cannot
+        # use pyqtgraph off the main thread. Show key trace values.
+        parts.append('<h2>Full-Frame ΔR/R Trace Summary</h2>')
+        if ts is not None and len(ff_signal) == len(ts):
+            ff_metrics = compute_transient_metrics(
+                ff_signal, ts, "Full frame")
+
+            parts.append(_kv_table([
+                ("Peak ΔR/R (signed)", f"{ff_metrics.peak_drr:+.4e}"),
+                ("Peak |ΔR/R|", f"{ff_metrics.peak_abs:.4e}"),
+                ("Time-to-peak", f"{ff_metrics.time_to_peak_s*1e3:.3f} ms"),
+                ("Baseline mean", f"{ff_metrics.baseline_mean:.4e}"),
+                ("Baseline σ", f"{ff_metrics.baseline_std:.4e}"),
+                ("Peak SNR", f"{ff_metrics.peak_snr:.1f}"),
+                ("Recovery ratio", f"{ff_metrics.recovery_ratio:.2f}"),
+            ]))
+
+        # ── Per-ROI metrics table ─────────────────────────────────
+        try:
+            from acquisition.roi_model import roi_model
+            rois = roi_model.rois
+        except ImportError:
+            rois = []
+
+        if rois and ts is not None:
+            roi_signals = extract_roi_signals(cube, rois)
+            if roi_signals:
+                roi_metrics = compute_all_roi_metrics(roi_signals, ts)
+                parts.append('<h2>ROI Metrics</h2>')
+                parts.append(
+                    '<table><tr>'
+                    '<th>ROI</th><th>Peak ΔR/R</th><th>Time-to-peak</th>'
+                    '<th>Baseline σ</th><th>Peak SNR</th>'
+                    '<th>Recovery</th></tr>')
+                for m in roi_metrics:
+                    parts.append(
+                        f'<tr><td>{_esc(m.roi_label)}</td>'
+                        f'<td class="mono">{m.peak_drr:+.4e}</td>'
+                        f'<td class="mono">{m.time_to_peak_s*1e3:.3f} ms</td>'
+                        f'<td class="mono">{m.baseline_std:.4e}</td>'
+                        f'<td class="mono">{m.peak_snr:.1f}</td>'
+                        f'<td class="mono">{m.recovery_ratio:.2f}</td></tr>')
+                parts.append('</table>')
+
+    return "\n".join(parts)
+
+
+# ------------------------------------------------------------------ #
+#  Movie report section                                               #
+# ------------------------------------------------------------------ #
+
+def _render_movie_section(session, meta) -> str:
+    """Render the movie acquisition report section as HTML."""
+    import numpy as np
+    from acquisition.movie_metrics import (
+        compute_movie_metrics, compute_all_movie_roi_metrics)
+    from acquisition.roi_extraction import extract_roi_signals
+
+    cp = getattr(meta, "cube_params", None) or {}
+    parts = ['<h2>Movie Acquisition</h2>']
+
+    # ── Acquisition metadata table ────────────────────────────────
+    fps = cp.get("fps_achieved", 0)
+    parts.append(_kv_table([
+        ("Frames", str(cp.get("n_frames", meta.n_frames or "—"))),
+        ("Frame rate", f"{fps:.1f} fps" if fps else "—"),
+        ("Exposure", f"{meta.exposure_us:.0f} µs"),
+        ("Gain", f"{meta.gain_db:.1f} dB"),
+        ("Duration", f"{meta.duration_s:.2f} s"),
+    ]))
+
+    # ── Peak-frame thermal thumbnail ──────────────────────────────
+    cube = session.delta_r_cube
+    ts = session.timestamps_s
+    if cube is None:
+        # Fall back to raw frame cube
+        cube = getattr(session, 'frame_cube', None)
+    if cube is not None and cube.ndim == 3 and cube.shape[0] > 0:
+        n = cube.shape[0]
+        ff_signal = np.nanmean(cube.reshape(n, -1), axis=1)
+        peak_idx = int(np.nanargmax(np.abs(ff_signal)))
+        peak_frame = cube[peak_idx]
+
+        b64 = _array_to_b64(peak_frame, mode="percentile",
+                            cmap="Thermal Delta", size=(500, 360))
+        if b64:
+            peak_time_ms = (ts[peak_idx] * 1e3
+                            if ts is not None and peak_idx < len(ts)
+                            else 0)
+            parts.append(
+                f'<div class="img-container">'
+                f'<img src="{b64}" alt="Peak frame"></div>')
+            parts.append(
+                f'<p class="caption">Peak-frame at frame {peak_idx}'
+                f' ({peak_time_ms:.1f} ms)</p>')
+
+        # ── Full-frame metrics summary ────────────────────────────
+        if ts is None:
+            ts = np.arange(n, dtype=np.float64)
+
+        parts.append('<h2>Full-Frame Signal Summary</h2>')
+        if len(ff_signal) == len(ts):
+            ff_metrics = compute_movie_metrics(ff_signal, ts, "Full frame")
+            parts.append(_kv_table([
+                ("Peak ΔR/R (signed)", f"{ff_metrics.peak_drr:+.4e}"),
+                ("Peak |ΔR/R|", f"{ff_metrics.peak_abs:.4e}"),
+                ("Peak frame", str(ff_metrics.peak_index)),
+                ("Peak time", f"{ff_metrics.peak_time_s*1e3:.1f} ms"),
+                ("Mean ΔR/R", f"{ff_metrics.mean_drr:+.4e}"),
+                ("Temporal σ", f"{ff_metrics.temporal_std:.4e}"),
+            ]))
+
+        # ── Per-ROI metrics table ─────────────────────────────────
+        try:
+            from acquisition.roi_model import roi_model
+            rois = roi_model.rois
+        except ImportError:
+            rois = []
+
+        if rois:
+            roi_signals = extract_roi_signals(cube, rois)
+            if roi_signals:
+                roi_metrics = compute_all_movie_roi_metrics(
+                    roi_signals, ts)
+                parts.append('<h2>ROI Metrics</h2>')
+                parts.append(
+                    '<table><tr>'
+                    '<th>ROI</th><th>Peak ΔR/R</th><th>Peak |ΔR/R|</th>'
+                    '<th>Peak time</th><th>Mean ΔR/R</th>'
+                    '<th>Temporal σ</th></tr>')
+                for m in roi_metrics:
+                    parts.append(
+                        f'<tr><td>{_esc(m.roi_label)}</td>'
+                        f'<td class="mono">{m.peak_drr:+.4e}</td>'
+                        f'<td class="mono">{m.peak_abs:.4e}</td>'
+                        f'<td class="mono">{m.peak_time_s*1e3:.1f} ms</td>'
+                        f'<td class="mono">{m.mean_drr:+.4e}</td>'
+                        f'<td class="mono">{m.temporal_std:.4e}</td></tr>')
+                parts.append('</table>')
+
+    return "\n".join(parts)
+
+
+# ------------------------------------------------------------------ #
+#  Helpers                                                            #
 # ------------------------------------------------------------------ #
 
 def _esc(text: str) -> str:

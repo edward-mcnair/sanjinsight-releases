@@ -1,8 +1,13 @@
 """
 ui/tabs/signal_check_section.py  —  Signal check section
 
-Live SNR readout, saturation indicator, signal verification badge.
+Live SNR readout, saturation indicator, signal verification badge,
+and frame preview with ROI overlay for measurement-quality confirmation.
 Phase 2 · IMAGE ACQUISITION
+
+Layout: two-card architecture
+  LEFT  — Metrics card: readout strip, controls, options
+  RIGHT — Preview card: live frame with ROI overlay, camera identity, ROI badge
 """
 from __future__ import annotations
 
@@ -10,12 +15,15 @@ import time
 import logging
 import math
 
+import numpy as np
+
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
     QGridLayout, QGroupBox, QStackedWidget, QPushButton, QCheckBox,
-    QScrollArea, QFrame,
+    QScrollArea, QFrame, QSizePolicy,
 )
 from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtGui import QImage, QPixmap, QPainter, QColor, QPen
 
 from hardware.app_state import app_state
 from ui.theme import PALETTE, FONT, MONO_FONT
@@ -35,6 +43,13 @@ _SNR_GOOD = 20.0    # dB — green
 _SNR_WARN = 10.0    # dB — amber
 _UPDATE_HZ = 5      # throttle live readout updates
 
+# ── Preview constants ─────────────────────────────────────────────────
+_PREVIEW_MIN_W = 320
+_PREVIEW_MIN_H = 240
+_PREVIEW_DECIM = 3   # update every Nth update_frame call (~1.7 fps at 5 Hz)
+
+
+# ── Helpers (same card/separator pattern as modality_section) ─────────
 
 def _mono_style() -> str:
     return (f"font-family:{MONO_FONT}; "
@@ -54,8 +69,31 @@ def _color_for_level(level: str) -> str:
     return PALETTE['danger']
 
 
+def _card_frame_qss() -> str:
+    """Bordered card container QSS."""
+    return (
+        f"QFrame#CardFrame {{"
+        f"  background: {PALETTE['surface']};"
+        f"  border: 1px solid {PALETTE['border']};"
+        f"  border-radius: 8px;"
+        f"}}")
+
+
+def _separator() -> QFrame:
+    """Thin horizontal separator line."""
+    line = QFrame()
+    line.setFrameShape(QFrame.HLine)
+    line.setFixedHeight(1)
+    line.setStyleSheet(f"background: {PALETTE['border']}; border: none;")
+    return line
+
+
 class SignalCheckSection(QWidget):
-    """Live signal quality verification — Phase 2 IMAGE ACQUISITION."""
+    """Live signal quality verification — Phase 2 IMAGE ACQUISITION.
+
+    Two-card layout: LEFT = metrics + controls, RIGHT = frame preview
+    with ROI overlay for measurement-quality confirmation.
+    """
 
     open_device_manager = pyqtSignal()
     signal_check_passed = pyqtSignal()
@@ -68,6 +106,9 @@ class SignalCheckSection(QWidget):
         self._passed = False
         self._snr_good = _SNR_GOOD
         self._snr_warn = _SNR_WARN
+        self._preview_frame_n = 0
+        self._preview_live = False
+        self._last_verdict_level = "text"   # for ROI overlay colour
 
         _cards = get_section_cards("signal_check")
         def _body(cid):
@@ -126,11 +167,8 @@ class SignalCheckSection(QWidget):
         # Page 0 — empty state
         self._stack.addWidget(self._build_empty_state())
 
-        # Page 1 — readouts
-        controls = QWidget()
-        root = QVBoxLayout(controls)
-        root.setContentsMargins(16, 16, 16, 16)
-        root.setSpacing(8)
+        # Page 1 — two-card layout
+        controls = self._build_controls_page()
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
@@ -138,32 +176,82 @@ class SignalCheckSection(QWidget):
         self._stack.addWidget(scroll)
         self._stack.setCurrentIndex(0)
 
-        # ── Title ─────────────────────────────────────────────────────
+        outer.addWidget(self._workflow_footer)
+
+        # ── Accumulated frames for manual "Run Check" ─────────────────
+        self._check_frames: list = []
+        self._check_target = 10
+
+        # Show placeholder in preview
+        self._show_placeholder()
+
+    # ── Controls page (two-card layout) ────────────────────────────────
+
+    def _build_controls_page(self) -> QWidget:
+        page = QWidget()
+        root = QVBoxLayout(page)
+        root.setContentsMargins(16, 8, 16, 12)
+        root.setSpacing(0)
+
+        # ══════════════════════════════════════════════════════════════
+        # Two-card body: LEFT = metrics/controls, RIGHT = preview
+        # ══════════════════════════════════════════════════════════════
+        body = QHBoxLayout()
+        body.setSpacing(12)
+        root.addLayout(body, 1)
+
+        # ── LEFT CARD: Metrics & Controls ────────────────────────────
+        left_card = QFrame()
+        left_card.setObjectName("CardFrame")
+        left_card.setStyleSheet(_card_frame_qss())
+        left_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
+        left_card.setMinimumWidth(320)
+
+        lc = QVBoxLayout(left_card)
+        lc.setContentsMargins(14, 12, 14, 12)
+        lc.setSpacing(0)
+
+        # ── Section header ────────────────────────────────────────────
         title = QLabel("Signal Check")
         title.setStyleSheet(
             f"color:{PALETTE['text']}; font-size:{FONT['heading']}pt; "
             "font-weight:bold;")
-        root.addWidget(title)
+        lc.addWidget(title)
+        lc.addSpacing(2)
 
-        desc = QLabel("Verify signal quality before starting a capture.")
+        desc = QLabel("Verify signal quality before capture.")
         desc.setStyleSheet(_dim_style())
-        root.addWidget(desc)
+        lc.addWidget(desc)
+
+        lc.addSpacing(8)
+        self._sep1 = _separator()
+        lc.addWidget(self._sep1)
+        lc.addSpacing(8)
 
         # ── Readout strip ─────────────────────────────────────────────
-        strip = QGroupBox("Signal Quality")
-        strip_lay = QHBoxLayout(strip)
-        strip_lay.setSpacing(24)
+        strip_lbl = QLabel("Signal Quality")
+        strip_lbl.setStyleSheet(self._section_label_qss())
+        lc.addWidget(strip_lbl)
+        lc.addSpacing(4)
+
+        strip = QHBoxLayout()
+        strip.setSpacing(20)
 
         self._snr_val = self._readout_widget("SNR (dB)")
         self._sat_val = self._readout_widget("SATURATION")
         self._verdict = self._readout_widget("VERDICT")
 
-        strip_lay.addWidget(self._snr_val)
-        strip_lay.addWidget(self._sat_val)
-        strip_lay.addWidget(self._verdict)
-        strip_lay.addStretch()
+        strip.addWidget(self._snr_val)
+        strip.addWidget(self._sat_val)
+        strip.addWidget(self._verdict)
+        strip.addStretch()
 
-        root.addWidget(strip)
+        lc.addLayout(strip)
+
+        lc.addSpacing(8)
+        self._sep2 = _separator()
+        lc.addWidget(self._sep2)
+        lc.addSpacing(6)
 
         # ── Controls row ──────────────────────────────────────────────
         ctrl_row = QHBoxLayout()
@@ -181,7 +269,9 @@ class SignalCheckSection(QWidget):
         ctrl_row.addWidget(self._auto_cb)
 
         ctrl_row.addStretch()
-        root.addLayout(ctrl_row)
+        lc.addLayout(ctrl_row)
+
+        lc.addSpacing(4)
 
         # ── More Options ──────────────────────────────────────────────
         from ui.widgets.more_options import MoreOptionsPanel
@@ -190,7 +280,7 @@ class SignalCheckSection(QWidget):
         opts_inner = QWidget()
         opts_grid = QGridLayout(opts_inner)
         opts_grid.setContentsMargins(0, 0, 0, 0)
-        opts_grid.setSpacing(8)
+        opts_grid.setSpacing(6)
 
         opts_grid.addWidget(QLabel("SNR ROI"), 0, 0)
         self._roi_combo = QComboBox()
@@ -204,16 +294,277 @@ class SignalCheckSection(QWidget):
         opts_grid.addWidget(self._thresh_lbl, 1, 1)
 
         opts.addWidget(opts_inner)
-        root.addWidget(opts)
-        root.addStretch()
+        lc.addWidget(opts)
 
-        outer.addWidget(self._workflow_footer)
+        body.addWidget(left_card, 3)
 
-        # ── Accumulated frames for manual "Run Check" ─────────────────
-        self._check_frames: list = []
-        self._check_target = 10
+        # ── RIGHT CARD: Preview / Confirmation ───────────────────────
+        right_card = QFrame()
+        right_card.setObjectName("CardFrame")
+        right_card.setStyleSheet(_card_frame_qss())
+        right_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        right_card.setMinimumWidth(300)
+        self._right_card = right_card
+
+        rc = QVBoxLayout(right_card)
+        rc.setContentsMargins(12, 12, 12, 12)
+        rc.setSpacing(8)
+
+        # Live preview with ROI overlay (expanding)
+        self._preview_lbl = QLabel()
+        self._preview_lbl.setSizePolicy(
+            QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self._preview_lbl.setMinimumSize(_PREVIEW_MIN_W, _PREVIEW_MIN_H)
+        self._preview_lbl.setAlignment(Qt.AlignCenter)
+        self._preview_lbl.setStyleSheet(self._preview_frame_qss())
+        rc.addWidget(self._preview_lbl, 1)
+
+        # ── Info footer (confirmation panel) ──────────────────────────
+        self._preview_sep = _separator()
+        rc.addWidget(self._preview_sep)
+        rc.addSpacing(4)
+
+        # Footer label
+        self._footer_label = QLabel("Measurement Region")
+        self._footer_label.setStyleSheet(
+            f"font-size:{FONT['caption']}pt; color:{PALETTE['textDim']}; "
+            f"font-weight:500; text-transform:uppercase; letter-spacing:0.5px;")
+        rc.addWidget(self._footer_label)
+        rc.addSpacing(2)
+
+        # Camera identity (bold)
+        self._cam_identity_lbl = QLabel("")
+        self._cam_identity_lbl.setAlignment(Qt.AlignLeft)
+        self._cam_identity_lbl.setStyleSheet(
+            f"font-size:{FONT['body']}pt; color:{PALETTE['text']}; "
+            f"font-weight:600;")
+        rc.addWidget(self._cam_identity_lbl)
+
+        # Camera detail (resolution — mono)
+        self._cam_detail_lbl = QLabel("")
+        self._cam_detail_lbl.setAlignment(Qt.AlignLeft)
+        self._cam_detail_lbl.setStyleSheet(
+            f"font-family:{MONO_FONT}; font-size:{FONT['sublabel']}pt; "
+            f"color:{PALETTE['textDim']};")
+        rc.addWidget(self._cam_detail_lbl)
+        rc.addSpacing(4)
+
+        # ROI badge + status caption row
+        badge_row = QHBoxLayout()
+        badge_row.setContentsMargins(0, 0, 0, 0)
+        badge_row.setSpacing(8)
+
+        self._roi_badge = QLabel("Full Frame")
+        self._roi_badge.setAlignment(Qt.AlignCenter)
+        self._roi_badge.setFixedHeight(22)
+        self._roi_badge.setMinimumWidth(80)
+        self._roi_badge.setMaximumWidth(160)
+        self._apply_roi_badge_style()
+        badge_row.addWidget(self._roi_badge)
+        badge_row.addStretch()
+
+        self._preview_caption = QLabel("No Preview")
+        self._preview_caption.setAlignment(Qt.AlignRight)
+        self._preview_caption.setStyleSheet(_dim_style())
+        badge_row.addWidget(self._preview_caption)
+
+        rc.addLayout(badge_row)
+
+        body.addWidget(right_card, 3)
+
+        return page
+
+    # ── Section label style ────────────────────────────────────────────
+
+    @staticmethod
+    def _section_label_qss() -> str:
+        return (f"font-size:{FONT['label']}pt; font-weight:600; "
+                f"color:{PALETTE['text']};")
+
+    # ── ROI badge ──────────────────────────────────────────────────────
+
+    def _apply_roi_badge_style(self) -> None:
+        """Apply colored pill style to the ROI mode badge."""
+        mode = self._roi_combo.currentText() if hasattr(self, '_roi_combo') else "Full Frame"
+        bg = PALETTE.get("accent", "#00d4aa")
+        self._roi_badge.setText(mode)
+        self._roi_badge.setStyleSheet(
+            f"background: {bg}22; color: {bg}; "
+            f"border: 1px solid {bg}44; border-radius: 10px; "
+            f"font-size: {FONT['sublabel']}pt; font-weight: 600; "
+            f"padding: 2px 10px;")
+
+    def _refresh_preview_card_info(self) -> None:
+        """Update camera identity + detail in the preview card."""
+        cam = app_state.cam
+        if cam is not None and hasattr(cam, "info"):
+            model = getattr(cam.info, "model", "") or "Camera"
+            w = getattr(cam.info, "width", 0)
+            h = getattr(cam.info, "height", 0)
+            self._cam_identity_lbl.setText(model)
+            if w and h:
+                fmt = getattr(cam.info, "pixel_format", "")
+                detail = f"{w} × {h}"
+                if fmt:
+                    detail += f"  ·  {fmt}"
+                self._cam_detail_lbl.setText(detail)
+            else:
+                self._cam_detail_lbl.setText("")
+        else:
+            self._cam_identity_lbl.setText("No camera")
+            self._cam_detail_lbl.setText("")
+        self._apply_roi_badge_style()
+
+    # ── Live preview with ROI overlay ─────────────────────────────────
+
+    def _render_preview(self, data) -> None:
+        """Render a frame into the preview label with ROI overlay."""
+        self._preview_frame_n += 1
+        if self._preview_frame_n % _PREVIEW_DECIM != 0:
+            return
+
+        pw = self._preview_lbl.width()
+        ph = self._preview_lbl.height()
+        if pw < 10:
+            pw = _PREVIEW_MIN_W
+        if ph < 10:
+            ph = _PREVIEW_MIN_H
+
+        try:
+            from acquisition.processing import to_display
+            disp = to_display(data, mode="auto")
+
+            if disp.ndim == 2:
+                img_h, img_w = disp.shape
+                disp = np.ascontiguousarray(disp)
+                qi = QImage(disp.data, img_w, img_h, img_w,
+                            QImage.Format_Grayscale8)
+            else:
+                img_h, img_w = disp.shape[:2]
+                qi = QImage(disp.tobytes(), img_w, img_h, img_w * 3,
+                            QImage.Format_RGB888)
+
+            pix = QPixmap.fromImage(qi).scaled(
+                pw, ph, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+
+            # Draw ROI overlay if not Full Frame
+            roi_mode = self._roi_combo.currentText()
+            if roi_mode != "Full Frame":
+                pix = self._draw_roi_overlay(pix, img_w, img_h, roi_mode)
+
+            self._preview_lbl.setPixmap(pix)
+        except Exception:
+            log.debug("Signal check preview render failed", exc_info=True)
+            return
+
+        self._preview_live = True
+        cam = app_state.cam
+        if cam is not None and hasattr(cam, "info"):
+            model = getattr(cam.info, "model", "") or "Camera"
+            self._preview_caption.setText(f"{model} · Live")
+        else:
+            self._preview_caption.setText("Live")
+
+    def _draw_roi_overlay(self, pix: QPixmap, img_w: int, img_h: int,
+                          roi_mode: str) -> QPixmap:
+        """Draw a semi-transparent ROI rectangle on the preview pixmap."""
+        # Compute ROI bounds in image coordinates
+        if roi_mode == "Center 50%":
+            rx, ry = img_w // 4, img_h // 4
+            rw, rh = img_w // 2, img_h // 2
+        elif roi_mode == "Center 25%":
+            rx, ry = 3 * img_w // 8, 3 * img_h // 8
+            rw, rh = img_w // 4, img_h // 4
+        else:
+            return pix
+
+        # Scale ROI bounds to pixmap coordinates
+        pw, ph = pix.width(), pix.height()
+        # The image was aspect-ratio-scaled, so compute actual drawn area
+        scale = min(pw / img_w, ph / img_h)
+        offset_x = (pw - img_w * scale) / 2
+        offset_y = (ph - img_h * scale) / 2
+
+        sx = offset_x + rx * scale
+        sy = offset_y + ry * scale
+        sw = rw * scale
+        sh = rh * scale
+
+        # Pick colour based on current verdict
+        level = self._last_verdict_level
+        if level == "good":
+            color = QColor(PALETTE.get("success", "#00d479"))
+        elif level == "warn":
+            color = QColor(PALETTE.get("warning", "#ffb300"))
+        else:
+            color = QColor(PALETTE.get("accent", "#00d4aa"))
+
+        result = QPixmap(pix)
+        p = QPainter(result)
+        p.setRenderHint(QPainter.Antialiasing)
+
+        # Semi-transparent fill
+        fill = QColor(color)
+        fill.setAlpha(30)
+        p.fillRect(int(sx), int(sy), int(sw), int(sh), fill)
+
+        # Border
+        pen = QPen(color)
+        pen.setWidth(2)
+        p.setPen(pen)
+        p.drawRect(int(sx), int(sy), int(sw), int(sh))
+
+        p.end()
+        return result
+
+    def _show_placeholder(self) -> None:
+        """Render a generic icon as the preview placeholder."""
+        self._preview_live = False
+
+        pw = self._preview_lbl.width()
+        ph = self._preview_lbl.height()
+        if pw < 10:
+            pw = _PREVIEW_MIN_W
+        if ph < 10:
+            ph = _PREVIEW_MIN_H
+
+        bg_col = QColor(PALETTE['bg'])
+        dim_col = QColor(PALETTE['textDim'])
+
+        canvas = QPixmap(pw, ph)
+        canvas.fill(bg_col)
+
+        try:
+            from ui.icons import make_icon, IC
+            icon = make_icon("mdi.signal-variant", color=dim_col.name(), size=80)
+            if icon is None:
+                icon = make_icon(IC.CAMERA, color=dim_col.name(), size=80)
+            if icon is not None:
+                icon_px = icon.pixmap(80, 80)
+                p = QPainter(canvas)
+                p.drawPixmap((pw - 80) // 2, (ph - 80) // 2, icon_px)
+                p.end()
+        except Exception:
+            pass
+
+        self._preview_lbl.setPixmap(canvas)
+        self._preview_caption.setText("No Preview")
+
+    @staticmethod
+    def _preview_frame_qss() -> str:
+        return (
+            f"QLabel {{"
+            f"  background:{PALETTE['bg']};"
+            f"  border:1px solid {PALETTE['border']};"
+            f"  border-radius:6px;"
+            f"}}")
 
     # ── Public API ─────────────────────────────────────────────────────
+
+    def showEvent(self, event):
+        """Refresh preview card info when section becomes visible."""
+        super().showEvent(event)
+        self._refresh_preview_card_info()
 
     def set_snr_threshold(self, good_db: float, warn_db: float | None = None) -> None:
         """Set SNR pass/warn thresholds. Called when a profile is applied."""
@@ -230,8 +581,11 @@ class SignalCheckSection(QWidget):
 
     def set_hardware_available(self, available: bool) -> None:
         self._stack.setCurrentIndex(1 if available else 0)
-        if not available:
+        if available:
+            self._refresh_preview_card_info()
+        else:
             self.reset()
+            self._show_placeholder()
 
     def reset(self) -> None:
         self._passed = False
@@ -240,6 +594,7 @@ class SignalCheckSection(QWidget):
         self._set_readout(self._snr_val, "--", "text")
         self._set_readout(self._sat_val, "--", "text")
         self._set_readout(self._verdict, "--", "text")
+        self._last_verdict_level = "text"
 
     def update_frame(self, frame) -> None:
         """Called from main_app._on_frame() with each live frame."""
@@ -253,7 +608,6 @@ class SignalCheckSection(QWidget):
             return
 
         try:
-            import numpy as np
             roi = self._extract_roi(data)
             snr = self._compute_temporal_snr(roi)
             sat_pct = self._compute_saturation(data)
@@ -277,16 +631,21 @@ class SignalCheckSection(QWidget):
             passed = snr >= self._snr_good and sat_pct < 95.0
             if passed:
                 self._set_readout(self._verdict, "PASS", "good")
+                self._last_verdict_level = "good"
                 if not self._passed and self._auto_cb.isChecked():
                     self._passed = True
                     self.signal_check_passed.emit()
             else:
                 self._set_readout(self._verdict, "FAIL", "bad")
+                self._last_verdict_level = "bad"
                 self._passed = False
 
             # Accumulate for manual check
             if self._check_frames is not None and len(self._check_frames) < self._check_target:
                 self._check_frames.append(snr)
+
+            # Render preview with ROI overlay
+            self._render_preview(data)
 
         except Exception:
             log.debug("Signal check update failed", exc_info=True)
@@ -306,8 +665,6 @@ class SignalCheckSection(QWidget):
         Falls back to single-frame spatial SNR until enough frames
         accumulate.
         """
-        import numpy as np
-
         if not hasattr(self, '_temporal_buf'):
             self._temporal_buf = []
 
@@ -337,14 +694,12 @@ class SignalCheckSection(QWidget):
 
     @staticmethod
     def _compute_saturation(data) -> float:
-        import numpy as np
         n_sat = int(np.sum(data >= CAMERA_SAT_LIMIT))
         total = data.size
         return (n_sat / total) * 100.0 if total > 0 else 0.0
 
     def _extract_roi(self, data):
         """Extract ROI from frame data based on combo selection."""
-        import numpy as np
         mode = self._roi_combo.currentText()
         h, w = data.shape[:2]
         if mode == "Center 50%":
@@ -421,6 +776,36 @@ class SignalCheckSection(QWidget):
         for w in [self._snr_val, self._sat_val, self._verdict]:
             w._sub.setStyleSheet(
                 f"font-size:{FONT['sublabel']}pt; color:{PALETTE['textDim']};")
+        # Card frames
+        card_qss = _card_frame_qss()
+        for child in self.findChildren(QFrame, "CardFrame"):
+            child.setStyleSheet(card_qss)
+        # Separators
+        for sep in (self._sep1, self._sep2, self._preview_sep):
+            sep.setStyleSheet(
+                f"background: {PALETTE['border']}; border: none;")
+        # Preview
+        if hasattr(self, "_preview_lbl"):
+            self._preview_lbl.setStyleSheet(self._preview_frame_qss())
+            self._preview_caption.setStyleSheet(_dim_style())
+            if not self._preview_live:
+                self._show_placeholder()
+        # Footer
+        if hasattr(self, "_footer_label"):
+            self._footer_label.setStyleSheet(
+                f"font-size:{FONT['caption']}pt; color:{PALETTE['textDim']}; "
+                f"font-weight:500; text-transform:uppercase; letter-spacing:0.5px;")
+        if hasattr(self, "_cam_identity_lbl"):
+            self._cam_identity_lbl.setStyleSheet(
+                f"font-size:{FONT['body']}pt; color:{PALETTE['text']}; "
+                f"font-weight:600;")
+            self._cam_detail_lbl.setStyleSheet(
+                f"font-family:{MONO_FONT}; font-size:{FONT['sublabel']}pt; "
+                f"color:{PALETTE['textDim']};")
+        # ROI badge
+        if hasattr(self, "_roi_badge"):
+            self._apply_roi_badge_style()
+        # Guidance cards
         for card in (self._overview_card, self._guide_card1):
             card._apply_styles()
         self._workflow_footer._apply_styles()

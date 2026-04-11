@@ -57,17 +57,14 @@ def get_modality_info(cam_type: str) -> tuple[str, str]:
 
 SECTION_CARDS: dict[str, list[dict]] = {
 
-    # ── Modality ────────────────────────────────────────────────────
+    # ── Measurement Setup (was "Modality") ────────────────────────
     "modality": [
         {
             "card_id": "modality.overview",
-            "title": "Getting Started with Modality",
+            "title": "Measurement Setup",
             "body": (
-                "Your <b>camera type</b> determines the measurement technique. "
-                "<b>TR</b> detects surface hotspots via reflectance change. "
-                "<b>IR</b> images thermal emission for backside analysis. "
-                "A <b>profile</b> pre-loads optimized settings for your "
-                "sample type."
+                "Select your camera, choose a measurement goal, "
+                "and pick a <b>profile</b> to pre-load optimized settings."
             ),
         },
         {

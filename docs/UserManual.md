@@ -1,7 +1,7 @@
 # SanjINSIGHT User Manual
 
-**Microsanj SanjINSIGHT v1.50.34-beta**
-**Document revision: 2026-04-05**
+**Microsanj SanjINSIGHT v0.44.0-beta.1**
+**Document revision: 2026-04-10**
 
 ---
 
@@ -693,7 +693,7 @@ When issues are shown, each one has a **Fix it →** button that navigates direc
 
 Press **Esc** or click **■ Abort** to cancel a running acquisition.
 
-#### Pre-Capture Validation *(v1.5.0)*
+#### Pre-Capture Validation *(v0.43.0)*
 
 Before each acquisition begins, a preflight validation dialog runs five automated checks:
 
@@ -1025,7 +1025,7 @@ The histogram makes it easy to see whether hotspot pixels represent a narrow spi
 
 Below the histogram, a table lists each detected hotspot region with its peak ΔT, area (pixels), and centroid coordinates (x, y). Click any row to highlight the corresponding region on the map.
 
-### 12.7 RGB Analysis *(v1.5.0)*
+### 12.7 RGB Analysis *(v0.43.0)*
 
 When the source acquisition was captured with a color (RGB) camera, the analysis engine operates on 3-channel data:
 
@@ -1078,7 +1078,7 @@ Both panels share a linked x-axis, so panning or zooming one panel moves the oth
 | **Export** | Export session data in TIFF, HDF5, NumPy, or PDF format |
 | **Delete** | Permanently remove the session folder from disk *(confirmation required)* |
 
-### 13.5 Session Schema *(v1.5.0 — Schema v3)*
+### 13.5 Session Schema *(v0.43.0 — Schema v3)*
 
 The `session.json` metadata file uses schema version 3. New fields added in v3:
 
@@ -1122,7 +1122,7 @@ The **Camera** sidebar entry opens a panel with three sub-tabs: **Camera**, **RO
 
 **Autofocus sub-tab** — Drives the Z-axis stage to find the sharpest focus position. Select the focus metric (variance, Laplacian, or gradient) and click **Run Autofocus** to execute a Z-sweep.
 
-#### Camera Sub-Tab Quick-Action Buttons *(v1.5.0)*
+#### Camera Sub-Tab Quick-Action Buttons *(v0.43.0)*
 
 | Button | Visibility | Description |
 |---|---|---|
@@ -1448,7 +1448,7 @@ When you save a session, a folder is created under `~\.microsanj_sessions\` cont
   thumbnail.png     — Small PNG preview
 ```
 
-> **Float64 averaging (v1.5.0):** Pipeline averaging and all NPY files now use float64 precision (previously float32). HDF5 exports also store float64. TIFF exports remain float32 for file-size compatibility with ImageJ/FIJI.
+> **Float64 averaging (v0.43.0):** Pipeline averaging and all NPY files now use float64 precision (previously float32). HDF5 exports also store float64. TIFF exports remain float32 for file-size compatibility with ImageJ/FIJI.
 
 ### 16.2 Export Formats
 
@@ -1527,13 +1527,13 @@ Open with **Help → Settings** or **Ctrl+,**. The Settings panel is organised i
 
 Embeds the full user management table. See Section 21.4 for details.
 
-### 18.4a Pre-Capture Validation *(v1.5.0)*
+### 18.4a Pre-Capture Validation *(v0.43.0)*
 
 | Setting | Description |
 |---|---|
 | **Enable preflight checks** | Checkbox. When enabled, automated validation runs before each acquisition. When disabled, acquisitions start immediately without checks. Config key: `acquisition.preflight_enabled` (default: on). |
 
-### 18.4b Autofocus *(v1.5.0)*
+### 18.4b Autofocus *(v0.43.0)*
 
 | Setting | Description |
 |---|---|
@@ -1551,7 +1551,7 @@ Embeds the full user management table. See Section 21.4 for details.
 
 ### 18.6 AI Assistant
 
-> *As of v1.50.34-beta, the AI Assistant settings have been reorganised into their own dedicated section (`ai_section.py`) within Settings. The layout and options are unchanged, but the section now loads independently for faster Settings panel startup.*
+> *As of v0.44.0-beta.1, the AI Assistant settings have been reorganised into their own dedicated section (`ai_section.py`) within Settings. The layout and options are unchanged, but the section now loads independently for faster Settings panel startup.*
 
 **Local model (Ollama / bundled)**
 
@@ -1581,7 +1581,7 @@ Embeds the full user management table. See Section 21.4 for details.
 | **Model list** | Select from models already installed in Ollama |
 | **Connect** | Test the Ollama connection and activate the selected model |
 
-### 18.7 Plugins *(v1.5.0)*
+### 18.7 Plugins *(v0.43.0)*
 
 SanjINSIGHT supports plugins that add new hardware panels, analysis tools, and utility tabs. Plugins are loaded from the `~/.microsanj/plugins/` directory at startup.
 
@@ -1864,7 +1864,7 @@ All supervisor override events are logged to the audit log (Section 21.7).
 > **pypylon:** The pypylon wheel bundles the pylon runtime internally — no separate Basler SDK install is required.
 > **NI Vision Acquisition download:** [ni.com/downloads](https://www.ni.com/en/support/downloads/drivers/download.ni-vision-acquisition-software.html)
 
-#### RGB Color Camera Support *(v1.5.0)*
+#### RGB Color Camera Support *(v0.43.0)*
 
 SanjINSIGHT supports RGB color cameras alongside traditional monochrome sensors. Enable color mode by setting `color_mode: true` in the camera section of `config.yaml`.
 
@@ -2204,7 +2204,7 @@ logging:
 - Check physical connections: TEC power leads, thermistor wiring.
 - Verify the COM port is not in use by another application.
 - The TEC-1089 requires external DC power (12–36 V) to respond to serial commands. USB only powers the FTDI serial chip — the TEC processor does not boot without DC input.
-- The FTDI VCP driver is bundled with the SanjINSIGHT installer (v1.5.0-beta.1+). If the TEC does not appear as a COM port, reinstall SanjINSIGHT or download the FTDI driver from [ftdichip.com](https://ftdichip.com/drivers/vcp-drivers/).
+- The FTDI VCP driver is bundled with the SanjINSIGHT installer (v0.44.0-beta.1+). If the TEC does not appear as a COM port, reinstall SanjINSIGHT or download the FTDI driver from [ftdichip.com](https://ftdichip.com/drivers/vcp-drivers/).
 
 ### FPGA not found / bitfile error
 
@@ -2315,7 +2315,7 @@ Starting from v1.2.8, SanjINSIGHT validates all required software dependencies b
 | `dark_pixel_count` | int | Pixels masked as dark/noise |
 | `dark_pixel_fraction` | float | Fraction of dark pixels (0.0–1.0) |
 
-> **v1.5.0 change:** All averaged arrays are now float64 (previously float32). The H×W×3 shape applies when the source camera is RGB.
+> **v0.43.0 change:** All averaged arrays are now float64 (previously float32). The H×W×3 shape applies when the source camera is RGB.
 
 **ScanResult**
 

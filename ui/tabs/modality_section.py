@@ -1,13 +1,17 @@
 """
-ui/tabs/modality_section.py  —  Modality configuration section
+ui/tabs/modality_section.py  —  Measurement Setup section
 
-Camera type selection, objective/lens, FOV, measurement mode.
+Camera → Measurement Goal → Profile → Begin.
 Phase 1 · CONFIGURATION
+
+Layout: two-card architecture
+  LEFT  — Configuration card: camera, goal, profile, objective, advanced, begin
+  RIGHT — Preview card: live feed, camera identity, modality badge
 
 Two presentation modes controlled by workspace mode:
 
-  GUIDED  — Option C: numbered guidance cards with explanations
-  COMPACT — Option A: two-column with dismissable help card
+  GUIDED  — numbered guidance cards above the two-card body
+  COMPACT — compact help card above the two-card body
 
 Both modes share the same widgets and controls page.  Mode switching
 toggles visibility of guidance elements (cards, footer, step badges)
@@ -42,10 +46,36 @@ from ui.guidance.steps import next_steps_after
 
 log = logging.getLogger(__name__)
 
+# ── Measurement Goal definitions ──────────────────────────────────────
+# Each goal: (id, title, subtitle, icon, navigate_to)
+# Goals are filtered by camera type at runtime.
+
+_GOALS_TR = [
+    ("measurement",      "Measurement",         "Acquire thermal image",           "mdi.thermometer",       "Live View"),
+    ("calibration",      "Calibration",          "Create or verify C_T map",        "mdi.chart-line",        "Calibration"),
+    ("hotspot_detection","Hotspot Detection",    "Capture and analyse for defects", "mdi.target",            "Capture"),
+    ("transient_series", "Transient Series",     "Time-resolved thermal response",  "mdi.chart-timeline",    "Transient"),
+    ("dataset_analysis", "Data Set Analysis",    "Analyse saved sessions",          "mdi.folder-search",     "Sessions"),
+]
+_GOALS_IR = [
+    ("measurement",      "Measurement",         "Acquire thermal image",           "mdi.thermometer",       "Live View"),
+    ("calibration",      "Calibration",          "Create or verify emissivity map", "mdi.chart-line",        "Calibration"),
+    ("hotspot_detection","Hotspot Detection",    "Capture and analyse for defects", "mdi.target",            "Capture"),
+    ("dataset_analysis", "Data Set Analysis",    "Analyse saved sessions",          "mdi.folder-search",     "Sessions"),
+]
+
+def _goals_for(cam_type: str) -> list:
+    """Return goal tuples appropriate for the camera type."""
+    return _GOALS_IR if cam_type == "ir" else _GOALS_TR
+
 # ── Preview constants ──────────────────────────────────────────────────
-_PREVIEW_W      = 280       # preview thumbnail width
-_PREVIEW_H      = 210       # preview thumbnail height  (4:3 ratio)
+_PREVIEW_MIN_W  = 320       # preview minimum width
+_PREVIEW_MIN_H  = 240       # preview minimum height (4:3 ratio)
 _PREVIEW_DECIM  = 15        # update every Nth frame (~2 fps at 30 fps)
+
+# Legacy aliases for external callers (if any)
+_PREVIEW_W = _PREVIEW_MIN_W
+_PREVIEW_H = _PREVIEW_MIN_H
 
 # ── Guidance content (pulled from centralized database) ────────────────
 
@@ -61,7 +91,7 @@ def _card_body(card_id: str) -> str:
 # Build next-steps tuples for the WorkflowFooter
 _NEXT_STEPS = [
     (s.nav_target, s.label, s.hint)
-    for s in next_steps_after("Modality", count=3)
+    for s in next_steps_after("Measurement Setup", count=3)
 ]
 
 
@@ -74,6 +104,25 @@ def _mono_style() -> str:
 
 def _dim_style() -> str:
     return f"font-size:{FONT['caption']}pt; color:{PALETTE['textDim']}; padding-left:2px;"
+
+
+def _card_frame_qss() -> str:
+    """Bordered card container QSS (reusable for left/right cards)."""
+    return (
+        f"QFrame#CardFrame {{"
+        f"  background: {PALETTE['surface']};"
+        f"  border: 1px solid {PALETTE['border']};"
+        f"  border-radius: 8px;"
+        f"}}")
+
+
+def _separator() -> QFrame:
+    """Thin horizontal separator line."""
+    line = QFrame()
+    line.setFrameShape(QFrame.HLine)
+    line.setFixedHeight(1)
+    line.setStyleSheet(f"background: {PALETTE['border']}; border: none;")
+    return line
 
 
 class ModalitySection(QWidget):
@@ -116,37 +165,28 @@ class ModalitySection(QWidget):
         # Show the placeholder icon
         self._show_placeholder()
 
-    # ── Controls page (single page, dual-mode) ─────────────────────
+    # ── Controls page (two-card layout) ────────────────────────────────
 
     def _build_controls_page(self) -> QWidget:
         page = QWidget()
         root = QVBoxLayout(page)
-        root.setContentsMargins(20, 16, 20, 16)
+        root.setContentsMargins(16, 8, 16, 12)
         root.setSpacing(0)
 
-        # ── Section header ──────────────────────────────────────────
-        title = QLabel("Modality")
-        title.setStyleSheet(
-            f"color:{PALETTE['text']}; font-size:{FONT['heading']}pt; "
-            "font-weight:bold;")
-        root.addWidget(title)
-
-        self._subtitle = QLabel(
-            "Configure your imaging technique and measurement settings")
-        self._subtitle.setStyleSheet(_dim_style())
-        root.addWidget(self._subtitle)
-        root.addSpacing(12)
-
-        # ── Compact help card (Standard/Expert) — sits above controls ──
+        # ── Compact help card (Standard/Expert) ────────────────────────
+        # No standalone heading — sidebar already provides "Modality" context
         self._compact_card = GuidanceCard(
             card_id="modality.overview",
-            title="Getting Started with Modality",
+            title="Measurement Setup",
             body=_card_body("modality.overview"),
         )
+        # Tighter padding for compact card — reduce visual weight
+        self._compact_card.layout().setContentsMargins(12, 8, 12, 8)
+        self._compact_card.layout().setSpacing(4)
         root.addWidget(self._compact_card)
-        root.addSpacing(8)
+        root.addSpacing(6)
 
-        # ── Step 1: Camera technique ────────────────────────────────
+        # ── Guided step cards (Guided mode only) ───────────────────────
         self._guide_card1 = GuidanceCard(
             card_id="modality.technique",
             title="Choose Your Measurement Technique",
@@ -154,54 +194,7 @@ class ModalitySection(QWidget):
             step_number=1,
         )
         root.addWidget(self._guide_card1)
-        root.addSpacing(4)
 
-        # Camera row: combo + description + preview
-        cam_row = QHBoxLayout()
-        cam_row.setSpacing(24)
-        root.addLayout(cam_row)
-
-        cam_left = QVBoxLayout()
-        cam_left.setSpacing(6)
-        cam_row.addLayout(cam_left, 3)
-
-        cam_lbl = QLabel("Camera")
-        cam_lbl.setStyleSheet(
-            f"font-size:{FONT['label']}pt; font-weight:600; "
-            f"color:{PALETTE['text']}; padding-left:2px;")
-        cam_left.addWidget(cam_lbl)
-
-        self._cam_combo = QComboBox()
-        self._cam_combo.setMaximumWidth(700)
-        self._cam_combo.currentIndexChanged.connect(self._on_camera_type_changed)
-        cam_left.addWidget(self._cam_combo)
-
-        self._modality_desc = QLabel("")
-        self._modality_desc.setWordWrap(True)
-        self._modality_desc.setStyleSheet(_dim_style())
-        cam_left.addWidget(self._modality_desc)
-
-        # Preview (right side of camera row)
-        preview_col = QVBoxLayout()
-        preview_col.setSpacing(4)
-        preview_col.setContentsMargins(0, 0, 0, 0)
-        cam_row.addLayout(preview_col, 2)
-
-        self._preview_lbl = QLabel()
-        self._preview_lbl.setFixedSize(_PREVIEW_W, _PREVIEW_H)
-        self._preview_lbl.setAlignment(Qt.AlignCenter)
-        self._preview_lbl.setStyleSheet(self._preview_frame_qss())
-        preview_col.addWidget(self._preview_lbl, 0, Qt.AlignTop)
-
-        self._preview_caption = QLabel("No Preview")
-        self._preview_caption.setAlignment(Qt.AlignCenter)
-        self._preview_caption.setStyleSheet(_dim_style())
-        self._preview_caption.setFixedWidth(_PREVIEW_W)
-        preview_col.addWidget(self._preview_caption)
-
-        root.addSpacing(12)
-
-        # ── Step 2: Profile ─────────────────────────────────────────
         self._guide_card2 = GuidanceCard(
             card_id="modality.profile",
             title="Select a Measurement Profile",
@@ -209,15 +202,7 @@ class ModalitySection(QWidget):
             step_number=2,
         )
         root.addWidget(self._guide_card2)
-        root.addSpacing(4)
 
-        self._profile_picker = ProfilePicker()
-        self._profile_picker.profile_selected.connect(self._on_profile_picked)
-        self._profile_picker.custom_selected.connect(self.custom_selected)
-        root.addWidget(self._profile_picker)
-        root.addSpacing(12)
-
-        # ── Step 3: Fine-tune ───────────────────────────────────────
         self._guide_card3 = GuidanceCard(
             card_id="modality.finetune",
             title="Fine-Tune (Optional)",
@@ -225,14 +210,125 @@ class ModalitySection(QWidget):
             step_number=3,
         )
         root.addWidget(self._guide_card3)
-        root.addSpacing(4)
+        root.addSpacing(6)
 
-        # Objective selector (hidden when no turret)
+        # ══════════════════════════════════════════════════════════════
+        # Two-card body: LEFT = configuration, RIGHT = preview
+        # ══════════════════════════════════════════════════════════════
+        body = QHBoxLayout()
+        body.setSpacing(12)
+        root.addLayout(body, 1)
+
+        # ── LEFT CARD: Configuration ─────────────────────────────────
+        left_card = QFrame()
+        left_card.setObjectName("CardFrame")
+        left_card.setStyleSheet(_card_frame_qss())
+        # Content-hugging: Preferred height, not Expanding
+        left_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
+        left_card.setMinimumWidth(340)
+
+        lc = QVBoxLayout(left_card)
+        lc.setContentsMargins(14, 12, 14, 12)
+        lc.setSpacing(0)
+
+        # ── Camera section ────────────────────────────────────────────
+        cam_lbl = QLabel("Camera")
+        cam_lbl.setStyleSheet(self._section_label_qss())
+        lc.addWidget(cam_lbl)
+        lc.addSpacing(2)
+
+        # Multi-camera: combo selector
+        self._cam_combo = QComboBox()
+        self._cam_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._cam_combo.currentIndexChanged.connect(self._on_camera_type_changed)
+        lc.addWidget(self._cam_combo)
+
+        # Single-camera: read-only identity row (hidden when multi)
+        self._single_cam_row = QFrame()
+        self._single_cam_row.setStyleSheet(
+            f"QFrame {{ background:{PALETTE['surface']}; "
+            f"border:1px solid {PALETTE['border']}; border-radius:4px; }}")
+        scr_lay = QHBoxLayout(self._single_cam_row)
+        scr_lay.setContentsMargins(8, 4, 8, 4)
+        scr_lay.setSpacing(6)
+        self._single_cam_label = QLabel("")
+        self._single_cam_label.setStyleSheet(
+            f"font-size:{FONT['label']}pt; color:{PALETTE['text']}; "
+            f"font-weight:500; border:none; background:transparent;")
+        scr_lay.addWidget(self._single_cam_label, 1)
+        self._single_cam_badge = QLabel("")
+        self._single_cam_badge.setAlignment(Qt.AlignCenter)
+        self._single_cam_badge.setFixedHeight(18)
+        self._single_cam_badge.setMinimumWidth(32)
+        self._single_cam_badge.setStyleSheet(
+            f"font-size:{FONT.get('small', 8)}pt; font-weight:600; "
+            f"border-radius:9px; padding:1px 6px; "
+            f"background:{PALETTE['accent']}22; color:{PALETTE['accent']}; "
+            f"border:none;")
+        scr_lay.addWidget(self._single_cam_badge)
+        self._single_cam_row.setVisible(False)
+        lc.addWidget(self._single_cam_row)
+
+        lc.addSpacing(2)
+
+        self._modality_desc = QLabel("")
+        self._modality_desc.setWordWrap(True)
+        self._modality_desc.setStyleSheet(_dim_style())
+        lc.addWidget(self._modality_desc)
+
+        # ── Separator ─────────────────────────────────────────────────
+        lc.addSpacing(4)
+        self._sep1 = _separator()
+        lc.addWidget(self._sep1)
+        lc.addSpacing(4)
+
+        # ── Measurement Goal section ──────────────────────────────────
+        goal_lbl = QLabel("Measurement Goal")
+        goal_lbl.setStyleSheet(self._section_label_qss())
+        lc.addWidget(goal_lbl)
+        lc.addSpacing(2)
+
+        self._goal_combo = QComboBox()
+        self._goal_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._goal_combo.currentIndexChanged.connect(self._on_goal_changed)
+        lc.addWidget(self._goal_combo)
+
+        self._goal_desc = QLabel("")
+        self._goal_desc.setWordWrap(True)
+        self._goal_desc.setStyleSheet(_dim_style())
+        lc.addWidget(self._goal_desc)
+
+        # ── Separator ─────────────────────────────────────────────────
+        lc.addSpacing(4)
+        self._sep_goal = _separator()
+        lc.addWidget(self._sep_goal)
+        lc.addSpacing(4)
+
+        # ── Profile section ───────────────────────────────────────────
+        prof_lbl = QLabel("Profile")
+        prof_lbl.setStyleSheet(self._section_label_qss())
+        lc.addWidget(prof_lbl)
+        lc.addSpacing(2)
+
+        self._profile_picker = ProfilePicker()
+        self._profile_picker.profile_selected.connect(self._on_profile_picked)
+        self._profile_picker.custom_selected.connect(self.custom_selected)
+        lc.addWidget(self._profile_picker)
+
+        # ── Separator (hidden when no turret) ─────────────────────────
+        lc.addSpacing(4)
+        self._sep2 = _separator()
+        lc.addWidget(self._sep2)
+        lc.addSpacing(4)
+
+        # ── Objective selector (hidden when no turret) ────────────────
         obj_grid = QGridLayout()
-        obj_grid.setSpacing(8)
-        root.addLayout(obj_grid)
+        obj_grid.setSpacing(4)
+        obj_grid.setContentsMargins(0, 0, 0, 0)
+        lc.addLayout(obj_grid)
 
         self._obj_label = QLabel("Objective")
+        self._obj_label.setStyleSheet(self._section_label_qss())
         self._obj_combo = QComboBox()
         self._obj_combo.setFixedWidth(200)
         self._obj_combo.currentIndexChanged.connect(self._on_objective_changed)
@@ -247,13 +343,13 @@ class ModalitySection(QWidget):
         obj_grid.addWidget(self._obj_combo,   0, 1)
         obj_grid.addWidget(self._obj_fov_lbl, 1, 1, 1, 2)
 
-        # More Options
+        # ── More Options (directly in left card — not orphaned) ───────
         from ui.widgets.more_options import MoreOptionsPanel
         self._opts_panel = MoreOptionsPanel(section_key="modality")
         opts_inner = QWidget()
         opts_grid = QGridLayout(opts_inner)
         opts_grid.setContentsMargins(0, 0, 0, 0)
-        opts_grid.setSpacing(8)
+        opts_grid.setSpacing(6)
 
         opts_grid.addWidget(QLabel("Pixel Pitch (µm)"), 0, 0)
         self._px_spin = QDoubleSpinBox()
@@ -304,8 +400,107 @@ class ModalitySection(QWidget):
         self._ffc_run_btn.setVisible(False)
 
         self._opts_panel.addWidget(opts_inner)
-        root.addWidget(self._opts_panel)
-        root.addSpacing(16)
+        lc.addWidget(self._opts_panel)
+
+        # ── Begin button ──────────────────────────────────────────────
+        lc.addSpacing(8)
+        self._begin_btn = QPushButton("  Begin Measurement")
+        set_btn_icon(self._begin_btn, IC.PLAY,
+                     color=PALETTE.get("ctaText", "#fff"))
+        self._begin_btn.setMinimumHeight(36)
+        self._begin_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._begin_btn.setCursor(Qt.PointingHandCursor)
+        self._begin_btn.setStyleSheet(
+            f"QPushButton {{"
+            f"  background: {PALETTE['cta']}; "
+            f"  color: {PALETTE.get('ctaText', '#fff')}; "
+            f"  border: none; border-radius: 6px; "
+            f"  font-size: {FONT['body']}pt; font-weight: 600; "
+            f"  padding: 4px 16px;"
+            f"}}"
+            f"QPushButton:hover {{"
+            f"  background: {PALETTE.get('ctaHover', PALETTE['cta'])};"
+            f"}}")
+        self._begin_btn.clicked.connect(self._on_begin)
+        lc.addWidget(self._begin_btn)
+
+        body.addWidget(left_card, 3)
+
+        # ── RIGHT CARD: Preview / Confirmation ───────────────────────
+        right_card = QFrame()
+        right_card.setObjectName("CardFrame")
+        right_card.setStyleSheet(_card_frame_qss())
+        right_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        right_card.setMinimumWidth(300)
+        self._right_card = right_card
+
+        rc = QVBoxLayout(right_card)
+        rc.setContentsMargins(12, 12, 12, 12)
+        rc.setSpacing(8)
+
+        # Live preview (expanding)
+        self._preview_lbl = QLabel()
+        self._preview_lbl.setSizePolicy(
+            QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self._preview_lbl.setMinimumSize(_PREVIEW_MIN_W, _PREVIEW_MIN_H)
+        self._preview_lbl.setAlignment(Qt.AlignCenter)
+        self._preview_lbl.setStyleSheet(self._preview_frame_qss())
+        rc.addWidget(self._preview_lbl, 1)
+
+        # ── Info footer (confirmation panel) ──────────────────────────
+        self._preview_sep = _separator()
+        rc.addWidget(self._preview_sep)
+        rc.addSpacing(4)
+
+        # Footer label — anchors the confirmation panel
+        self._footer_label = QLabel("Active Camera")
+        self._footer_label.setStyleSheet(
+            f"font-size:{FONT['caption']}pt; color:{PALETTE['textDim']}; "
+            f"font-weight:500; text-transform:uppercase; letter-spacing:0.5px;")
+        rc.addWidget(self._footer_label)
+        rc.addSpacing(2)
+
+        # Camera identity (bold, prominent — primary anchor)
+        self._cam_identity_lbl = QLabel("")
+        self._cam_identity_lbl.setAlignment(Qt.AlignLeft)
+        self._cam_identity_lbl.setStyleSheet(
+            f"font-size:{FONT['body']}pt; color:{PALETTE['text']}; "
+            f"font-weight:600;")
+        rc.addWidget(self._cam_identity_lbl)
+
+        # Camera detail line (resolution, pixel format — mono)
+        self._cam_detail_lbl = QLabel("")
+        self._cam_detail_lbl.setAlignment(Qt.AlignLeft)
+        self._cam_detail_lbl.setStyleSheet(
+            f"font-family:{MONO_FONT}; font-size:{FONT['sublabel']}pt; "
+            f"color:{PALETTE['textDim']};")
+        rc.addWidget(self._cam_detail_lbl)
+        rc.addSpacing(4)
+
+        # Modality badge + status caption row
+        badge_row = QHBoxLayout()
+        badge_row.setContentsMargins(0, 0, 0, 0)
+        badge_row.setSpacing(8)
+
+        self._modality_badge = QLabel("TR")
+        self._modality_badge.setAlignment(Qt.AlignCenter)
+        self._modality_badge.setFixedHeight(22)
+        self._modality_badge.setMinimumWidth(80)
+        self._modality_badge.setMaximumWidth(160)
+        self._apply_badge_style("tr")
+        badge_row.addWidget(self._modality_badge)
+        badge_row.addStretch()
+
+        self._preview_caption = QLabel("No Preview")
+        self._preview_caption.setAlignment(Qt.AlignRight)
+        self._preview_caption.setStyleSheet(_dim_style())
+        badge_row.addWidget(self._preview_caption)
+
+        rc.addLayout(badge_row)
+
+        body.addWidget(right_card, 3)
+
+        root.addSpacing(10)
 
         # ── Workflow footer (Guided only) ───────────────────────────
         self._workflow_footer = WorkflowFooter(_NEXT_STEPS)
@@ -313,7 +508,6 @@ class ModalitySection(QWidget):
             self.navigate_requested)
         root.addWidget(self._workflow_footer)
 
-        root.addStretch()
         return page
 
     # ── Mode switching ──────────────────────────────────────────────
@@ -332,10 +526,48 @@ class ModalitySection(QWidget):
         self._guide_card2.setVisible(is_guided)
         self._guide_card3.setVisible(is_guided)
         self._workflow_footer.setVisible(is_guided)
-        self._subtitle.setVisible(is_guided)
 
         # Compact-only element
         self._compact_card.setVisible(not is_guided)
+
+    # ── Modality badge ─────────────────────────────────────────────────
+
+    def _apply_badge_style(self, cam_type: str) -> None:
+        """Apply colored pill style to the modality badge."""
+        if cam_type == "ir":
+            bg = PALETTE.get("warning", "#ff9f0a")
+            text = "IR Lock-in"
+        else:
+            bg = PALETTE.get("accent", "#00d4aa")
+            text = "Thermoreflectance"
+        self._modality_badge.setText(text)
+        self._modality_badge.setStyleSheet(
+            f"background: {bg}22; color: {bg}; "
+            f"border: 1px solid {bg}44; border-radius: 10px; "
+            f"font-size: {FONT['sublabel']}pt; font-weight: 600; "
+            f"padding: 2px 10px;")
+
+    def _refresh_preview_card_info(self) -> None:
+        """Update camera identity + detail in the preview card."""
+        cam = app_state.cam
+        cam_type = getattr(app_state, "active_camera_type", "tr")
+        if cam is not None and hasattr(cam, "info"):
+            model = getattr(cam.info, "model", "") or "Camera"
+            w = getattr(cam.info, "width", 0)
+            h = getattr(cam.info, "height", 0)
+            self._cam_identity_lbl.setText(model)
+            if w and h:
+                fmt = getattr(cam.info, "pixel_format", "")
+                detail = f"{w} × {h}"
+                if fmt:
+                    detail += f"  ·  {fmt}"
+                self._cam_detail_lbl.setText(detail)
+            else:
+                self._cam_detail_lbl.setText("")
+        else:
+            self._cam_identity_lbl.setText("No camera")
+            self._cam_detail_lbl.setText("")
+        self._apply_badge_style(cam_type)
 
     # ── Live preview ──────────────────────────────────────────────────
 
@@ -354,6 +586,15 @@ class ModalitySection(QWidget):
         if data is None:
             return
 
+        # Get the actual display size of the preview label
+        pw = self._preview_lbl.width()
+        ph = self._preview_lbl.height()
+        # Fallback to minimums if not yet laid out
+        if pw < 10:
+            pw = _PREVIEW_MIN_W
+        if ph < 10:
+            ph = _PREVIEW_MIN_H
+
         try:
             from acquisition.processing import to_display
             disp = to_display(data, mode="auto")
@@ -367,14 +608,14 @@ class ModalitySection(QWidget):
                 qi = QImage(disp.tobytes(), w, h, w * 3, QImage.Format_RGB888)
 
             pix = QPixmap.fromImage(qi).scaled(
-                _PREVIEW_W, _PREVIEW_H,
+                pw, ph,
                 Qt.KeepAspectRatio, Qt.SmoothTransformation)
             self._preview_lbl.setPixmap(pix)
         except Exception:
             log.debug("Modality preview render failed", exc_info=True)
             return
 
-        # Update caption with camera model
+        # Update caption
         self._preview_live = True
         cam = app_state.cam
         if cam is not None and hasattr(cam, "info"):
@@ -386,10 +627,18 @@ class ModalitySection(QWidget):
     def _show_placeholder(self) -> None:
         """Render a generic microscope icon as the preview placeholder."""
         self._preview_live = False
+
+        pw = self._preview_lbl.width()
+        ph = self._preview_lbl.height()
+        if pw < 10:
+            pw = _PREVIEW_MIN_W
+        if ph < 10:
+            ph = _PREVIEW_MIN_H
+
         bg_col = QColor(PALETTE['bg'])
         dim_col = QColor(PALETTE['textDim'])
 
-        canvas = QPixmap(_PREVIEW_W, _PREVIEW_H)
+        canvas = QPixmap(pw, ph)
         canvas.fill(bg_col)
 
         icon = make_icon("mdi.microscope", color=dim_col.name(), size=80)
@@ -398,7 +647,7 @@ class ModalitySection(QWidget):
         if icon is not None:
             icon_px = icon.pixmap(80, 80)
             p = QPainter(canvas)
-            p.drawPixmap((_PREVIEW_W - 80) // 2, (_PREVIEW_H - 80) // 2, icon_px)
+            p.drawPixmap((pw - 80) // 2, (ph - 80) // 2, icon_px)
             p.end()
 
         self._preview_lbl.setPixmap(canvas)
@@ -430,11 +679,12 @@ class ModalitySection(QWidget):
 
     def refresh(self) -> None:
         """Re-populate combos from current app_state."""
-        self._refresh_camera_combo()
+        self._refresh_camera_combo()   # also calls _refresh_goals()
         self._refresh_turret()
         self._refresh_sensor_info()
         self._refresh_modality_controls()
         self._refresh_ffc_row()
+        self._refresh_preview_card_info()
         self._profile_picker.filter_by_modality(app_state.active_camera_type)
 
     # ── Camera combo ───────────────────────────────────────────────────
@@ -447,7 +697,9 @@ class ModalitySection(QWidget):
         tr_drv = app_state.tr_cam
         ir_drv = app_state.ir_cam
 
-        if ir_drv is not None:
+        multi_camera = ir_drv is not None and tr_drv is not None
+
+        if multi_camera:
             tr_model = getattr(getattr(tr_drv, 'info', None), 'model', 'TR Camera')
             ir_model = getattr(getattr(ir_drv, 'info', None), 'model', 'IR Camera')
             self._cam_combo.addItem(
@@ -468,8 +720,32 @@ class ModalitySection(QWidget):
                 self._cam_combo.setCurrentIndex(i)
                 break
 
+        # Single-camera: show read-only identity row instead of combo
+        if not multi_camera and (tr_drv is not None or ir_drv is not None):
+            drv = tr_drv or ir_drv
+            model = getattr(getattr(drv, 'info', None), 'model', 'Camera')
+            badge_text = "IR" if active == "ir" else "TR"
+            self._single_cam_label.setText(model)
+            self._single_cam_badge.setText(badge_text)
+            # Badge color
+            if active == "ir":
+                bc = PALETTE.get("warning", "#ff9f0a")
+            else:
+                bc = PALETTE.get("accent", "#00d4aa")
+            self._single_cam_badge.setStyleSheet(
+                f"font-size:{FONT.get('small', 8)}pt; font-weight:600; "
+                f"border-radius:9px; padding:1px 6px; "
+                f"background:{bc}22; color:{bc}; border:none;")
+            self._cam_combo.setVisible(False)
+            self._single_cam_row.setVisible(True)
+        else:
+            self._cam_combo.setVisible(True)
+            self._single_cam_row.setVisible(False)
+
         self._update_modality_desc(active)
         self._cam_combo.blockSignals(False)
+        # Refresh goals for current camera type
+        self._refresh_goals(active)
 
     def _on_camera_type_changed(self, index: int) -> None:
         if index < 0:
@@ -479,11 +755,51 @@ class ModalitySection(QWidget):
             return
         app_state.active_camera_type = cam_type
         self._update_modality_desc(cam_type)
+        self._refresh_goals(cam_type)
         self._refresh_sensor_info()
         self._refresh_modality_controls()
         self._refresh_ffc_row()
+        self._refresh_preview_card_info()
         self._profile_picker.filter_by_modality(cam_type)
         self.modality_changed.emit(cam_type)
+
+    # ── Measurement Goal ──────────────────────────────────────────────
+
+    def _refresh_goals(self, cam_type: str) -> None:
+        """Populate the goal combo for the active camera type."""
+        self._goal_combo.blockSignals(True)
+        self._goal_combo.clear()
+        for gid, title, subtitle, icon, nav in _goals_for(cam_type):
+            self._goal_combo.addItem(title, userData=(gid, subtitle, icon, nav))
+        self._goal_combo.setCurrentIndex(0)
+        self._goal_combo.blockSignals(False)
+        self._on_goal_changed(0)
+
+    def _on_goal_changed(self, index: int) -> None:
+        """Handle goal selection change — update subtitle + begin button."""
+        if index < 0:
+            return
+        data = self._goal_combo.itemData(index)
+        if data is None:
+            return
+        gid, subtitle, icon, nav = data
+        self._goal_desc.setText(subtitle)
+        # Update Begin button text
+        goal_title = self._goal_combo.currentText()
+        self._begin_btn.setText(f"  Begin {goal_title}")
+        set_btn_icon(self._begin_btn, icon,
+                     color=PALETTE.get("ctaText", "#fff"))
+
+    def _on_begin(self) -> None:
+        """Handle Begin button click — navigate to the goal's target panel."""
+        index = self._goal_combo.currentIndex()
+        if index < 0:
+            return
+        data = self._goal_combo.itemData(index)
+        if data is None:
+            return
+        gid, subtitle, icon, nav = data
+        self.navigate_requested.emit(nav)
 
     def _on_profile_picked(self, profile) -> None:
         self.profile_selected.emit(profile)
@@ -500,6 +816,9 @@ class ModalitySection(QWidget):
         self._obj_label.setVisible(has_turret)
         self._obj_combo.setVisible(has_turret)
         self._obj_fov_lbl.setVisible(has_turret)
+
+        # Show/hide the separator above objectives
+        self._sep2.setVisible(has_turret)
 
         if not has_turret:
             return
@@ -660,26 +979,77 @@ class ModalitySection(QWidget):
         from ui.widgets.empty_state import build_empty_state
         return build_empty_state(
             title="Camera Not Connected",
-            description="Connect a camera in Device Manager to configure "
-                        "measurement modality.",
+            description="Connect a camera in Device Manager to begin "
+                        "measurement setup.",
             on_action=self.open_device_manager.emit,
         )
 
     # ── Theme ──────────────────────────────────────────────────────────
 
+    @staticmethod
+    def _section_label_qss() -> str:
+        """Consistent section label style for left-card headings."""
+        return (f"font-size:{FONT['label']}pt; font-weight:600; "
+                f"color:{PALETTE['text']};")
+
     def _apply_styles(self) -> None:
         self._modality_desc.setStyleSheet(_dim_style())
+        self._goal_desc.setStyleSheet(_dim_style())
         self._obj_fov_lbl.setStyleSheet(_dim_style())
         self._sensor_lbl.setStyleSheet(_mono_style())
-        self._subtitle.setStyleSheet(_dim_style())
+        # Begin button
+        self._begin_btn.setStyleSheet(
+            f"QPushButton {{"
+            f"  background: {PALETTE['cta']}; "
+            f"  color: {PALETTE.get('ctaText', '#fff')}; "
+            f"  border: none; border-radius: 6px; "
+            f"  font-size: {FONT['body']}pt; font-weight: 600; "
+            f"  padding: 4px 16px;"
+            f"}}"
+            f"QPushButton:hover {{"
+            f"  background: {PALETTE.get('ctaHover', PALETTE['cta'])};"
+            f"}}")
+        # Section labels in left card
+        for child in self.findChildren(QLabel):
+            if child.text() in ("Camera", "Measurement Goal", "Profile", "Objective"):
+                child.setStyleSheet(self._section_label_qss())
         if hasattr(self, "_profile_picker"):
             self._profile_picker._apply_styles()
+        # Card frames
+        card_qss = _card_frame_qss()
+        for attr in ("_right_card",):
+            card = getattr(self, attr, None)
+            if card is not None:
+                card.setStyleSheet(card_qss)
+        # Find left card by walking children
+        for child in self.findChildren(QFrame, "CardFrame"):
+            child.setStyleSheet(card_qss)
+        # Separators
+        for sep in (self._sep1, self._sep_goal, self._sep2, self._preview_sep):
+            sep.setStyleSheet(
+                f"background: {PALETTE['border']}; border: none;")
         # Preview panel
         if hasattr(self, "_preview_lbl"):
             self._preview_lbl.setStyleSheet(self._preview_frame_qss())
             self._preview_caption.setStyleSheet(_dim_style())
             if not self._preview_live:
                 self._show_placeholder()
+        # Preview card info
+        if hasattr(self, "_footer_label"):
+            self._footer_label.setStyleSheet(
+                f"font-size:{FONT['caption']}pt; color:{PALETTE['textDim']}; "
+                f"font-weight:500; text-transform:uppercase; letter-spacing:0.5px;")
+        if hasattr(self, "_cam_identity_lbl"):
+            self._cam_identity_lbl.setStyleSheet(
+                f"font-size:{FONT['body']}pt; color:{PALETTE['text']}; "
+                f"font-weight:600;")
+            self._cam_detail_lbl.setStyleSheet(
+                f"font-family:{MONO_FONT}; font-size:{FONT['sublabel']}pt; "
+                f"color:{PALETTE['textDim']};")
+        # Badge
+        if hasattr(self, "_modality_badge"):
+            cam_type = getattr(app_state, "active_camera_type", "tr")
+            self._apply_badge_style(cam_type)
         # Guidance cards
         for card in self._all_guidance_cards():
             card._apply_styles()

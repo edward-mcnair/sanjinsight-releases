@@ -15,7 +15,8 @@ log = logging.getLogger(__name__)
 from PyQt5.QtWidgets import (
     QWidget, QLabel, QPushButton, QSpinBox, QDoubleSpinBox,
     QProgressBar, QVBoxLayout, QHBoxLayout, QGridLayout,
-    QGroupBox, QComboBox, QTextEdit, QFileDialog, QScrollArea)
+    QGroupBox, QComboBox, QTextEdit, QFileDialog, QScrollArea,
+    QFrame)
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from ui.icons import set_btn_icon
 from ui.theme import progress_bar_qss, FONT, PALETTE, scaled_qss, MONO_FONT
@@ -66,11 +67,47 @@ class AcquireTab(QWidget):
         self._quick_controls = QuickControlsBar()
         left.addWidget(self._quick_controls)
 
+        # Hardware summary strip (timing + bias)
+        from ui.widgets.hw_summary_strip import HwSummaryStrip
+        self._hw_strip = HwSummaryStrip()
+        left.addWidget(self._hw_strip)
+
         # Live feed
         live_box = QGroupBox("Live Feed")
         ll = QVBoxLayout(live_box)
-        self._live = ImagePane("", 500, 375)
+        self._live = ImagePane("", 500, 375, expanding=True)
         ll.addWidget(self._live)
+
+        # Camera context strip (identity + modality confirmation + detach)
+        ctx_row = QHBoxLayout()
+        ctx_row.setContentsMargins(0, 0, 0, 0)
+        ctx_row.setSpacing(8)
+
+        self._cam_ctx_lbl = QLabel("")
+        self._cam_ctx_lbl.setStyleSheet(
+            f"font-size:{FONT['sublabel']}pt; color:{PALETTE['textDim']};")
+        ctx_row.addWidget(self._cam_ctx_lbl)
+
+        ctx_row.addStretch()
+
+        self._mode_badge = QLabel("")
+        self._mode_badge.setAlignment(Qt.AlignCenter)
+        self._mode_badge.setFixedHeight(20)
+        self._mode_badge.setVisible(False)
+        ctx_row.addWidget(self._mode_badge)
+
+        # Detach button — open large viewer window
+        self._detach_btn = QPushButton()
+        set_btn_icon(self._detach_btn, "mdi.open-in-new", PALETTE['textDim'])
+        self._detach_btn.setFixedSize(24, 24)
+        self._detach_btn.setToolTip(
+            "Open a detached large viewer window.\n"
+            "Can be moved to a second monitor or made full-screen (F11).")
+        self._detach_btn.setFlat(True)
+        self._detach_btn.clicked.connect(self._on_detach_viewer)
+        ctx_row.addWidget(self._detach_btn)
+
+        ll.addLayout(ctx_row)
         left.addWidget(live_box)
 
         # ROI status bar
@@ -314,10 +351,12 @@ class AcquireTab(QWidget):
         self._notes_more.addWidget(notes_log_w)
         left.addWidget(self._notes_more)
 
-        # RIGHT — results
-        right = QVBoxLayout()
+        # RIGHT — results (hidden until acquisition starts)
+        self._results_container = QWidget()
+        right = QVBoxLayout(self._results_container)
         right.setSpacing(8)
-        root.addLayout(right, 2)
+        right.setContentsMargins(0, 0, 0, 0)
+        root.addWidget(self._results_container, 2)
 
         res_box = QGroupBox("Results")
         rl = QGridLayout(res_box)
@@ -346,6 +385,9 @@ class AcquireTab(QWidget):
         bot.addStretch()
         bot.addWidget(self._export_btn)
         right.addLayout(bot)
+
+        # Hide results panel until acquisition starts
+        self._results_container.setVisible(False)
 
         # Wire buttons
         self._cold_btn.clicked.connect(self._cap_cold)
@@ -398,6 +440,13 @@ class AcquireTab(QWidget):
                 f"QPushButton:hover {{ background:{sur}; }}")
         if hasattr(self, "_quick_controls"):
             self._quick_controls._apply_styles()
+        if hasattr(self, "_hw_strip"):
+            self._hw_strip._apply_styles()
+
+    def set_workspace_mode(self, mode: str) -> None:
+        """Control component visibility based on workspace mode."""
+        if hasattr(self, "_hw_strip"):
+            self._hw_strip.set_workspace_mode(mode)
 
     def set_active_recipe_name(self, name: str | None) -> None:
         """Called by MainWindow when a recipe is applied to reflect its name."""
@@ -461,6 +510,43 @@ class AcquireTab(QWidget):
 
     def update_live(self, frame):
         self._live.show_array(frame.data, mode="auto")
+        # Push to detached viewer if open
+        if hasattr(self, '_detached_viewer') and self._detached_viewer is not None:
+            pix = self._live._lbl.pixmap()
+            if pix is not None and not pix.isNull():
+                cam = app_state.cam
+                info = ""
+                if cam is not None and hasattr(cam, "info"):
+                    model = getattr(cam.info, "model", "") or "Camera"
+                    w = getattr(cam.info, "width", 0)
+                    h = getattr(cam.info, "height", 0)
+                    info = f"{model}  ·  {w}×{h}  ·  Live"
+                self._detached_viewer.update_image(
+                    pix, info, data=frame.data)
+
+    # ── Detached viewer ─────────────────────────────────────────────
+
+    _detached_viewer = None
+
+    def _on_detach_viewer(self) -> None:
+        """Open (or bring to front) a detached large viewer window."""
+        if self._detached_viewer is not None:
+            self._detached_viewer.raise_()
+            self._detached_viewer.activateWindow()
+            return
+        from ui.widgets.detached_viewer import DetachedViewer
+        self._detached_viewer = DetachedViewer("Capture — Live Feed")
+        self._detached_viewer.closed.connect(self._on_viewer_closed)
+        self._detached_viewer.show()
+
+        # Push current frame immediately if available
+        pix = self._live._lbl.pixmap()
+        if pix is not None and not pix.isNull():
+            self._detached_viewer.update_image(pix, "")
+
+    def _on_viewer_closed(self) -> None:
+        """Clean up reference when the detached viewer is closed."""
+        self._detached_viewer = None
 
     def update_progress(self, p: AcquisitionProgress):
         self.log(p.message)
@@ -512,6 +598,7 @@ class AcquireTab(QWidget):
 
     def update_result(self, result):
         self._result = result
+        self._results_container.setVisible(True)
         cmap = self._cmap.currentText()
         if result.cold_avg is not None:
             self._cold_pane.show_array(result.cold_avg)
@@ -545,6 +632,8 @@ class AcquireTab(QWidget):
         self._hot_btn.setEnabled(not busy)
         self._run_btn.setEnabled(not busy)
         self._abort_btn.setEnabled(busy)
+        if busy:
+            self._results_container.setVisible(True)
 
     def _cap_cold(self):
         self._set_busy(True)
@@ -677,6 +766,7 @@ class AcquireTab(QWidget):
     def showEvent(self, event):
         super().showEvent(event)
         self.refresh_camera_mode()
+        self._refresh_camera_context()
 
     def refresh_camera_mode(self) -> None:
         """Adapt UI controls for IR vs TR camera mode.
@@ -706,3 +796,36 @@ class AcquireTab(QWidget):
                 "Captures cold baseline, applies stimulus, captures hot frames, "
                 "then computes ΔR/R and ΔT.\n\n"
                 "Keyboard shortcut: Ctrl+R")
+        self._refresh_camera_context()
+
+    def _refresh_camera_context(self) -> None:
+        """Update the camera context strip below the live feed."""
+        cam = app_state.cam
+        cam_type = getattr(app_state, "active_camera_type", "tr")
+
+        # Camera identity + resolution
+        if cam is not None and hasattr(cam, "info"):
+            model = getattr(cam.info, "model", "") or "Camera"
+            w = getattr(cam.info, "width", 0)
+            h = getattr(cam.info, "height", 0)
+            parts = [model]
+            if w and h:
+                parts.append(f"{w} × {h}")
+            self._cam_ctx_lbl.setText("  ·  ".join(parts))
+        else:
+            self._cam_ctx_lbl.setText("No camera connected")
+
+        # Modality badge
+        if cam_type == "ir":
+            badge_text = "IR Lock-in"
+            bg = PALETTE.get("warning", "#ff9f0a")
+        else:
+            badge_text = "TR"
+            bg = PALETTE.get("accent", "#00d4aa")
+        self._mode_badge.setText(badge_text)
+        self._mode_badge.setStyleSheet(
+            f"background: {bg}22; color: {bg}; "
+            f"border: 1px solid {bg}44; border-radius: 9px; "
+            f"font-size: {FONT['sublabel']}pt; font-weight: 600; "
+            f"padding: 1px 8px;")
+        self._mode_badge.setVisible(cam is not None)

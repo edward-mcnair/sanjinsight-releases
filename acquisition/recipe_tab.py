@@ -109,6 +109,11 @@ class Recipe:
     approved_at: str  = ""      # ISO timestamp of lock action
     scan_type:   str  = "autoscan"  # "autoscan" | "single" | "transient"
 
+    # ── Variable designation ────────────────────────────────────────────
+    # Dotted field paths that operators can adjust at run time.
+    # e.g. ["bias.voltage_v", "tec.setpoint_c", "camera.exposure_us"]
+    variables:   List[str] = field(default_factory=list)
+
     def to_dict(self) -> dict:
         return asdict(self)
 
@@ -131,6 +136,7 @@ class Recipe:
         r.approved_by  = d.get("approved_by",  "")
         r.approved_at  = d.get("approved_at",  "")
         r.scan_type    = d.get("scan_type",    "autoscan")
+        r.variables    = list(d.get("variables",  []))
         r.camera       = RecipeCamera(**_filter(RecipeCamera,      d.get("camera",      {})))
         r.acquisition  = RecipeAcquisition(**_filter(RecipeAcquisition, d.get("acquisition", {})))
         r.analysis     = RecipeAnalysis(**_filter(RecipeAnalysis,  d.get("analysis",   {})))
@@ -179,6 +185,35 @@ class Recipe:
                 r.analysis.fail_area_fraction = getattr(cfg, "fail_area_fraction", 0.05)
 
         return r
+
+
+# ================================================================== #
+#  Variable designation registry                                       #
+# ================================================================== #
+
+# Maps dotted field paths to (display_label, value_type, unit_suffix).
+# These are the fields an engineer can mark as operator-adjustable.
+VARIABLE_FIELDS: Dict[str, tuple] = {
+    "camera.exposure_us":              ("Exposure",            float, " µs"),
+    "camera.gain_db":                  ("Gain",                float, " dB"),
+    "camera.n_frames":                 ("Frames",              int,   ""),
+    "acquisition.inter_phase_delay_s": ("Inter-phase delay",   float, " s"),
+    "analysis.threshold_k":            ("Threshold",           float, " °C"),
+    "analysis.fail_peak_k":            ("Fail: peak ΔT",      float, " °C"),
+    "bias.voltage_v":                  ("Voltage",             float, " V"),
+    "bias.current_a":                  ("Current",             float, " A"),
+    "tec.setpoint_c":                  ("Temperature setpoint", float, " °C"),
+}
+
+# Map dotted field paths to the editor spin widget attribute name on RecipeTab
+_FIELD_TO_WIDGET: Dict[str, str] = {
+    "camera.exposure_us":              "_exposure_spin",
+    "camera.gain_db":                  "_gain_spin",
+    "camera.n_frames":                 "_frames_spin",
+    "acquisition.inter_phase_delay_s": "_delay_spin",
+    "analysis.threshold_k":            "_thresh_spin",
+    "analysis.fail_peak_k":            "_fail_peak_spin",
+}
 
 
 # ================================================================== #
@@ -242,11 +277,13 @@ from PyQt5.QtWidgets import (
     QListWidgetItem, QPushButton, QLabel, QLineEdit, QTextEdit,
     QGroupBox, QFormLayout, QDoubleSpinBox, QSpinBox, QCheckBox,
     QMessageBox, QFrame, QComboBox, QDialog, QScrollArea,
+    QSizePolicy,
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QColor, QFont
 from ui.icons import set_btn_icon
 from ui.theme import FONT, PALETTE, scaled_qss, MONO_FONT
+from ui.workspace import get_manager
 
 
 class RecipeTab(QWidget):
@@ -268,8 +305,13 @@ class RecipeTab(QWidget):
         self._store        = RecipeStore()
         self._current:     Optional[Recipe] = None
         self._auth_session = None   # set by main_app after login
+        self._var_toggles: Dict[str, QCheckBox] = {}  # field_path → checkbox
+        self._workspace_mode = "standard"
         self._build()
         self._refresh_list()
+        # Wire workspace mode
+        self.set_workspace_mode(get_manager().mode)
+        get_manager().mode_changed.connect(self.set_workspace_mode)
 
     # ── UI ──────────────────────────────────────────────────────────
 
@@ -405,10 +447,14 @@ class RecipeTab(QWidget):
             "ir_lockin: mid-wave IR lock-in mode.\n"
             "hybrid / opp: contact Microsanj for application notes."
         )
-        cam_form.addRow("Exposure:", self._exposure_spin)
-        cam_form.addRow("Gain:", self._gain_spin)
-        cam_form.addRow("Frames:", self._frames_spin)
-        cam_form.addRow("Inter-phase delay:", self._delay_spin)
+        cam_form.addRow("Exposure:", self._make_var_row(
+            self._exposure_spin, "camera.exposure_us"))
+        cam_form.addRow("Gain:", self._make_var_row(
+            self._gain_spin, "camera.gain_db"))
+        cam_form.addRow("Frames:", self._make_var_row(
+            self._frames_spin, "camera.n_frames"))
+        cam_form.addRow("Inter-phase delay:", self._make_var_row(
+            self._delay_spin, "acquisition.inter_phase_delay_s"))
         cam_form.addRow("Modality:", self._modality_combo)
         right_lay.addWidget(cam_box)
 
@@ -440,9 +486,11 @@ class RecipeTab(QWidget):
             "Maximum allowable single-pixel peak temperature rise.\n"
             "Exceeding this threshold triggers an immediate FAIL verdict regardless of hotspot count."
         )
-        an_form.addRow("Threshold:", self._thresh_spin)
+        an_form.addRow("Threshold:", self._make_var_row(
+            self._thresh_spin, "analysis.threshold_k"))
         an_form.addRow("Fail: hotspot count ≥", self._fail_hs_spin)
-        an_form.addRow("Fail: peak ΔT ≥", self._fail_peak_spin)
+        an_form.addRow("Fail: peak ΔT ≥", self._make_var_row(
+            self._fail_peak_spin, "analysis.fail_peak_k"))
         right_lay.addWidget(an_box)
 
         # Notes
@@ -467,6 +515,32 @@ class RecipeTab(QWidget):
             f"font-size:{FONT.get('sublabel', 9)}pt; font-weight:600;")
         self._lock_banner.setVisible(False)
         right_lay.addWidget(self._lock_banner)
+
+        # ── Run-time preview (what the operator sees) ──────────────────
+        self._preview_frame = QFrame()
+        self._preview_frame.setObjectName("runPreview")
+        preview_lay = QVBoxLayout(self._preview_frame)
+        preview_lay.setContentsMargins(8, 6, 8, 6)
+        preview_lay.setSpacing(4)
+
+        preview_hdr = QLabel("Operator Run-Time Preview")
+        preview_hdr.setStyleSheet(
+            f"color:{PALETTE['textDim']}; font-size:{FONT.get('sublabel', 9)}pt; "
+            f"font-weight:600; text-transform:uppercase;")
+        preview_lay.addWidget(preview_hdr)
+
+        self._preview_body = QLabel("No variables designated.")
+        self._preview_body.setWordWrap(True)
+        self._preview_body.setStyleSheet(
+            f"color:{PALETTE['text']}; font-size:{FONT['caption']}pt; "
+            f"font-family:{MONO_FONT};")
+        preview_lay.addWidget(self._preview_body)
+
+        self._preview_frame.setStyleSheet(
+            f"#runPreview {{ background:{PALETTE['surface']}; "
+            f"border:1px solid {PALETTE['border']}; border-radius:4px; }}")
+        self._preview_frame.setVisible(False)
+        right_lay.addWidget(self._preview_frame)
 
         # Save / Capture buttons
         footer = QHBoxLayout()
@@ -499,6 +573,29 @@ class RecipeTab(QWidget):
         splitter.setSizes([280, 560])
 
         self._set_editor_enabled(False)
+
+    def _make_var_row(self, spin_widget: QWidget, field_path: str) -> QWidget:
+        """Wrap a spin widget with a 'VAR' toggle checkbox for variable designation."""
+        row = QWidget()
+        row.setStyleSheet("background:transparent;")
+        lay = QHBoxLayout(row)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(4)
+        lay.addWidget(spin_widget, 1)
+
+        cb = QCheckBox("VAR")
+        cb.setToolTip(
+            "Mark this field as a run-time variable.\n"
+            "Operators can adjust it before each run.")
+        cb.setStyleSheet(
+            f"QCheckBox {{ font-size:{FONT.get('small', 8)}pt; "
+            f"color:{PALETTE['accent']}; }}"
+            f"QCheckBox::indicator {{ width:13px; height:13px; }}")
+        cb.toggled.connect(self._on_var_toggle_changed)
+        lay.addWidget(cb)
+
+        self._var_toggles[field_path] = cb
+        return row
 
     @staticmethod
     def _box_style() -> str:
@@ -551,9 +648,77 @@ class RecipeTab(QWidget):
                 f"border:1px solid {acc}55; border-radius:4px; "
                 f"font-size:{FONT.get('sublabel', 9)}pt; font-weight:600;")
 
+    def _on_var_toggle_changed(self) -> None:
+        """A variable toggle was checked/unchecked — refresh the preview."""
+        self._update_preview()
+
+    def _update_preview(self) -> None:
+        """Rebuild the run-time preview to reflect currently toggled variables."""
+        active = [fp for fp, cb in self._var_toggles.items() if cb.isChecked()]
+        if not active:
+            self._preview_body.setText("No variables designated.")
+            self._preview_frame.setVisible(
+                self._workspace_mode == "expert" and self._current is not None)
+            return
+        lines = []
+        for fp in active:
+            label, vtype, suffix = VARIABLE_FIELDS.get(fp, (fp, str, ""))
+            # Show current value from the editor spin if available
+            widget_attr = _FIELD_TO_WIDGET.get(fp)
+            val = ""
+            if widget_attr:
+                w = getattr(self, widget_attr, None)
+                if w is not None:
+                    val = f" = {w.value()}{suffix}"
+            lines.append(f"  {label}{val}")
+        self._preview_body.setText(
+            "Operator will see these adjustable fields:\n" + "\n".join(lines))
+        self._preview_frame.setVisible(
+            self._workspace_mode == "expert" and self._current is not None)
+
+    def set_workspace_mode(self, mode: str) -> None:
+        """Adjust visibility and editability for workspace mode.
+
+        Standard: view-only (all editor fields disabled, no variable toggles).
+        Expert: full edit access, variable toggles visible, preview panel.
+        Guided: hidden (parent typically hides the entire tab).
+        """
+        self._workspace_mode = mode
+        is_expert = (mode == "expert")
+
+        # Variable toggle visibility — Expert only
+        for cb in self._var_toggles.values():
+            cb.setVisible(is_expert)
+
+        # Preview panel — Expert only
+        self._preview_frame.setVisible(
+            is_expert and self._current is not None
+            and any(cb.isChecked() for cb in self._var_toggles.values()))
+
+        # Lock/Capture buttons — Expert only
+        self._lock_btn.setVisible(is_expert)
+        self._cap_btn.setVisible(is_expert)
+
+        # Standard: disable all editing (view-only)
+        if mode == "standard":
+            for w in [self._label_edit, self._desc_edit, self._prof_edit,
+                      self._exposure_spin, self._gain_spin, self._frames_spin,
+                      self._delay_spin, self._modality_combo,
+                      self._thresh_spin, self._fail_hs_spin, self._fail_peak_spin,
+                      self._notes_edit, self._save_btn, self._cap_btn,
+                      self._new_btn, self._lock_btn]:
+                w.setEnabled(False)
+            # Run + Delete still active
+            self._run_btn.setEnabled(self._current is not None)
+            self._delete_btn.setEnabled(False)
+        elif self._current is not None:
+            # Re-apply normal enable/disable logic
+            self._set_editor_enabled(True)
+
     def _set_editor_enabled(self, enabled: bool):
         locked = bool(self._current and self._current.locked)
-        can_edit = enabled and not locked
+        is_standard = (self._workspace_mode == "standard")
+        can_edit = enabled and not locked and not is_standard
         for w in [self._label_edit, self._desc_edit, self._prof_edit,
                   self._exposure_spin, self._gain_spin, self._frames_spin,
                   self._delay_spin, self._modality_combo,
@@ -562,9 +727,12 @@ class RecipeTab(QWidget):
             w.setEnabled(can_edit)
         # Delete and Run stay enabled (can still run or delete a locked recipe)
         for w in [self._run_btn, self._delete_btn]:
-            w.setEnabled(enabled)
+            w.setEnabled(enabled and not is_standard)
+        # Run is still usable in Standard mode
+        if is_standard:
+            self._run_btn.setEnabled(enabled)
         # Lock button — enabled if a recipe is selected and user can edit recipes
-        can_lock = enabled and self._can_edit_recipes()
+        can_lock = enabled and self._can_edit_recipes() and not is_standard
         self._lock_btn.setEnabled(can_lock)
         if enabled:
             if locked:
@@ -617,6 +785,12 @@ class RecipeTab(QWidget):
         self._fail_hs_spin.setValue(r.analysis.fail_hotspot_count)
         self._fail_peak_spin.setValue(r.analysis.fail_peak_k)
         self._notes_edit.setPlainText(r.notes)
+        # Variable toggles
+        for fp, cb in self._var_toggles.items():
+            cb.blockSignals(True)
+            cb.setChecked(fp in r.variables)
+            cb.blockSignals(False)
+        self._update_preview()
         # Lock banner
         if r.locked:
             by = r.approved_by or "unknown"
@@ -640,6 +814,9 @@ class RecipeTab(QWidget):
         r.analysis.fail_hotspot_count     = self._fail_hs_spin.value()
         r.analysis.fail_peak_k            = self._fail_peak_spin.value()
         r.notes = self._notes_edit.toPlainText()
+        # Collect designated variables from toggle checkboxes
+        r.variables = [fp for fp, cb in self._var_toggles.items()
+                       if cb.isChecked()]
         return r
 
     # ── Auth helpers ─────────────────────────────────────────────────

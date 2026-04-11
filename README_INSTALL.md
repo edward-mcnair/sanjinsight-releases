@@ -1,6 +1,6 @@
 # SanjINSIGHT — Installation Guide (Windows)
 
-**Version:** 1.5.0-beta.1
+**Version:** 0.44.0-beta.1
 **Applies to:** Windows 10 / Windows 11 (64-bit)
 **Support:** software-support@microsanj.com
 
@@ -43,7 +43,7 @@ For production instrument use with a locally connected NI chassis, a standard de
 
 ---
 
-## Quick Start (recommended)
+## Installation (recommended)
 
 The SanjINSIGHT installer bundles Python and all required Python packages — no separate Python installation is needed. A small number of items cannot be bundled and must be set up manually as described below.
 
@@ -194,7 +194,7 @@ The **Hardware Setup Wizard** will appear on first launch and guide you through 
 When a new version is available, an **amber notification badge** will appear in the top-right of the header bar. Click it to see release notes and download the new installer.
 
 ### Manual upgrade
-1. Download the new release from [github.com/microsanj/sanjinsight/releases](https://github.com/microsanj/sanjinsight/releases).
+1. Download the new release from [github.com/edward-mcnair/sanjinsight-releases/releases](https://github.com/edward-mcnair/sanjinsight-releases/releases).
 2. Run the installer. It will detect the existing installation and upgrade in place.
 3. Your `config.yaml`, measurement sessions, and preferences are preserved.
 

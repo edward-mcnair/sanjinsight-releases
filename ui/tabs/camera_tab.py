@@ -503,6 +503,8 @@ class CameraTab(QWidget):
         if not has_stage:
             self._af_btn.setToolTip(
                 "Connect a motorized stage to enable autofocus.")
+        if available:
+            self._refresh_camera_ranges()
 
     def refresh_camera_mode(self) -> None:
         """Update all mode-dependent controls when modality changes."""
@@ -523,6 +525,69 @@ class CameraTab(QWidget):
 
         # Optimize throughput — TR only (adjusts exposure/duty cycle)
         self._optimize_btn.setVisible(not is_ir)
+
+        # Sync slider ranges to the connected camera's capabilities
+        self._refresh_camera_ranges()
+
+    def _refresh_camera_ranges(self) -> None:
+        """Query the connected camera for exposure/gain ranges and update sliders.
+
+        Falls back to the base-class defaults if no camera is connected or
+        the driver does not override the range methods.
+        """
+        cam = app_state.cam
+        if cam is None:
+            return
+
+        # ── Exposure range ────────────────────────────────────────────
+        try:
+            exp_min, exp_max = cam.exposure_range()
+            exp_min = max(1, int(round(exp_min)))
+            exp_max = max(exp_min + 1, int(round(exp_max)))
+        except Exception:
+            exp_min, exp_max = 50, 200_000
+
+        if (self._exp_slider.minimum() != exp_min or
+                self._exp_slider.maximum() != exp_max):
+            self._exp_slider.blockSignals(True)
+            cur = max(exp_min, min(self._exp_slider.value(), exp_max))
+            self._exp_slider.setRange(exp_min, exp_max)
+            self._exp_slider.setValue(cur)
+            self._exp_slider.blockSignals(False)
+            self._exp_lbl.setText(_fmt_exp(cur))
+
+        # ── Gain range (TR) ───────────────────────────────────────────
+        try:
+            g_min, g_max = cam.gain_range()
+        except Exception:
+            g_min, g_max = 0.0, 24.0
+
+        # Slider uses ×10 integer encoding: 0–239 → 0.0–23.9 dB
+        g_slider_min = int(round(g_min * 10))
+        g_slider_max = int(round(g_max * 10))
+        if g_slider_max <= g_slider_min:
+            g_slider_max = g_slider_min + 1
+
+        if (self._gain_slider.minimum() != g_slider_min or
+                self._gain_slider.maximum() != g_slider_max):
+            self._gain_slider.blockSignals(True)
+            cur = max(g_slider_min,
+                      min(self._gain_slider.value(), g_slider_max))
+            self._gain_slider.setRange(g_slider_min, g_slider_max)
+            self._gain_slider.setValue(cur)
+            self._gain_slider.blockSignals(False)
+            self._gain_lbl.setText(f"{cur / 10:.1f}")
+
+        # ── Simulated camera FPS cap ──────────────────────────────────
+        try:
+            max_fps = int(round(cam.info.max_fps)) if cam.info.max_fps > 0 else 60
+        except Exception:
+            max_fps = 60
+        max_fps = max(5, min(240, max_fps))
+        if self._simcam_fps_slider.maximum() != max_fps:
+            self._simcam_fps_slider.blockSignals(True)
+            self._simcam_fps_slider.setRange(5, max_fps)
+            self._simcam_fps_slider.blockSignals(False)
 
     # ── Stat readout widget ────────────────────────────────────────────
 
@@ -809,6 +874,7 @@ class CameraTab(QWidget):
     # ── Objective turret ───────────────────────────────────────────────
 
     def showEvent(self, e):
+        self._refresh_camera_ranges()
         self._refresh_turret()
         self._refresh_simcam()
         super().showEvent(e)

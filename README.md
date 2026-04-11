@@ -10,27 +10,25 @@ SanjINSIGHT is the instrument control and data acquisition software for the Micr
 
 See [**README_INSTALL.md**](README_INSTALL.md) for the full Windows installation guide.
 
-To install the latest release, go to the [**Releases**](../../releases) page and download `SanjINSIGHT-Setup-{version}.exe`.
+To install the latest release, go to the [**Releases**](https://github.com/edward-mcnair/sanjinsight-releases/releases) page and download `SanjINSIGHT-Setup-{version}.exe`.
 
 The application checks for updates automatically on startup and displays a notification when a new version is available.
 
 ---
 
-## What's New in v1.5.0
+## What's New in v0.44.0
 
-- **AI capability tiers and Proactive Advisor** — AI features auto-scale with model size (BASIC → STANDARD → FULL). The new AI Advisor analyses profile vs instrument state after every profile selection, identifies conflicts, and suggests one-click fixes. Supports TR, IR, and future camera modalities.
-- **Phase-aware sidebar and Guided mode** — Workspace modes (Auto / Manual) with progressive disclosure. Guided walkthrough banner walks users through the measurement workflow step by step.
-- **Plugin architecture (API v1)** — Manifest-based plugin system for tool, camera, analysis, and export plugins. Requires Developer license tier.
-- **Architecture restructure** — Device services, acquisition subpackages, MeasurementOrchestrator state machine, and Failure Analysis vs Metrology workflow profiles
-- **Crash-resilient session logging** — Session log mirrored to disk; crash detection dialog on restart with previous session's log
-- **Multi-channel (RGB) color camera support** — pypylon auto-detects and demosaics Bayer sensors; DirectShow cameras support `color_mode: true`
-- **Pre-capture validation system** — checks exposure quality, frame stability, focus, and hardware readiness before each acquisition (enabled by default)
-- **FPS throughput optimizer** — one-click auto-tuning of LED power, FPS, and exposure via the Camera panel
-- **FFC button for thermal cameras** — triggers flat-field correction directly from the Camera panel toolbar
-- **Float64 pipeline averaging** — all averaged data uses float64 precision; HDF5 exports preserve full accuracy
-- **RGB thermoreflectance per-channel analysis** — per-channel ΔR/R computation for color sensors
-- **Autofocus convenience features** — quick-action Autofocus button on the Camera panel; optional auto-focus before each capture in Settings
-- **Pipeline processing hooks** — extensible hook points in the acquisition pipeline for custom pre/post-processing
+- **Measurement Setup** — Replaces the old Quick Start launcher. Single entry surface: Camera → Measurement Goal → Material Profile → Begin. Camera type (TR/IR) determines available goals automatically.
+- **Hardware category panels** — Sidebar HARDWARE section restructured from individual tabs to 6 dynamic category panels: Cameras, Stages, Thermal Control, Stimulus & Timing, Probes, Sensors. Device tabs appear/disappear on connect/disconnect.
+- **Recipe system** — Recipe Builder with variable designation (mark fields as operator-adjustable), workspace mode gating (Standard = view-only, Expert = full edit), and run-time preview. Recipe Run Panel for operator execution with Experiment Log integration.
+- **Experiment Log** — Tracks all recipe runs with verdict, hotspots, peak ΔT, duration. Guided mode shows simplified 7-column view; Standard/Expert shows full 12-column detail. CSV export, row-to-session drill-down, auto-refresh.
+- **Guided walkthrough** — 15 steps across 5 phases (Configuration → Image Acquisition → Analysis → Hardware Automation → Data & Reporting). Phase-aware sidebar with progress dots.
+- **Workspace modes** — Guided / Standard / Expert with progressive disclosure across all surfaces.
+- **Error taxonomy and support bundles** — 30-category error classification with actionable suggested fixes. Auto-triggered diagnostic bundle after repeated failures.
+- **Hardened release pipeline** — CI cross-publishes to public releases repo with post-publish verification. Fail-fast if installer asset is missing.
+- **AI capability tiers** — BASIC / STANDARD / FULL auto-scaling with Proactive Advisor.
+- **Plugin architecture (API v1)** — Manifest-based plugin system. Requires Developer license tier.
+- **Pre-capture validation** — exposure quality, frame stability, focus, and hardware readiness checks before each acquisition.
 
 ---
 
@@ -43,7 +41,7 @@ The application checks for updates automatically on startup and displays a notif
 ### Clone and run
 
 ```bash
-git clone https://github.com/microsanj/sanjinsight.git
+git clone https://github.com/edward-mcnair/sanjinsight.git
 cd sanjinsight
 pip install -r requirements.txt
 python main_app.py
@@ -72,6 +70,9 @@ sanjinsight/
 │   ├── services/            # Per-device QObject service classes
 │   ├── hardware_service.py  # Coordinator with signal forwarding
 │   ├── readiness_orchestrator.py  # Multi-step hardware prep sequencer
+│   ├── error_taxonomy.py    # 30-category error classification with suggested fixes
+│   ├── support_bundle.py    # Diagnostic zip generator (14 sections)
+│   ├── os_checks.py         # Platform-specific diagnostics (USB, permissions)
 │   └── app_state.py         # Thread-safe shared application state
 │
 ├── acquisition/             # Measurement pipeline and data management
@@ -115,17 +116,20 @@ pytest tests/
 
 ## Releasing a new version
 
-1. Update `version.py` — change `__version__`, `PRERELEASE`, `VERSION_TUPLE`, and `BUILD_DATE`
+1. Update `version.py` — change `__version__`, `PRERELEASE`, and `BUILD_DATE`
 2. Add a release entry to `CHANGELOG.md`
 3. Commit and tag:
    ```bash
    git add version.py CHANGELOG.md
-   git commit -m "Bump version to v1.5.0-beta.1"
-   git tag -a v1.5.0-beta.1 -m "SanjINSIGHT v1.5.0-beta.1"
-   git push origin main v1.5.0-beta.1
+   git commit -m "Bump version to v0.44.0-beta.1"
+   git tag -a v0.44.0-beta.1 -m "SanjINSIGHT v0.44.0-beta.1"
+   git push origin main v0.44.0-beta.1
    ```
-4. CI builds the installer automatically and creates a GitHub Release with the `.exe` attached
-5. The in-app update checker notifies users on next startup
+4. CI builds the Windows installer and cross-publishes to the public `sanjinsight-releases` repo
+5. A post-publish verification step confirms the release and installer asset are live
+6. The in-app update checker notifies users on next startup
+
+> **Repos:** Source code lives in the private `edward-mcnair/sanjinsight` repo. Packaged installers are published to the public `edward-mcnair/sanjinsight-releases` repo. The in-app updater only checks the public repo — no authentication required.
 
 ---
 

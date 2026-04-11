@@ -193,12 +193,66 @@ class SessionCard(QFrame):
 
         snr_str = f"SNR {meta.snr_db:.1f} dB" if meta.snr_db else "SNR —"
         size_str = f"{meta.frame_w}×{meta.frame_h}" if meta.frame_w else ""
-        sub = QLabel(
-            f"{meta.timestamp_str}   ·   {meta.n_frames} frames   ·   "
-            f"{snr_str}   ·   {size_str}")
+
+        # ── Result-type–aware subtitle ───────────────────────────
+        rt = getattr(meta, "result_type", "single_point") or "single_point"
+        cp = getattr(meta, "cube_params", None) or {}
+        if rt == "transient":
+            n_del = cp.get("n_delays", meta.n_frames)
+            d0 = cp.get("delay_start_s", 0)
+            d1 = cp.get("delay_end_s", 0)
+            # Format delay range in best unit
+            if d1 and d1 < 1e-3:
+                range_str = f"{d0*1e6:.0f}–{d1*1e6:.0f} µs"
+            elif d1 and d1 < 1.0:
+                range_str = f"{d0*1e3:.1f}–{d1*1e3:.1f} ms"
+            elif d1:
+                range_str = f"{d0:.2f}–{d1:.2f} s"
+            else:
+                range_str = ""
+            sub_parts = [meta.timestamp_str, f"{n_del} delays"]
+            if range_str:
+                sub_parts.append(range_str)
+            if size_str:
+                sub_parts.append(size_str)
+            sub_text = "   ·   ".join(sub_parts)
+        elif rt == "movie":
+            n_fr = cp.get("n_frames", meta.n_frames)
+            fps  = cp.get("fps_achieved", 0.0)
+            sub_parts = [meta.timestamp_str, f"{n_fr} frames"]
+            if fps:
+                sub_parts.append(f"{fps:.0f} fps")
+            if size_str:
+                sub_parts.append(size_str)
+            sub_text = "   ·   ".join(sub_parts)
+        else:
+            sub_text = (
+                f"{meta.timestamp_str}   ·   {meta.n_frames} frames   ·   "
+                f"{snr_str}   ·   {size_str}")
+        sub = QLabel(sub_text)
         sub.setStyleSheet(f"font-size:{FONT['label']}pt; color:{PALETTE['textDim']};")
 
-        info.addWidget(self._label_lbl)
+        # ── Label row (with result type badge for non-single-point) ──
+        label_row = QHBoxLayout()
+        label_row.setContentsMargins(0, 0, 0, 0)
+        label_row.setSpacing(6)
+        label_row.addWidget(self._label_lbl)
+        if rt != "single_point":
+            _RT_COLORS = {
+                "grid":      PALETTE.get("info",    "#5b9bd5"),
+                "transient": PALETTE.get("warning", "#ffb300"),
+                "movie":     PALETTE.get("accent",  "#6ec6ff"),
+            }
+            rt_badge = QLabel(rt.replace("_", " ").title())
+            rt_color = _RT_COLORS.get(rt, PALETTE.get("textSub", "#888"))
+            rt_badge.setFixedHeight(16)
+            rt_badge.setStyleSheet(
+                f"color:{PALETTE.get('textOnAccent','#fff')}; background:{rt_color}; "
+                f"border-radius:7px; padding:0 6px; font-size:{FONT['sublabel']}pt;")
+            label_row.addWidget(rt_badge)
+        label_row.addStretch()
+
+        info.addLayout(label_row)
         info.addWidget(sub)
 
         # ── Lab-context chip row ──────────────────────────────────────
@@ -453,6 +507,9 @@ class DataTab(QWidget):
     """Session browser and data management tab."""
 
     navigate_requested = pyqtSignal(str)          # sidebar label
+    analyze_requested  = pyqtSignal(str)          # uid → load into Analysis
+    open_transient_requested = pyqtSignal(str)    # uid → load into TransientTab
+    open_movie_requested     = pyqtSignal(str)    # uid → load into MovieTab
     status_changed     = pyqtSignal(str, str)     # (uid, new_status)
     export_completed   = pyqtSignal(str)          # uid
     report_completed   = pyqtSignal(str)          # uid
@@ -522,6 +579,18 @@ class DataTab(QWidget):
                 f"color:{txt}; border:1px solid {bdr}; "
                 f"padding:2px 8px; font-size:{FONT['body']}pt; }}")
 
+        # Sort button
+        if hasattr(self, "_sort_btn"):
+            self._sort_btn.setStyleSheet(
+                f"QPushButton {{ background:{P['surface2']}; "
+                f"color:{txt}; border:1px solid {bdr}; "
+                f"padding:2px 6px; font-size:{FONT['body']}pt; }}"
+                f"QPushButton:hover {{ background:{P['surface']}; }}")
+
+        # Result-type filter chips
+        if hasattr(self, "_rt_filter_btns"):
+            self._apply_rt_chip_styles()
+
         # Scroll area background
         if hasattr(self, "_list_scroll"):
             self._list_scroll.setStyleSheet(
@@ -546,6 +615,15 @@ class DataTab(QWidget):
     #  List panel (left)                                                #
     # ---------------------------------------------------------------- #
 
+    # Result-type filter chip labels (internal value → display label)
+    _RT_FILTERS = [
+        ("all",          "All"),
+        ("single_point", "Single"),
+        ("grid",         "Grid"),
+        ("transient",    "Transient"),
+        ("movie",        "Movie"),
+    ]
+
     def _build_list_panel(self) -> QWidget:
         w   = QWidget()
         w.setMinimumWidth(280)
@@ -554,7 +632,7 @@ class DataTab(QWidget):
         lay.setContentsMargins(8, 8, 4, 8)
         lay.setSpacing(6)
 
-        # Header
+        # Header — title + count (count now shows visible/total)
         hdr = QHBoxLayout()
         self._sessions_title = QLabel("Sessions")
         self._sessions_title.setStyleSheet(
@@ -569,11 +647,34 @@ class DataTab(QWidget):
         hdr.addWidget(self._count_lbl)
         lay.addLayout(hdr)
 
-        # Search + status filter
+        # Search
         self._search = QLineEdit()
         self._search.setPlaceholderText("Filter by label…")
         self._search.textChanged.connect(self._filter_cards)
         lay.addWidget(self._search)
+
+        # ── Result-type filter chips ─────────────────────────────────
+        self._rt_filter_btns: dict[str, QPushButton] = {}
+        rt_row = QHBoxLayout()
+        rt_row.setContentsMargins(0, 0, 0, 0)
+        rt_row.setSpacing(3)
+        for rt_val, rt_label in self._RT_FILTERS:
+            btn = QPushButton(rt_label)
+            btn.setCheckable(True)
+            btn.setChecked(rt_val == "all")
+            btn.setFixedHeight(22)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.clicked.connect(lambda _, v=rt_val: self._on_rt_filter(v))
+            rt_row.addWidget(btn)
+            self._rt_filter_btns[rt_val] = btn
+        rt_row.addStretch()
+        lay.addLayout(rt_row)
+        self._active_rt_filter = "all"
+        self._apply_rt_chip_styles()
+
+        # ── Status filter + sort order row ───────────────────────────
+        filter_sort_row = QHBoxLayout()
+        filter_sort_row.setSpacing(4)
 
         self._status_filter = QComboBox()
         self._status_filter.addItems(["All", "Pending", "Reviewed", "Flagged", "Archived"])
@@ -584,7 +685,23 @@ class DataTab(QWidget):
             f"padding:2px 8px; font-size:{FONT['body']}pt; }}")
         self._status_filter.currentTextChanged.connect(
             lambda _: self._filter_cards(self._search.text()))
-        lay.addWidget(self._status_filter)
+        filter_sort_row.addWidget(self._status_filter, 1)
+
+        self._sort_btn = QPushButton("Newest")
+        self._sort_btn.setFixedHeight(26)
+        self._sort_btn.setFixedWidth(70)
+        self._sort_btn.setCursor(Qt.PointingHandCursor)
+        self._sort_btn.setToolTip("Toggle sort order")
+        self._sort_btn.setStyleSheet(
+            f"QPushButton {{ background:{PALETTE['surface2']}; "
+            f"color:{PALETTE['text']}; border:1px solid {PALETTE['border']}; "
+            f"padding:2px 6px; font-size:{FONT['body']}pt; }}"
+            f"QPushButton:hover {{ background:{PALETTE['surface']}; }}")
+        self._sort_btn.clicked.connect(self._toggle_sort_order)
+        self._sort_newest_first = True
+        filter_sort_row.addWidget(self._sort_btn)
+
+        lay.addLayout(filter_sort_row)
 
         # Scrollable card list
         self._list_scroll = QScrollArea()
@@ -703,12 +820,14 @@ class DataTab(QWidget):
         ml.setSpacing(6)
         self._meta_fields = {}
         rows = [("Label",     "label"),
+                ("Type",      "result_type"),
                 ("Date",      "timestamp_str"),
                 ("Frames",    "n_frames"),
                 ("SNR",       "snr_db"),
                 ("Size",      "frame_size"),
                 ("Exposure",  "exposure_us"),
                 ("Duration",  "duration_s"),
+                ("Disk",      "disk_size"),
                 ("ROI",       "roi"),
                 ("Operator",  "operator"),
                 ("Device ID", "device_id"),
@@ -741,6 +860,23 @@ class DataTab(QWidget):
         cl = QVBoxLayout(ctrl_box)
         cl.setSpacing(6)
 
+        self._analyze_btn  = QPushButton("Analyze")
+        set_btn_icon(self._analyze_btn, "fa5s.chart-line")
+        self._analyze_btn.setObjectName("primary")
+        self._analyze_btn.setToolTip(
+            "Load this session into the Analysis tab")
+        self._open_transient_btn = QPushButton("Open in Transient")
+        set_btn_icon(self._open_transient_btn, "fa5s.wave-square")
+        self._open_transient_btn.setObjectName("primary")
+        self._open_transient_btn.setToolTip(
+            "Reload this transient session for scrubbing and export")
+        self._open_transient_btn.setVisible(False)
+        self._open_movie_btn = QPushButton("Open in Movie")
+        set_btn_icon(self._open_movie_btn, "mdi.filmstrip")
+        self._open_movie_btn.setObjectName("primary")
+        self._open_movie_btn.setToolTip(
+            "Reload this movie session for scrubbing and export")
+        self._open_movie_btn.setVisible(False)
         self._rename_btn   = QPushButton("Rename")
         set_btn_icon(self._rename_btn, "fa5s.pencil-alt")
         self._notes_btn    = QPushButton("Edit Notes")
@@ -750,6 +886,12 @@ class DataTab(QWidget):
         self._report_btn   = QPushButton("Generate Report")
         set_btn_icon(self._report_btn, "fa5s.file-pdf")
         self._report_btn.setObjectName("primary")
+        self._compare_sessions_btn = QPushButton("Compare Sessions…")
+        set_btn_icon(self._compare_sessions_btn, "fa5s.balance-scale")
+        self._compare_sessions_btn.setObjectName("primary")
+        self._compare_sessions_btn.setToolTip(
+            "Compare this session with another of the same type")
+        self._compare_sessions_btn.setVisible(False)
 
         # Status transition
         status_row = QHBoxLayout()
@@ -773,6 +915,15 @@ class DataTab(QWidget):
         self._delete_btn.setObjectName("danger")
         self._cmp_a_btn    = QPushButton("Set as A")
         self._cmp_b_btn    = QPushButton("Set as B")
+
+        self._analyze_btn.setFixedHeight(30)
+        cl.addWidget(self._analyze_btn)
+        self._open_transient_btn.setFixedHeight(30)
+        cl.addWidget(self._open_transient_btn)
+        self._open_movie_btn.setFixedHeight(30)
+        cl.addWidget(self._open_movie_btn)
+        self._compare_sessions_btn.setFixedHeight(30)
+        cl.addWidget(self._compare_sessions_btn)
 
         for b in [self._rename_btn, self._notes_btn, self._export_btn,
                   self._report_btn]:
@@ -857,10 +1008,14 @@ class DataTab(QWidget):
         lay.addWidget(img_tabs, 1)
 
         # Wire buttons
+        self._analyze_btn.clicked.connect(self._on_analyze_clicked)
+        self._open_transient_btn.clicked.connect(self._on_open_transient_clicked)
+        self._open_movie_btn.clicked.connect(self._on_open_movie_clicked)
         self._rename_btn.clicked.connect(self._rename)
         self._notes_btn.clicked.connect(self._edit_notes)
         self._export_btn.clicked.connect(self._export)
         self._report_btn.clicked.connect(self._generate_report)
+        self._compare_sessions_btn.clicked.connect(self._open_session_comparison)
         self._delete_btn.clicked.connect(self._delete)
         self._cmp_a_btn.clicked.connect(lambda: self._set_compare("a"))
         self._cmp_b_btn.clicked.connect(lambda: self._set_compare("b"))
@@ -874,8 +1029,9 @@ class DataTab(QWidget):
 
     def add_session(self, session: Session):
         """Called immediately after a new acquisition is saved."""
-        self._add_card(session.meta)
-        self._count_lbl.setText(str(self._mgr.count()))
+        self._add_card(session.meta, respect_sort=True)
+        self._update_count_label()
+        self._filter_cards(self._search.text())
         self._trend_chart.update_sessions(list(self._mgr.all_metas()))
 
     def select_latest(self) -> None:
@@ -900,23 +1056,36 @@ class DataTab(QWidget):
         self._cards.clear()
         self._selected = None
 
-        for meta in self._mgr.all_metas():
+        metas = self._mgr.all_metas()  # newest first
+        if not self._sort_newest_first:
+            metas = list(reversed(metas))
+        for meta in metas:
             self._add_card(meta)
 
-        self._count_lbl.setText(str(n))
+        self._update_count_label()
         self._trend_chart.update_sessions(list(self._mgr.all_metas()))
         # Toggle empty state vs detail view
         self._right_stack.setCurrentIndex(1 if n > 0 else 0)
+        # Re-apply active filters
+        self._filter_cards(self._search.text())
 
-    def _add_card(self, meta: SessionMeta):
+    def _add_card(self, meta: SessionMeta, respect_sort: bool = False):
         if meta.uid in self._cards:
             return
         card = SessionCard(meta)
         card.clicked.connect(self._on_card_clicked)
         card.deleted.connect(self._on_card_delete_btn)
-        # Insert before the trailing stretch
-        idx = self._list_layout.count() - 1
-        self._list_layout.insertWidget(idx, card)
+        if respect_sort and self._sort_newest_first:
+            # New session is newest — insert at top (index 0)
+            self._list_layout.insertWidget(0, card)
+        elif respect_sort and not self._sort_newest_first:
+            # Oldest-first — new session goes at end (before stretch)
+            idx = self._list_layout.count() - 1
+            self._list_layout.insertWidget(idx, card)
+        else:
+            # Default: insert before trailing stretch (maintains caller order)
+            idx = self._list_layout.count() - 1
+            self._list_layout.insertWidget(idx, card)
         self._cards[meta.uid] = card
 
     def _remove_card(self, uid: str):
@@ -924,11 +1093,16 @@ class DataTab(QWidget):
         if card:
             self._list_layout.removeWidget(card)
             card.deleteLater()
-        self._count_lbl.setText(str(self._mgr.count()))
+        self._update_count_label()
+        # Show empty state if no sessions remain
+        if self._mgr.count() == 0:
+            self._right_stack.setCurrentIndex(0)
 
-    def _filter_cards(self, text: str):
+    def _filter_cards(self, text: str = ""):
         text = text.lower()
         status_sel = self._status_filter.currentText().lower()
+        rt_sel = self._active_rt_filter
+        visible_count = 0
         for uid, card in self._cards.items():
             meta = self._mgr.get_meta(uid)
             text_match = (not text) or (meta and text in meta.label.lower())
@@ -937,7 +1111,76 @@ class DataTab(QWidget):
             else:
                 meta_status = (getattr(meta, "status", "") or "").lower()
                 status_match = meta_status == status_sel
-            card.setVisible(text_match and status_match)
+            if rt_sel == "all":
+                rt_match = True
+            else:
+                meta_rt = (getattr(meta, "result_type", "single_point") or "single_point")
+                rt_match = meta_rt == rt_sel
+            vis = text_match and status_match and rt_match
+            card.setVisible(vis)
+            if vis:
+                visible_count += 1
+        self._update_count_label(visible_count)
+
+    def _update_count_label(self, visible: int = -1):
+        """Update the session count label.  Shows 'N' or 'visible / total'."""
+        total = self._mgr.count()
+        if visible < 0 or visible == total:
+            self._count_lbl.setText(str(total))
+        else:
+            self._count_lbl.setText(f"{visible} / {total}")
+
+    # ── Result-type filter chip interaction ───────────────────────────
+
+    def _on_rt_filter(self, rt_val: str):
+        """Handle result-type chip click — radio-style (only one active)."""
+        self._active_rt_filter = rt_val
+        for v, btn in self._rt_filter_btns.items():
+            btn.setChecked(v == rt_val)
+        self._apply_rt_chip_styles()
+        self._filter_cards(self._search.text())
+
+    def _apply_rt_chip_styles(self):
+        """Apply active/inactive styles to result-type filter chips."""
+        acc = PALETTE.get("accent", "#6ec6ff")
+        for v, btn in self._rt_filter_btns.items():
+            if v == self._active_rt_filter:
+                btn.setStyleSheet(
+                    f"QPushButton {{ background:{acc}; color:{PALETTE.get('textOnAccent','#fff')}; "
+                    f"border:none; border-radius:10px; padding:0 8px; "
+                    f"font-size:{FONT['sublabel']}pt; font-weight:600; }}")
+            else:
+                btn.setStyleSheet(
+                    f"QPushButton {{ background:{PALETTE['surface2']}; color:{PALETTE['textSub']}; "
+                    f"border:1px solid {PALETTE['border']}; border-radius:10px; padding:0 8px; "
+                    f"font-size:{FONT['sublabel']}pt; }}"
+                    f"QPushButton:hover {{ background:{PALETTE['surface']}; color:{PALETTE['text']}; }}")
+
+    # ── Sort order toggle ─────────────────────────────────────────────
+
+    def _toggle_sort_order(self):
+        """Toggle between newest-first and oldest-first, then re-sort cards."""
+        self._sort_newest_first = not self._sort_newest_first
+        self._sort_btn.setText("Newest" if self._sort_newest_first else "Oldest")
+        self._resort_cards()
+
+    def _resort_cards(self):
+        """Re-order card widgets in the list layout to match current sort."""
+        metas = self._mgr.all_metas()  # already sorted newest-first
+        if not self._sort_newest_first:
+            metas = list(reversed(metas))
+        # Remove all cards from layout (but keep stretch at end)
+        for uid in list(self._cards):
+            card = self._cards[uid]
+            self._list_layout.removeWidget(card)
+        # Re-insert in sorted order before the trailing stretch
+        for meta in metas:
+            card = self._cards.get(meta.uid)
+            if card is not None:
+                idx = self._list_layout.count() - 1  # before stretch
+                self._list_layout.insertWidget(idx, card)
+        # Re-apply visibility filter
+        self._filter_cards(self._search.text())
 
     # ---------------------------------------------------------------- #
     #  Selection & display                                              #
@@ -958,12 +1201,45 @@ class DataTab(QWidget):
         if meta is None:
             return
 
+        # Enable/disable Analyze button based on whether session has
+        # analysable 2D data (delta_r_over_r).  Cube sessions (transient/movie)
+        # have has_drr=True for their cube data, but cannot be loaded into
+        # the current 2D Analysis tab.
+        has_drr = getattr(meta, "has_drr", False)
+        rt = getattr(meta, "result_type", "single_point") or "single_point"
+        is_cube = rt in ("transient", "movie")
+        can_analyze = bool(has_drr) and not is_cube
+        self._analyze_btn.setEnabled(can_analyze)
+        if is_cube:
+            self._analyze_btn.setToolTip(
+                "Cube analysis not yet supported — use Export to save data")
+        elif has_drr:
+            self._analyze_btn.setToolTip(
+                "Load this session into the Analysis tab")
+        else:
+            self._analyze_btn.setToolTip("No ΔR/R data available for analysis")
+
+        # Show "Open in ..." buttons for cube sessions
+        is_transient = rt == "transient"
+        self._open_transient_btn.setVisible(is_transient)
+        self._open_transient_btn.setEnabled(is_transient and bool(has_drr))
+        is_movie = rt == "movie"
+        self._open_movie_btn.setVisible(is_movie)
+        self._open_movie_btn.setEnabled(is_movie and bool(has_drr))
+
+        # "Compare Sessions…" — visible for transient and movie sessions
+        can_compare = (is_transient or is_movie) and bool(has_drr)
+        self._compare_sessions_btn.setVisible(can_compare)
+        self._compare_sessions_btn.setEnabled(can_compare)
+
         # Metadata fields (fast — meta is already in memory)
         snr = f"{meta.snr_db:.1f} dB" if meta.snr_db else "—"
         roi = (f"x={meta.roi['x']} y={meta.roi['y']} "
                f"w={meta.roi['w']} h={meta.roi['h']}"
                if meta.roi else "Full frame")
         self._meta_fields["label"].setText(meta.label)
+        rt_display = (rt.replace("_", " ").title()) if rt else "Single Point"
+        self._meta_fields["result_type"].setText(rt_display)
         self._meta_fields["timestamp_str"].setText(meta.timestamp_str)
         self._meta_fields["n_frames"].setText(str(meta.n_frames))
         self._meta_fields["snr_db"].setText(snr)
@@ -971,6 +1247,10 @@ class DataTab(QWidget):
             f"{meta.frame_w} × {meta.frame_h}")
         self._meta_fields["exposure_us"].setText(f"{meta.exposure_us:.0f} μs")
         self._meta_fields["duration_s"].setText(f"{meta.duration_s:.1f} s")
+        # Disk size — lightweight scandir, no recursion
+        disk_bytes = self._session_dir_size(meta.path) if meta.path else 0
+        self._meta_fields["disk_size"].setText(
+            self._fmt_size(disk_bytes) if disk_bytes > 0 else "—")
         self._meta_fields["roi"].setText(roi)
 
         # Lab-context fields (gracefully absent on old sessions)
@@ -1064,6 +1344,70 @@ class DataTab(QWidget):
     #  Actions                                                          #
     # ---------------------------------------------------------------- #
 
+    def _on_analyze_clicked(self):
+        """Emit analyze_requested for the currently selected session."""
+        if self._selected:
+            self.analyze_requested.emit(self._selected)
+
+    def _on_open_transient_clicked(self):
+        """Emit open_transient_requested for the currently selected session."""
+        if self._selected:
+            self.open_transient_requested.emit(self._selected)
+
+    def _on_open_movie_clicked(self):
+        """Emit open_movie_requested for the currently selected session."""
+        if self._selected:
+            self.open_movie_requested.emit(self._selected)
+
+    def _open_session_comparison(self):
+        """Open the appropriate comparison dialog for the selected session.
+
+        Routes by result_type:
+          - transient → TransientCompareDialog
+          - movie     → (future) MovieCompareDialog
+        Only same-modality comparison is supported.
+        """
+        if not self._selected:
+            return
+        meta = self._mgr.get_meta(self._selected)
+        if meta is None:
+            return
+        rt = getattr(meta, "result_type", "") or ""
+
+        if rt == "transient":
+            try:
+                from ui.dialogs.transient_compare_dialog import (
+                    TransientCompareDialog,
+                )
+                TransientCompareDialog.run(
+                    self._mgr, self._selected, self)
+            except Exception:
+                import logging
+                logging.getLogger(__name__).debug(
+                    "Transient compare dialog failed", exc_info=True)
+                QMessageBox.warning(
+                    self, "Compare",
+                    "Could not open transient comparison dialog.")
+        elif rt == "movie":
+            try:
+                from ui.dialogs.movie_compare_dialog import (
+                    MovieCompareDialog,
+                )
+                MovieCompareDialog.run(
+                    self._mgr, self._selected, self)
+            except Exception:
+                import logging
+                logging.getLogger(__name__).debug(
+                    "Movie compare dialog failed", exc_info=True)
+                QMessageBox.warning(
+                    self, "Compare",
+                    "Could not open movie comparison dialog.")
+        else:
+            QMessageBox.information(
+                self, "Compare",
+                "Session comparison is only available for transient "
+                "and movie sessions.")
+
     def _on_status_changed(self, new_status: str):
         """Persist status change and update card badge."""
         if not self._selected:
@@ -1125,7 +1469,9 @@ class DataTab(QWidget):
             return
 
         from ui.widgets.report_dialog import ReportDialog
-        dlg = ReportDialog(session_label=meta.label, parent=self)
+        rt = getattr(meta, "result_type", "single_point") or "single_point"
+        dlg = ReportDialog(session_label=meta.label, result_type=rt,
+                           parent=self)
         if dlg.exec_() != QDialog.Accepted:
             return
 
@@ -1734,6 +2080,26 @@ class DataTab(QWidget):
         import threading
         threading.Thread(target=_run, daemon=True).start()
 
+    def _build_delete_message(self, meta: SessionMeta) -> str:
+        """Build a descriptive confirmation message for session deletion."""
+        rt = getattr(meta, "result_type", "single_point") or "single_point"
+        rt_label = rt.replace("_", " ").title()
+        size = self._session_dir_size(meta.path) if meta.path else 0
+        size_str = f"  ({self._fmt_size(size)})" if size > 0 else ""
+        date_str = meta.timestamp_str or ""
+        lines = [
+            f"Permanently delete this {rt_label} session?",
+            "",
+            f"  {meta.label}",
+        ]
+        if date_str:
+            lines.append(f"  {date_str}")
+        if size_str:
+            lines.append(f"  Size: {self._fmt_size(size)}")
+        lines.append("")
+        lines.append("This cannot be undone.")
+        return "\n".join(lines)
+
     def _delete(self):
         if not self._selected:
             return
@@ -1742,7 +2108,7 @@ class DataTab(QWidget):
             return
         r = QMessageBox.question(
             self, "Delete Session",
-            f"Permanently delete session:\n{meta.label}\n\nThis cannot be undone.",
+            self._build_delete_message(meta),
             QMessageBox.Yes | QMessageBox.No)
         if r == QMessageBox.Yes:
             uid = self._selected
@@ -1760,7 +2126,7 @@ class DataTab(QWidget):
             return
         r = QMessageBox.question(
             self, "Delete Session",
-            f"Delete:\n{meta.label}?",
+            self._build_delete_message(meta),
             QMessageBox.Yes | QMessageBox.No)
         if r == QMessageBox.Yes:
             if self._selected == uid:
@@ -1903,6 +2269,34 @@ class DataTab(QWidget):
     # ---------------------------------------------------------------- #
     #  Helpers                                                          #
     # ---------------------------------------------------------------- #
+
+    @staticmethod
+    def _session_dir_size(path: str) -> int:
+        """Return total size in bytes of all files in a session directory.
+
+        Lightweight walk — no recursion deeper than the session folder itself.
+        Returns 0 on any error.
+        """
+        total = 0
+        try:
+            for entry in os.scandir(path):
+                if entry.is_file(follow_symlinks=False):
+                    total += entry.stat(follow_symlinks=False).st_size
+        except OSError:
+            pass
+        return total
+
+    @staticmethod
+    def _fmt_size(nbytes: int) -> str:
+        """Human-readable file size (e.g. '12.3 MB')."""
+        if nbytes < 1024:
+            return f"{nbytes} B"
+        elif nbytes < 1024 * 1024:
+            return f"{nbytes / 1024:.1f} KB"
+        elif nbytes < 1024 * 1024 * 1024:
+            return f"{nbytes / (1024 * 1024):.1f} MB"
+        else:
+            return f"{nbytes / (1024 * 1024 * 1024):.2f} GB"
 
     def _sub(self, text):
         l = QLabel(text)

@@ -69,6 +69,10 @@ class ReportConfig:
     calibration_details: bool = False
     quality_scorecard: bool = True
 
+    # Cube-modality sections (transient / movie)
+    transient_section: bool = True
+    movie_section: bool = True
+
     # Format
     format: str = "pdf"  # "pdf" | "html"
 

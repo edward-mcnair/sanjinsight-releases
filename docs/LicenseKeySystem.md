@@ -173,7 +173,7 @@ Send an email like this:
 | **Developer** | Standard features + plugin SDK access (load custom plugins) | Microsanj add-on products, third-party plugin developers |
 | **Site** | Full hardware access, N seats, plugin SDK access | Lab / institution |
 
-> **Note:** The Developer tier was added in v1.5.0 for the plugin architecture. Plugins specify a `min_license_tier` in their manifest; most internal Microsanj plugins require Developer or higher. Site-tier licenses automatically have full plugin access.
+> **Note:** The Developer tier was added in v0.43.0 for the plugin architecture. Plugins specify a `min_license_tier` in their manifest; most internal Microsanj plugins require Developer or higher. Site-tier licenses automatically have full plugin access.
 
 ---
 

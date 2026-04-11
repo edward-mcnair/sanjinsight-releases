@@ -31,7 +31,7 @@ import re as _re
 # ── Version number ────────────────────────────────────────────────────────────
 __version__    = "0.44.0-beta.1"
 PRERELEASE     = "beta.1"           # empty string "" for GA releases
-BUILD_DATE     = "2026-04-09"       # set by CI/CD on release; update manually otherwise
+BUILD_DATE     = "2026-04-10"       # set by CI/CD on release; update manually otherwise
 
 # ── Application identity ──────────────────────────────────────────────────────
 APP_NAME       = "SanjINSIGHT"

@@ -26,9 +26,11 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout,
                               QListWidget, QListWidgetItem, QAbstractItemView)
 from PyQt5.QtCore    import Qt, pyqtSignal, QPoint, QRect, QSize
 from PyQt5.QtGui     import (QImage, QPixmap, QPainter, QPen, QColor,
-                              QBrush, QFont, QCursor)
+                              QBrush, QFont, QCursor, QPainterPath,
+                              QPolygonF)
+from PyQt5.QtCore    import QPointF
 
-from .roi       import Roi
+from .roi       import Roi, SHAPE_FREEFORM
 from .roi_model import roi_model
 from ui.icons        import set_btn_icon
 from ui.font_utils   import mono_font
@@ -62,12 +64,27 @@ class MultiRoiCanvas(QWidget):
         self._drag_end   = None
         self._dragging   = False
         self._show_mask  = True
+        self._draw_shape: str = "rect"   # shape for new ROIs drawn on canvas
+
+        # Freeform drawing state
+        self._freeform_pts: list[QPoint] = []  # widget-space vertices
+        self._freeform_drawing = False
 
         # Repaint when model changes
         roi_model.rois_changed.connect(self.update)
         roi_model.active_changed.connect(lambda _: self.update())
 
     # ── public ───────────────────────────────────────────────────────
+
+    def set_draw_shape(self, shape: str) -> None:
+        """Set the shape type for new ROIs drawn on the canvas.
+
+        If a freeform drawing is in progress it is cancelled automatically
+        so the canvas never gets stuck in an orphaned freeform state.
+        """
+        if self._freeform_drawing and shape != "freeform":
+            self._cancel_freeform()
+        self._draw_shape = shape
 
     def set_frame(self, data: np.ndarray):
         """Update displayed frame (uint16 or uint8, 2D or 3D)."""
@@ -124,6 +141,14 @@ class MultiRoiCanvas(QWidget):
         br = self._frame_to_widget(QPoint(clamped.x2, clamped.y2))
         return QRect(tl, br)
 
+    def _roi_to_widget_polygon(self, roi: Roi) -> QPolygonF:
+        """Convert a freeform ROI's vertices to widget-space QPolygonF."""
+        poly = QPolygonF()
+        for vx, vy in roi.vertices:
+            wp = self._frame_to_widget(QPoint(vx, vy))
+            poly.append(QPointF(wp.x(), wp.y()))
+        return poly
+
     def _drag_to_roi(self) -> Roi:
         if self._drag_start is None or self._drag_end is None:
             return Roi()
@@ -133,7 +158,7 @@ class MultiRoiCanvas(QWidget):
         y  = min(p1.y(), p2.y())
         w  = abs(p2.x() - p1.x())
         h  = abs(p2.y() - p1.y())
-        return Roi(x=x, y=y, w=w, h=h)
+        return Roi(x=x, y=y, w=w, h=h, shape=self._draw_shape)
 
     # ── hit testing ──────────────────────────────────────────────────
 
@@ -141,6 +166,11 @@ class MultiRoiCanvas(QWidget):
         """Return uid of ROI under *pos*, or None."""
         # Check in reverse (top-most drawn last)
         for roi in reversed(roi_model.rois):
+            if roi.is_freeform and roi.vertices:
+                poly = self._roi_to_widget_polygon(roi)
+                if poly.containsPoint(QPointF(pos.x(), pos.y()), Qt.OddEvenFill):
+                    return roi.uid
+                continue
             wr = self._roi_to_widget_rect(roi)
             inflated = wr.adjusted(
                 -self._HIT_MARGIN, -self._HIT_MARGIN,
@@ -149,9 +179,63 @@ class MultiRoiCanvas(QWidget):
                 return roi.uid
         return None
 
+    # ── freeform helpers ────────────────────────────────────────────
+
+    def _finish_freeform(self):
+        """Close the freeform polygon and emit the ROI."""
+        if len(self._freeform_pts) < 3:
+            self._freeform_pts.clear()
+            self._freeform_drawing = False
+            self.update()
+            return
+        # Convert widget points to frame-space vertices
+        vertices = []
+        for pt in self._freeform_pts:
+            fp = self._widget_to_frame(pt)
+            vertices.append((fp.x(), fp.y()))
+        self._freeform_pts.clear()
+        self._freeform_drawing = False
+        roi = Roi.from_vertices(vertices)
+        if roi.area > 30:
+            self.roi_drawn.emit(roi)
+        self.update()
+
+    def _cancel_freeform(self):
+        """Cancel the current freeform drawing without creating an ROI."""
+        self._freeform_pts.clear()
+        self._freeform_drawing = False
+        self.update()
+
     # ── mouse events ─────────────────────────────────────────────────
 
     def mousePressEvent(self, e):
+        # Freeform mode: click adds a vertex
+        if self._draw_shape == "freeform":
+            if e.button() == Qt.LeftButton:
+                if not self._freeform_drawing:
+                    # First click — start a new polygon
+                    hit_uid = self._hit_test(e.pos())
+                    if hit_uid and not self._freeform_pts:
+                        roi_model.set_active(hit_uid)
+                        return
+                    self._freeform_drawing = True
+                    self._freeform_pts = [e.pos()]
+                else:
+                    # Check if clicking near start point to close
+                    if len(self._freeform_pts) >= 3:
+                        d = (e.pos() - self._freeform_pts[0])
+                        dist = (d.x() ** 2 + d.y() ** 2) ** 0.5
+                        if dist < 12:
+                            self._finish_freeform()
+                            return
+                    self._freeform_pts.append(e.pos())
+                self.update()
+            elif e.button() == Qt.RightButton:
+                if self._freeform_drawing:
+                    self._cancel_freeform()
+            return
+
+        # Rect / ellipse mode: drag to draw
         if e.button() != Qt.LeftButton:
             return
         hit_uid = self._hit_test(e.pos())
@@ -163,11 +247,23 @@ class MultiRoiCanvas(QWidget):
             self._dragging   = True
 
     def mouseMoveEvent(self, e):
+        if self._freeform_drawing:
+            self.update()  # repaint to show rubber-band line to cursor
+            return
         if self._dragging:
             self._drag_end = e.pos()
             self.update()
 
+    def mouseDoubleClickEvent(self, e):
+        """Double-click closes the freeform polygon."""
+        if self._draw_shape == "freeform" and self._freeform_drawing:
+            if e.button() == Qt.LeftButton:
+                self._finish_freeform()
+            return
+
     def mouseReleaseEvent(self, e):
+        if self._draw_shape == "freeform":
+            return  # freeform is click-based, not drag-based
         if e.button() == Qt.LeftButton and self._dragging:
             self._drag_end = e.pos()
             self._dragging = False
@@ -178,11 +274,22 @@ class MultiRoiCanvas(QWidget):
             self._drag_end   = None
             self.update()
 
+    def keyPressEvent(self, e):
+        """Escape cancels freeform drawing; Enter/Return closes it."""
+        if self._freeform_drawing:
+            if e.key() == Qt.Key_Escape:
+                self._cancel_freeform()
+                return
+            if e.key() in (Qt.Key_Return, Qt.Key_Enter):
+                self._finish_freeform()
+                return
+        super().keyPressEvent(e)
+
     # ── paint ────────────────────────────────────────────────────────
 
     def paintEvent(self, e):
         p = QPainter(self)
-        p.setRenderHint(QPainter.Antialiasing, False)
+        p.setRenderHint(QPainter.Antialiasing, True)
 
         # Background
         p.fillRect(self.rect(), QColor(PALETTE['canvas']))
@@ -200,32 +307,43 @@ class MultiRoiCanvas(QWidget):
         # Semi-transparent mask outside ALL ROIs (combined)
         if self._show_mask and rois:
             mask_color = QColor(0, 0, 0, 100)
-            # Build list of widget rects for all ROIs
-            roi_rects = [self._roi_to_widget_rect(r) for r in rois
-                         if not r.is_empty]
-            if roi_rects:
-                # Simple approach: draw semi-transparent overlay over the
-                # whole image, then clear (punch out) each ROI rect
+            visible = [r for r in rois if not r.is_empty]
+            if visible:
+                # Draw semi-transparent overlay over the whole image,
+                # then clear (punch out) each ROI shape
                 p.save()
                 p.setClipRect(ir)
                 p.setCompositionMode(QPainter.CompositionMode_SourceOver)
                 overlay = QPixmap(ir.size())
                 overlay.fill(Qt.transparent)
                 op = QPainter(overlay)
+                op.setRenderHint(QPainter.Antialiasing, True)
                 op.fillRect(overlay.rect(), mask_color)
                 op.setCompositionMode(QPainter.CompositionMode_Clear)
-                for wr in roi_rects:
-                    local = wr.translated(-ir.topLeft())
-                    op.fillRect(local, Qt.transparent)
+                op.setPen(Qt.NoPen)
+                op.setBrush(Qt.transparent)
+                for roi in visible:
+                    if roi.is_freeform and roi.vertices:
+                        poly = self._roi_to_widget_polygon(roi)
+                        local = poly.translated(-ir.x(), -ir.y())
+                        path = QPainterPath()
+                        path.addPolygon(local)
+                        op.fillPath(path, Qt.transparent)
+                    else:
+                        wr = self._roi_to_widget_rect(roi)
+                        local = wr.translated(-ir.topLeft())
+                        if roi.is_ellipse:
+                            op.drawEllipse(local)
+                        else:
+                            op.fillRect(local, Qt.transparent)
                 op.end()
                 p.drawPixmap(ir.topLeft(), overlay)
                 p.restore()
 
-        # Draw each ROI rectangle
+        # Draw each ROI shape
         for roi in rois:
             if roi.is_empty:
                 continue
-            wr = self._roi_to_widget_rect(roi)
             color = QColor(roi.color) if roi.color else QColor(PALETTE['accent'])
             is_active = (roi.uid == active_uid)
 
@@ -233,25 +351,42 @@ class MultiRoiCanvas(QWidget):
             p.setBrush(Qt.NoBrush)
             pen_width = 3 if is_active else 1
             p.setPen(QPen(color, pen_width))
-            p.drawRect(wr)
 
-            # Corner handles (active ROI only)
-            if is_active:
-                hs = 7
-                p.setBrush(QBrush(color))
-                for cx, cy in [(wr.x(), wr.y()),
-                               (wr.right(), wr.y()),
-                               (wr.x(), wr.bottom()),
-                               (wr.right(), wr.bottom())]:
-                    p.drawRect(cx - hs // 2, cy - hs // 2, hs, hs)
+            if roi.is_freeform and roi.vertices:
+                poly = self._roi_to_widget_polygon(roi)
+                p.drawPolygon(poly)
+                # Vertex handles (active ROI only)
+                if is_active:
+                    hs = 6
+                    p.setBrush(QBrush(color))
+                    for i in range(poly.count()):
+                        pt = poly.at(i)
+                        p.drawEllipse(pt, hs // 2, hs // 2)
+            else:
+                wr = self._roi_to_widget_rect(roi)
+                if roi.is_ellipse:
+                    p.drawEllipse(wr)
+                else:
+                    p.drawRect(wr)
+
+                # Corner handles (active ROI only)
+                if is_active:
+                    hs = 7
+                    p.setBrush(QBrush(color))
+                    for cx, cy in [(wr.x(), wr.y()),
+                                   (wr.right(), wr.y()),
+                                   (wr.x(), wr.bottom()),
+                                   (wr.right(), wr.bottom())]:
+                        p.drawRect(cx - hs // 2, cy - hs // 2, hs, hs)
 
             # Label
             if roi.label:
                 p.setFont(mono_font(8))
                 p.setPen(QPen(color))
+                wr = self._roi_to_widget_rect(roi)
                 p.drawText(wr.x() + 3, wr.y() - 4, roi.label)
 
-        # Live drag rectangle
+        # Live drag preview (rect / ellipse)
         if self._dragging and self._drag_start and self._drag_end:
             drag_roi = self._drag_to_roi()
             drag_rect = QRect(
@@ -261,7 +396,10 @@ class MultiRoiCanvas(QWidget):
 
             p.setBrush(Qt.NoBrush)
             p.setPen(QPen(QColor(PALETTE['warning']), 1, Qt.DashLine))
-            p.drawRect(drag_rect)
+            if self._draw_shape == "ellipse":
+                p.drawEllipse(drag_rect)
+            else:
+                p.drawRect(drag_rect)
 
             if not drag_roi.is_empty:
                 label = f"{drag_roi.w} \u00d7 {drag_roi.h} px"
@@ -271,6 +409,49 @@ class MultiRoiCanvas(QWidget):
                     min(self._drag_start.x(), self._drag_end.x()),
                     min(self._drag_start.y(), self._drag_end.y()) - 4,
                     label)
+
+        # Live freeform polygon preview
+        if self._freeform_drawing and self._freeform_pts:
+            warn = QColor(PALETTE['warning'])
+            p.setPen(QPen(warn, 2, Qt.DashLine))
+            p.setBrush(Qt.NoBrush)
+
+            # Draw completed edges
+            for i in range(len(self._freeform_pts) - 1):
+                p.drawLine(self._freeform_pts[i], self._freeform_pts[i + 1])
+
+            # Rubber-band line from last point to cursor
+            cursor_pos = self.mapFromGlobal(QCursor.pos())
+            if self._freeform_pts:
+                p.setPen(QPen(warn, 1, Qt.DotLine))
+                p.drawLine(self._freeform_pts[-1], cursor_pos)
+                # Also show closing line to start
+                if len(self._freeform_pts) >= 3:
+                    close_col = QColor(PALETTE['accent'])
+                    close_col.setAlpha(100)
+                    p.setPen(QPen(close_col, 1, Qt.DotLine))
+                    p.drawLine(cursor_pos, self._freeform_pts[0])
+
+            # Draw vertex dots
+            p.setPen(Qt.NoPen)
+            p.setBrush(QBrush(warn))
+            for pt in self._freeform_pts:
+                p.drawEllipse(pt, 4, 4)
+
+            # Start-point highlight (close target)
+            if len(self._freeform_pts) >= 3:
+                start = self._freeform_pts[0]
+                p.setBrush(Qt.NoBrush)
+                p.setPen(QPen(QColor(PALETTE['accent']), 2))
+                p.drawEllipse(start, 10, 10)
+
+            # Vertex count label
+            n = len(self._freeform_pts)
+            p.setFont(mono_font(8))
+            p.setPen(QPen(warn))
+            p.drawText(self._freeform_pts[0].x() + 8,
+                        self._freeform_pts[0].y() - 8,
+                        f"{n} pts")
 
         p.end()
 
@@ -302,7 +483,8 @@ class _RoiListWidget(QListWidget):
         self.blockSignals(True)
         self.clear()
         for roi in roi_model.rois:
-            txt = f"  {roi.label}  ({roi.w}\u00d7{roi.h})"
+            sh = "\u2B53" if roi.is_freeform else ("\u2B2D" if roi.is_ellipse else "\u25AD")  # ⬓ ⬭ ▭
+            txt = f"  {sh} {roi.label}  ({roi.w}\u00d7{roi.h})"
             item = QListWidgetItem(txt)
             item.setData(Qt.UserRole, roi.uid)
             if roi.color:
@@ -398,6 +580,10 @@ class MultiRoiSelector(QWidget):
 
     # ── public ───────────────────────────────────────────────────────
 
+    def set_draw_shape(self, shape: str) -> None:
+        """Set the shape type for new ROIs drawn on the canvas."""
+        self._canvas.set_draw_shape(shape)
+
     def set_frame(self, data: np.ndarray):
         self._canvas.set_frame(data)
 
@@ -415,8 +601,14 @@ class MultiRoiSelector(QWidget):
         active = roi_model.active_roi
         count = roi_model.count
         if active and not active.is_empty:
+            if active.is_freeform:
+                sh = f"freeform {len(active.vertices)}pts"
+            elif active.is_ellipse:
+                sh = "ellipse"
+            else:
+                sh = "rect"
             self._info.setText(
-                f"{active.label}  x={active.x}  y={active.y}  "
+                f"{active.label}  [{sh}]  x={active.x}  y={active.y}  "
                 f"w={active.w}  h={active.h}  ({active.area:,} px)")
         elif count == 0:
             self._info.setText("No ROIs defined \u2014 full frame")
@@ -442,8 +634,9 @@ class MultiRoiSelector(QWidget):
 
 class RoiOverlay(QWidget):
     """
-    Transparent overlay that draws ROI rectangles on top of any image
-    widget.  Install over a QLabel or similar using a stacked layout.
+    Transparent overlay that draws ROI shapes (rect or ellipse) on top
+    of any image widget.  Install over a QLabel or similar using a
+    stacked layout.
 
     Does NOT handle mouse events — read-only visualisation.
     """
@@ -465,7 +658,7 @@ class RoiOverlay(QWidget):
         if not roi_model.rois:
             return
         p = QPainter(self)
-        p.setRenderHint(QPainter.Antialiasing, False)
+        p.setRenderHint(QPainter.Antialiasing, True)
         fh, fw = self._frame_hw
         ww, wh = self.width(), self.height()
         sx = ww / fw if fw else 1
@@ -479,15 +672,28 @@ class RoiOverlay(QWidget):
             pen_width = 2 if is_active else 1
             p.setPen(QPen(color, pen_width))
             p.setBrush(Qt.NoBrush)
-            rx = int(roi.x * sx)
-            ry = int(roi.y * sy)
-            rw = int(roi.w * sx)
-            rh = int(roi.h * sy)
-            p.drawRect(rx, ry, rw, rh)
+
+            if roi.is_freeform and roi.vertices:
+                poly = QPolygonF()
+                for vx, vy in roi.vertices:
+                    poly.append(QPointF(vx * sx, vy * sy))
+                p.drawPolygon(poly)
+            elif roi.is_ellipse:
+                rx = int(roi.x * sx)
+                ry = int(roi.y * sy)
+                rw = int(roi.w * sx)
+                rh = int(roi.h * sy)
+                p.drawEllipse(rx, ry, rw, rh)
+            else:
+                rx = int(roi.x * sx)
+                ry = int(roi.y * sy)
+                rw = int(roi.w * sx)
+                rh = int(roi.h * sy)
+                p.drawRect(rx, ry, rw, rh)
 
             if roi.label and is_active:
                 p.setFont(mono_font(7))
-                p.drawText(rx + 2, ry - 3, roi.label)
+                p.drawText(int(roi.x * sx) + 2, int(roi.y * sy) - 3, roi.label)
 
         p.end()
 

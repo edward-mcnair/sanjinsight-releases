@@ -3,8 +3,15 @@ ui/tabs/temperature_tab.py
 
 TemperatureTab — TEC temperature control with live readouts, plots, and safety limits.
 
-Layout per TEC
---------------
+Architecture
+------------
+Each TEC controller gets its own ``TecPanel`` widget, displayed as a
+separate tab inside a ``QTabWidget``.  Shared infrastructure (Chuck
+temperature, error banner, empty-state) lives in the outer
+``TemperatureTab`` wrapper.
+
+TecPanel layout
+~~~~~~~~~~~~~~~
 Basic (always visible)
   • Alarm / warning banners
   • ACTUAL / SETPOINT / OUTPUT / STATUS readouts
@@ -24,7 +31,8 @@ log = logging.getLogger(__name__)
 
 from PyQt5.QtWidgets import (
     QWidget, QLabel, QPushButton, QDoubleSpinBox, QVBoxLayout,
-    QHBoxLayout, QGroupBox, QFrame, QStackedWidget, QScrollArea)
+    QHBoxLayout, QGroupBox, QFrame, QStackedWidget, QScrollArea,
+    QTabWidget)
 from PyQt5.QtCore    import Qt, QTimer, pyqtSignal
 
 from hardware.app_state    import app_state
@@ -41,80 +49,36 @@ _CHUCK_STAB_TOLERANCE_C  = 0.5   # °C band
 _CHUCK_STAB_DURATION_S   = 5.0   # seconds within band
 
 
-class TemperatureTab(QWidget):
+# ═══════════════════════════════════════════════════════════════════════
+# TecPanel — self-contained control surface for one TEC controller
+# ═══════════════════════════════════════════════════════════════════════
 
-    open_device_manager = pyqtSignal()
+class TecPanel(QWidget):
+    """Full control panel for a single TEC device.
 
-    def __init__(self, n_tecs: int, hw_service=None, has_chuck: bool = False):
-        super().__init__()
-        self._hw        = hw_service
-        self._has_chuck = has_chuck
+    Contains readouts, temperature history plot, setpoint controls,
+    ramp speed, and safety limits.  Previously built inline by
+    ``TemperatureTab._build_tec()``.
+    """
 
-        # Chuck stability tracking (software-side, no HW flag from chuck driver)
-        self._chuck_in_band_since: float | None = None
+    def __init__(
+        self,
+        tec_index: int,
+        display_name: str = "",
+        hw_service=None,
+        *,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._tec_index = tec_index
+        self._hw = hw_service
 
-        # Outer layout holds the stacked widget
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-        self._stack = QStackedWidget()
-        outer.addWidget(self._stack)
+        if not display_name:
+            display_name = f"TEC {tec_index + 1}"
 
-        # Page 0: not-connected empty state
-        self._stack.addWidget(self._build_empty_state(
-            "Temperature Controller", "TEC",
-            "Connect a TEC controller in Device Manager to enable "
-            "temperature control and monitoring."))
-
-        # Page 1: full controls
-        controls = QWidget()
-        root = QVBoxLayout(controls)
-        root.setContentsMargins(10, 10, 10, 10)
-        root.setSpacing(10)
-
-        # Error banner (hidden until a device error occurs)
-        from ui.widgets.device_error_banner import DeviceErrorBanner
-        self._error_banner = DeviceErrorBanner()
-        self._error_banner.device_manager_clicked.connect(
-            self.open_device_manager.emit)
-        root.addWidget(self._error_banner)
-
-        self._panels = []
-        labels = ["TEC 1 — Meerstetter TEC-1089", "TEC 2 — ATEC-302"]
-        for i in range(n_tecs):
-            p = self._build_tec(labels[i] if i < len(labels) else f"TEC {i+1}", i)
-            root.addWidget(p)
-            self._panels.append(p)
-
-        # ── Chuck Temperature (TCAT) section ─────────────────────────
-        self._chuck_box = self._build_chuck()
-        root.addWidget(self._chuck_box)
-        # Show/hide based on whether chuck controller is configured
-        self._chuck_box.setVisible(True)   # always render; update_chuck hides content if N/A
-
-        root.addStretch()
-
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setWidget(controls)
-        self._stack.addWidget(scroll)
-        self._stack.setCurrentIndex(0)  # empty state until device connects
-
-    def _build_empty_state(self, title: str, device: str, tip: str) -> QWidget:
-        from ui.widgets.empty_state import build_empty_state
-        return build_empty_state(
-            title=f"{title} Not Connected",
-            description=tip,
-            on_action=self.open_device_manager,
-        )
-
-    def set_hardware_available(self, available: bool) -> None:
-        """Switch between empty state (page 0) and full controls (page 1)."""
-        self._stack.setCurrentIndex(1 if available else 0)
-
-    def _build_tec(self, title, tec_index):
-        box = QGroupBox(title)
-        main = QVBoxLayout(box)
+        main = QVBoxLayout(self)
+        main.setContentsMargins(10, 10, 10, 10)
+        main.setSpacing(10)
 
         # ── Alarm banner (hidden by default) ─────────────────────────
         alarm_banner = QWidget()
@@ -145,10 +109,10 @@ class TemperatureTab(QWidget):
         ab_lay.addWidget(ab_icon)
         ab_lay.addWidget(ab_msg, 1)
         ab_lay.addWidget(ab_ack)
-        box._alarm_banner   = alarm_banner
-        box._alarm_msg_lbl  = ab_msg
-        box._alarm_icon_lbl = ab_icon
-        box._alarm_ack_btn  = ab_ack
+        self._alarm_banner   = alarm_banner
+        self._alarm_msg_lbl  = ab_msg
+        self._alarm_icon_lbl = ab_icon
+        self._alarm_ack_btn  = ab_ack
         main.addWidget(alarm_banner)
 
         # ── Warning banner (hidden by default) ───────────────────────
@@ -165,9 +129,9 @@ class TemperatureTab(QWidget):
         wb_msg.setWordWrap(True)
         wb_lay.addWidget(wb_icon)
         wb_lay.addWidget(wb_msg, 1)
-        box._warn_banner   = warn_banner
-        box._warn_msg_lbl  = wb_msg
-        box._warn_icon_lbl = wb_icon
+        self._warn_banner   = warn_banner
+        self._warn_msg_lbl  = wb_msg
+        self._warn_icon_lbl = wb_icon
         main.addWidget(warn_banner)
 
         # ── Readouts ─────────────────────────────────────────────────
@@ -178,20 +142,19 @@ class TemperatureTab(QWidget):
         state_w  = self._readout_widget("STATUS",      "UNKNOWN",  "textSub")
         ready_w  = self._readout_widget("ACQUISITION", "CHECKING", "textDim")
 
-        box._actual_lbl = actual_w._val
-        box._target_lbl = target_w._val
-        box._power_lbl  = power_w._val
-        box._state_lbl  = state_w._val
-        box._ready_lbl  = ready_w._val
+        self._actual_lbl = actual_w._val
+        self._target_lbl = target_w._val
+        self._power_lbl  = power_w._val
+        self._state_lbl  = state_w._val
+        self._ready_lbl  = ready_w._val
 
         for w in [actual_w, target_w, power_w, state_w, ready_w]:
             top.addWidget(w)
         main.addLayout(top)
 
         # ── Plot ──────────────────────────────────────────────────────
-        plot = TempPlot(h=166)
-        box._plot = plot
-        main.addWidget(plot)
+        self._plot = TempPlot(h=166)
+        main.addWidget(self._plot)
 
         # ── Setpoint controls ─────────────────────────────────────────
         ctrl = QHBoxLayout()
@@ -202,7 +165,7 @@ class TemperatureTab(QWidget):
         spin.setSingleStep(0.5)
         spin.setDecimals(1)
         spin.setFixedWidth(80)
-        box._spin = spin
+        self._spin = spin
         ctrl.addWidget(spin)
 
         set_btn = QPushButton("Set")
@@ -216,14 +179,14 @@ class TemperatureTab(QWidget):
             b.setMinimumWidth(66)
             ctrl.addWidget(b)
             b.clicked.connect(
-                lambda _, v=val, s=spin, box=box: (
-                    s.setValue(v), self._set_target(box, v)))
+                lambda _, v=val, s=spin: (
+                    s.setValue(v), self._set_target(v)))
 
         ctrl.addStretch()
         en_btn  = QPushButton("Enable")
         dis_btn = QPushButton("Disable")
-        box._en_btn  = en_btn
-        box._dis_btn = dis_btn
+        self._en_btn  = en_btn
+        self._dis_btn = dis_btn
         en_btn.setMinimumWidth(85)
         dis_btn.setMinimumWidth(85)
         _acc2 = PALETTE['accent']
@@ -257,13 +220,13 @@ class TemperatureTab(QWidget):
             "Non-zero values slew to the target gradually,\n"
             "protecting the DUT from thermal shock.\n"
             "Supported on Meerstetter TEC-1089 only.")
-        box._ramp_spin = ramp_spin
+        self._ramp_spin = ramp_spin
         ramp_row.addWidget(ramp_spin)
 
         ramp_set_btn = QPushButton("Set Ramp")
         ramp_set_btn.setFixedWidth(80)
         ramp_set_btn.clicked.connect(
-            lambda _, b=box: self._set_ramp_speed(b, b._ramp_spin.value()))
+            lambda _: self._set_ramp_speed(self._ramp_spin.value()))
         ramp_row.addWidget(ramp_set_btn)
 
         ramp_hint = QLabel("0 = disabled (Meerstetter only)")
@@ -283,7 +246,7 @@ class TemperatureTab(QWidget):
         min_spin.setValue(-20.0)
         min_spin.setSingleStep(1.0)
         min_spin.setDecimals(1)
-        min_spin.setFixedWidth(105)  # wide enough for "min -20.0 °C" on Windows
+        min_spin.setFixedWidth(105)
         min_spin.setPrefix("min ")
         min_spin.setSuffix(" °C")
 
@@ -292,7 +255,7 @@ class TemperatureTab(QWidget):
         max_spin.setValue(85.0)
         max_spin.setSingleStep(1.0)
         max_spin.setDecimals(1)
-        max_spin.setFixedWidth(105)  # wide enough for "max 150.0 °C" on Windows
+        max_spin.setFixedWidth(105)
         max_spin.setPrefix("max ")
         max_spin.setSuffix(" °C")
 
@@ -301,7 +264,7 @@ class TemperatureTab(QWidget):
         warn_spin.setValue(5.0)
         warn_spin.setSingleStep(0.5)
         warn_spin.setDecimals(1)
-        warn_spin.setMinimumWidth(120)  # wide enough for "warn ±20.0 °C" on Windows
+        warn_spin.setMinimumWidth(120)
         warn_spin.setPrefix("warn ±")
         warn_spin.setSuffix(" °C")
 
@@ -319,23 +282,340 @@ class TemperatureTab(QWidget):
         lim_panel.addLayout(lim_row)
         main.addWidget(lim_panel)
 
-        box._min_spin  = min_spin
-        box._max_spin  = max_spin
-        box._warn_spin = warn_spin
-        box._tec_index = tec_index
+        self._min_spin  = min_spin
+        self._max_spin  = max_spin
+        self._warn_spin = warn_spin
 
         # Update plot limits immediately with defaults
-        plot.set_limits(-20.0, 85.0, 5.0)
+        self._plot.set_limits(-20.0, 85.0, 5.0)
+
+        main.addStretch()
 
         # ── Wire ──────────────────────────────────────────────────────
         set_btn.clicked.connect(
-            lambda _, s=spin, b=box: self._set_target(b, s.value()))
-        en_btn.clicked.connect( lambda _, b=box: self._enable(b))
-        dis_btn.clicked.connect(lambda _, b=box: self._disable(b))
-        apply_btn.clicked.connect(lambda _, b=box: self._apply_limits(b))
-        ab_ack.clicked.connect(lambda _, b=box: self._acknowledge_alarm(b))
+            lambda _: self._set_target(spin.value()))
+        en_btn.clicked.connect( lambda _: self._enable())
+        dis_btn.clicked.connect(lambda _: self._disable())
+        apply_btn.clicked.connect(lambda _: self._apply_limits())
+        ab_ack.clicked.connect(lambda _: self._acknowledge_alarm())
 
-        return box
+    # ── Readout factory ──────────────────────────────────────────────
+
+    @staticmethod
+    def _readout_widget(label: str, initial: str, pal_key: str) -> QWidget:
+        w = QWidget()
+        v = QVBoxLayout(w)
+        v.setAlignment(Qt.AlignCenter)
+        sub = QLabel(label)
+        sub.setObjectName("sublabel")
+        sub.setAlignment(Qt.AlignCenter)
+        val = QLabel(initial)
+        val.setAlignment(Qt.AlignCenter)
+        color = PALETTE.get(pal_key, "#00d4aa")
+        val.setStyleSheet(
+            f"font-family:{MONO_FONT}; font-size:{FONT['readoutLg']}pt; color:{color};")
+        v.addWidget(sub)
+        v.addWidget(val)
+        w._val     = val
+        w._pal_key = pal_key
+        return w
+
+    # ── Live data update ─────────────────────────────────────────────
+
+    def update_status(self, status) -> None:
+        """Push a new TEC status snapshot to this panel."""
+        if status.error:
+            self._actual_lbl.setText("ERR")
+            self._state_lbl.setText(status.error[:20])
+            self._state_lbl.setStyleSheet(
+                f"font-family:{MONO_FONT}; font-size:{FONT['readout']}pt; color:{PALETTE['danger']};")
+            self._ready_lbl.setText("ERROR ✗")
+            self._ready_lbl.setStyleSheet(
+                f"font-family:{MONO_FONT}; font-size:{FONT['readout']}pt; color:{PALETTE['danger']};")
+            return
+        self._actual_lbl.setText(f"{status.actual_temp:.2f} °C")
+        self._target_lbl.setText(f"{status.target_temp:.1f} °C")
+        self._power_lbl.setText( f"{status.output_power:.2f} W")
+        if not status.enabled:
+            _sub = PALETTE['textSub']
+            _dim = PALETTE['textDim']
+            self._state_lbl.setText("DISABLED")
+            self._state_lbl.setStyleSheet(
+                f"font-family:{MONO_FONT}; font-size:{FONT['readout']}pt; color:{_sub};")
+            self._ready_lbl.setText("○  Disabled")
+            self._ready_lbl.setStyleSheet(
+                f"font-family:{MONO_FONT}; font-size:{FONT['readout']}pt; color:{_dim};")
+        elif status.stable:
+            self._state_lbl.setText("STABLE ✓")
+            self._state_lbl.setStyleSheet(
+                f"font-family:{MONO_FONT}; font-size:{FONT['readout']}pt; color:{PALETTE['accent']};")
+            self._ready_lbl.setText("READY ✓")
+            self._ready_lbl.setStyleSheet(
+                f"font-family:{MONO_FONT}; font-size:{FONT['readout']}pt; color:{PALETTE['accent']};")
+        else:
+            diff  = status.actual_temp - status.target_temp
+            arrow = "▼" if diff > 0 else "▲"
+            eta_min = abs(diff) / _TEC_RAMP_RATE_C_PER_MIN
+            eta_s   = int(eta_min * 60)
+            eta_str = f"~{eta_s // 60}:{eta_s % 60:02d}"
+            self._state_lbl.setText(f"SETTLING {arrow}  {eta_str}")
+            self._state_lbl.setStyleSheet(
+                f"font-family:{MONO_FONT}; font-size:{FONT['readout']}pt; color:{PALETTE['warning']};")
+            self._ready_lbl.setText(f"{eta_str} remaining")
+            self._ready_lbl.setStyleSheet(
+                f"font-family:{MONO_FONT}; font-size:{FONT['readout']}pt; color:{PALETTE['warning']};")
+        self._plot.push(status.actual_temp, status.target_temp)
+
+    # ── Alarm / warning ──────────────────────────────────────────────
+
+    def show_alarm(self, message: str) -> None:
+        self._alarm_msg_lbl.setText(message)
+        self._alarm_banner.setVisible(True)
+        self._warn_banner.setVisible(False)
+        self._actual_lbl.setStyleSheet(
+            f"font-family:{MONO_FONT}; font-size:{FONT['readoutLg']}pt; color:{PALETTE['danger']};")
+
+    def show_warning(self, message: str) -> None:
+        self._warn_msg_lbl.setText(message)
+        self._warn_banner.setVisible(True)
+        self._actual_lbl.setStyleSheet(
+            f"font-family:{MONO_FONT}; font-size:{FONT['readoutLg']}pt; color:{PALETTE['warning']};")
+
+    def clear_alarm(self) -> None:
+        self._alarm_banner.setVisible(False)
+        self._warn_banner.setVisible(False)
+        self._actual_lbl.setStyleSheet(
+            f"font-family:{MONO_FONT}; font-size:{FONT['readoutLg']}pt; color:{PALETTE['accent']};")
+
+    # ── Hardware actions ─────────────────────────────────────────────
+
+    def _set_target(self, val: float, _from_sync: bool = False) -> None:
+        idx = self._tec_index
+        if self._hw:
+            self._hw.tec_set_target(idx, val)
+        else:
+            _tecs = app_state.tecs
+            if _tecs and idx < len(_tecs):
+                _tecs[idx].set_target(val)
+        if not _from_sync:
+            from ui.app_signals import signals
+            signals.tec_setpoint_changed.emit(idx, float(val), "temperature_tab")
+
+    def _enable(self) -> None:
+        idx   = self._tec_index
+        guard = app_state.get_tec_guard(idx)
+        if guard and guard.is_alarmed:
+            return
+        if self._hw:
+            self._hw.tec_enable(idx)
+        else:
+            _tecs = app_state.tecs
+            if _tecs and idx < len(_tecs):
+                _tecs[idx].enable()
+
+    def _disable(self) -> None:
+        idx = self._tec_index
+        if self._hw:
+            self._hw.tec_disable(idx)
+        else:
+            _tecs = app_state.tecs
+            if _tecs and idx < len(_tecs):
+                _tecs[idx].disable()
+
+    def _set_ramp_speed(self, degrees_per_second: float) -> None:
+        idx = self._tec_index
+        if self._hw:
+            self._hw.tec_set_ramp_speed(idx, degrees_per_second)
+        else:
+            _tecs = app_state.tecs
+            if _tecs and idx < len(_tecs) and hasattr(_tecs[idx], 'set_ramp_speed'):
+                _tecs[idx].set_ramp_speed(degrees_per_second)
+
+    def _apply_limits(self) -> None:
+        idx         = self._tec_index
+        temp_min    = self._min_spin.value()
+        temp_max    = self._max_spin.value()
+        warn_margin = self._warn_spin.value()
+        self._plot.set_limits(temp_min, temp_max, warn_margin)
+        guard = app_state.get_tec_guard(idx)
+        if guard:
+            guard.update_limits(temp_min, temp_max, warn_margin)
+
+    def _acknowledge_alarm(self) -> None:
+        idx   = self._tec_index
+        guard = app_state.get_tec_guard(idx)
+        if guard:
+            guard.acknowledge()
+        self.clear_alarm()
+
+    # ── Theme ────────────────────────────────────────────────────────
+
+    def _apply_styles(self) -> None:
+        P    = PALETTE
+        acc  = P['accent']
+        dng  = P['danger']
+        warn = P['warning']
+        surf = P['surface']
+        sur2 = P['surface2']
+
+        def _rgb(h):
+            h = h.lstrip("#")
+            return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+
+        ar, ag, ab = _rgb(acc)
+        dr, dg, db = _rgb(dng)
+
+        self._en_btn.setStyleSheet(
+            f"QPushButton {{ background:rgba({ar},{ag},{ab},0.13); color:{acc}; "
+            f"border:1px solid rgba({ar},{ag},{ab},0.35); border-radius:4px; padding:0 8px; }}"
+            f"QPushButton:hover {{ background:rgba({ar},{ag},{ab},0.22); }}")
+        self._dis_btn.setStyleSheet(
+            f"QPushButton {{ background:rgba({dr},{dg},{db},0.13); color:{dng}; "
+            f"border:1px solid rgba({dr},{dg},{db},0.35); border-radius:4px; padding:0 8px; }}"
+            f"QPushButton:hover {{ background:rgba({dr},{dg},{db},0.22); }}")
+        self._alarm_banner.setStyleSheet(
+            f"background:{dng}22; border:1px solid {dng}; border-radius:3px;")
+        self._alarm_icon_lbl.setStyleSheet(
+            f"color:{dng}; font-size:{FONT['readoutSm']}pt;")
+        self._alarm_msg_lbl.setStyleSheet(
+            f"color:{dng}; font-size:{FONT['body']}pt;")
+        self._alarm_ack_btn.setStyleSheet(
+            f"QPushButton {{ background:{surf}; color:{dng}; "
+            f"border:1px solid {dng}66; border-radius:3px; "
+            f"font-size:{FONT['label']}pt; padding: 0 10px; }}"
+            f"QPushButton:hover {{ background:{sur2}; }}")
+        self._warn_banner.setStyleSheet(
+            f"background:{warn}22; border:1px solid {warn}66; border-radius:3px;")
+        self._warn_icon_lbl.setStyleSheet(
+            f"color:{warn}; font-size:{FONT['heading']}pt;")
+        self._warn_msg_lbl.setStyleSheet(
+            f"color:{warn}; font-size:{FONT['label']}pt;")
+        for attr, pal_key in [
+            ("_actual_lbl", "accent"),
+            ("_target_lbl", "warning"),
+            ("_power_lbl",  "cta"),
+            ("_state_lbl",  "textSub"),
+            ("_ready_lbl",  "textDim"),
+        ]:
+            lbl = getattr(self, attr, None)
+            if lbl:
+                lbl.setStyleSheet(
+                    f"font-family:{MONO_FONT}; font-size:{FONT['readoutLg']}pt; "
+                    f"color:{P[pal_key]};")
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# TemperatureTab — outer routing surface (unchanged public API)
+# ═══════════════════════════════════════════════════════════════════════
+
+class TemperatureTab(QWidget):
+
+    open_device_manager = pyqtSignal()
+
+    def __init__(self, n_tecs: int, hw_service=None, has_chuck: bool = False):
+        super().__init__()
+        self._hw        = hw_service
+        self._has_chuck = has_chuck
+
+        # Chuck stability tracking (software-side, no HW flag from chuck driver)
+        self._chuck_in_band_since: float | None = None
+
+        # Outer layout holds the stacked widget
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        self._stack = QStackedWidget()
+        outer.addWidget(self._stack)
+
+        # Page 0: not-connected empty state
+        self._stack.addWidget(self._build_empty_state(
+            "Temperature Controller", "TEC",
+            "Connect a TEC controller in Device Manager to enable "
+            "temperature control and monitoring."))
+
+        # Page 1: full controls (tab widget + chuck section)
+        controls = QWidget()
+        root = QVBoxLayout(controls)
+        root.setContentsMargins(10, 10, 10, 10)
+        root.setSpacing(10)
+
+        # Error banner (hidden until a device error occurs)
+        from ui.widgets.device_error_banner import DeviceErrorBanner
+        self._error_banner = DeviceErrorBanner()
+        self._error_banner.device_manager_clicked.connect(
+            self.open_device_manager.emit)
+        root.addWidget(self._error_banner)
+
+        # ── Per-TEC tab widget ───────────────────────────────────────
+        self._tec_tabs = QTabWidget()
+        self._tec_tabs.setDocumentMode(True)
+
+        self._panels: list[TecPanel] = []
+        _default_labels = ["TEC 1 — Meerstetter TEC-1089", "TEC 2 — ATEC-302"]
+        for i in range(n_tecs):
+            label = _default_labels[i] if i < len(_default_labels) else f"TEC {i + 1}"
+            panel = TecPanel(i, display_name=label, hw_service=hw_service)
+            self._panels.append(panel)
+            self._tec_tabs.addTab(panel, f"TEC {i + 1}")
+
+        root.addWidget(self._tec_tabs, 1)
+
+        # ── Chuck Temperature (TCAT) section (shared, outside tabs) ──
+        self._chuck_box = self._build_chuck()
+        root.addWidget(self._chuck_box)
+        self._chuck_box.setVisible(True)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setWidget(controls)
+        self._stack.addWidget(scroll)
+        self._stack.setCurrentIndex(0)  # empty state until device connects
+
+    def _build_empty_state(self, title: str, device: str, tip: str) -> QWidget:
+        from ui.widgets.empty_state import build_empty_state
+        return build_empty_state(
+            title=f"{title} Not Connected",
+            description=tip,
+            on_action=self.open_device_manager,
+        )
+
+    def set_hardware_available(self, available: bool) -> None:
+        """Switch between empty state (page 0) and full controls (page 1)."""
+        self._stack.setCurrentIndex(1 if available else 0)
+
+    # ── Public routing API (unchanged signatures) ────────────────────
+
+    def update_tec(self, index: int, status) -> None:
+        """Route a TEC status update to the correct panel."""
+        if index < len(self._panels):
+            self._panels[index].update_status(status)
+
+    def show_alarm(self, index: int, message: str) -> None:
+        if index < len(self._panels):
+            self._panels[index].show_alarm(message)
+
+    def show_warning(self, index: int, message: str) -> None:
+        if index < len(self._panels):
+            self._panels[index].show_warning(message)
+
+    def clear_alarm(self, index: int) -> None:
+        if index < len(self._panels):
+            self._panels[index].clear_alarm()
+
+    # ── Device error banner ──────────────────────────────────────────
+
+    def show_device_error(self, key: str, name: str, message: str) -> None:
+        self._error_banner.show_error(key, name, message)
+
+    def clear_device_error(self) -> None:
+        self._error_banner.clear()
+
+    # ── Tab label management ─────────────────────────────────────────
+
+    def set_tab_label(self, index: int, label: str) -> None:
+        """Update the tab label for a TEC panel (e.g. with device identity)."""
+        if 0 <= index < self._tec_tabs.count():
+            self._tec_tabs.setTabText(index, label)
 
     # ---------------------------------------------------------------- #
     #  Chuck Temperature (TCAT) section                                #
@@ -361,13 +641,11 @@ class TemperatureTab(QWidget):
         readout_row = QHBoxLayout()
         readout_row.setSpacing(16)
 
-        # Current temperature display
-        cur_w  = self._readout_widget("CHUCK TEMP", "--", "accent")
+        cur_w  = TecPanel._readout_widget("CHUCK TEMP", "--", "accent")
         box._chuck_actual_lbl = cur_w._val
         readout_row.addWidget(cur_w)
 
-        # Target temperature display (only meaningful when ATEC302 connected)
-        tgt_w  = self._readout_widget("TARGET", "--", "warning")
+        tgt_w  = TecPanel._readout_widget("TARGET", "--", "warning")
         box._chuck_target_lbl = tgt_w._val
         readout_row.addWidget(tgt_w)
 
@@ -423,7 +701,7 @@ class TemperatureTab(QWidget):
         main.addLayout(readout_row)
 
         # Store references for show/hide
-        box._readout_row_w = readout_row   # layout — toggle via widgets visibility
+        box._readout_row_w = readout_row
         box._tgt_ctrl_w    = tgt_ctrl_w
 
         # Initial state: hide live content, show "not configured"
@@ -433,7 +711,6 @@ class TemperatureTab(QWidget):
         tgt_w.setVisible(False)
         stab_w.setVisible(False)
 
-        # Keep references
         box._cur_readout_w  = cur_w
         box._tgt_readout_w  = tgt_w
         box._stab_readout_w = stab_w
@@ -441,7 +718,6 @@ class TemperatureTab(QWidget):
         return box
 
     def _chuck_set_target(self, val: float) -> None:
-        """Send new target temperature to the chuck controller."""
         try:
             chuck = getattr(app_state, "chuck", None)
             if chuck is not None:
@@ -451,22 +727,10 @@ class TemperatureTab(QWidget):
                       exc_info=True)
 
     def update_chuck(self, temp_c: float | None, stable: bool = False) -> None:
-        """
-        Update the Chuck Temperature (TCAT) display.
-
-        Parameters
-        ----------
-        temp_c : float or None
-            Current chuck temperature in °C.  Pass None to show "not configured".
-        stable : bool
-            True when the chuck reports it is within tolerance.
-            If the chuck driver does not report a stable flag, callers may pass
-            the result of the software-side stability check instead.
-        """
+        """Update the Chuck Temperature (TCAT) display."""
         box = self._chuck_box
 
         if temp_c is None:
-            # No chuck controller available — show placeholder
             box._not_configured_lbl.setVisible(True)
             box._chuck_sep.setVisible(False)
             box._cur_readout_w.setVisible(False)
@@ -476,25 +740,16 @@ class TemperatureTab(QWidget):
             self._chuck_in_band_since = None
             return
 
-        # Chuck is available — hide placeholder, show live content
         box._not_configured_lbl.setVisible(False)
         box._chuck_sep.setVisible(True)
         box._cur_readout_w.setVisible(True)
         box._tgt_readout_w.setVisible(True)
         box._stab_readout_w.setVisible(True)
-
-        # Show target spinbox only when a chuck controller is configured
         box._tgt_ctrl_w.setVisible(True)
 
-        # ── Temperature readout ───────────────────────────────────────
         box._chuck_actual_lbl.setText(f"{temp_c:.2f} °C")
-
-        # Update target label from spinbox value
         box._chuck_target_lbl.setText(f"{box._chuck_spin.value():.1f} °C")
 
-        # ── Software-side stability check ─────────────────────────────
-        # If the caller already resolved stability (e.g. from HW flag), use it.
-        # Otherwise compute from tolerance + duration window.
         target = box._chuck_spin.value()
         within_band = abs(temp_c - target) <= _CHUCK_STAB_TOLERANCE_C
         if within_band:
@@ -506,10 +761,8 @@ class TemperatureTab(QWidget):
             self._chuck_in_band_since = None
             sw_stable = False
 
-        # Hardware flag takes precedence if True; SW check is the fallback
         is_stable = stable or sw_stable
 
-        # ── Stability indicator dot ───────────────────────────────────
         if is_stable:
             _grn = PALETTE['success']
             box._chuck_stab_dot.setText("●")
@@ -533,87 +786,25 @@ class TemperatureTab(QWidget):
                 box._chuck_stab_dot.setToolTip(
                     f"Settling — Δ{diff:+.2f}°C from target")
 
+    # ── Theme ────────────────────────────────────────────────────────
+
     def _apply_styles(self) -> None:
-        P    = PALETTE
-        acc  = P['accent']
-        dng  = P['danger']
-        warn = P['warning']
-        surf = P['surface']
-        sur2 = P['surface2']
-
-        def _rgb(h):
-            h = h.lstrip("#")
-            return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
-
-        ar, ag, ab = _rgb(acc)
-        dr, dg, db = _rgb(dng)
-
-        for panel in getattr(self, "_panels", []):
-            # ── Enable / Disable buttons ──────────────────────────────
-            if hasattr(panel, "_en_btn"):
-                panel._en_btn.setStyleSheet(
-                    f"QPushButton {{ background:rgba({ar},{ag},{ab},0.13); color:{acc}; "
-                    f"border:1px solid rgba({ar},{ag},{ab},0.35); border-radius:4px; padding:0 8px; }}"
-                    f"QPushButton:hover {{ background:rgba({ar},{ag},{ab},0.22); }}")
-            if hasattr(panel, "_dis_btn"):
-                panel._dis_btn.setStyleSheet(
-                    f"QPushButton {{ background:rgba({dr},{dg},{db},0.13); color:{dng}; "
-                    f"border:1px solid rgba({dr},{dg},{db},0.35); border-radius:4px; padding:0 8px; }}"
-                    f"QPushButton:hover {{ background:rgba({dr},{dg},{db},0.22); }}")
-            # ── Alarm banner ──────────────────────────────────────────
-            if hasattr(panel, "_alarm_banner"):
-                panel._alarm_banner.setStyleSheet(
-                    f"background:{dng}22; border:1px solid {dng}; border-radius:3px;")
-            if hasattr(panel, "_alarm_icon_lbl"):
-                panel._alarm_icon_lbl.setStyleSheet(
-                    f"color:{dng}; font-size:{FONT['readoutSm']}pt;")
-            if hasattr(panel, "_alarm_msg_lbl"):
-                panel._alarm_msg_lbl.setStyleSheet(
-                    f"color:{dng}; font-size:{FONT['body']}pt;")
-            if hasattr(panel, "_alarm_ack_btn"):
-                panel._alarm_ack_btn.setStyleSheet(
-                    f"QPushButton {{ background:{surf}; color:{dng}; "
-                    f"border:1px solid {dng}66; border-radius:3px; "
-                    f"font-size:{FONT['label']}pt; padding: 0 10px; }}"
-                    f"QPushButton:hover {{ background:{sur2}; }}")
-            # ── Warning banner ────────────────────────────────────────
-            if hasattr(panel, "_warn_banner"):
-                panel._warn_banner.setStyleSheet(
-                    f"background:{warn}22; border:1px solid {warn}66; border-radius:3px;")
-            if hasattr(panel, "_warn_icon_lbl"):
-                panel._warn_icon_lbl.setStyleSheet(
-                    f"color:{warn}; font-size:{FONT['heading']}pt;")
-            if hasattr(panel, "_warn_msg_lbl"):
-                panel._warn_msg_lbl.setStyleSheet(
-                    f"color:{warn}; font-size:{FONT['label']}pt;")
-            # ── Readout value labels (default/idle colours only) ──────
-            for attr, pal_key in [
-                ("_actual_lbl", "accent"),
-                ("_target_lbl", "warning"),
-                ("_power_lbl",  "cta"),
-                ("_state_lbl",  "textSub"),
-                ("_ready_lbl",  "textDim"),
-            ]:
-                lbl = getattr(panel, attr, None)
-                if lbl:
-                    lbl.setStyleSheet(
-                        f"font-family:{MONO_FONT}; font-size:{FONT['readoutLg']}pt; "
-                        f"color:{P[pal_key]};")
+        P = PALETTE
+        # Delegate to each TEC panel
+        for panel in self._panels:
+            panel._apply_styles()
 
         # ── Chuck box ─────────────────────────────────────────────────
         chuck = getattr(self, "_chuck_box", None)
         if chuck:
-            # "Not configured" label
             nc = getattr(chuck, "_not_configured_lbl", None)
             if nc:
                 nc.setStyleSheet(
                     f"color:{P['textDim']}; "
                     f"font-size:{FONT['body']}pt; padding:8px;")
-            # Separator colour
             sep = getattr(chuck, "_chuck_sep", None)
             if sep:
                 sep.setStyleSheet(f"color:{P['border']};")
-            # Readout labels
             for attr, pal_key in [
                 ("_chuck_actual_lbl", "accent"),
                 ("_chuck_target_lbl", "warning"),
@@ -623,7 +814,6 @@ class TemperatureTab(QWidget):
                     lbl.setStyleSheet(
                         f"font-family:{MONO_FONT}; font-size:{FONT['readoutLg']}pt; "
                         f"color:{P[pal_key]};")
-            # Stability dot — colour preserved by update_chuck; just reset font
             dot = getattr(chuck, "_chuck_stab_dot", None)
             if dot:
                 _dim3 = P['textDim']
@@ -631,175 +821,5 @@ class TemperatureTab(QWidget):
                     f"font-size:{FONT['readoutLg']}pt; color:{_dim3};")
 
     def _readout_widget(self, label, initial, pal_key):
-        """Create a readout widget.  pal_key is a PALETTE key (e.g. "accent")."""
-        w = QWidget()
-        v = QVBoxLayout(w)
-        v.setAlignment(Qt.AlignCenter)
-        sub = QLabel(label)
-        sub.setObjectName("sublabel")
-        sub.setAlignment(Qt.AlignCenter)
-        val = QLabel(initial)
-        val.setAlignment(Qt.AlignCenter)
-        color = PALETTE.get(pal_key, "#00d4aa")
-        val.setStyleSheet(
-            f"font-family:{MONO_FONT}; font-size:{FONT['readoutLg']}pt; color:{color};")
-        v.addWidget(sub)
-        v.addWidget(val)
-        w._val     = val
-        w._pal_key = pal_key
-        return w
-
-    def update_tec(self, index: int, status):
-        if index >= len(self._panels):
-            return
-        p = self._panels[index]
-        if status.error:
-            p._actual_lbl.setText("ERR")
-            p._state_lbl.setText(status.error[:20])
-            p._state_lbl.setStyleSheet(
-                f"font-family:{MONO_FONT}; font-size:{FONT['readout']}pt; color:{PALETTE['danger']};")
-            p._ready_lbl.setText("ERROR ✗")
-            p._ready_lbl.setStyleSheet(
-                f"font-family:{MONO_FONT}; font-size:{FONT['readout']}pt; color:{PALETTE['danger']};")
-            return
-        p._actual_lbl.setText(f"{status.actual_temp:.2f} °C")
-        p._target_lbl.setText(f"{status.target_temp:.1f} °C")
-        p._power_lbl.setText( f"{status.output_power:.2f} W")
-        if not status.enabled:
-            _sub = PALETTE['textSub']
-            _dim = PALETTE['textDim']
-            p._state_lbl.setText("DISABLED")
-            p._state_lbl.setStyleSheet(
-                f"font-family:{MONO_FONT}; font-size:{FONT['readout']}pt; color:{_sub};")
-            p._ready_lbl.setText("○  Disabled")
-            p._ready_lbl.setStyleSheet(
-                f"font-family:{MONO_FONT}; font-size:{FONT['readout']}pt; color:{_dim};")
-        elif status.stable:
-            p._state_lbl.setText("STABLE ✓")
-            p._state_lbl.setStyleSheet(
-                f"font-family:{MONO_FONT}; font-size:{FONT['readout']}pt; color:{PALETTE['accent']};")
-            p._ready_lbl.setText("READY ✓")
-            p._ready_lbl.setStyleSheet(
-                f"font-family:{MONO_FONT}; font-size:{FONT['readout']}pt; color:{PALETTE['accent']};")
-        else:
-            diff  = status.actual_temp - status.target_temp
-            arrow = "▼" if diff > 0 else "▲"
-            eta_min = abs(diff) / _TEC_RAMP_RATE_C_PER_MIN
-            eta_s   = int(eta_min * 60)
-            eta_str = f"~{eta_s // 60}:{eta_s % 60:02d}"
-            p._state_lbl.setText(f"SETTLING {arrow}  {eta_str}")
-            p._state_lbl.setStyleSheet(
-                f"font-family:{MONO_FONT}; font-size:{FONT['readout']}pt; color:{PALETTE['warning']};")
-            p._ready_lbl.setText(f"{eta_str} remaining")
-            p._ready_lbl.setStyleSheet(
-                f"font-family:{MONO_FONT}; font-size:{FONT['readout']}pt; color:{PALETTE['warning']};")
-        p._plot.push(status.actual_temp, status.target_temp)
-
-    # ── Device error banner (Feature 6) ──────────────────────────────
-
-    def show_device_error(self, key: str, name: str, message: str) -> None:
-        """Show an error banner at the top of the tab."""
-        self._error_banner.show_error(key, name, message)
-
-    def clear_device_error(self) -> None:
-        """Hide the error banner (device reconnected)."""
-        self._error_banner.clear()
-
-    def show_alarm(self, index: int, message: str):
-        """Show the alarm banner for the given TEC panel."""
-        if index >= len(self._panels):
-            return
-        p = self._panels[index]
-        p._alarm_msg_lbl.setText(message)
-        p._alarm_banner.setVisible(True)
-        p._warn_banner.setVisible(False)
-        p._actual_lbl.setStyleSheet(
-            f"font-family:{MONO_FONT}; font-size:{FONT['readoutLg']}pt; color:{PALETTE['danger']};")
-        p.setStyleSheet(f"QGroupBox {{ border-color: {PALETTE['danger']}; }}")
-
-    def show_warning(self, index: int, message: str):
-        """Show the warning banner for the given TEC panel."""
-        if index >= len(self._panels):
-            return
-        p = self._panels[index]
-        p._warn_msg_lbl.setText(message)
-        p._warn_banner.setVisible(True)
-        p._actual_lbl.setStyleSheet(
-            f"font-family:{MONO_FONT}; font-size:{FONT['readoutLg']}pt; color:{PALETTE['warning']};")
-
-    def clear_alarm(self, index: int):
-        """Clear alarm/warning state for the given TEC panel."""
-        if index >= len(self._panels):
-            return
-        p = self._panels[index]
-        p._alarm_banner.setVisible(False)
-        p._warn_banner.setVisible(False)
-        p._actual_lbl.setStyleSheet(
-            f"font-family:{MONO_FONT}; font-size:{FONT['readoutLg']}pt; color:{PALETTE['accent']};")
-        p.setStyleSheet("")
-
-    def _apply_limits(self, box):
-        """Push updated limits to the ThermalGuard and TempPlot."""
-        idx        = self._panels.index(box)
-        temp_min   = box._min_spin.value()
-        temp_max   = box._max_spin.value()
-        warn_margin = box._warn_spin.value()
-
-        # Update the chart
-        box._plot.set_limits(temp_min, temp_max, warn_margin)
-
-        # Update the guard
-        guard = app_state.get_tec_guard(idx)
-        if guard:
-            guard.update_limits(temp_min, temp_max, warn_margin)
-
-    def _acknowledge_alarm(self, box):
-        """Acknowledge the alarm — clears latch, hides banner."""
-        idx   = self._panels.index(box)
-        guard = app_state.get_tec_guard(idx)
-        if guard:
-            guard.acknowledge()
-        self.clear_alarm(idx)
-
-    def _set_target(self, box, val, _from_sync=False):
-        idx = self._panels.index(box)
-        if self._hw:
-            self._hw.tec_set_target(idx, val)
-        else:
-            _tecs = app_state.tecs
-            if _tecs and idx < len(_tecs):
-                _tecs[idx].set_target(val)
-        if not _from_sync:
-            from ui.app_signals import signals
-            signals.tec_setpoint_changed.emit(idx, float(val), "temperature_tab")
-
-    def _enable(self, box):
-        idx   = self._panels.index(box)
-        guard = app_state.get_tec_guard(idx)
-        if guard and guard.is_alarmed:
-            return
-        if self._hw:
-            self._hw.tec_enable(idx)
-        else:
-            _tecs = app_state.tecs
-            if _tecs and idx < len(_tecs):
-                _tecs[idx].enable()
-
-    def _disable(self, box):
-        idx = self._panels.index(box)
-        if self._hw:
-            self._hw.tec_disable(idx)
-        else:
-            _tecs = app_state.tecs
-            if _tecs and idx < len(_tecs):
-                _tecs[idx].disable()
-
-    def _set_ramp_speed(self, box, degrees_per_second: float):
-        """Set temperature ramp rate for the TEC channel."""
-        idx = self._panels.index(box)
-        if self._hw:
-            self._hw.tec_set_ramp_speed(idx, degrees_per_second)
-        else:
-            _tecs = app_state.tecs
-            if _tecs and idx < len(_tecs) and hasattr(_tecs[idx], 'set_ramp_speed'):
-                _tecs[idx].set_ramp_speed(degrees_per_second)
+        """Backward-compatible readout factory (delegates to TecPanel)."""
+        return TecPanel._readout_widget(label, initial, pal_key)

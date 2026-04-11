@@ -28,12 +28,14 @@ class ReportDialog(QDialog):
 
     generate_requested = pyqtSignal(object)  # emits ReportConfig
 
-    def __init__(self, session_label: str = "", parent=None):
+    def __init__(self, session_label: str = "", result_type: str = "single_point",
+                 parent=None):
         super().__init__(parent)
         self.setWindowTitle("Generate Report")
         self.setMinimumSize(860, 560)
         self.setModal(True)
         self._session_label = session_label
+        self._result_type = result_type or "single_point"
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -155,11 +157,21 @@ class ReportDialog(QDialog):
         self._cb_scorecard = QCheckBox("Quality scorecard")
         self._cb_scorecard.setChecked(True)
 
+        # Cube-modality checkboxes (visible only for transient/movie)
+        self._cb_transient = QCheckBox("Transient analysis (trace + metrics)")
+        self._cb_transient.setChecked(True)
+        self._cb_transient.setVisible(self._result_type == "transient")
+
+        self._cb_movie = QCheckBox("Movie analysis (trace + metrics)")
+        self._cb_movie.setChecked(True)
+        self._cb_movie.setVisible(self._result_type == "movie")
+
         self._checkboxes = [
-            self._cb_thermal_map, self._cb_hotspot_table,
             self._cb_measurement_params, self._cb_device_info,
+            self._cb_thermal_map, self._cb_hotspot_table,
             self._cb_raw_data, self._cb_verdict,
             self._cb_calibration, self._cb_scorecard,
+            self._cb_transient, self._cb_movie,
         ]
         for cb in self._checkboxes:
             cl.addWidget(cb)
@@ -299,6 +311,10 @@ class ReportDialog(QDialog):
             sections.append("Hotspot Detail")
         if self._cb_scorecard.isChecked():
             sections.append("Quality Scorecard")
+        if self._cb_transient.isChecked() and self._cb_transient.isVisible():
+            sections.append("Transient Analysis")
+        if self._cb_movie.isChecked() and self._cb_movie.isVisible():
+            sections.append("Movie Analysis")
         self._preview.set_sections(sections)
 
     # ---------------------------------------------------------------- #
@@ -316,6 +332,8 @@ class ReportDialog(QDialog):
             verdict_and_recommendations=self._cb_verdict.isChecked(),
             calibration_details=self._cb_calibration.isChecked(),
             quality_scorecard=self._cb_scorecard.isChecked(),
+            transient_section=self._cb_transient.isChecked(),
+            movie_section=self._cb_movie.isChecked(),
             format="html" if self._radio_html.isChecked() else "pdf",
             operator=self._operator_edit.text().strip(),
             customer=self._customer_edit.text().strip(),

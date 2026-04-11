@@ -28,7 +28,7 @@ from ui.font_utils import mono_family_css
 # Each group is (header_label, [(key_string, description), ...])
 _SHORTCUT_GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
     ("Sections  (Ctrl + number)", [
-        ("Ctrl+1", "Modality"),
+        ("Ctrl+1", "Measurement Setup"),
         ("Ctrl+2", "Stimulus"),
         ("Ctrl+3", "Timing"),
         ("Ctrl+4", "Live View"),

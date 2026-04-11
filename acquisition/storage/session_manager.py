@@ -78,8 +78,23 @@ class SessionManager:
                     project: str = "",
                     status: str = "",
                     tags: Optional[List[str]] = None,
-                    auth_session=None) -> Session:
-        """Save an AcquisitionResult as a new session. Adds to index.
+                    auth_session=None,
+                    result_type: str = "single_point",
+                    scan_params: Optional[dict] = None,
+                    cube_params: Optional[dict] = None) -> Session:
+        """Save an acquisition result as a new session. Adds to index.
+
+        Parameters
+        ----------
+        result
+            The result object — AcquisitionResult (single_point),
+            ScanResult (grid), or TransientResult (transient).
+        result_type : str
+            One of "single_point", "grid", "transient", "movie".
+        scan_params : dict, optional
+            Grid-specific metadata (n_rows, n_cols, step sizes, etc.).
+        cube_params : dict, optional
+            Transient/movie-specific metadata (n_delays, delay range, etc.).
 
         If *operator* is not supplied, it is resolved in priority order:
           1. ``auth_session.user.display_name`` (when auth is active)
@@ -101,6 +116,9 @@ class SessionManager:
             project=project,
             status=status,
             tags=tags or [],
+            result_type=result_type,
+            scan_params=scan_params,
+            cube_params=cube_params,
         )
         session.save(self._root)
         with self._lock:

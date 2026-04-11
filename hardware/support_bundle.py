@@ -48,6 +48,8 @@ _PREFS_FILE = Path.home() / ".microsanj" / "preferences.json"
 def generate_support_bundle(
     error_context: Optional[list] = None,
     output_dir: Optional[Path] = None,
+    app_state=None,
+    ai_service=None,
 ) -> Path:
     """Generate a diagnostic support bundle as a zip archive.
 
@@ -57,6 +59,11 @@ def generate_support_bundle(
         Recent structured errors to include in the bundle.
     output_dir : Path | None
         Override output directory (default: ``~/.microsanj/support_bundles/``).
+    app_state : ApplicationState | None
+        Live application state for hardware summary and demo mode.
+        Pass ``None`` for CLI usage (sections are skipped gracefully).
+    ai_service : AIService | None
+        Live AI service for provider/tier/status snapshot.
 
     Returns
     -------
@@ -70,14 +77,19 @@ def generate_support_bundle(
     zip_path = out / f"sanjinsight_support_{ts}.zip"
 
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        _add_app_info(zf, app_state)
         _add_system_info(zf)
         _add_python_info(zf)
+        _add_hardware_summary(zf, app_state)
         _add_config(zf)
         _add_device_cache(zf)
         _add_serial_ports(zf)
         _add_network_info(zf)
         _add_logs(zf)
         _add_discovery_report(zf)
+        _add_preferences(zf)
+        _add_ai_state(zf, ai_service)
+        _add_os_checks(zf)
         if error_context:
             _add_error_context(zf, error_context)
 
@@ -87,6 +99,37 @@ def generate_support_bundle(
 
 
 # ── Section collectors ──────────────────────────────────────────────────────
+
+def _add_app_info(zf: zipfile.ZipFile, app_state=None) -> None:
+    """Application identity, version, build metadata, and demo mode status."""
+    info: dict = {}
+    try:
+        from version import (
+            __version__, APP_NAME, APP_VENDOR, PRERELEASE, BUILD_DATE,
+            CURRENT_VERSION,
+        )
+        info["app_name"] = APP_NAME
+        info["app_vendor"] = APP_VENDOR
+        info["version"] = __version__
+        info["prerelease"] = PRERELEASE or None
+        info["build_date"] = BUILD_DATE
+        info["is_prerelease"] = CURRENT_VERSION.is_prerelease
+        info["version_tuple"] = list(CURRENT_VERSION.numeric_tuple)
+    except Exception as exc:
+        info["version_error"] = str(exc)
+
+    # Demo mode flag (requires live app_state)
+    if app_state is not None:
+        try:
+            info["demo_mode"] = bool(getattr(app_state, "demo_mode", False))
+        except Exception:
+            info["demo_mode"] = None
+    else:
+        info["demo_mode"] = None
+
+    info["timestamp"] = datetime.datetime.now().isoformat()
+    zf.writestr("app_info.json", json.dumps(info, indent=2))
+
 
 def _add_system_info(zf: zipfile.ZipFile) -> None:
     info = {
@@ -137,6 +180,54 @@ def _add_python_info(zf: zipfile.ZipFile) -> None:
         "all_packages_count": len(packages),
         "all_packages": dict(sorted(packages.items())),
     }, indent=2))
+
+
+def _add_hardware_summary(zf: zipfile.ZipFile, app_state=None) -> None:
+    """Snapshot of connected hardware from the live ApplicationState."""
+    if app_state is None:
+        return  # CLI usage — no runtime state available
+    summary: dict = {}
+    try:
+        # Cameras
+        for attr in ("cam", "ir_cam"):
+            obj = getattr(app_state, attr, None)
+            if obj is not None:
+                summary[attr] = {
+                    "type": type(obj).__name__,
+                    "connected": bool(getattr(obj, "connected", False)),
+                }
+            else:
+                summary[attr] = None
+
+        summary["active_camera_type"] = getattr(
+            app_state, "active_camera_type", None)
+
+        # Scalar hardware
+        for attr in ("fpga", "bias", "stage", "prober", "gpio", "ldd"):
+            obj = getattr(app_state, attr, None)
+            if obj is not None:
+                summary[attr] = {
+                    "type": type(obj).__name__,
+                    "connected": bool(getattr(obj, "connected", False)),
+                }
+            else:
+                summary[attr] = None
+
+        # TEC list
+        tecs = getattr(app_state, "tecs", None)
+        if tecs:
+            summary["tecs"] = [
+                {"type": type(t).__name__,
+                 "connected": bool(getattr(t, "connected", False))}
+                for t in tecs
+            ]
+        else:
+            summary["tecs"] = []
+
+        summary["demo_mode"] = bool(getattr(app_state, "demo_mode", False))
+    except Exception as exc:
+        summary["error"] = str(exc)
+    zf.writestr("hardware_summary.json", json.dumps(summary, indent=2))
 
 
 def _add_config(zf: zipfile.ZipFile) -> None:
@@ -241,19 +332,71 @@ def _add_discovery_report(zf: zipfile.ZipFile) -> None:
                      json.dumps({"error": str(exc)}))
 
 
+def _add_preferences(zf: zipfile.ZipFile) -> None:
+    """Sanitized user preferences (redacts sensitive keys)."""
+    try:
+        if _PREFS_FILE.exists():
+            raw = json.loads(_PREFS_FILE.read_text(encoding="utf-8"))
+            sanitized = _sanitize_dict(raw) if isinstance(raw, dict) else raw
+            zf.writestr("preferences.json", json.dumps(sanitized, indent=2))
+    except Exception as exc:
+        zf.writestr("preferences.json", json.dumps({"error": str(exc)}))
+
+
+def _add_ai_state(zf: zipfile.ZipFile, ai_service=None) -> None:
+    """AI subsystem snapshot — provider, tier, status (no keys/prompts)."""
+    if ai_service is None:
+        return  # No AI service available (CLI or AI disabled)
+    info: dict = {}
+    try:
+        info["status"] = getattr(ai_service, "status", "unknown")
+        # Tier — may be an enum with .name/.value
+        tier = getattr(ai_service, "tier", None)
+        if tier is not None:
+            info["tier"] = tier.name if hasattr(tier, "name") else str(tier)
+            info["tier_value"] = tier.value if hasattr(tier, "value") else None
+        else:
+            info["tier"] = None
+        info["active_backend"] = getattr(ai_service, "active_backend", None)
+        info["remote_provider"] = getattr(ai_service, "remote_provider", None)
+        # Explicitly exclude: api_key, model paths, prompt content
+    except Exception as exc:
+        info["error"] = str(exc)
+    zf.writestr("ai_state.json", json.dumps(info, indent=2))
+
+
+def _add_os_checks(zf: zipfile.ZipFile) -> None:
+    """Run OS-level diagnostic checks and include results."""
+    try:
+        from hardware.os_checks import run_os_checks
+        results = run_os_checks()
+        zf.writestr("os_checks.json", json.dumps(
+            [r.to_dict() for r in results], indent=2))
+    except Exception as exc:
+        zf.writestr("os_checks.json", json.dumps({"error": str(exc)}))
+
+
 def _add_error_context(zf: zipfile.ZipFile, errors: list) -> None:
-    """Include recent structured DeviceError objects."""
+    """Include recent structured DeviceError objects.
+
+    Uses ``to_dict()`` from the error taxonomy when available, falling
+    back to manual field extraction for older DeviceError instances.
+    """
     error_list = []
     for err in errors:
         try:
-            if hasattr(err, "category"):
+            # Prefer taxonomy-aware to_dict() (includes severity/domain/transience)
+            if hasattr(err, "to_dict") and callable(err.to_dict):
+                error_list.append(err.to_dict())
+            elif hasattr(err, "category"):
+                # Legacy fallback — pre-taxonomy DeviceError without to_dict
                 error_list.append({
                     "category": err.category.value,
-                    "device_uid": err.device_uid,
-                    "message": err.message,
-                    "suggested_fix": err.suggested_fix,
-                    "raw_exception": err.raw_exception,
-                    "exception_type": err.exception_type,
+                    "device_uid": getattr(err, "device_uid", ""),
+                    "message": getattr(err, "message", ""),
+                    "suggested_fix": getattr(err, "suggested_fix", ""),
+                    "raw_exception": getattr(err, "raw_exception", ""),
+                    "exception_type": getattr(err, "exception_type", ""),
                 })
             else:
                 error_list.append({"raw": str(err)})

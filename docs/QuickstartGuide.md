@@ -1,6 +1,6 @@
 # SanjINSIGHT — Quick Start Guide
 
-**Microsanj SanjINSIGHT v1.5.0-beta.1**
+**Microsanj SanjINSIGHT v0.44.0-beta.1**
 *Get from first launch to your first thermoreflectance measurement in minutes.*
 
 ---
@@ -140,16 +140,12 @@ After admin setup, the **Hardware Setup Wizard** opens and walks you through con
 
 | Section | Panels |
 |---|---|
-| **ACQUIRE** | AutoScan★, Live★, Capture★ (Single / Grid sub-tabs), Transient (Time-Resolved / Burst sub-tabs) |
-| **ANALYZE** | Calibration, Analysis★, Sessions, Compare, 3D Surface |
-| **Hardware** *(collapsible ▸)* | Camera (Camera / ROI / Autofocus sub-tabs), Stimulus (Modulation / Bias Source sub-tabs), Temperature, Stage, Prober |
-
-The **Camera** panel toolbar includes three quick-action buttons:
-
-- **Autofocus** — runs autofocus using the last-used settings (requires a motorised stage).
-- **Optimize Throughput** — automatically tunes LED power, FPS, and exposure for best throughput.
-- **Run FFC** — triggers flat-field correction. This button is only visible for thermal cameras (Boson, FLIR).
-| **LIBRARY** | Profiles (Material Profiles / Scan Profiles sub-tabs) |
+| **CONFIGURATION** | Measurement Setup★, Stimulus, Timing, Temperature, Acquisition Settings |
+| **ACQUIRE** | Live★, ROI, Focus & Stage, Signal Check, Transient, Movie |
+| **ANALYZE** | Capture★ (Single / Grid sub-tabs), Calibration, 3D Surface, Sessions, Emissivity |
+| **HARDWARE** | Cameras, Stages, Thermal Control, Stimulus & Timing, Probes, Sensors |
+| **AUTOMATE** | Recipe Run, Experiment Log |
+| **LIBRARY** | Library (Material Profiles / Scan Profiles sub-tabs) |
 | **Settings** | |
 
 ★ = most commonly used panels

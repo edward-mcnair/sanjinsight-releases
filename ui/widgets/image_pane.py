@@ -11,7 +11,7 @@ import logging
 
 log = logging.getLogger(__name__)
 
-from PyQt5.QtWidgets import QWidget, QLabel, QVBoxLayout
+from PyQt5.QtWidgets import QWidget, QLabel, QVBoxLayout, QSizePolicy
 from PyQt5.QtCore    import Qt
 from PyQt5.QtGui     import QImage, QPixmap
 import numpy as np
@@ -22,13 +22,18 @@ from ui.theme                import PALETTE, FONT, MONO_FONT, scaled_qss
 
 
 class ImagePane(QWidget):
-    def __init__(self, title: str = "", w: int = 400, h: int = 300):
+    def __init__(self, title: str = "", w: int = 400, h: int = 300,
+                 *, expanding: bool = False):
         super().__init__()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(3)
         self._lbl = QLabel()
-        self._lbl.setFixedSize(w, h)
+        if expanding:
+            self._lbl.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            self._lbl.setMinimumSize(w, h)
+        else:
+            self._lbl.setFixedSize(w, h)
         self._lbl.setStyleSheet(f"background:{PALETTE['canvas']}; border:1px solid {PALETTE['border']};")
         self._lbl.setAlignment(Qt.AlignCenter)
         self._title = QLabel(title)

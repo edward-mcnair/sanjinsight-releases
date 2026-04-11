@@ -300,6 +300,11 @@ class AnalysisTab(QWidget):
 
         root.addWidget(self._build_toolbar())
 
+        # ── Acquisition context panel (hidden until populated) ────
+        from ui.widgets.acquisition_context_panel import AcquisitionContextPanel
+        self._context_panel = AcquisitionContextPanel()
+        root.addWidget(self._context_panel)
+
         self._body_splitter = QSplitter(Qt.Horizontal)
         ctrl_scroll = QScrollArea()
         ctrl_scroll.setWidgetResizable(True)
@@ -380,6 +385,47 @@ class AnalysisTab(QWidget):
         lay.addStretch()
         return w
 
+    # ── Detached viewer ──────────────────────────────────────────
+
+    _detached_viewer = None
+
+    def _on_detach_viewer(self) -> None:
+        """Open (or bring to front) a detached large viewer window."""
+        if self._detached_viewer is not None:
+            self._detached_viewer.raise_()
+            self._detached_viewer.activateWindow()
+            return
+        from ui.widgets.detached_viewer import DetachedViewer
+        self._detached_viewer = DetachedViewer("Analysis — Result")
+        self._detached_viewer.closed.connect(self._on_viewer_closed)
+        self._detached_viewer.show()
+
+        # Push current canvas immediately if a result exists
+        self._push_to_detached()
+
+    def _on_viewer_closed(self) -> None:
+        """Clean up reference when the detached viewer is closed."""
+        self._detached_viewer = None
+
+    def _push_to_detached(self) -> None:
+        """Send the current canvas pixmap to the detached viewer."""
+        if self._detached_viewer is None:
+            return
+        try:
+            pix = self._canvas.grab()
+            info = ""
+            data = None
+            if hasattr(self, "_result") and self._result is not None:
+                v = getattr(self._result, "verdict", "")
+                n = getattr(self._result, "n_hotspots", 0)
+                info = f"{v}  ·  {n} hotspot(s)"
+            # Provide ΔT map for cursor readout
+            if hasattr(self, "_dt_map") and self._dt_map is not None:
+                data = self._dt_map
+            self._detached_viewer.update_image(pix, info, data=data)
+        except Exception:
+            pass
+
     # ---------------------------------------------------------------- #
     #  Toolbar                                                          #
     # ---------------------------------------------------------------- #
@@ -435,6 +481,8 @@ class AnalysisTab(QWidget):
                         }}
                         QPushButton:hover {{ background:{sur}; }}
                     """)
+        if hasattr(self, "_context_panel"):
+            self._context_panel._apply_styles()
         if hasattr(self, "_banner"):
             self._banner._apply_styles()
         if hasattr(self, "_canvas"):
@@ -471,6 +519,16 @@ class AnalysisTab(QWidget):
         lay.addWidget(self._clear_btn)
         lay.addWidget(self._auto_cb)
         lay.addStretch()
+
+        self._detach_btn = QPushButton()
+        set_btn_icon(self._detach_btn, "mdi.open-in-new", PALETTE['textDim'])
+        self._detach_btn.setFixedSize(24, 24)
+        self._detach_btn.setToolTip(
+            "Open a detached large viewer window.\n"
+            "Can be moved to a second monitor or made full-screen (F11).")
+        self._detach_btn.setFlat(True)
+        self._detach_btn.clicked.connect(self._on_detach_viewer)
+        lay.addWidget(self._detach_btn)
 
         # Source indicator
         self._source_lbl = self._badge("No data", PALETTE['surface2'], PALETTE['textDim'])
@@ -735,8 +793,17 @@ class AnalysisTab(QWidget):
     def push_result(self, dt_map: Optional[np.ndarray],
                     drr_map: Optional[np.ndarray],
                     base_image: Optional[np.ndarray] = None,
-                    source_label: str = "Acquisition"):
-        """Feed new maps into the tab. Runs automatically if auto-run is on."""
+                    source_label: str = "Acquisition",
+                    context: Optional[dict] = None):
+        """Feed new maps into the tab. Runs automatically if auto-run is on.
+
+        Parameters
+        ----------
+        context : dict, optional
+            Acquisition metadata dict (e.g. from SessionMeta.to_dict()).
+            When provided, shows the collapsible acquisition context panel
+            above the analysis body.
+        """
         self._dt_map   = dt_map
         self._drr_map  = drr_map
         self._base_img = base_image
@@ -744,6 +811,11 @@ class AnalysisTab(QWidget):
         self._source_lbl.setStyleSheet(
             f"background:{PALETTE['surface2']}; color:{PALETTE['accent']}; padding:0 10px; "
             f"border-radius:3px; font-family:{MONO_FONT}; font-size:{FONT['label']}pt;")
+        # Show acquisition context panel when metadata is available
+        if context:
+            self._context_panel.set_context(context)
+        else:
+            self._context_panel.clear_context()
         if dt_map is not None or drr_map is not None:
             self._data_stack.setCurrentIndex(1)
         if self._auto_cb.isChecked():
@@ -800,6 +872,9 @@ class AnalysisTab(QWidget):
         for b in [self._save_png_btn, self._save_csv_btn, self._add_rpt_btn]:
             b.setEnabled(True)
 
+        # Push to detached viewer if open
+        self._push_to_detached()
+
         self.analysis_complete.emit(result)
 
         # Log to main app
@@ -830,6 +905,7 @@ class AnalysisTab(QWidget):
         self._source_lbl.setStyleSheet(
             f"background:{PALETTE['surface2']}; color:{PALETTE['textDim']}; padding:0 10px; "
             f"border-radius:3px; font-family:{MONO_FONT}; font-size:{FONT['label']}pt;")
+        self._context_panel.clear_context()
 
     # ---------------------------------------------------------------- #
     #  Stats update                                                     #

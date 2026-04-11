@@ -295,6 +295,9 @@ class LiveCanvas(QWidget):
         self._frozen    = False
         self._cmap      = "Thermal Delta"
         self._data      = None
+        self._cold_data = None   # reference frame for Merge mode
+        self._base_pixmap = None # grayscale pixmap built from cold_data
+        self._merge     = False  # True = Merge mode (base + thermal overlay)
         self._probe_pos = None   # (px, py) in widget coords
 
         # ── Zoom & pan state ──────────────────────────────────────────
@@ -348,6 +351,13 @@ class LiveCanvas(QWidget):
         self._overlay_opacity = max(0.0, min(1.0, opacity))
         self.update()
 
+    def set_merge(self, enabled: bool) -> None:
+        """Toggle Merge mode (grayscale base + thermal overlay)."""
+        self._merge = enabled
+        if self._data is not None:
+            self._rebuild_base()
+        self.update()
+
     def set_cmap(self, cmap: str):
         self._cmap = cmap
         # Redraw immediately so a frozen / stopped view updates at once.
@@ -359,6 +369,7 @@ class LiveCanvas(QWidget):
         if self._frozen or frame.drr is None:
             return
         self._data = frame.drr
+        self._cold_data = frame.cold_avg
         self._rebuild(frame.drr)
         self.update()
 
@@ -393,6 +404,22 @@ class LiveCanvas(QWidget):
         buf = rgb.tobytes()   # keep ref alive for QImage
         qi = QImage(buf, w, h, w * 3, QImage.Format_RGB888)
         self._pixmap = QPixmap.fromImage(qi)
+        # Also rebuild grayscale base when in merge mode
+        if self._merge:
+            self._rebuild_base()
+
+    def _rebuild_base(self) -> None:
+        """Build grayscale base pixmap from cold reference for Merge mode."""
+        if self._cold_data is None:
+            self._base_pixmap = None
+            return
+        cold = self._cold_data.astype(np.float32)
+        disp = to_display(cold, mode="percentile")
+        rgb = apply_colormap(disp, "gray")
+        h, w = rgb.shape[:2]
+        buf = rgb.tobytes()
+        qi = QImage(buf, w, h, w * 3, QImage.Format_RGB888)
+        self._base_pixmap = QPixmap.fromImage(qi)
 
     def _draw_rect(self):
         """Return (ox, oy, dw, dh) — the destination rect for the current pixmap."""
@@ -427,9 +454,20 @@ class LiveCanvas(QWidget):
 
         r = self._draw_rect()
         ox, oy, dw, dh = r
-        scaled = self._pixmap.scaled(dw, dh, Qt.IgnoreAspectRatio,
-                                     Qt.SmoothTransformation)
-        p.drawPixmap(ox, oy, scaled)
+        if self._merge and self._base_pixmap is not None:
+            # Merge mode: grayscale base + thermal overlay
+            base_sc = self._base_pixmap.scaled(
+                dw, dh, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
+            p.drawPixmap(ox, oy, base_sc)
+            p.setOpacity(self._overlay_opacity)
+            thermal_sc = self._pixmap.scaled(
+                dw, dh, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
+            p.drawPixmap(ox, oy, thermal_sc)
+            p.setOpacity(1.0)
+        else:
+            scaled = self._pixmap.scaled(dw, dh, Qt.IgnoreAspectRatio,
+                                         Qt.SmoothTransformation)
+            p.drawPixmap(ox, oy, scaled)
 
         # Crosshair probe
         if self._probe_pos:
@@ -665,6 +703,11 @@ class LiveTab(QWidget):
 
         root.addWidget(self._build_toolbar())
 
+        # ── Hardware summary strip (timing + bias) ───────────────
+        from ui.widgets.hw_summary_strip import HwSummaryStrip
+        self._hw_strip = HwSummaryStrip()
+        root.addWidget(self._hw_strip)
+
         # ── Guidance cards — scrollable area ──────────────────────
         _cards = get_section_cards("live_view")
         def _body(cid):
@@ -746,6 +789,12 @@ class LiveTab(QWidget):
         any_visible = any(c.isVisible() for c in (
             self._overview_card, self._guide_card1))
         self._cards_scroll.setVisible(any_visible)
+        # Merge toggle: hidden in Guided (keep it clean), visible otherwise
+        if hasattr(self, "_view_seg"):
+            self._view_seg.setVisible(not is_guided)
+        # Hardware summary strip: hidden in Guided
+        if hasattr(self, "_hw_strip"):
+            self._hw_strip.set_workspace_mode(mode)
 
     def _update_cards_scroll_visibility(self, _card_id: str = "") -> None:
         any_visible = any(c.isVisible() for c in (
@@ -793,6 +842,8 @@ class LiveTab(QWidget):
                 f"background:{su2}; color:{sub}; {_badge_base}")
         if hasattr(self, "_quick_controls"):
             self._quick_controls._apply_styles()
+        if hasattr(self, "_hw_strip"):
+            self._hw_strip._apply_styles()
 
     def _build_toolbar(self) -> QWidget:
         bar = QWidget()
@@ -864,6 +915,15 @@ class LiveTab(QWidget):
         self._saved_cmap = saved_cmap
         self._cmap_combo.currentTextChanged.connect(self._on_cmap_local)
         lay.addWidget(self._cmap_combo)
+
+        lay.addSpacing(8)
+
+        # Thermal / Merge toggle
+        from ui.widgets.segmented_control import SegmentedControl
+        self._view_seg = SegmentedControl(
+            ["Thermal", "Merge"], seg_width=72, height=24)
+        self._view_seg.selection_changed.connect(self._on_view_mode)
+        lay.addWidget(self._view_seg)
 
         # Sync colormap from other tabs
         from ui.app_signals import signals as _sig
@@ -1048,6 +1108,10 @@ class LiveTab(QWidget):
     def _on_overlay_opacity(self, value: int) -> None:
         self._canvas.set_overlay_opacity(value / 100.0)
         self._overlay_pct.setText(f"{value}%")
+
+    def _on_view_mode(self, idx: int) -> None:
+        """Handle Thermal / Merge toggle."""
+        self._canvas.set_merge(idx == 1)
 
     def _on_canvas_context(self, action: str):
         """Dispatch context menu actions from LiveCanvas."""

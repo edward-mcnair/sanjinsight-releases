@@ -341,6 +341,7 @@ from ai.metrics_service          import MetricsService
 from ai.diagnostic_engine        import DiagnosticEngine
 from ui.widgets.readiness_widget import ReadinessWidget
 from ui.widgets.acquisition_summary_overlay import AcquisitionSummaryOverlay
+from ui.widgets.post_capture_action_bar import PostCaptureActionBar
 from ui.widgets.optimization_suggestions import OptimizationSuggestionsWidget
 from ui.widgets.batch_progress_widget import BatchProgressWidget
 from ai.ai_service               import AIService
@@ -650,6 +651,64 @@ class MainWindow(QMainWindow):
         self._library_tab           = LibraryTab(self._profile_tab, self._recipe_tab)
         self._autoscan_tab          = AutoScanTab()
 
+        # ── Phase 1 workflow layer: Recipe Run + Experiment Log
+        from ui.widgets.recipe_run_panel import RecipeRunPanel
+        from ui.widgets.experiment_log_widget import ExperimentLogWidget
+        self._recipe_run    = RecipeRunPanel()
+        self._experiment_log_widget = ExperimentLogWidget()
+
+        # ── Calibration status indicators ────────────────────────
+        # Must be after all capture tabs are created.
+        from ui.widgets.calibration_indicator import CalibrationIndicator
+        self._cal_indicators = []
+        for tab, insert_fn in [
+            (self._acquire_tab, lambda w: self._acquire_tab.insert_readiness_widget(w)),
+            (self._scan_tab,    lambda w: self._scan_tab.layout().insertWidget(0, w)),
+            (self._transient_tab, lambda w: self._transient_tab.layout().insertWidget(0, w)),
+            (self._movie_tab,   lambda w: self._movie_tab.layout().insertWidget(0, w)),
+        ]:
+            ind = CalibrationIndicator()
+            ind.navigate_requested.connect(
+                lambda: self._nav.select_by_label("Calibration"))
+            insert_fn(ind)
+            self._cal_indicators.append(ind)
+        # Initial state
+        self._refresh_cal_indicators()
+
+        # ── Post-capture action bars ─────────────────────────────
+        self._pcab_acquire   = PostCaptureActionBar()
+        self._pcab_scan      = PostCaptureActionBar()
+        self._pcab_transient = PostCaptureActionBar()
+        self._pcab_movie     = PostCaptureActionBar()
+        # Insert at top of each tab's root layout
+        self._acquire_tab.insert_readiness_widget(self._pcab_acquire)
+        self._scan_tab.layout().insertWidget(0, self._pcab_scan)
+        self._transient_tab.layout().insertWidget(0, self._pcab_transient)
+        self._movie_tab.layout().insertWidget(0, self._pcab_movie)
+        # Wire navigation actions
+        for bar in (self._pcab_acquire, self._pcab_scan,
+                    self._pcab_transient, self._pcab_movie):
+            bar.view_sessions_clicked.connect(
+                lambda: self._nav.select_by_label("Sessions"))
+            bar.open_analysis_clicked.connect(
+                lambda: self._nav.select_by_label("Analysis"))
+        self._pcab_acquire.export_clicked.connect(
+            self._acquire_tab._export if hasattr(
+                self._acquire_tab, "_export") else lambda: None)
+        self._pcab_scan.export_clicked.connect(
+            self._scan_tab._save_map if hasattr(
+                self._scan_tab, "_save_map") else lambda: None)
+        self._pcab_transient.export_clicked.connect(
+            self._transient_tab._save if hasattr(
+                self._transient_tab, "_save") else lambda: None)
+        self._pcab_movie.export_clicked.connect(
+            self._movie_tab._save if hasattr(
+                self._movie_tab, "_save") else lambda: None)
+
+        # ── Transient comparison ─────────────────────────────────────
+        self._transient_tab.compare_requested.connect(
+            self._on_transient_compare_requested)
+
         # ── Hardware category panels ──────────────────────────────────
         # Each panel is a dynamic QTabWidget that shows one tab per
         # connected device.  Existing tab widgets are pre-registered
@@ -665,11 +724,12 @@ class MainWindow(QMainWindow):
         self._hw_coord.navigate_requested.connect(
             lambda lbl: self._nav.select_by_label(lbl))
 
-        self._hw_cameras_panel  = _hw_panels["cameras"]
-        self._hw_stages_panel   = _hw_panels["stages"]
-        self._hw_stimulus_panel = _hw_panels["stimulus"]
-        self._hw_probes_panel   = _hw_panels["probes"]
-        self._hw_sensors_panel  = _hw_panels["sensors"]
+        self._hw_cameras_panel         = _hw_panels["cameras"]
+        self._hw_stages_panel          = _hw_panels["stages"]
+        self._hw_thermal_control_panel = _hw_panels["thermal_control"]
+        self._hw_stimulus_panel        = _hw_panels["stimulus_timing"]
+        self._hw_probes_panel          = _hw_panels["probes"]
+        self._hw_sensors_panel         = _hw_panels["sensors"]
 
         # ── Phase-aware sections (new) ─────────────────────────────────
         self._modality_section      = ModalitySection()
@@ -722,6 +782,36 @@ class MainWindow(QMainWindow):
         # Wire recipe RUN signal → apply recipe to hardware
         self._recipe_tab.recipe_run.connect(self._apply_recipe)
 
+        # ── Phase 1 workflow layer signals ─────────────────────────
+        # (Measurement Setup navigate_requested already wired above)
+
+        # Recipe Run Panel → execute acquisition
+        self._recipe_run.run_requested.connect(self._on_recipe_run_requested)
+        self._recipe_run.run_completed.connect(
+            self._experiment_log_widget.refresh)
+        self._recipe_run.edit_recipe_requested.connect(
+            lambda uid: self._nav.select_by_label("Library"))
+
+        # Experiment Log → open session
+        self._experiment_log_widget.open_session_requested.connect(
+            self._on_experiment_log_open_session)
+
+        # Load recipes into run panel
+        from acquisition.recipe_tab import RecipeStore
+        try:
+            recipes = RecipeStore().list()
+            self._recipe_run.load_recipes(recipes)
+        except Exception:
+            pass
+
+        # Pre-fill operator from lab prefs
+        try:
+            op = cfg_mod.get_pref("lab.active_operator", "")
+            if op:
+                self._recipe_run.set_operator(op)
+        except Exception:
+            pass
+
         # Wire Library tab "Apply" → propagate profile to header + hardware
         self._library_tab.profile_applied.connect(self._on_profile_applied)
 
@@ -756,6 +846,14 @@ class MainWindow(QMainWindow):
         # Cloud and Ollama signals are connected here because they don't
         # appear in that block.
 
+        # Wire Settings tab → Hardware setup profiles
+        self._settings_tab.profile_save_requested.connect(
+            self._on_profile_save)
+        self._settings_tab.profile_load_requested.connect(
+            self._on_profile_load)
+        self._settings_tab.profile_delete_requested.connect(
+            self._on_profile_delete)
+
         # Wire Settings tab → AI service (cloud)
         self._settings_tab.cloud_ai_connect_requested.connect(
             self._on_cloud_ai_connect)
@@ -775,7 +873,7 @@ class MainWindow(QMainWindow):
         # Phase 1: CONFIGURATION
         self._nav.add_phase(1, "CONFIGURATION",
             "Set up your hardware and measurement parameters", [
-            NI("Modality",             _I["Modality"],             self._modality_section),
+            NI("Measurement Setup",    _I["Measurement Setup"],    self._modality_section),
             NI("Stimulus",             _I["Stimulus"],             self._stimulus_tab),
             NI("Timing",               _I["Timing"],               self._timing_tab),
             NI("Temperature",          _I["Temperature"],          self._temp_tab),
@@ -806,13 +904,20 @@ class MainWindow(QMainWindow):
         # ─── separator ───
         self._nav.add_separator()
 
-        # HARDWARE (collapsible — 5 categories matching Device Manager)
+        # HARDWARE (collapsible — 6 categories matching Device Manager)
         self._nav.add_collapsible("HARDWARE", "mdi.chip", [
-            NI("Cameras",      _I["Cameras"],      self._hw_cameras_panel),
-            NI("Stages",       _I["Stages"],       self._hw_stages_panel),
-            NI("Stimulus",     _I["Stimulus"],     self._hw_stimulus_panel),
-            NI("Probes",       _I["Probes"],       self._hw_probes_panel),
-            NI("Sensors",      _I["Sensors"],      self._hw_sensors_panel),
+            NI("Cameras",           _I["Cameras"],           self._hw_cameras_panel),
+            NI("Stages",            _I["Stages"],            self._hw_stages_panel),
+            NI("Thermal Control",   _I["Thermal Control"],   self._hw_thermal_control_panel),
+            NI("Stimulus & Timing", _I["Stimulus & Timing"], self._hw_stimulus_panel),
+            NI("Probes",            _I["Probes"],            self._hw_probes_panel),
+            NI("Sensors",           _I["Sensors"],           self._hw_sensors_panel),
+        ])
+
+        # WORKFLOW
+        self._nav.add_section("WORKFLOW", [
+            NI("Recipe Run",      _I["Recipes"],        self._recipe_run),
+            NI("Experiment Log",  _I["Experiment Log"], self._experiment_log_widget),
         ])
 
         # SYSTEM
@@ -832,9 +937,12 @@ class MainWindow(QMainWindow):
         self._modality_section.set_workspace_mode(ws_mgr.mode.value)
         for w in (self._live_tab, self._focus_stage_tab,
                   self._signal_check_section, self._capture_tab,
-                  self._cal_tab):
+                  self._cal_tab, self._recipe_run):
             if hasattr(w, "set_workspace_mode"):
                 w.set_workspace_mode(ws_mgr.mode.value)
+        # Navigate to Measurement Setup as landing in Guided mode
+        if ws_mgr.mode.value == "guided":
+            self._nav.navigate_to(self._modality_section)
         ws_mgr.mode_changed.connect(self._nav.set_workspace_mode)
         # Mode indicator in sidebar header cycles through modes
         self._nav.mode_cycle_requested.connect(self._on_workspace_changed)
@@ -859,12 +967,12 @@ class MainWindow(QMainWindow):
 
         # ── Auto-hide unconfigured items ──────────────────────────────────
         _hw_cfg = config.get("hardware", {})
-        # Sensors (TEC): shown if at least one TEC is enabled
+        # Thermal Control (TEC): shown if at least one TEC is enabled
         if n_tecs == 0:
-            self._nav.set_item_visible("Sensors", False)
-        # Stimulus (FPGA+Bias+GPIO): shown if FPGA is enabled
+            self._nav.set_item_visible("Thermal Control", False)
+        # Stimulus & Timing (FPGA+Bias+GPIO): shown if FPGA is enabled
         if not _hw_cfg.get("fpga", {}).get("enabled", True):
-            self._nav.set_item_visible("Stimulus", False)
+            self._nav.set_item_visible("Stimulus & Timing", False)
         # Emissivity: always shown (applies to both real + simulated IR cameras)
 
         # Wire monochromator driver into WavelengthTab if available
@@ -993,9 +1101,9 @@ class MainWindow(QMainWindow):
         """Return all PaletteItems for the command palette (Ctrl+K)."""
         return [
             # ── CONFIGURATION ─────────────────────────────────────────
-            PaletteItem("Modality",             "Configuration",
+            PaletteItem("Measurement Setup",    "Configuration",
                         lambda: self._nav.navigate_to(self._modality_section),
-                        keywords=["modality", "camera", "objective", "fov", "lens"]),
+                        keywords=["modality", "camera", "objective", "fov", "lens", "setup"]),
             PaletteItem("Stimulus",             "Configuration",
                         lambda: self._nav.navigate_to(self._stimulus_tab),
                         keywords=["stimulus", "fpga", "modulation", "bias", "voltage", "iv", "sweep"]),
@@ -1062,6 +1170,11 @@ class MainWindow(QMainWindow):
         signals.acq_complete.connect(self._autoscan_tab.on_acq_complete, Qt.QueuedConnection)
         signals.scan_progress.connect(self._autoscan_tab.on_scan_progress, Qt.QueuedConnection)
         signals.scan_complete.connect(self._autoscan_tab.on_scan_complete, Qt.QueuedConnection)
+        # Transient/Movie completion → post-capture action bars
+        signals.transient_complete.connect(
+            self._on_transient_complete_actionbar, Qt.QueuedConnection)
+        signals.movie_complete.connect(
+            self._on_movie_complete_actionbar, Qt.QueuedConnection)
         signals.log_message.connect(self._on_log)
         signals.error.connect(self._on_error)
         # TEC alarm signals
@@ -1204,6 +1317,12 @@ class MainWindow(QMainWindow):
             lambda uid: self._phase_tracker.mark(5, "data_exported"))
         self._data_tab.report_completed.connect(
             lambda uid: self._phase_tracker.mark(5, "report_generated"))
+        self._data_tab.analyze_requested.connect(
+            self._on_session_analyze_requested)
+        self._data_tab.open_transient_requested.connect(
+            self._on_session_open_transient)
+        self._data_tab.open_movie_requested.connect(
+            self._on_session_open_movie)
 
         # Acquisition readiness gate
         self._acquire_tab.acquire_requested.connect(self._on_acquire_requested)
@@ -1225,6 +1344,28 @@ class MainWindow(QMainWindow):
         self._auto_theme_timer.timeout.connect(self._poll_system_theme)
         if config.get_pref("ui.theme", "auto") == "auto":
             self._auto_theme_timer.start()
+
+        # ── Hardware setup profile auto-save ──────────────────────────
+        from hardware.setup_profile_manager import SetupProfileManager
+        self._profile_mgr = SetupProfileManager()
+        self._profile_restoring = False  # guard against echo during restore
+
+        self._profile_autosave_timer = QTimer(self)
+        self._profile_autosave_timer.setSingleShot(True)
+        self._profile_autosave_timer.setInterval(2000)
+        self._profile_autosave_timer.timeout.connect(self._autosave_profile)
+
+        # Connect hardware-change signals to debounced auto-save
+        from ui.app_signals import signals as _sigs
+        _sigs.camera_exposure_changed.connect(self._on_hw_setting_changed)
+        _sigs.camera_gain_changed.connect(self._on_hw_setting_changed)
+        _sigs.tec_setpoint_changed.connect(self._on_hw_setting_changed)
+        _sigs.fpga_frequency_changed.connect(self._on_hw_setting_changed)
+        _sigs.fpga_duty_changed.connect(self._on_hw_setting_changed)
+        _sigs.bias_voltage_changed.connect(self._on_hw_setting_changed)
+
+        # Populate the Settings tab profile list
+        self._settings_tab.refresh_profile_list(self._profile_mgr.names())
 
     # ── Theme switching ───────────────────────────────────────────────────────
 
@@ -1494,9 +1635,18 @@ class MainWindow(QMainWindow):
         # Refresh sidebar step indicators for the new mode
         if hasattr(self, "_phase_tracker"):
             self._nav.update_guided_states(self._phase_tracker, mode)
+        # Recipe Run Panel mode gating
+        rr = getattr(self, "_recipe_run", None)
+        if rr is not None and hasattr(rr, "set_workspace_mode"):
+            rr.set_workspace_mode(mode)
+        # Navigate to Measurement Setup landing in Guided mode
+        ms = getattr(self, "_modality_section", None)
+        if mode == "guided" and ms is not None:
+            self._nav.navigate_to(ms)
         # Switch section layouts (Guided vs compact)
         for w in (getattr(self, "_modality_section", None),
                   getattr(self, "_live_tab", None),
+                  getattr(self, "_acquire_tab", None),
                   getattr(self, "_focus_stage_tab", None),
                   getattr(self, "_signal_check_section", None),
                   getattr(self, "_capture_tab", None),
@@ -1615,6 +1765,11 @@ class MainWindow(QMainWindow):
         if app_state.fpga is None and not app_state.demo_mode:
             return
         self._fpga_tab.update_status(status)
+        # Forward to summary strips on image-centric screens
+        if hasattr(self, "_live_tab") and hasattr(self._live_tab, "_hw_strip"):
+            self._live_tab._hw_strip.update_timing(status)
+        if hasattr(self, "_acquire_tab") and hasattr(self._acquire_tab, "_hw_strip"):
+            self._acquire_tab._hw_strip.update_timing(status)
         if app_state.fpga is None:
             return
         ok  = status.error is None and status.running
@@ -1629,6 +1784,11 @@ class MainWindow(QMainWindow):
         if app_state.bias is None and not app_state.demo_mode:
             return
         self._bias_tab.update_status(status)
+        # Forward to summary strips on image-centric screens
+        if hasattr(self, "_live_tab") and hasattr(self._live_tab, "_hw_strip"):
+            self._live_tab._hw_strip.update_bias(status)
+        if hasattr(self, "_acquire_tab") and hasattr(self._acquire_tab, "_hw_strip"):
+            self._acquire_tab._hw_strip.update_bias(status)
         if app_state.bias is None:
             return
         ok  = status.error is None and status.output_on
@@ -1669,6 +1829,17 @@ class MainWindow(QMainWindow):
                 f"T {result.t_min:.1f}–{result.t_max:.1f}°C")
         else:
             self._log_tab.append("Calibration failed or aborted")
+        # Refresh calibration indicators on all capture tabs
+        self._refresh_cal_indicators()
+
+    def _refresh_cal_indicators(self):
+        """Push current calibration state to all capture-tab indicators."""
+        cal = app_state.active_calibration
+        for ind in self._cal_indicators:
+            try:
+                ind.update_state(cal)
+            except Exception:
+                log.debug("cal indicator refresh failed", exc_info=True)
 
     def _on_scan_progress(self, prog):
         self._scan_tab.update_progress(prog)
@@ -1700,6 +1871,46 @@ class MainWindow(QMainWindow):
             self._toasts.show_warning("Scan failed or was aborted",
                                       auto_dismiss_ms=5000)
             return
+        # ── Grid session auto-save — off main thread ─────────────
+        scan_params = {
+            "n_rows":      result.n_rows,
+            "n_cols":      result.n_cols,
+            "step_x_um":   result.step_x_um,
+            "step_y_um":   result.step_y_um,
+            "tile_w":      getattr(result, "tile_w", 0),
+            "tile_h":      getattr(result, "tile_h", 0),
+            "origin_x_um": getattr(result, "origin_x_um", 0.0),
+            "origin_y_um": getattr(result, "origin_y_um", 0.0),
+        }
+
+        def _save_grid_session():
+            try:
+                scan_label = time.strftime("grid_%Y%m%d_%H%M%S")
+                session = session_mgr.save_result(
+                    result,
+                    label=scan_label,
+                    result_type="grid",
+                    scan_params=scan_params,
+                    auth_session=self._auth_session,
+                )
+                signals.acq_saved.emit(session)
+                log.info("Grid scan saved to Sessions: %s", session.meta.uid)
+            except Exception:
+                log.debug("Grid session auto-save failed", exc_info=True)
+        threading.Thread(target=_save_grid_session, daemon=True,
+                         name="save-grid-session").start()
+
+        # ── Post-capture action bar (grid scan) ──────────────────
+        # Grid scan: saved to Sessions ✓, analysable (has drr) ✓, exportable ✓
+        has_drr = result.drr_map is not None
+        self._pcab_scan.show_actions(
+            can_view_sessions=True,
+            can_open_analysis=has_drr,
+            can_export=True,
+            result_label=(
+                f"Grid scan complete — {result.n_cols}×{result.n_rows} tiles, "
+                f"{result.duration_s:.0f}s"),
+        )
         # ── Autosave checkpoint (scan) — off main thread ──────────────
         def _autosave_scan():
             try:
@@ -1718,10 +1929,8 @@ class MainWindow(QMainWindow):
                          name="autosave-scan").start()
 
         # ── Run manifest (scan) ───────────────────────────────────────
-        # Scans are not yet saved through SessionManager, so there is no
-        # session directory to write the manifest into.  A scan-specific
-        # session save path is tracked for a future enhancement; for now
-        # we emit the run event to the timeline bus only.
+        # Grid scans are now auto-saved to SessionManager (v6+).
+        # We also emit the run event to the timeline bus.
         try:
             from events import emit_info, EVT_SCAN_COMPLETE
             _rdns = check_readiness(OP_SCAN, app_state)
@@ -1734,6 +1943,101 @@ class MainWindow(QMainWindow):
                       optional_devices_missing=_rdns.optional_missing)
         except Exception as _me:
             log.debug("Manifest event (scan) failed: %s", _me)
+
+    # ── Post-capture action bars (transient / movie) ────────────────
+
+    def _on_transient_complete_actionbar(self, result):
+        """Auto-save transient session and show post-capture action bar."""
+        n_delays = getattr(result, "n_delays", 0) or 0
+        dur = getattr(result, "duration_s", 0) or 0
+        has_cube = getattr(result, "delta_r_cube", None) is not None
+
+        # ── Transient session auto-save — off main thread ─────────
+        if has_cube:
+            cube_params = {
+                "n_delays":      n_delays,
+                "n_averages":    getattr(result, "n_averages", 0),
+                "delay_start_s": getattr(result, "delay_start_s", 0.0),
+                "delay_end_s":   getattr(result, "delay_end_s", 0.0),
+                "pulse_dur_us":  getattr(result, "pulse_dur_us", 0.0),
+                "hw_triggered":  getattr(result, "hw_triggered", False),
+            }
+
+            def _save_transient_session():
+                try:
+                    label = time.strftime("transient_%Y%m%d_%H%M%S")
+                    session = session_mgr.save_result(
+                        result,
+                        label=label,
+                        result_type="transient",
+                        cube_params=cube_params,
+                        auth_session=self._auth_session,
+                    )
+                    signals.acq_saved.emit(session)
+                    log.info("Transient session saved: %s", session.meta.uid)
+                except Exception:
+                    log.debug("Transient session auto-save failed", exc_info=True)
+            threading.Thread(target=_save_transient_session, daemon=True,
+                             name="save-transient-session").start()
+
+        # ── Post-capture action bar ───────────────────────────────
+        try:
+            self._pcab_transient.show_actions(
+                can_view_sessions=has_cube,
+                can_open_analysis=False,   # transient cubes are not 2D maps
+                can_export=True,
+                result_label=(
+                    f"Time-resolved acquisition complete — "
+                    f"{n_delays} delay steps, {dur:.1f}s"),
+            )
+        except Exception:
+            log.debug("Transient action bar failed", exc_info=True)
+
+    def _on_movie_complete_actionbar(self, result):
+        """Auto-save movie session (if persistable) and show action bar."""
+        n_frames = getattr(result, "n_frames", 0) or 0
+        dur = getattr(result, "duration_s", 0) or 0
+        has_cube = getattr(result, "delta_r_cube", None) is not None
+
+        # ── Movie session auto-save — only when delta_r_cube exists ──
+        if has_cube:
+            cube_params = {
+                "n_frames":       n_frames,
+                "frames_captured": getattr(result, "frames_captured", n_frames),
+                "fps_achieved":   getattr(result, "fps_achieved", 0.0),
+            }
+
+            def _save_movie_session():
+                try:
+                    label = time.strftime("movie_%Y%m%d_%H%M%S")
+                    session = session_mgr.save_result(
+                        result,
+                        label=label,
+                        result_type="movie",
+                        cube_params=cube_params,
+                        auth_session=self._auth_session,
+                    )
+                    signals.acq_saved.emit(session)
+                    log.info("Movie session saved: %s", session.meta.uid)
+                except Exception:
+                    log.debug("Movie session auto-save failed", exc_info=True)
+            threading.Thread(target=_save_movie_session, daemon=True,
+                             name="save-movie-session").start()
+
+        # ── Post-capture action bar ───────────────────────────────
+        try:
+            self._pcab_movie.show_actions(
+                can_view_sessions=has_cube,
+                can_open_analysis=False,   # movie bursts are not 2D maps
+                can_export=True,
+                result_label=(
+                    f"Burst capture complete — "
+                    f"{n_frames} frames, {dur:.1f}s"
+                    + ("" if has_cube else
+                       "  (no reference — not saved to Sessions)")),
+            )
+        except Exception:
+            log.debug("Movie action bar failed", exc_info=True)
 
     # ── Centralized camera-mode refresh ──────────────────────────────
 
@@ -1896,24 +2200,37 @@ class MainWindow(QMainWindow):
             log.debug("health panel startup update failed", exc_info=True)
 
     def _on_structured_error(self, dev_err):
-        """Handle a structured DeviceError — update health panel and tab banner."""
+        """Handle a structured DeviceError — update health panel, tab banner, and toast."""
         try:
             uid = getattr(dev_err, 'device_uid', '') or 'unknown'
-            # Use narration for rich, readable error messages
+            # Build severity-tagged error message for health panel
+            from hardware.error_taxonomy import Severity
+            sev = getattr(dev_err, 'severity', Severity.ERROR)
+            sev_label = {
+                Severity.INFO:     "Info",
+                Severity.WARNING:  "Warning",
+                Severity.DEGRADED: "Degraded",
+                Severity.ERROR:    "Error",
+                Severity.CRITICAL: "Critical",
+            }.get(sev, "Error")
+
             narration = getattr(dev_err, 'narration', '') or \
                         getattr(dev_err, 'suggested_fix', '') or \
                         getattr(dev_err, 'message', str(dev_err))
+            # Prefix with severity for health panel display
+            panel_msg = f"[{sev_label}] {narration}"
             self._health_panel.update_device(
                 uid=uid,
                 state=STATE_ERROR,
-                error_msg=narration,
+                error_msg=panel_msg,
             )
-            # Show contextual in-tab error banner (Feature 6)
+            # Show contextual in-tab error banner
             tab = self._device_tab(uid)
             if tab is not None and hasattr(tab, 'show_device_error'):
-                short = getattr(dev_err, 'short_narration',
-                                self._device_display(uid))
                 tab.show_device_error(uid, self._device_display(uid), narration)
+            # Show toast for errors and above (not for warnings/info)
+            if sev >= Severity.ERROR and hasattr(self, '_toast_manager'):
+                self._toast_manager.show_structured_error(dev_err)
             # Track for dedup against _on_error()
             import time as _time
             self._structured_error_dedup = (uid, _time.time())
@@ -2499,7 +2816,7 @@ class MainWindow(QMainWindow):
         view_menu = mb.addMenu("View")
 
         # Phase 1: Configuration
-        act_modality = view_menu.addAction("Modality")
+        act_modality = view_menu.addAction("Measurement Setup")
         act_modality.setShortcut(QKeySequence("Ctrl+1"))
         act_modality.triggered.connect(
             lambda: self._nav.navigate_to(self._modality_section))
@@ -2920,6 +3237,53 @@ class MainWindow(QMainWindow):
     def _apply_recipe(self, recipe) -> None:
         self._recipe_svc.apply(recipe)
 
+    # ── Phase 1 workflow layer handlers ───────────────────────────────
+
+    def _on_recipe_run_requested(self, payload: dict) -> None:
+        """Handle Recipe Run Panel RUN button.
+
+        Applies recipe settings to hardware and starts acquisition.
+        On completion, calls back to the run panel to log the result.
+        """
+        import time as _time
+
+        # Apply hardware settings from payload
+        try:
+            cam = app_state.cam
+            if cam is not None:
+                cam.set_exposure(payload.get("exposure_us", 5000.0))
+                cam.set_gain(payload.get("gain_db", 0.0))
+        except Exception:
+            log.debug("Failed to apply camera settings from recipe run",
+                      exc_info=True)
+
+        # Set modality
+        try:
+            cam_type = "ir" if payload.get("modality") == "infrared" else "tr"
+            app_state.active_camera_type = cam_type
+        except Exception:
+            pass
+
+        # Start acquisition via existing path
+        n_frames = payload.get("n_frames", 16)
+        delay = payload.get("inter_phase_delay_s", 0.1)
+        start_time = _time.time()
+
+        # Store payload for completion callback
+        self._recipe_run_payload = payload
+        self._recipe_run_start_time = start_time
+
+        self._on_acquire_requested(n_frames, delay)
+
+    def _on_experiment_log_open_session(self, session_uid: str) -> None:
+        """Handle Experiment Log row double-click: navigate to session."""
+        self._nav.select_by_label("Sessions")
+        try:
+            self._data_tab.select_session(session_uid)
+        except Exception:
+            log.debug("Could not select session %s in DataTab",
+                      session_uid, exc_info=True)
+
     # ── Profile save / load ────────────────────────────────────────────
 
     def _navigate_to_profiles(self):
@@ -2953,6 +3317,101 @@ class MainWindow(QMainWindow):
         elif op == "scan":
             if getattr(self._scan_tab, "_runner", None):
                 self._scan_tab._runner.abort()
+
+    def _on_session_analyze_requested(self, uid: str) -> None:
+        """Load a stored session into the Analysis tab (Sessions → Analyze)."""
+        try:
+            session = session_mgr.load(uid)
+            if session is None:
+                self._toasts.show_warning("Could not load session")
+                return
+            drr = session.delta_r_over_r
+            dt  = None
+            # Apply calibration to get ΔT if available
+            cal = app_state.active_calibration
+            if cal and cal.valid and drr is not None:
+                try:
+                    dt = cal.apply(drr)
+                except Exception:
+                    pass
+            meta = session.meta
+            label = getattr(meta, "label", uid) or uid
+            # Build acquisition context dict from session metadata
+            ctx = None
+            if hasattr(meta, "to_dict"):
+                try:
+                    ctx = meta.to_dict()
+                except Exception:
+                    pass
+            self._analysis_tab.push_result(
+                dt_map=dt, drr_map=drr,
+                base_image=None,
+                source_label=f"Session: {label}",
+                context=ctx)
+            session.unload()  # free memory after pushing maps
+            self._nav.select_by_label("Analysis")
+        except Exception:
+            import logging
+            logging.getLogger(__name__).debug(
+                "Session analyze failed", exc_info=True)
+            self._toasts.show_warning("Failed to load session for analysis")
+
+    def _on_session_open_transient(self, uid: str) -> None:
+        """Load a stored transient session into the Transient tab."""
+        try:
+            session = session_mgr.load(uid)
+            if session is None:
+                self._toasts.show_warning("Could not load session")
+                return
+            rt = getattr(session.meta, "result_type", "") or ""
+            if rt != "transient":
+                self._toasts.show_warning("Session is not a transient acquisition")
+                return
+            self._transient_tab.load_session(session)
+            # Don't unload — TransientTab holds mmap references to the arrays
+            self._nav.select_by_label("Transient")
+        except Exception:
+            log.debug("Session open-transient failed", exc_info=True)
+            self._toasts.show_warning("Failed to load transient session")
+
+    def _on_transient_compare_requested(self) -> None:
+        """Open the transient session comparison dialog."""
+        try:
+            from ui.dialogs.transient_compare_dialog import TransientCompareDialog
+            # Pass the UID of the currently loaded session (if any) for pre-selection
+            current_uid = ""
+            if (hasattr(self._transient_tab, '_loaded_session_label')
+                    and self._transient_tab._loaded_session_label):
+                # Resolve label back to UID via session manager
+                for m in session_mgr.all_metas():
+                    lbl = getattr(m, "label", "") or m.uid
+                    if lbl == self._transient_tab._loaded_session_label:
+                        current_uid = m.uid
+                        break
+            TransientCompareDialog.run(session_mgr, current_uid, self)
+        except Exception:
+            log.debug("Transient compare dialog failed", exc_info=True)
+            self._toasts.show_warning("Could not open comparison dialog")
+
+    def _on_session_open_movie(self, uid: str) -> None:
+        """Load a stored movie session into the Movie tab."""
+        try:
+            session = session_mgr.load(uid)
+            if session is None:
+                self._toasts.show_warning("Could not load session")
+                return
+            rt = getattr(session.meta, "result_type", "") or ""
+            if rt != "movie":
+                self._toasts.show_warning("Session is not a movie acquisition")
+                return
+            self._movie_tab.load_session(session)
+            # Don't unload — MovieTab holds mmap references to the arrays
+            # Navigate to Transient capture tab, then switch to Burst sub-tab
+            self._nav.select_by_label("Transient")
+            self._transient_capture_tab._tabs.setCurrentIndex(1)
+        except Exception:
+            log.debug("Session open-movie failed", exc_info=True)
+            self._toasts.show_warning("Failed to load movie session")
 
     def _on_autoscan_send_to_analysis(self, result) -> None:
         """Push AutoScan result to Analysis tab, then switch to Manual mode."""
@@ -3048,6 +3507,19 @@ class MainWindow(QMainWindow):
                 scorecard, duration_s=r.duration_s, n_frames=r.n_frames)
         except Exception:
             log.debug("Quality scorecard computation failed", exc_info=True)
+
+        # ── Post-capture action bar (single-point) ─────────────────
+        # Single-point: saved to Sessions ✓, analysable ✓, exportable ✓
+        self._pcab_acquire.show_actions(
+            can_view_sessions=True,
+            can_open_analysis=True,
+            can_export=True,
+            result_label=(
+                f"Capture complete — {r.n_frames} frames, "
+                f"{r.duration_s:.1f}s"
+                + (f", grade {scorecard.overall_grade}"
+                   if scorecard else "")),
+        )
 
         # Push to analysis tab — auto-runs if auto-run checkbox is on
         dt_map  = getattr(r, "delta_t",       None)
@@ -4135,7 +4607,7 @@ class MainWindow(QMainWindow):
                 log.debug("Swallowed exception", exc_info=True)
         elif code == "tec_wait":
             try:
-                self._nav.select_by_label("Sensors")
+                self._nav.select_by_label("Thermal Control")
             except Exception:
                 log.debug("Swallowed exception", exc_info=True)
 
@@ -4643,6 +5115,181 @@ class MainWindow(QMainWindow):
             self._modality_section.refresh()
         except Exception:
             log.debug("Modality startup refresh failed", exc_info=True)
+        # Restore last-used hardware profile if auto-restore is enabled
+        self._restore_startup_profile()
+
+        # Run OS-level diagnostics and surface results in health panel
+        self._run_startup_os_checks()
+
+    # ── Hardware setup profile handlers ─────────────────────────────────────
+
+    def _on_hw_setting_changed(self, *args):
+        """Any hardware setting changed — restart the debounced auto-save timer.
+
+        Ignored while a profile restore is in progress to avoid immediately
+        overwriting the restored profile with partially-applied values.
+        """
+        if self._profile_restoring:
+            return
+        self._profile_autosave_timer.start()
+
+    def _autosave_profile(self):
+        """Debounced auto-save: capture current settings → last-used file."""
+        try:
+            from hardware.setup_profile import capture_current_settings
+            profile = capture_current_settings(
+                camera_tab=self._camera_tab,
+                temperature_tab=self._temp_tab,
+                fpga_tab=self._fpga_tab,
+                bias_tab=self._bias_tab,
+                app_state=app_state,
+            )
+            self._profile_mgr.save_last_used(profile)
+        except Exception:
+            log.debug("Profile auto-save failed", exc_info=True)
+
+    def _restore_startup_profile(self):
+        """Restore last-used profile on startup if auto-restore is enabled."""
+        if not config.get_pref("hardware.auto_restore_profile", True):
+            return
+        if not self._profile_mgr.has_last_used():
+            return
+        try:
+            profile = self._profile_mgr.load_last_used()
+            if profile is None:
+                return
+            report = self._apply_profile(profile)
+            if report.applied or report.pending:
+                summary = self._format_restore_toast(report)
+                self._settings_tab.set_profile_status(
+                    f"Startup restore: {summary}")
+                log.info("Startup profile restore: %s", report.summary())
+                # Show a toast summarising what was restored
+                try:
+                    from ui.notifications import show_toast
+                    show_toast(
+                        self,
+                        "Hardware settings restored",
+                        detail=summary,
+                        level="info",
+                        duration=6000,
+                    )
+                except Exception:
+                    pass
+        except Exception:
+            log.debug("Startup profile restore failed", exc_info=True)
+
+    def _apply_profile(self, profile):
+        """Apply a profile to the live tabs.  Returns a RestoreReport.
+
+        Sets ``_profile_restoring`` guard to suppress auto-save echo.
+        """
+        from hardware.setup_profile import restore_profile
+        self._profile_restoring = True
+        try:
+            report = restore_profile(
+                profile,
+                camera_tab=self._camera_tab,
+                temperature_tab=self._temp_tab,
+                fpga_tab=self._fpga_tab,
+                bias_tab=self._bias_tab,
+                app_state=app_state,
+            )
+        finally:
+            self._profile_restoring = False
+        return report
+
+    @staticmethod
+    def _format_restore_toast(report) -> str:
+        """Build a concise one-line toast summary from a RestoreReport."""
+        parts = []
+        if report.applied:
+            parts.append(f"{len(report.applied)} applied")
+        if report.pending:
+            parts.append(f"{len(report.pending)} pending")
+        if report.warnings:
+            parts.append(f"{len(report.warnings)} warning(s)")
+        return ", ".join(parts) if parts else "No changes"
+
+    def _on_profile_save(self, name: str):
+        """Settings tab → Save current hardware settings as a named profile."""
+        try:
+            from hardware.setup_profile import capture_current_settings
+            profile = capture_current_settings(
+                camera_tab=self._camera_tab,
+                temperature_tab=self._temp_tab,
+                fpga_tab=self._fpga_tab,
+                bias_tab=self._bias_tab,
+                app_state=app_state,
+                name=name,
+            )
+            self._profile_mgr.save(profile)
+            self._settings_tab.refresh_profile_list(self._profile_mgr.names())
+            self._settings_tab.set_profile_status(f"Saved: {name}")
+            log.info("Saved hardware profile '%s'", name)
+        except Exception as exc:
+            log.warning("Profile save failed: %s", exc)
+            self._settings_tab.set_profile_status(f"Save failed: {exc}")
+
+    def _on_profile_load(self, name: str):
+        """Settings tab → Load a named profile into hardware tabs."""
+        profile = self._profile_mgr.load(name)
+        if profile is None:
+            self._settings_tab.set_profile_status(f"Profile not found: {name}")
+            return
+        report = self._apply_profile(profile)
+        summary = self._format_restore_toast(report)
+        self._settings_tab.set_profile_status(
+            f"Loaded \"{name}\": {summary}")
+        if report.warnings:
+            try:
+                from ui.notifications import show_toast
+                show_toast(
+                    self,
+                    f"Profile \"{name}\" loaded with warnings",
+                    detail="; ".join(report.warnings),
+                    level="warning",
+                    duration=8000,
+                )
+            except Exception:
+                pass
+        log.info("Loaded hardware profile '%s': %s", name, report.summary())
+
+    def _on_profile_delete(self, name: str):
+        """Settings tab → Delete a named profile."""
+        self._profile_mgr.delete(name)
+        self._settings_tab.refresh_profile_list(self._profile_mgr.names())
+        self._settings_tab.set_profile_status(f"Deleted: {name}")
+        log.info("Deleted hardware profile '%s'", name)
+
+    def _run_startup_os_checks(self):
+        """Run OS-level diagnostic checks and surface warnings in the health panel."""
+        try:
+            from hardware.os_checks import run_os_checks
+            results = run_os_checks()
+            # Send failed checks to the health panel's OS warnings banner
+            failed = [r for r in results if not r.passed]
+            if failed and hasattr(self, '_health_panel'):
+                self._health_panel.set_os_warnings(failed)
+            # Show a toast for blocking OS issues
+            blocking = [r for r in failed
+                        if getattr(r, 'is_blocking', False)]
+            if blocking and hasattr(self, '_toast_manager'):
+                names = ", ".join(r.display_name for r in blocking[:3])
+                from ui.notifications import show_toast
+                show_toast(
+                    self,
+                    "System check: action required",
+                    detail=f"{names} — open Hardware Status for details",
+                    level="warning",
+                    duration=15000,
+                )
+            elif failed:
+                log.info("OS checks: %d warning(s): %s",
+                         len(failed),
+                         ", ".join(r.display_name for r in failed))
+        except Exception:
+            log.debug("Startup OS checks failed", exc_info=True)
 
     def _restore_layout(self):
         """Restore persisted window geometry and tab splitter sizes."""
@@ -4689,13 +5336,35 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         """
         Deterministic shutdown sequence:
-          1. Signal all background loops to stop (running = False)
-          2. Abort any in-progress acquisition
-          3. Stop the live tab processor
-          4. Close every driver in a defined order (camera last so frames stop)
-          5. Shutdown the thread pool (wait=True up to 3 s, then cancel)
-          6. Accept the event — window closes cleanly
+          1. Check for unsaved ephemeral results (guard)
+          2. Signal all background loops to stop (running = False)
+          3. Abort any in-progress acquisition
+          4. Stop the live tab processor
+          5. Close every driver in a defined order (camera last so frames stop)
+          6. Shutdown the thread pool (wait=True up to 3 s, then cancel)
+          7. Accept the event — window closes cleanly
         """
+        # ── Unsaved-data guard ────────────────────────────────────────
+        try:
+            from ui.widgets.unsaved_data_guard import (
+                check_unsaved_results, UnsavedDataDialog)
+            unsaved = check_unsaved_results(
+                ("Time-Resolved", self._transient_tab),
+                ("Burst",         self._movie_tab),
+                ("Grid Scan",     self._scan_tab),
+            )
+            if unsaved:
+                action = UnsavedDataDialog.ask(unsaved, parent=self)
+                if action in ("cancel", "export"):
+                    # "cancel" = abort close; "export" = stay open so user
+                    # can export first.  Both keep the window alive.
+                    event.ignore()
+                    return
+                # action == "discard" → proceed with shutdown
+        except Exception:
+            log.debug("Unsaved-data guard check failed (non-fatal)",
+                      exc_info=True)
+
         self._save_layout()
         # Clear autosave checkpoints on clean exit (not a crash)
         try:
@@ -4719,7 +5388,8 @@ class MainWindow(QMainWindow):
         # Prevents timer callbacks from firing on deleted widgets
         # ("wrapped C/C++ object has been deleted" RuntimeErrors).
         for timer in (getattr(self, "_evidence_timer", None),
-                      getattr(self, "_auto_theme_timer", None)):
+                      getattr(self, "_auto_theme_timer", None),
+                      getattr(self, "_profile_autosave_timer", None)):
             if timer is not None:
                 timer.stop()
 

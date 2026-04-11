@@ -26,15 +26,42 @@ from __future__ import annotations
 import logging
 import os
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
+
+from hardware.error_taxonomy import (
+    ErrorCategory,
+    ErrorDomain,
+    Severity,
+    Transience,
+    DeviceError,
+    make_error,
+)
 
 log = logging.getLogger(__name__)
 
 
+# ── Severity / category mapping per check_id ────────────────────────────────
+# Each check maps to an ErrorCategory and a severity for failures.
+# Passing checks are not surfaced as errors.
+_CHECK_TAXONOMY: dict[str, tuple[ErrorCategory, Severity]] = {
+    "win_usb_suspend":    (ErrorCategory.BLOCKED_PERMISSION, Severity.WARNING),
+    "win_port_lock":      (ErrorCategory.DEVICE_BUSY,        Severity.ERROR),
+    "macos_camera_perm":  (ErrorCategory.PERMISSION_DENIED,  Severity.ERROR),
+    "linux_dialout":      (ErrorCategory.PERMISSION_DENIED,  Severity.ERROR),
+    "serial_no_ports":    (ErrorCategory.DEVICE_DISCONNECTED, Severity.WARNING),
+    "serial_pyserial":    (ErrorCategory.MISSING_DEPENDENCY,  Severity.ERROR),
+}
+
+
 @dataclass
 class OSCheckResult:
-    """Result of a single OS-level diagnostic check."""
+    """Result of a single OS-level diagnostic check.
+
+    Each check carries a taxonomy mapping so that failures can be surfaced
+    as structured ``DeviceError`` instances with consistent severity and
+    category classification.
+    """
 
     check_id:       str
     display_name:   str
@@ -42,9 +69,78 @@ class OSCheckResult:
     message:        str
     fix_suggestion: str = ""   # empty if passed
 
+    # Taxonomy mapping (resolved from _CHECK_TAXONOMY on failed checks)
+    category:       Optional[ErrorCategory] = None
+    severity:       Optional[Severity] = None
+
     @property
     def is_warning(self) -> bool:
         return not self.passed and bool(self.fix_suggestion)
+
+    @property
+    def is_blocking(self) -> bool:
+        """A failed check is blocking if its severity is ERROR or higher."""
+        if self.passed:
+            return False
+        sev = self.severity or self._default_severity()
+        return sev >= Severity.ERROR
+
+    @property
+    def is_informational(self) -> bool:
+        """Check passed or severity is INFO."""
+        if self.passed:
+            return True
+        sev = self.severity or self._default_severity()
+        return sev <= Severity.INFO
+
+    def _default_severity(self) -> Severity:
+        """Look up default severity from the taxonomy mapping."""
+        base_id = self.check_id.rsplit("_", 1)[0] if "_" in self.check_id else self.check_id
+        _, sev = _CHECK_TAXONOMY.get(self.check_id, (None, None)) or _CHECK_TAXONOMY.get(base_id, (None, Severity.WARNING))
+        return sev or Severity.WARNING
+
+    def to_device_error(self) -> Optional[DeviceError]:
+        """Convert a failed check to a taxonomy-aware DeviceError.
+
+        Returns None for passing checks (no error to report).
+        """
+        if self.passed:
+            return None
+        # Resolve category from mapping; fall back to BLOCKED_PERMISSION
+        base_id = self.check_id.rsplit("_", 1)[0] if "_" in self.check_id else self.check_id
+        cat, sev = _CHECK_TAXONOMY.get(self.check_id, (None, None)) or _CHECK_TAXONOMY.get(base_id, (None, None))
+        cat = self.category or cat or ErrorCategory.BLOCKED_PERMISSION
+        sev = self.severity or sev or Severity.WARNING
+        return make_error(
+            category=cat,
+            message=self.message,
+            severity=sev,
+            transience=Transience.PERSISTENT,
+            suggested_fix=self.fix_suggestion,
+            user_correctable=True,
+            error_code=f"OS_{self.check_id.upper()}",
+        )
+
+    def to_dict(self) -> dict:
+        """Serialize for support bundle / JSON logging."""
+        d = {
+            "check_id": self.check_id,
+            "display_name": self.display_name,
+            "passed": self.passed,
+            "message": self.message,
+            "is_blocking": self.is_blocking,
+        }
+        if not self.passed:
+            d["fix_suggestion"] = self.fix_suggestion
+            base_id = self.check_id.rsplit("_", 1)[0] if "_" in self.check_id else self.check_id
+            cat, sev = _CHECK_TAXONOMY.get(self.check_id, (None, None)) or _CHECK_TAXONOMY.get(base_id, (None, None))
+            cat = self.category or cat
+            sev = self.severity or sev
+            if cat:
+                d["category"] = cat.value
+            if sev:
+                d["severity"] = sev.name
+        return d
 
 
 def run_os_checks() -> list[OSCheckResult]:
@@ -156,6 +252,8 @@ def _check_com_port_locks() -> list[OSCheckResult]:
                             "  • Meerstetter Service Tool\n"
                             "Then click Re-scan Hardware."
                         ),
+                        category=ErrorCategory.DEVICE_BUSY,
+                        severity=Severity.ERROR,
                     ))
             except Exception:
                 pass

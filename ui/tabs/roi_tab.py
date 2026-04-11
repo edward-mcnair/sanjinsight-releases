@@ -16,11 +16,11 @@ log = logging.getLogger(__name__)
 
 from PyQt5.QtWidgets import (
     QWidget, QLabel, QPushButton, QSpinBox, QVBoxLayout, QHBoxLayout,
-    QGridLayout, QGroupBox, QScrollArea, QFrame)
+    QGridLayout, QGroupBox, QScrollArea, QFrame, QComboBox)
 from PyQt5.QtCore    import Qt
 
 from hardware.app_state      import app_state
-from acquisition.roi         import Roi
+from acquisition.roi         import Roi, SHAPE_RECT, SHAPE_ELLIPSE, SHAPE_FREEFORM
 from acquisition.roi_model   import roi_model
 from acquisition.roi_widget  import MultiRoiSelector
 from ui.icons import set_btn_icon
@@ -44,7 +44,7 @@ class RoiTab(QWidget):
 
         # ---- Left: multi-ROI selector canvas ----
         left = QVBoxLayout()
-        sel_box = QGroupBox("Draw ROIs  (click-drag to add, click to select)")
+        sel_box = QGroupBox("Draw ROIs  (drag to add rect/ellipse, click to add freeform vertices)")
         sl = QVBoxLayout(sel_box)
         self._selector = MultiRoiSelector()
         sl.addWidget(self._selector)
@@ -68,7 +68,8 @@ class RoiTab(QWidget):
 
         self._roi_labels = {}
         for r, (key, label) in enumerate([
-                ("label", "Label"), ("x",  "X origin"), ("y", "Y origin"),
+                ("label", "Label"), ("shape", "Shape"),
+                ("x",  "X origin"), ("y", "Y origin"),
                 ("w",  "Width"),    ("h", "Height"),
                 ("area", "Area"),   ("status", "Status")]):
             il.addWidget(self._sub(label), r, 0)
@@ -102,19 +103,40 @@ class RoiTab(QWidget):
         # Manual entry
         manual_box = QGroupBox("Add Manual ROI  (pixels)")
         ml = QGridLayout(manual_box)
+
+        # Shape selector
+        ml.addWidget(QLabel("Shape"), 0, 0)
+        self._shape_combo = QComboBox()
+        self._shape_combo.addItem("Rectangle", SHAPE_RECT)
+        self._shape_combo.addItem("Ellipse", SHAPE_ELLIPSE)
+        self._shape_combo.addItem("Freeform", SHAPE_FREEFORM)
+        self._shape_combo.setFixedWidth(120)
+        self._shape_combo.currentIndexChanged.connect(self._on_shape_changed)
+        ml.addWidget(self._shape_combo, 0, 1)
+
         self._mx = self._ispin(0, 9999, 0)
         self._my = self._ispin(0, 9999, 0)
         self._mw = self._ispin(1, 9999, 400)
         self._mh = self._ispin(1, 9999, 300)
         for r, (lbl, sp) in enumerate([
                 ("X", self._mx), ("Y", self._my),
-                ("W", self._mw), ("H", self._mh)]):
+                ("W", self._mw), ("H", self._mh)], start=1):
             ml.addWidget(QLabel(lbl), r, 0)
             ml.addWidget(sp, r, 1)
-        add_btn = QPushButton("Add ROI")
-        add_btn.setObjectName("primary")
-        add_btn.clicked.connect(self._add_manual)
-        ml.addWidget(add_btn, 4, 0, 1, 2)
+        self._add_btn = QPushButton("Add ROI")
+        self._add_btn.setObjectName("primary")
+        self._add_btn.clicked.connect(self._add_manual)
+        ml.addWidget(self._add_btn, 5, 0, 1, 2)
+
+        # Freeform hint label (shown when freeform selected)
+        self._freeform_hint = QLabel(
+            "Draw on canvas: click to add vertices,\n"
+            "double-click or click start to close.\n"
+            "Esc to cancel, Enter to finish.")
+        self._freeform_hint.setStyleSheet(
+            f"color:{PALETTE['textSub']}; font-size:8pt;")
+        self._freeform_hint.setVisible(False)
+        ml.addWidget(self._freeform_hint, 6, 0, 1, 2)
         right.addWidget(manual_box)
 
         # Apply to acquisition
@@ -194,6 +216,13 @@ class RoiTab(QWidget):
                            f"color:{PALETTE['textSub']};"))
         else:
             self._roi_labels["label"].setText(roi.label or "(unnamed)")
+            if roi.is_freeform:
+                shape_display = f"Freeform ({len(roi.vertices)} pts)"
+            elif roi.is_ellipse:
+                shape_display = "Ellipse"
+            else:
+                shape_display = "Rectangle"
+            self._roi_labels["shape"].setText(shape_display)
             self._roi_labels["x"].setText(str(roi.x))
             self._roi_labels["y"].setText(str(roi.y))
             self._roi_labels["w"].setText(str(roi.w))
@@ -205,6 +234,19 @@ class RoiTab(QWidget):
                 scaled_qss(f"font-family:{MONO_FONT}; font-size:{FONT['heading']}pt; "
                            f"color:{PALETTE['warning']};"))
 
+    def _on_shape_changed(self, _index: int):
+        """Push the selected shape to the canvas draw tool."""
+        shape = self._shape_combo.currentData() or SHAPE_RECT
+        self._selector.set_draw_shape(shape)
+        is_freeform = (shape == SHAPE_FREEFORM)
+        # Disable manual x/y/w/h entry for freeform — must draw on canvas
+        self._mx.setEnabled(not is_freeform)
+        self._my.setEnabled(not is_freeform)
+        self._mw.setEnabled(not is_freeform)
+        self._mh.setEnabled(not is_freeform)
+        self._add_btn.setEnabled(not is_freeform)
+        self._freeform_hint.setVisible(is_freeform)
+
     def _add_preset(self, rx, ry, rw, rh):
         fh, fw = self._frame_hw
         x = int(rx * fw)
@@ -214,8 +256,10 @@ class RoiTab(QWidget):
         roi_model.add(Roi(x=x, y=y, w=w, h=h))
 
     def _add_manual(self):
+        shape = self._shape_combo.currentData() or SHAPE_RECT
         roi = Roi(x=self._mx.value(), y=self._my.value(),
-                  w=self._mw.value(), h=self._mh.value())
+                  w=self._mw.value(), h=self._mh.value(),
+                  shape=shape)
         roi_model.add(roi)
 
     def _apply_to_acq(self):

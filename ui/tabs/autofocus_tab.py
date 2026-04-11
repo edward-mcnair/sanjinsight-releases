@@ -16,7 +16,7 @@ log = logging.getLogger(__name__)
 from PyQt5.QtWidgets import (
     QWidget, QLabel, QPushButton, QSpinBox, QDoubleSpinBox,
     QProgressBar, QVBoxLayout, QHBoxLayout, QGridLayout,
-    QGroupBox, QComboBox, QTextEdit, QSizePolicy, QToolButton,
+    QGroupBox, QComboBox, QSizePolicy, QToolButton,
     QScrollArea, QFrame)
 from PyQt5.QtCore    import Qt
 from PyQt5.QtGui     import QPainter, QColor, QPen, QFont, QBrush
@@ -204,16 +204,6 @@ class AutofocusTab(QWidget):
         self._prog.setStyleSheet(progress_bar_qss())
         ctrl.addWidget(self._prog)
         root.addLayout(ctrl)
-
-        # ---- Log ----
-        log_box = QGroupBox("Log")
-        ll = QVBoxLayout(log_box)
-        self._log = QTextEdit()
-        self._log.setReadOnly(True)
-        self._log.setMinimumHeight(80)
-        self._log.setMaximumHeight(140)
-        ll.addWidget(self._log)
-        root.addWidget(log_box)
 
         self._run_btn.clicked.connect(self._run)
         self._abort_btn.clicked.connect(self._abort)
@@ -433,10 +423,7 @@ class AutofocusTab(QWidget):
                 f"font-family:{MONO_FONT}; font-size:{FONT['readout']}pt; color:{PALETTE['danger']};")
 
     def log(self, msg):
-        ts = time.strftime("%H:%M:%S")
-        self._log.append(f"[{ts}]  {msg}")
-        self._log.verticalScrollBar().setValue(
-            self._log.verticalScrollBar().maximum())
+        log.info("[autofocus] %s", msg)
 
 
 class FocusPlot(QWidget):
@@ -444,7 +431,7 @@ class FocusPlot(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.setMinimumHeight(120)
+        self.setMinimumHeight(200)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self._z      = []
         self._scores = []
