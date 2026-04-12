@@ -13,7 +13,7 @@ log = logging.getLogger(__name__)
 from PyQt5.QtWidgets import (
     QWidget, QLabel, QPushButton, QDoubleSpinBox, QVBoxLayout,
     QHBoxLayout, QGridLayout, QGroupBox, QComboBox, QStackedWidget,
-    QToolButton, QMenu, QAction, QScrollArea, QFrame)
+    QScrollArea, QFrame)
 from PyQt5.QtCore    import Qt, pyqtSignal
 
 from hardware.app_state import app_state
@@ -126,53 +126,36 @@ class StageTab(QWidget):
 
         root.addWidget(jog_box)
 
-        # Home + Stop row  — split-button: main click = Home All, arrow = XY / Z
+        # Home XY / Home Z / Stop row
         ctrl_row = QHBoxLayout()
 
-        self._home_btn = QToolButton()
-        home_btn = self._home_btn
-        home_btn.setText("  Home All")
-        home_btn.setPopupMode(QToolButton.MenuButtonPopup)
-        home_btn.setFixedHeight(32)
-        home_btn.setFixedWidth(120)
-        home_btn.setStyleSheet(
-            f"QToolButton {{ background:{PALETTE['surface']}; "
+        home_qss = (
+            f"QPushButton {{ background:{PALETTE['surface']}; "
             f"color:{PALETTE['text']}; border:1px solid {PALETTE['border']}; "
-            f"border-radius:5px; padding:0 8px; font-size:{FONT['label']}pt; }}"
-            f"QToolButton:hover {{ background:{PALETTE['surface2']}; }}"
-            f"QToolButton::menu-button {{ border-left:1px solid {PALETTE['border']}; "
-            f"width:18px; border-radius:0 5px 5px 0; }}"
+            f"border-radius:5px; padding:4px 12px; font-size:{FONT['label']}pt; }}"
+            f"QPushButton:hover {{ background:{PALETTE['surface2']}; }}"
         )
-        try:
-            import qtawesome as qta
-            home_btn.setIcon(qta.icon("fa5s.home", color=PALETTE['text']))
-        except Exception:
-            pass
+        self._home_xy_btn = QPushButton("Home XY")
+        set_btn_icon(self._home_xy_btn, "mdi.home", PALETTE['text'])
+        self._home_xy_btn.setFixedHeight(32)
+        self._home_xy_btn.setStyleSheet(home_qss)
+        self._home_xy_btn.setToolTip("Return X and Y axes to home position")
+        self._home_xy_btn.clicked.connect(lambda: self._home("xy"))
 
-        self._home_menu = QMenu(home_btn)
-        home_menu = self._home_menu
-        home_menu.setStyleSheet(
-            f"QMenu {{ background:{PALETTE['surface2']}; "
-            f"color:{PALETTE['text']}; border:1px solid {PALETTE['border']}; "
-            f"border-radius:4px; }} "
-            f"QMenu::item:selected {{ background:{PALETTE['accent']}22; }}"
-        )
-        act_xy = QAction("Home XY  (X + Y axes)", home_btn)
-        act_z  = QAction("Home Z   (Z axis only)", home_btn)
-        home_menu.addAction(act_xy)
-        home_menu.addAction(act_z)
-        home_btn.setMenu(home_menu)
-
-        home_btn.clicked.connect(lambda: self._home("xyz"))
-        act_xy.triggered.connect(lambda: self._home("xy"))
-        act_z.triggered.connect( lambda: self._home("z"))
+        self._home_z_btn = QPushButton("Home Z")
+        set_btn_icon(self._home_z_btn, "mdi.home", PALETTE['text'])
+        self._home_z_btn.setFixedHeight(32)
+        self._home_z_btn.setStyleSheet(home_qss)
+        self._home_z_btn.setToolTip("Return Z axis to home position")
+        self._home_z_btn.clicked.connect(lambda: self._home("z"))
 
         stop_btn = QPushButton("STOP")
         set_btn_icon(stop_btn, "fa5s.stop", PALETTE['danger'])
         stop_btn.setObjectName("danger")
         stop_btn.clicked.connect(self._stop)
 
-        ctrl_row.addWidget(home_btn)
+        ctrl_row.addWidget(self._home_xy_btn)
+        ctrl_row.addWidget(self._home_z_btn)
         ctrl_row.addStretch()
         stop_btn.setFixedWidth(110)
         ctrl_row.addWidget(stop_btn)
@@ -187,27 +170,17 @@ class StageTab(QWidget):
         su2  = P['surface2']
         bdr  = P['border']
         txt  = P['text']
-        acc  = P['accent']
-        if hasattr(self, "_home_btn"):
-            self._home_btn.setStyleSheet(
-                f"QToolButton {{ background:{sur}; color:{txt}; "
-                f"border:1px solid {bdr}; border-radius:5px; "
-                f"padding:0 8px; font-size:{FONT['label']}pt; }}"
-                f"QToolButton:hover {{ background:{su2}; }}"
-                f"QToolButton::menu-button {{ border-left:1px solid {bdr}; "
-                f"width:18px; border-radius:0 5px 5px 0; }}"
-            )
-            try:
-                import qtawesome as qta
-                self._home_btn.setIcon(qta.icon("fa5s.home", color=txt))
-            except Exception:
-                pass
-        if hasattr(self, "_home_menu"):
-            self._home_menu.setStyleSheet(
-                f"QMenu {{ background:{su2}; color:{txt}; "
-                f"border:1px solid {bdr}; border-radius:4px; }} "
-                f"QMenu::item:selected {{ background:{acc}22; }}"
-            )
+        home_qss = (
+            f"QPushButton {{ background:{sur}; color:{txt}; "
+            f"border:1px solid {bdr}; border-radius:5px; "
+            f"padding:4px 12px; font-size:{FONT['label']}pt; }}"
+            f"QPushButton:hover {{ background:{su2}; }}"
+        )
+        for btn in (getattr(self, "_home_xy_btn", None),
+                     getattr(self, "_home_z_btn", None)):
+            if btn is not None:
+                btn.setStyleSheet(home_qss)
+                set_btn_icon(btn, "mdi.home", txt)
 
     def _build_empty_state(self, title: str, device: str, tip: str) -> QWidget:
         from ui.widgets.empty_state import build_empty_state

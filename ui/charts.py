@@ -886,45 +886,39 @@ class dTSparklineWidget(QWidget):
     Call ``push_dt(dt_c)`` from the TEC status slot; the chart scrolls
     automatically.
 
-    The widget is hidden by default; show it with ``setVisible(True)``.
-    It is typically placed immediately below ``MeasurementReadoutStrip``
-    in the main window's root layout.
+    Uses pyqtgraph when available; falls back to a lightweight QPainter
+    implementation on machines where pyqtgraph is missing or fails to
+    render (e.g. some Windows GPU configurations).
     """
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFixedHeight(_SPARKLINE_HEIGHT)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.setMinimumHeight(_SPARKLINE_HEIGHT)
 
-        self._times: deque  = deque()    # float timestamps (seconds)
-        self._dts:   deque  = deque()    # float dT values
+        self._times: deque = deque()
+        self._dts:   deque = deque()
+        self._use_pg = _PG_OK
 
-        if not _PG_OK:
-            lay = QVBoxLayout(self)
-            lbl = QLabel("pyqtgraph not installed")
-            lbl.setAlignment(Qt.AlignCenter)
-            lbl.setStyleSheet(
-                f"color:{PALETTE['textDim']};"
-                f"font-size:{FONT.get('caption',9)}pt;")
-            lay.addWidget(lbl)
-            return
+        if self._use_pg:
+            self._init_pyqtgraph()
+        else:
+            # QPainter fallback — no layout, just paintEvent
+            pass
 
-        import time as _time
-        self._time = _time
-
+    def _init_pyqtgraph(self) -> None:
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
 
         self._plot = StyledPlotWidget(x_label="", y_label="dT  (°C)")
-        # Hide x-axis ticks — time scrolls right-to-left and exact values
-        # are shown in the measurement strip; the sparkline shows SHAPE only.
         self._plot.getAxis("bottom").setStyle(showValues=False)
         lay.addWidget(self._plot)
 
         accent = PALETTE['accent']
-        self._line  = self._plot.plot([], [],
-                                      pen=pg.mkPen(color=accent, width=1))
-        self._zero  = pg.InfiniteLine(
+        self._line = self._plot.plot([], [],
+                                     pen=pg.mkPen(color=accent, width=1))
+        self._zero = pg.InfiniteLine(
             pos=0, angle=0,
             pen=pg.mkPen(color=PALETTE['border'],
                          width=1, style=Qt.DotLine))
@@ -934,14 +928,13 @@ class dTSparklineWidget(QWidget):
 
     def push_dt(self, dt_c: Optional[float]) -> None:
         """Append a new dT reading.  None readings are silently skipped."""
-        if not _PG_OK or dt_c is None:
+        if dt_c is None:
             return
         import time as _time
         now = _time.monotonic()
         self._times.append(now)
         self._dts.append(float(dt_c))
 
-        # Expire readings older than the window
         cutoff = now - _SPARKLINE_WINDOW_S
         while self._times and self._times[0] < cutoff:
             self._times.popleft()
@@ -950,26 +943,92 @@ class dTSparklineWidget(QWidget):
         if len(self._times) < 2:
             return
 
-        # Normalise x-axis to "seconds ago" (0 = now, negative = past)
-        xs = np.array(self._times) - now
-        ys = np.array(self._dts)
-        self._line.setData(x=xs, y=ys)
+        if self._use_pg:
+            xs = np.array(self._times) - now
+            ys = np.array(self._dts)
+            self._line.setData(x=xs, y=ys)
+        else:
+            self.update()   # trigger paintEvent for QPainter fallback
 
     def clear(self) -> None:
         self._times.clear()
         self._dts.clear()
-        if _PG_OK:
+        if self._use_pg:
             self._line.setData([], [])
+        else:
+            self.update()
+
+    def paintEvent(self, event) -> None:
+        """QPainter fallback sparkline — used when pyqtgraph is unavailable."""
+        if self._use_pg:
+            return super().paintEvent(event)
+
+        from PyQt5.QtGui import QPainter, QPen, QPainterPath
+
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        w, h = self.width(), self.height()
+
+        # Background
+        p.fillRect(0, 0, w, h, QColor(PALETTE['bg']))
+
+        # Y-axis label
+        p.setPen(QColor(PALETTE['textDim']))
+        p.setFont(QFont("Consolas", FONT.get("caption", 9)))
+        p.drawText(4, 14, "dT (°C)")
+
+        margin_l, margin_r, margin_t, margin_b = 52, 8, 6, 6
+        plot_w = w - margin_l - margin_r
+        plot_h = h - margin_t - margin_b
+
+        if plot_w < 10 or plot_h < 10:
+            p.end()
+            return
+
+        # Zero line
+        pen = QPen(QColor(PALETTE['border']), 1, Qt.DotLine)
+        p.setPen(pen)
+        zero_y = margin_t + plot_h // 2
+        p.drawLine(margin_l, zero_y, w - margin_r, zero_y)
+
+        if len(self._dts) < 2:
+            p.end()
+            return
+
+        import time as _time
+        now = _time.monotonic()
+        ts = list(self._times)
+        ds = list(self._dts)
+
+        # Map time → x, dT → y
+        t_min = now - _SPARKLINE_WINDOW_S
+        y_max = max(abs(d) for d in ds) or 0.05  # avoid div-by-zero
+
+        path = QPainterPath()
+        first = True
+        for t, d in zip(ts, ds):
+            x = margin_l + ((t - t_min) / _SPARKLINE_WINDOW_S) * plot_w
+            y = margin_t + plot_h / 2 - (d / y_max) * (plot_h / 2 - 2)
+            if first:
+                path.moveTo(x, y)
+                first = False
+            else:
+                path.lineTo(x, y)
+
+        p.setPen(QPen(QColor(PALETTE['accent']), 1.5))
+        p.drawPath(path)
+        p.end()
 
     def _apply_styles(self) -> None:
-        if not _PG_OK:
-            return
-        _configure_plot(self._plot)
-        self._line.setPen(
-            pg.mkPen(color=PALETTE['accent'], width=1))
-        self._zero.setPen(
-            pg.mkPen(color=PALETTE['border'],
-                     width=1, style=Qt.DotLine))
+        if self._use_pg:
+            _configure_plot(self._plot)
+            self._line.setPen(
+                pg.mkPen(color=PALETTE['accent'], width=1))
+            self._zero.setPen(
+                pg.mkPen(color=PALETTE['border'],
+                         width=1, style=Qt.DotLine))
+        else:
+            self.update()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
