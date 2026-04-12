@@ -37,9 +37,9 @@ import math
 import time
 from typing import Optional
 
-from PyQt5.QtCore import Qt, QTimer, QEvent, QRect, QObject
+from PyQt5.QtCore import Qt, QTimer, QEvent, QRect
 from PyQt5.QtGui import QColor, QPainter
-from PyQt5.QtWidgets import QTabWidget, QTabBar
+from PyQt5.QtWidgets import QWidget, QTabWidget, QTabBar
 
 from ui.theme import PALETTE
 
@@ -54,14 +54,14 @@ _OPACITY_MAX  = 1.0
 
 # ── Shared pulse timer ────────────────────────────────────────────────────
 _tab_pulse_timer: Optional[QTimer] = None
-_tab_pulse_bars: list = []     # list of _AttentionOverlay instances
+_tab_pulse_overlays: list = []     # list of _AttentionOverlay instances
 
 
 def _tab_pulse_tick() -> None:
-    """Repaint all registered tab bars that have active badges."""
-    for overlay in _tab_pulse_bars:
-        if overlay._tab_bar.isVisible():
-            overlay._tab_bar.update()
+    """Repaint all registered overlays that have active badges."""
+    for overlay in _tab_pulse_overlays:
+        if overlay.isVisible():
+            overlay.update()
 
 
 def _ensure_tab_pulse_timer() -> None:
@@ -82,13 +82,14 @@ def _pulse_opacity(period: float) -> float:
     return mid + amp * math.sin(time.monotonic() * (2 * math.pi / period))
 
 
-# ── Overlay event filter ──────────────────────────────────────────────────
+# ── Transparent overlay widget ────────────────────────────────────────────
 
-class _AttentionOverlay(QObject):
-    """Event filter that paints attention dots on a QTabBar.
+class _AttentionOverlay(QWidget):
+    """Transparent widget parented to a QTabBar that paints attention dots.
 
-    Installed once per QTabWidget.  Stores per-tab state (color + tooltip)
-    and draws the dots after the tab bar's own paintEvent finishes.
+    Sits on top of the tab bar with ``WA_TransparentForMouseEvents`` so
+    clicks pass straight through to the tabs underneath.  Resizes itself
+    to match the tab bar whenever the tab bar changes geometry.
     """
 
     def __init__(self, tab_bar: QTabBar):
@@ -96,13 +97,16 @@ class _AttentionOverlay(QObject):
         self._tab_bar = tab_bar
         # tab_index → ("amber"|"red", tooltip_str)
         self._states: dict[int, tuple[str, str]] = {}
-        self._installed = False
-        self._painting = False    # re-entrance guard
 
-    def install(self) -> None:
-        if not self._installed:
-            self._tab_bar.installEventFilter(self)
-            self._installed = True
+        # Transparent to mouse — clicks go to the tab bar
+        self.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setStyleSheet("background: transparent;")
+
+        # Match tab bar geometry now and on future resizes
+        self._sync_geometry()
+        tab_bar.installEventFilter(self)
+        self.raise_()
 
     @property
     def has_active_badges(self) -> bool:
@@ -122,37 +126,34 @@ class _AttentionOverlay(QObject):
         # Manage pulse timer subscription
         if self.has_active_badges:
             _ensure_tab_pulse_timer()
-            if self not in _tab_pulse_bars:
-                _tab_pulse_bars.append(self)
+            if self not in _tab_pulse_overlays:
+                _tab_pulse_overlays.append(self)
         else:
-            if self in _tab_pulse_bars:
-                _tab_pulse_bars.remove(self)
+            if self in _tab_pulse_overlays:
+                _tab_pulse_overlays.remove(self)
 
-        self._tab_bar.update()
+        self.update()
+
+    def _sync_geometry(self) -> None:
+        """Resize overlay to match the tab bar."""
+        self.setGeometry(self._tab_bar.rect())
 
     def eventFilter(self, obj, event) -> bool:
-        if (obj is self._tab_bar
-                and event.type() == QEvent.Paint
-                and not self._painting):
-            self._painting = True
-            try:
-                # Let the tab bar paint itself first
-                obj.event(event)
-                # Now paint our badges on top
-                self._paint_badges()
-            finally:
-                self._painting = False
-            return True  # we handled it
-        return False
+        """Track tab bar resize/move to keep overlay aligned."""
+        if obj is self._tab_bar and event.type() in (
+                QEvent.Resize, QEvent.Move, QEvent.LayoutRequest):
+            self._sync_geometry()
+            self.raise_()
+        return False   # never consume events
 
-    def _paint_badges(self) -> None:
+    def paintEvent(self, event) -> None:
         if not self._states:
             return
 
-        p = QPainter(self._tab_bar)
+        p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
 
-        for idx, (level, tooltip) in self._states.items():
+        for idx, (level, _tooltip) in self._states.items():
             if idx < 0 or idx >= self._tab_bar.count():
                 continue
 
@@ -195,7 +196,6 @@ class TabAttentionMixin:
     def _init_tab_attention(self, tabs: QTabWidget) -> None:
         """Install the attention overlay on *tabs*'s tab bar."""
         self._attn_overlay = _AttentionOverlay(tabs.tabBar())
-        self._attn_overlay.install()
         self._attn_tabs = tabs
         # Clear amber when user clicks to that tab
         tabs.currentChanged.connect(self._on_tab_visited)
