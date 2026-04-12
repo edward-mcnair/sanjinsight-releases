@@ -131,7 +131,8 @@ class StageTab(QWidget):
 
         self._home_btn = QToolButton()
         home_btn = self._home_btn
-        home_btn.setText("  Home All")
+        home_btn.setText(" Home All")
+        home_btn.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         home_btn.setToolTip("Home all axes\nClick ▾ for XY or Z only")
         home_btn.setPopupMode(QToolButton.MenuButtonPopup)
         home_btn.setFixedHeight(32)
