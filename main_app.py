@@ -931,6 +931,16 @@ class MainWindow(QMainWindow):
 
         self._nav.finish()
 
+        # Populate panel→label map for clearing auto-configured badges
+        # when the user navigates to the tab.  Keys are id(panel_widget).
+        self._PANEL_LABEL_MAP = {
+            id(self._hw_cameras_panel):     "Cameras",
+            id(self._acq_settings_section): "Acquisition Settings",
+            id(self._stimulus_tab):         "Stimulus",
+            id(self._temp_tab):             "Temperature",
+            id(self._live_tab):             "Live View",
+        }
+
         # Apply initial workspace mode
         ws_mgr = _get_ws_manager()
         self._nav.set_workspace_mode(ws_mgr.mode.value)
@@ -1496,6 +1506,9 @@ class MainWindow(QMainWindow):
             effective = mode_pref
         self._swap_visual_theme(effective)
 
+    # Panel → sidebar label map for clearing auto-configured state on visit
+    _PANEL_LABEL_MAP: dict = {}  # populated in _build_ui after panels exist
+
     def _on_panel_changed(self, panel: QWidget) -> None:
         """Track which section the user visits for phase completion."""
         # AI context
@@ -1506,6 +1519,10 @@ class MainWindow(QMainWindow):
         # Sessions: auto-select latest session if nothing is selected
         if panel is self._data_tab and self._data_tab._selected is None:
             self._data_tab.select_latest()
+        # Clear auto-configured badge when user visits the tab
+        label = self._PANEL_LABEL_MAP.get(id(panel))
+        if label:
+            self._nav.clear_auto_configured(label)
 
     def _update_tab_attention(self, snapshot: dict) -> None:
         """Update sub-tab attention dots from MetricsService snapshot."""
@@ -3424,8 +3441,17 @@ class MainWindow(QMainWindow):
             base_image=None, source_label="AutoScan")
         self._nav.select_by_label("Analysis")
 
+    # Sidebar labels whose settings are touched by ProfileService.apply()
+    _PROFILE_AUTO_LABELS = [
+        "Cameras", "Acquisition Settings", "Stimulus",
+        "Temperature", "Live View",
+    ]
+
     def _on_profile_applied(self, profile):
         self._profile_svc.apply(profile)
+        # Mark affected tabs as auto-configured in the sidebar
+        if getattr(self, "_workspace_mode", "guided") == "guided":
+            self._nav.mark_auto_configured(self._PROFILE_AUTO_LABELS)
 
     def _on_auto_expose_done(self, result) -> None:
         """Handle auto-exposure completion (called on GUI thread)."""

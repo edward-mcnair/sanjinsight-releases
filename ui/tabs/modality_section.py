@@ -212,6 +212,11 @@ class ModalitySection(QWidget):
         root.addWidget(self._guide_card3)
         root.addSpacing(6)
 
+        # ── Auto-config info banner (Guided mode, dismissible) ─────────
+        self._auto_config_banner = self._build_auto_config_banner()
+        root.addWidget(self._auto_config_banner)
+        root.addSpacing(6)
+
         # ══════════════════════════════════════════════════════════════
         # Two-card body: LEFT = configuration, RIGHT = preview
         # ══════════════════════════════════════════════════════════════
@@ -510,6 +515,79 @@ class ModalitySection(QWidget):
 
         return page
 
+    # ── Auto-config info banner ────────────────────────────────────
+
+    def _build_auto_config_banner(self) -> QWidget:
+        """Dismissible banner explaining sidebar indicator badges."""
+        from config import get_pref, set_pref
+
+        frame = QFrame()
+        frame.setObjectName("AutoConfigBanner")
+        frame.setStyleSheet(
+            f"QFrame#AutoConfigBanner {{"
+            f"  background: {PALETTE['accentDim']};"
+            f"  border: 1px solid {PALETTE['accent']}44;"
+            f"  border-radius: 6px;"
+            f"  padding: 8px 12px;"
+            f"}}"
+        )
+
+        lay = QHBoxLayout(frame)
+        lay.setContentsMargins(12, 8, 8, 8)
+        lay.setSpacing(10)
+
+        # ℹ icon
+        icon_lbl = QLabel()
+        try:
+            import qtawesome as qta
+            px = qta.icon("mdi.information", color=PALETTE['accent']).pixmap(18, 18)
+            icon_lbl.setPixmap(px)
+        except Exception:
+            icon_lbl.setText("ℹ")
+        icon_lbl.setFixedSize(20, 20)
+        lay.addWidget(icon_lbl)
+
+        # Message
+        msg = QLabel(
+            "As you make choices here, related tabs are automatically "
+            "configured — look for the <b>ℹ</b> indicators in the sidebar. "
+            "Tabs marked <b>⚠</b> need your attention."
+        )
+        msg.setWordWrap(True)
+        msg.setStyleSheet(
+            f"color: {PALETTE['text']}; "
+            f"font-size: {FONT['body']}pt; "
+            f"background: transparent; border: none;"
+        )
+        lay.addWidget(msg, 1)
+
+        # Got it button
+        got_it = QPushButton("Got it")
+        got_it.setFixedHeight(26)
+        got_it.setCursor(Qt.PointingHandCursor)
+        got_it.setStyleSheet(
+            f"QPushButton {{"
+            f"  background: {PALETTE['accent']}; color: {PALETTE['textOnAccent']};"
+            f"  border: none; border-radius: 4px;"
+            f"  padding: 2px 14px; font-size: {FONT['label']}pt;"
+            f"  font-weight: bold;"
+            f"}}"
+            f"QPushButton:hover {{ background: {PALETTE['accent']}cc; }}"
+        )
+
+        def _dismiss():
+            frame.setVisible(False)
+            set_pref("ui.guided.auto_config_banner_dismissed", True)
+
+        got_it.clicked.connect(_dismiss)
+        lay.addWidget(got_it)
+
+        # Hide if already dismissed
+        dismissed = get_pref("ui.guided.auto_config_banner_dismissed", False)
+        frame.setVisible(not dismissed)
+
+        return frame
+
     # ── Mode switching ──────────────────────────────────────────────
 
     def set_workspace_mode(self, mode: str) -> None:
@@ -526,6 +604,11 @@ class ModalitySection(QWidget):
         self._guide_card2.setVisible(is_guided)
         self._guide_card3.setVisible(is_guided)
         self._workflow_footer.setVisible(is_guided)
+        # Auto-config banner: guided + not dismissed
+        if hasattr(self, "_auto_config_banner"):
+            from config import get_pref
+            dismissed = get_pref("ui.guided.auto_config_banner_dismissed", False)
+            self._auto_config_banner.setVisible(is_guided and not dismissed)
 
         # Compact-only element
         self._compact_card.setVisible(not is_guided)
