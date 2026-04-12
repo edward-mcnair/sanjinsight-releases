@@ -62,7 +62,7 @@ from typing import Any, Dict, List, Optional
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
     QLineEdit, QCheckBox, QPushButton, QProgressBar,
-    QFrame, QSizePolicy, QFormLayout,
+    QFrame, QSizePolicy, QFormLayout, QScrollArea,
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 
@@ -137,6 +137,7 @@ class RecipeRunPanel(QWidget):
     run_requested = pyqtSignal(dict)
     run_completed = pyqtSignal()
     edit_recipe_requested = pyqtSignal(str)
+    navigate_requested = pyqtSignal(str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -160,12 +161,40 @@ class RecipeRunPanel(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
+        # ── Guidance cards (Guided mode) ─────────────────────────────
+        from ui.guidance import get_section_cards, GuidanceCard, WorkflowFooter
+        from ui.guidance.steps import next_steps_after
+
+        cards_widget = QWidget()
+        cards_lay = QVBoxLayout(cards_widget)
+        cards_lay.setContentsMargins(12, 8, 12, 4)
+        cards_lay.setSpacing(6)
+        self._guidance_cards: list[GuidanceCard] = []
+        for cdef in get_section_cards("recipe_run"):
+            card = GuidanceCard(
+                card_id=cdef["card_id"],
+                title=cdef["title"],
+                body=cdef["body"],
+                step_number=cdef.get("step_number"),
+            )
+            cards_lay.addWidget(card)
+            self._guidance_cards.append(card)
+
+        self._cards_scroll = QScrollArea()
+        self._cards_scroll.setWidgetResizable(True)
+        self._cards_scroll.setFrameShape(QFrame.NoFrame)
+        self._cards_scroll.setWidget(cards_widget)
+        self._cards_scroll.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._cards_scroll.setMaximumHeight(180)
+        self._cards_scroll.setVisible(False)
+        root.addWidget(self._cards_scroll)
+
         # ── Recipe selector ──────────────────────────────────────────
         sel_row = QHBoxLayout()
         sel_row.setContentsMargins(12, 10, 12, 6)
         sel_row.setSpacing(8)
 
-        sel_lbl = QLabel("Recipe:")
+        sel_lbl = QLabel("Scan Profile:")
         sel_lbl.setStyleSheet(
             f"font-size: {FONT['label']}pt; color: {PALETTE['text']};")
         sel_row.addWidget(sel_lbl)
@@ -174,15 +203,15 @@ class RecipeRunPanel(QWidget):
         self._recipe_combo.setMinimumWidth(200)
         self._recipe_combo.setSizePolicy(
             QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self._recipe_combo.setPlaceholderText("Select a recipe…")
+        self._recipe_combo.setPlaceholderText("Select a scan profile…")
         sel_row.addWidget(self._recipe_combo, 1)
 
         root.addLayout(sel_row)
 
         # ── Empty-state hint (visible when no recipes loaded) ────────
         self._empty_hint = QLabel(
-            "No recipes available.\n"
-            "Create one in the Library tab, or ask your engineer to set up recipes.")
+            "No scan profiles available.\n"
+            "Create one in the Library tab, or ask your engineer to set up a scan profile.")
         self._empty_hint.setWordWrap(True)
         self._empty_hint.setAlignment(Qt.AlignCenter)
         self._empty_hint.setStyleSheet(
@@ -309,7 +338,7 @@ class RecipeRunPanel(QWidget):
         bypass_row.addStretch()
 
         # Expert: "Edit Recipe ▸" link
-        self._edit_link = QPushButton("Edit Recipe ▸")
+        self._edit_link = QPushButton("Edit Scan Profile ▸")
         self._edit_link.setFlat(True)
         self._edit_link.setCursor(Qt.PointingHandCursor)
         self._edit_link.setStyleSheet(
@@ -325,7 +354,7 @@ class RecipeRunPanel(QWidget):
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
 
-        self._run_btn = QPushButton("  RUN RECIPE")
+        self._run_btn = QPushButton("  RUN SCAN")
         set_btn_icon(self._run_btn, IC.PLAY, color=PALETTE.get("ctaText", "#fff"))
         self._run_btn.setEnabled(False)
         self._run_btn.setMinimumHeight(36)
@@ -370,6 +399,14 @@ class RecipeRunPanel(QWidget):
 
         self._result_strip.setVisible(False)
         root.addWidget(self._result_strip)
+
+        # ── Workflow footer (Guided mode) ────────────────────────────
+        _NEXT = [(s.nav_target, s.label, s.hint)
+                 for s in next_steps_after("Run Scan", count=3)]
+        self._workflow_footer = WorkflowFooter(_NEXT)
+        self._workflow_footer.navigate_requested.connect(self.navigate_requested)
+        self._workflow_footer.setVisible(False)
+        root.addWidget(self._workflow_footer)
 
     # ── Signal wiring ────────────────────────────────────────────────
 
@@ -463,7 +500,7 @@ class RecipeRunPanel(QWidget):
         self._abort_btn.setVisible(False)
         self._progress.setVisible(False)
         self._run_btn.setEnabled(True)
-        self._run_btn.setText("  RUN RECIPE")
+        self._run_btn.setText("  RUN SCAN")
         set_btn_icon(self._run_btn, IC.PLAY,
                      color=PALETTE.get("ctaText", "#fff"))
 
@@ -515,7 +552,7 @@ class RecipeRunPanel(QWidget):
         self._abort_btn.setVisible(False)
         self._progress.setVisible(False)
         self._run_btn.setEnabled(True)
-        self._run_btn.setText("  RUN RECIPE")
+        self._run_btn.setText("  RUN SCAN")
         set_btn_icon(self._run_btn, IC.PLAY,
                      color=PALETTE.get("ctaText", "#fff"))
 
@@ -561,6 +598,10 @@ class RecipeRunPanel(QWidget):
 
         # Expert: show "Edit Recipe ▸" link
         self._edit_link.setVisible(is_expert)
+
+        # Guidance cards + footer (Guided mode only)
+        self._cards_scroll.setVisible(is_guided and len(self._guidance_cards) > 0)
+        self._workflow_footer.setVisible(is_guided)
 
         # Pre-fill operator from lab prefs in guided mode
         if is_guided:

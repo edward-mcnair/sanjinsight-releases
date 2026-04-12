@@ -100,11 +100,11 @@ class FocusStageTab(QWidget, TabAttentionMixin):
         # ── Sub-tabs ──────────────────────────────────────────────
         self._tabs = QTabWidget()
         self._tabs.setDocumentMode(True)
-        self._tabs.setStyleSheet(_inner_tab_qss())
-        self._tabs.addTab(af_tab,    "  Focus")
-        self._tabs.addTab(stage_tab, "  Stage")
+        self._tabs.setStyleSheet(inner_tab_qss())
+        self._tabs.addTab(af_tab,    "Focus")
+        self._tabs.addTab(stage_tab, "Stage")
         if prober_tab is not None:
-            self._tabs.addTab(prober_tab, "  Prober")
+            self._tabs.addTab(prober_tab, "Prober")
         self._apply_tab_icons()
         self._init_tab_attention(self._tabs)
 
@@ -145,7 +145,7 @@ class FocusStageTab(QWidget, TabAttentionMixin):
     # ── Theme ─────────────────────────────────────────────────────────
 
     def _apply_styles(self) -> None:
-        self._tabs.setStyleSheet(_inner_tab_qss())
+        self._tabs.setStyleSheet(inner_tab_qss())
         self._apply_tab_icons()
         for sub in (self._af_tab, self._stage_tab, self._prober_tab):
             if sub is not None and hasattr(sub, "_apply_styles"):
@@ -166,7 +166,3 @@ class FocusStageTab(QWidget, TabAttentionMixin):
         for i, icon in enumerate(icons):
             if icon:
                 self._tabs.setTabIcon(i, icon)
-
-
-def _inner_tab_qss() -> str:
-    return inner_tab_qss()

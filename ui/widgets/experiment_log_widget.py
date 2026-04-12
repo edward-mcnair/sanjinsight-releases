@@ -49,8 +49,8 @@ log = logging.getLogger(__name__)
 # key must match RunEntry field name or be a computed column
 _COLUMNS = [
     ("timestamp",       "Time",       140, Qt.AlignLeft),
-    ("source",          "Source",      60,  Qt.AlignCenter),
-    ("recipe_label",    "Recipe",     120, Qt.AlignLeft),
+    ("source",          "Source",      80,  Qt.AlignCenter),
+    ("recipe_label",    "Scan Profile", 120, Qt.AlignLeft),
     ("session_label",   "Session",    140, Qt.AlignLeft),
     ("modality",        "Type",        80, Qt.AlignCenter),
     ("device_id",       "Device ID",  100, Qt.AlignLeft),
@@ -134,8 +134,8 @@ class ExperimentLogWidget(QWidget):
             f"font-size: {FONT['caption']}pt; color: {PALETTE['textDim']};")
         tb_lay.addWidget(src_lbl)
         self._source_filter = QComboBox()
-        self._source_filter.addItems(["All", "Recipe", "Manual"])
-        self._source_filter.setFixedWidth(90)
+        self._source_filter.addItems(["All", "Scan Profile", "Manual"])
+        self._source_filter.setFixedWidth(110)
         self._source_filter.currentIndexChanged.connect(self._on_filter_changed)
         tb_lay.addWidget(self._source_filter)
 
@@ -207,10 +207,14 @@ class ExperimentLogWidget(QWidget):
         root.addWidget(self._table, 1)
 
         # ── Empty state ──────────────────────────────────────────────
-        self._empty_label = QLabel("No experiment log entries yet.\n"
-                                   "Run a recipe or manual acquisition "
-                                   "to start recording.")
+        self._empty_label = QLabel(
+            "No experiment log entries yet.\n\n"
+            "The experiment log records every acquisition\n"
+            "with its verdict, duration, and operator context.\n\n"
+            "Run a scan profile or start a manual capture\n"
+            "to see your first entry here.")
         self._empty_label.setAlignment(Qt.AlignCenter)
+        self._empty_label.setWordWrap(True)
         self._empty_label.setStyleSheet(
             f"font-size: {FONT['body']}pt; "
             f"color: {PALETTE['textDim']}; "
@@ -270,7 +274,10 @@ class ExperimentLogWidget(QWidget):
 
     def _apply_filters_and_populate(self) -> None:
         """Apply current filters and populate the table."""
-        source_filter = self._source_filter.currentText().lower()
+        # Map display label → stored data key
+        _SOURCE_MAP = {"scan profile": "recipe"}
+        raw = self._source_filter.currentText().lower()
+        source_filter = _SOURCE_MAP.get(raw, raw)
         verdict_filter = self._verdict_filter.currentText().lower()
 
         filtered = []
@@ -342,7 +349,8 @@ class ExperimentLogWidget(QWidget):
         elif key == "modality":
             display = _MODALITY_SHORT.get(str(val), str(val)[:10])
         elif key == "source":
-            display = str(val).title()
+            _SRC_DISPLAY = {"recipe": "Scan Profile", "manual": "Manual"}
+            display = _SRC_DISPLAY.get(str(val), str(val).title())
         elif key == "verdict":
             display = str(val).title() if val else "—"
         elif key == "roi_peak_k":

@@ -41,8 +41,9 @@ class PhaseTracker(QObject):
                 "signal_checked": False,
             },
             3: {  # MEASUREMENT & ANALYSIS
-                "captured":   False,
-                "calibrated": False,
+                "captured":    False,
+                "calibrated":  False,
+                "recipe_run":  False,
             },
             4: {  # HARDWARE AUTOMATION
                 "hardware_ready":        False,

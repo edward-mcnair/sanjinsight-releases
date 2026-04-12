@@ -161,9 +161,12 @@ class _AttentionOverlay(QWidget):
             if rect.isEmpty():
                 continue
 
-            # Position: top-right corner of the tab, inset slightly
-            dx = rect.right() - _DOT_SIZE - 4
-            dy = rect.top() + 4
+            # Position: centred on the 14 px tab icon (left of label text)
+            icon_sz = self._tab_bar.iconSize()
+            icon_cx = rect.left() + 20 + icon_sz.width() // 2  # Qt icon inset
+            icon_cy = rect.center().y()
+            dx = icon_cx - _DOT_SIZE // 2
+            dy = icon_cy - _DOT_SIZE // 2
 
             # Choose colour and pulse rate
             if level == "red":

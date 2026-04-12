@@ -942,6 +942,15 @@ class DataTab(QWidget):
             f"font-size:{FONT['label']}pt; color:{PALETTE['textSub']}; letter-spacing:1px;")
         cl.addWidget(cmp_lbl)
 
+        self._cmp_hint = QLabel(
+            "Assign two sessions to slots A and B,\n"
+            "then compare their ΔR/R maps side-by-side.")
+        self._cmp_hint.setWordWrap(True)
+        self._cmp_hint.setStyleSheet(
+            f"font-size:{FONT['caption']}pt; color:{PALETTE['textDim']}; "
+            f"padding: 2px 0 4px 0;")
+        cl.addWidget(self._cmp_hint)
+
         self._cmp_a_lbl = QLabel("A: —")
         self._cmp_b_lbl = QLabel("B: —")
         for l in [self._cmp_a_lbl, self._cmp_b_lbl]:
@@ -1066,6 +1075,8 @@ class DataTab(QWidget):
         self._trend_chart.update_sessions(list(self._mgr.all_metas()))
         # Toggle empty state vs detail view
         self._right_stack.setCurrentIndex(1 if n > 0 else 0)
+        # Reconcile compare slots against the refreshed store
+        self._sync_compare_state()
         # Re-apply active filters
         self._filter_cards(self._search.text())
 
@@ -2115,6 +2126,7 @@ class DataTab(QWidget):
             self._selected = None
             self._mgr.delete(uid)
             self._remove_card(uid)
+            self._sync_compare_state()
             for pane in [self._pane_cold, self._pane_hot,
                          self._pane_diff, self._pane_drr]:
                 pane.clear()
@@ -2133,6 +2145,46 @@ class DataTab(QWidget):
                 self._selected = None
             self._mgr.delete(uid)
             self._remove_card(uid)
+            self._sync_compare_state()
+
+    def _sync_compare_state(self) -> None:
+        """Single source of truth for the compare section UI.
+
+        Validates that both slot UIDs still exist in the session store,
+        clears any stale references, and reconciles labels, badges,
+        button state, and hint visibility.
+        """
+        # Invalidate slots whose UIDs no longer exist in the store
+        for attr, lbl in [("_compare_a", self._cmp_a_lbl),
+                          ("_compare_b", self._cmp_b_lbl)]:
+            uid = getattr(self, attr)
+            if uid is None:
+                lbl.setText(f"{'A' if attr.endswith('a') else 'B'}: —")
+                continue
+            meta = self._mgr.get_meta(uid)
+            if meta is None:
+                # Session was deleted/renamed/missing — clear the slot
+                card = self._cards.get(uid)
+                if card:
+                    card.set_compare_slot(None)
+                setattr(self, attr, None)
+                lbl.setText(f"{'A' if attr.endswith('a') else 'B'}: —")
+            else:
+                lbl.setText(
+                    f"{'A' if attr.endswith('a') else 'B'}: "
+                    f"{meta.label[:30]}")
+
+        # Reconcile card badges for surviving slots
+        for attr, slot_id in [("_compare_a", "a"), ("_compare_b", "b")]:
+            uid = getattr(self, attr)
+            if uid is not None:
+                card = self._cards.get(uid)
+                if card:
+                    card.set_compare_slot(slot_id)
+
+        both_valid = bool(self._compare_a and self._compare_b)
+        self._compare_btn.setEnabled(both_valid)
+        self._cmp_hint.setVisible(not both_valid)
 
     def _set_compare(self, slot: str):
         if not self._selected:
@@ -2147,7 +2199,6 @@ class DataTab(QWidget):
                 if prev:
                     prev.set_compare_slot(None)
             self._compare_a = self._selected
-            self._cmp_a_lbl.setText(f"A: {meta.label[:30]}")
         else:
             # Clear previous B badge if different card
             if self._compare_b and self._compare_b != self._selected:
@@ -2155,17 +2206,17 @@ class DataTab(QWidget):
                 if prev:
                     prev.set_compare_slot(None)
             self._compare_b = self._selected
-            self._cmp_b_lbl.setText(f"B: {meta.label[:30]}")
 
-        # Set badge on the newly assigned card (may overwrite if same card gets both)
+        # Set badge on the newly assigned card
         card = self._cards.get(self._selected)
         if card:
             card.set_compare_slot(slot)
 
-        self._compare_btn.setEnabled(
-            bool(self._compare_a and self._compare_b))
+        self._sync_compare_state()
 
     def _run_compare(self):
+        # Re-validate slots against the store before executing
+        self._sync_compare_state()
         if not (self._compare_a and self._compare_b):
             return
         diff = self._mgr.diff_drr(self._compare_a, self._compare_b)

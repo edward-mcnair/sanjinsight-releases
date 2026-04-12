@@ -95,9 +95,9 @@ class CaptureTab(QWidget):
         # ── Sub-tabs ──────────────────────────────────────────────
         self._tabs = QTabWidget()
         self._tabs.setDocumentMode(True)
-        self._tabs.setStyleSheet(_inner_tab_qss())
-        self._tabs.addTab(acquire_tab, "  Single")
-        self._tabs.addTab(scan_tab,    "  Grid")
+        self._tabs.setStyleSheet(inner_tab_qss())
+        self._tabs.addTab(acquire_tab, "Single")
+        self._tabs.addTab(scan_tab,    "Grid")
         self._apply_tab_icons()
 
         root.addWidget(self._tabs, 1)
@@ -183,7 +183,7 @@ class CaptureTab(QWidget):
     # ── Theme ─────────────────────────────────────────────────────────
 
     def _apply_styles(self) -> None:
-        self._tabs.setStyleSheet(_inner_tab_qss())
+        self._tabs.setStyleSheet(inner_tab_qss())
         self._apply_tab_icons()
         for sub in (self._acquire_tab, self._scan_tab):
             if hasattr(sub, "_apply_styles"):
@@ -201,7 +201,3 @@ class CaptureTab(QWidget):
         for i, icon in enumerate(icons):
             if icon:
                 self._tabs.setTabIcon(i, icon)
-
-
-def _inner_tab_qss() -> str:
-    return inner_tab_qss()

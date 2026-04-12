@@ -789,6 +789,8 @@ class MainWindow(QMainWindow):
         self._recipe_run.run_requested.connect(self._on_recipe_run_requested)
         self._recipe_run.run_completed.connect(
             self._experiment_log_widget.refresh)
+        self._recipe_run.run_completed.connect(
+            lambda: self._phase_tracker.mark(3, "recipe_run"))
         self._recipe_run.edit_recipe_requested.connect(
             lambda uid: self._nav.select_by_label("Library"))
 
@@ -916,7 +918,7 @@ class MainWindow(QMainWindow):
 
         # WORKFLOW
         self._nav.add_section("WORKFLOW", [
-            NI("Recipe Run",      _I["Recipes"],        self._recipe_run),
+            NI("Run Scan",        _I["Recipes"],        self._recipe_run),
             NI("Experiment Log",  _I["Experiment Log"], self._experiment_log_widget),
         ])
 
@@ -1308,7 +1310,8 @@ class MainWindow(QMainWindow):
         for w in (self._data_tab, self._focus_stage_tab,
                   self._signal_check_section, self._capture_tab,
                   self._live_tab, self._cal_tab,
-                  self._stimulus_tab, self._temp_tab):
+                  self._stimulus_tab, self._temp_tab,
+                  self._recipe_run):
             if hasattr(w, "navigate_requested"):
                 w.navigate_requested.connect(self._nav.select_by_label)
 

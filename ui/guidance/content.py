@@ -346,6 +346,44 @@ SECTION_CARDS: dict[str, list[dict]] = {
         },
     ],
 
+    # ── Run Scan ───────────────────────────────────────────────────
+    "recipe_run": [
+        {
+            "card_id": "recipe_run.overview",
+            "title": "Getting Started with Scan Profiles",
+            "body": (
+                "Scan profiles capture a complete measurement "
+                "configuration — camera settings, stimulus, analysis "
+                "thresholds, and operator context — so you can repeat "
+                "the same test reliably across samples, operators, "
+                "and sessions."
+            ),
+        },
+        {
+            "card_id": "recipe_run.select",
+            "title": "Select and Run a Scan Profile",
+            "body": (
+                "Choose a scan profile from the dropdown and review "
+                "the summary strip to confirm the settings. Fill in "
+                "any <b>test variables</b> (e.g. voltage, current) "
+                "and click <b>RUN</b>. The system will acquire, "
+                "analyze, and log the result automatically."
+            ),
+            "step_number": 1,
+        },
+        {
+            "card_id": "recipe_run.results",
+            "title": "Review the Run Result",
+            "body": (
+                "After the run completes, a result strip shows the "
+                "verdict, duration, and hotspot count. The session is "
+                "saved automatically — open it in <b>Sessions</b> to "
+                "inspect images, export data, or generate a report."
+            ),
+            "step_number": 2,
+        },
+    ],
+
     # ── Hardware Readiness ─────────────────────────────────────────
     "hardware_readiness": [
         {

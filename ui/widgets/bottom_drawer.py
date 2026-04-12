@@ -27,6 +27,7 @@ from PyQt5.QtGui  import QPainter, QPainterPath, QColor
 
 from ui.theme import FONT, PALETTE
 from ui.icons import IC, make_icon
+from ui.widgets.tab_helpers import inner_tab_qss
 
 
 # ── Bottom drawer (tab content) ────────────────────────────────────────────
@@ -57,9 +58,9 @@ class BottomDrawer(QWidget):
         self._tabs = QTabWidget()
         self._tabs.setTabPosition(QTabWidget.North)
         self._tabs.setDocumentMode(True)
-        self._tabs.setStyleSheet(self._tab_qss())
-        self._tabs.addTab(console_tab, "  Console")
-        self._tabs.addTab(log_tab,     "  Log")
+        self._tabs.setStyleSheet(inner_tab_qss())
+        self._tabs.addTab(console_tab, "Console")
+        self._tabs.addTab(log_tab,     "Log")
         self._apply_tab_icons()
         root.addWidget(self._tabs, 1)
 
@@ -88,7 +89,7 @@ class BottomDrawer(QWidget):
 
         Returns the new tab index.
         """
-        idx = self._tabs.addTab(widget, f"  {label}")
+        idx = self._tabs.addTab(widget, label)
         if icon_name:
             icon = make_icon(icon_name, color=PALETTE["textDim"], size=14)
             if icon:
@@ -98,34 +99,8 @@ class BottomDrawer(QWidget):
     # ── Theme ──────────────────────────────────────────────────────────
 
     def _apply_styles(self) -> None:
-        self._tabs.setStyleSheet(self._tab_qss())
+        self._tabs.setStyleSheet(inner_tab_qss())
         self._apply_tab_icons()
-
-    def _tab_qss(self) -> str:
-        P = PALETTE
-        return f"""
-            QTabWidget::pane {{
-                border-top: 1px solid {P['border']};
-                background: {P['surface']};
-            }}
-            QTabBar::tab {{
-                background: {P['surface2']};
-                color: {P['textDim']};
-                border: none;
-                border-right: 1px solid {P['border']};
-                padding: 5px 16px;
-                font-size: {FONT['label']}pt;
-            }}
-            QTabBar::tab:selected {{
-                background: {P['surface']};
-                color: {P['text']};
-                border-bottom: 2px solid {P['accent']};
-            }}
-            QTabBar::tab:hover:!selected {{
-                background: {P['surfaceHover']};
-                color: {P['text']};
-            }}
-        """
 
 
 # ── Grip pill indicator ─────────────────────────────────────────────────────

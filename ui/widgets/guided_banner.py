@@ -99,7 +99,7 @@ class GuidedBanner(QWidget):
         self._action_btn.clicked.connect(self._on_go)
         lay.addWidget(self._action_btn)
 
-        self._skip_btn = QPushButton("Skip")
+        self._skip_btn = QPushButton("Skip this step")
         self._skip_btn.setFixedHeight(26)
         self._skip_btn.setCursor(Qt.PointingHandCursor)
         self._skip_btn.setToolTip("Mark this step as done and move on")

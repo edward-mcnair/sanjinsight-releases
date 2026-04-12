@@ -34,6 +34,7 @@ from PyQt5.QtWidgets import (
 
 from ui.theme import PALETTE
 from ui.widgets.empty_state import build_empty_state
+from ui.widgets.tab_helpers import inner_tab_qss
 
 log = logging.getLogger(__name__)
 
@@ -87,6 +88,7 @@ class HardwareCategoryPanel(QWidget):
         self._tabs = QTabWidget()
         self._tabs.setDocumentMode(True)
         self._tabs.setTabPosition(QTabWidget.North)
+        self._tabs.setStyleSheet(inner_tab_qss())
         self._stack.addWidget(self._tabs)
 
         # Start with empty state
@@ -177,6 +179,7 @@ class HardwareCategoryPanel(QWidget):
 
     def _apply_styles(self) -> None:
         """Refresh styles after a theme switch."""
+        self._tabs.setStyleSheet(inner_tab_qss())
         # Rebuild empty state description color
         if hasattr(self._empty, 'desc_lbl'):
             self._empty.desc_lbl.setStyleSheet(

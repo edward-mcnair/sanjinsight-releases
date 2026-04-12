@@ -145,8 +145,8 @@ class HardwarePanelCoordinator(QObject):
             "stage":           (stg,  IC.STAGE,       "Stage",               "Focus & Stage"),
             "newport_npc3":    (stg,  IC.STAGE,       "Newport NPC3 Piezo Controller",       "Focus & Stage"),
             # ── Thermal Control ──────────────────────────────────────
-            "tec0":            (therm, IC.TEMPERATURE,  "TEC 1",              "Temperature"),
-            "tec1":            (therm, IC.TEMPERATURE,  "TEC 2",              "Temperature"),
+            "tec0":            (therm, IC.TEMPERATURE,  "TEC-1089",           "Temperature"),
+            "tec1":            (therm, IC.TEMPERATURE,  "ATEC-302",           "Temperature"),
             "tec2":            (therm, IC.TEMPERATURE,  "TEC 3",              "Temperature"),
             "tec_meerstetter": (therm, IC.TEMPERATURE,  "Meerstetter TEC",    "Temperature"),
             # ── Stimulus & Timing ────────────────────────────────────

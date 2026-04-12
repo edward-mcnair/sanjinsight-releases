@@ -39,6 +39,7 @@ from hardware.app_state    import app_state
 from ui.widgets.temp_plot  import TempPlot
 from ui.widgets.more_options import MoreOptionsPanel
 from ui.theme import FONT, PALETTE, scaled_qss, MONO_FONT
+from ui.widgets.tab_helpers import inner_tab_qss
 from ui.guidance import get_section_cards, GuidanceCard, WorkflowFooter
 from ui.guidance.steps import next_steps_after
 
@@ -599,14 +600,21 @@ class TemperatureTab(QWidget):
         # ── Per-TEC tab widget ───────────────────────────────────────
         self._tec_tabs = QTabWidget()
         self._tec_tabs.setDocumentMode(True)
+        self._tec_tabs.setStyleSheet(inner_tab_qss())
 
         self._panels: list[TecPanel] = []
-        _default_labels = ["TEC 1 — Meerstetter TEC-1089", "TEC 2 — ATEC-302"]
+        _default_info = [
+            ("TEC-1089", "Meerstetter TEC-1089"),
+            ("ATEC-302", "ATEC-302"),
+        ]
         for i in range(n_tecs):
-            label = _default_labels[i] if i < len(_default_labels) else f"TEC {i + 1}"
-            panel = TecPanel(i, display_name=label, hw_service=hw_service)
+            if i < len(_default_info):
+                tab_label, full_name = _default_info[i]
+            else:
+                tab_label, full_name = f"TEC {i + 1}", f"TEC {i + 1}"
+            panel = TecPanel(i, display_name=full_name, hw_service=hw_service)
             self._panels.append(panel)
-            self._tec_tabs.addTab(panel, f"TEC {i + 1}")
+            self._tec_tabs.addTab(panel, tab_label)
 
         root.addWidget(self._tec_tabs, 1)
 
@@ -857,6 +865,8 @@ class TemperatureTab(QWidget):
 
     def _apply_styles(self) -> None:
         P = PALETTE
+        # Refresh sub-tab styling
+        self._tec_tabs.setStyleSheet(inner_tab_qss())
         # Guidance cards
         for c in (self._overview_card, self._guide_card1):
             if hasattr(c, "_apply_styles"):

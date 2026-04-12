@@ -30,9 +30,9 @@ class TransientCaptureTab(QWidget):
 
         self._tabs = QTabWidget()
         self._tabs.setDocumentMode(True)
-        self._tabs.setStyleSheet(_inner_tab_qss())
-        self._tabs.addTab(transient_tab, "  Time-Resolved")
-        self._tabs.addTab(movie_tab,     "  Burst")
+        self._tabs.setStyleSheet(inner_tab_qss())
+        self._tabs.addTab(transient_tab, "Time-Resolved")
+        self._tabs.addTab(movie_tab,     "Burst")
         self._apply_tab_icons()
 
         root.addWidget(self._tabs, 1)
@@ -72,7 +72,7 @@ class TransientCaptureTab(QWidget):
     # ── Theme ─────────────────────────────────────────────────────────
 
     def _apply_styles(self) -> None:
-        self._tabs.setStyleSheet(_inner_tab_qss())
+        self._tabs.setStyleSheet(inner_tab_qss())
         self._apply_tab_icons()
 
     def _apply_tab_icons(self) -> None:
@@ -84,7 +84,3 @@ class TransientCaptureTab(QWidget):
         for i, icon in enumerate(icons):
             if icon:
                 self._tabs.setTabIcon(i, icon)
-
-
-def _inner_tab_qss() -> str:
-    return inner_tab_qss()

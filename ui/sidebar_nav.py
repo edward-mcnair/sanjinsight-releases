@@ -912,6 +912,7 @@ class _Sidebar(QWidget):
         (2, "signal_checked",      "Signal Check"),
         (3, "captured",            "Capture"),
         (3, "calibrated",          "Calibration"),
+        (3, "recipe_run",          "Run Scan"),
     ]
 
     # Labels whose settings were auto-configured by a profile selection.

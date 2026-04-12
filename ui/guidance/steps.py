@@ -78,6 +78,10 @@ WORKFLOW_STEPS: list[WorkflowStep] = [
         3, "calibrated", "Calibrate the measurement",
         "Calibration", IC.CHART_LINE,
         "Run a calibration sweep, or skip if using a saved .cal file."),
+    WorkflowStep(
+        3, "recipe_run", "Run a scan profile",
+        "Run Scan", IC.RECIPES,
+        "Select a saved scan profile and run it for consistent, repeatable measurements."),
 
     # Phase 4: HARDWARE AUTOMATION
     WorkflowStep(

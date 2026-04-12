@@ -102,9 +102,9 @@ class StimulusTab(QWidget, TabAttentionMixin):
         self._tabs = QTabWidget()
         self._tabs.setDocumentMode(True)
         self._tabs.setStyleSheet(self._tab_qss())
-        self._tabs.addTab(fpga_tab,              "  Modulation")
-        self._tabs.addTab(bias_tab,              "  Bias Source")
-        self._tabs.addTab(self._iv_sweep_tab,    "  IV Sweep")
+        self._tabs.addTab(fpga_tab,              "Modulation")
+        self._tabs.addTab(bias_tab,              "Bias Source")
+        self._tabs.addTab(self._iv_sweep_tab,    "IV Sweep")
         self._apply_tab_icons()
         self._init_tab_attention(self._tabs)
 
@@ -178,8 +178,4 @@ class StimulusTab(QWidget, TabAttentionMixin):
                 self._tabs.setTabIcon(i, icon)
 
     def _tab_qss(self) -> str:
-        return _inner_tab_qss()
-
-
-def _inner_tab_qss() -> str:
-    return inner_tab_qss()
+        return inner_tab_qss()

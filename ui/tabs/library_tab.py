@@ -34,9 +34,9 @@ class LibraryTab(QWidget):
 
         self._tabs = QTabWidget()
         self._tabs.setDocumentMode(True)
-        self._tabs.setStyleSheet(_inner_tab_qss())
-        self._tabs.addTab(profile_tab, "  Material Profiles")
-        self._tabs.addTab(recipe_tab,  "  Scan Profiles")
+        self._tabs.setStyleSheet(inner_tab_qss())
+        self._tabs.addTab(profile_tab, "Material Profiles")
+        self._tabs.addTab(recipe_tab,  "Scan Profiles")
         self._apply_tab_icons()
 
         root.addWidget(self._tabs, 1)
@@ -72,7 +72,7 @@ class LibraryTab(QWidget):
     # ── Theme ─────────────────────────────────────────────────────────
 
     def _apply_styles(self) -> None:
-        self._tabs.setStyleSheet(_inner_tab_qss())
+        self._tabs.setStyleSheet(inner_tab_qss())
         self._apply_tab_icons()
         for sub in (self._profile_tab, self._recipe_tab):
             if hasattr(sub, "_apply_styles"):
@@ -87,7 +87,3 @@ class LibraryTab(QWidget):
         for i, icon in enumerate(icons):
             if icon:
                 self._tabs.setTabIcon(i, icon)
-
-
-def _inner_tab_qss() -> str:
-    return inner_tab_qss()

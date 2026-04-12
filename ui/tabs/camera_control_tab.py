@@ -35,10 +35,10 @@ class CameraControlTab(QWidget, TabAttentionMixin):
 
         self._tabs = QTabWidget()
         self._tabs.setDocumentMode(True)
-        self._tabs.setStyleSheet(_inner_tab_qss())
-        self._tabs.addTab(camera_tab,    "  Camera")
-        self._tabs.addTab(roi_tab,       "  ROI")
-        self._tabs.addTab(autofocus_tab, "  Autofocus")
+        self._tabs.setStyleSheet(inner_tab_qss())
+        self._tabs.addTab(camera_tab,    "Camera")
+        self._tabs.addTab(roi_tab,       "ROI")
+        self._tabs.addTab(autofocus_tab, "Autofocus")
         self._apply_tab_icons()
         self._init_tab_attention(self._tabs)
 
@@ -67,7 +67,7 @@ class CameraControlTab(QWidget, TabAttentionMixin):
     # ── Theme ─────────────────────────────────────────────────────────
 
     def _apply_styles(self) -> None:
-        self._tabs.setStyleSheet(_inner_tab_qss())
+        self._tabs.setStyleSheet(inner_tab_qss())
         self._apply_tab_icons()
 
     def _apply_tab_icons(self) -> None:
@@ -80,7 +80,3 @@ class CameraControlTab(QWidget, TabAttentionMixin):
         for i, icon in enumerate(icons):
             if icon:
                 self._tabs.setTabIcon(i, icon)
-
-
-def _inner_tab_qss() -> str:
-    return inner_tab_qss()

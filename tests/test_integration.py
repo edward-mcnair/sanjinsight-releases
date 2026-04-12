@@ -5756,11 +5756,11 @@ class TestPhase1Integration:
         assert "QuickStartLauncher" not in src
 
     def test_recipe_run_in_sidebar(self):
-        """Recipe Run is registered as a sidebar item."""
+        """Run Scan is registered as a sidebar item."""
         import inspect
         from main_app import MainWindow
         src = inspect.getsource(MainWindow._build_ui)
-        assert '"Recipe Run"' in src
+        assert '"Run Scan"' in src
         assert "self._recipe_run" in src
 
     def test_experiment_log_in_sidebar(self):
