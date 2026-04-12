@@ -14,9 +14,10 @@ from PyQt5.QtCore    import pyqtSignal, QSize
 from ui.theme import FONT, PALETTE
 from ui.icons import IC, make_icon
 from ui.widgets.tab_helpers import inner_tab_qss
+from ui.widgets.tab_attention import TabAttentionMixin
 
 
-class CameraControlTab(QWidget):
+class CameraControlTab(QWidget, TabAttentionMixin):
     """Camera controls: Camera view, ROI selection, Autofocus — sub-tabs."""
 
     open_device_manager = pyqtSignal()
@@ -39,6 +40,7 @@ class CameraControlTab(QWidget):
         self._tabs.addTab(roi_tab,       "  ROI")
         self._tabs.addTab(autofocus_tab, "  Autofocus")
         self._apply_tab_icons()
+        self._init_tab_attention(self._tabs)
 
         root.addWidget(self._tabs, 1)
 
@@ -61,28 +63,6 @@ class CameraControlTab(QWidget):
     def set_gain(self, db: float) -> None:
         if hasattr(self._camera_tab, "set_gain"):
             self._camera_tab.set_gain(db)
-
-    # ── Attention dots ─────────────────────────────────────────────
-
-    _TAB_BASE = {0: "  Camera", 1: "  ROI", 2: "  Autofocus"}
-    _TAB_ICONS = {0: IC.CAMERA, 1: IC.ROI, 2: IC.AUTOFOCUS}
-    _DOT = "\u2009\u25cf"
-
-    def set_tab_attention(self, tab_index: int, needs_attention: bool) -> None:
-        """Show/hide a red attention dot on a sub-tab."""
-        if tab_index < 0 or tab_index >= self._tabs.count():
-            return
-        base = self._TAB_BASE.get(tab_index, "")
-        if needs_attention:
-            self._tabs.setTabText(tab_index, base + self._DOT)
-            icon_name = self._TAB_ICONS.get(tab_index)
-            if icon_name:
-                icon = make_icon(icon_name, color=PALETTE["danger"], size=14)
-                if icon:
-                    self._tabs.setTabIcon(tab_index, icon)
-        else:
-            self._tabs.setTabText(tab_index, base)
-            self._apply_tab_icons()
 
     # ── Theme ─────────────────────────────────────────────────────────
 

@@ -15,6 +15,7 @@ from PyQt5.QtCore import Qt, pyqtSignal, QSize
 from ui.theme import FONT, PALETTE
 from ui.icons import IC, make_icon
 from ui.widgets.tab_helpers import inner_tab_qss
+from ui.widgets.tab_attention import TabAttentionMixin
 from ui.guidance import get_section_cards, GuidanceCard, WorkflowFooter
 from ui.guidance.steps import next_steps_after
 
@@ -28,7 +29,7 @@ def _card_body(card_id: str) -> str:
     return ""
 
 
-class FocusStageTab(QWidget):
+class FocusStageTab(QWidget, TabAttentionMixin):
     """Focus & Stage: Autofocus, Stage control, and Prober as sub-tabs."""
 
     # Pass-through signals
@@ -105,6 +106,7 @@ class FocusStageTab(QWidget):
         if prober_tab is not None:
             self._tabs.addTab(prober_tab, "  Prober")
         self._apply_tab_icons()
+        self._init_tab_attention(self._tabs)
 
         root.addWidget(self._tabs, 1)
         root.addWidget(self._workflow_footer)
@@ -121,34 +123,6 @@ class FocusStageTab(QWidget):
             idx = self._tabs.indexOf(self._prober_tab)
             if idx >= 0:
                 self._tabs.setTabVisible(idx, visible)
-
-    # ── Attention dots ─────────────────────────────────────────────
-
-    _TAB_BASE = {0: "  Focus", 1: "  Stage", 2: "  Prober"}
-    _DOT = "\u2009\u25cf"  # thin space + filled circle
-
-    def set_tab_attention(self, tab_index: int, needs_attention: bool) -> None:
-        """Show or hide a red attention dot on a sub-tab.
-
-        ``tab_index``: 0=Focus, 1=Stage, 2=Prober.
-        """
-        if tab_index < 0 or tab_index >= self._tabs.count():
-            return
-        base = self._TAB_BASE.get(tab_index, self._tabs.tabText(tab_index).rstrip(" \u25cf\u2009"))
-        if needs_attention:
-            self._tabs.setTabText(tab_index, base + self._DOT)
-            # Use red-tinted icon on the attention tab
-            error_color = PALETTE["danger"]
-            icons_map = {0: IC.AUTOFOCUS, 1: IC.STAGE, 2: IC.PROBER}
-            icon_name = icons_map.get(tab_index)
-            if icon_name:
-                icon = make_icon(icon_name, color=error_color, size=14)
-                if icon:
-                    self._tabs.setTabIcon(tab_index, icon)
-        else:
-            self._tabs.setTabText(tab_index, base)
-            # Restore normal icon color
-            self._apply_tab_icons()
 
     # ── Workspace mode ────────────────────────────────────────────────
 

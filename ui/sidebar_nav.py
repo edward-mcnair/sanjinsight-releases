@@ -190,8 +190,7 @@ class _MenuItem(QWidget):
         self._indent = indent
         self._active = False
         self._hover  = False
-        # None | "complete" | "current" | "pending" | "warning" | "error" | "auto_configured"
-        self._guided_state = None
+        self._guided_state = None   # None | "complete" | "current" | "pending"
         self.setFixedHeight(_ITEM_H)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.setCursor(QCursor(Qt.PointingHandCursor))
@@ -211,16 +210,11 @@ class _MenuItem(QWidget):
             self.update()
 
     def set_guided_state(self, state):
-        """Set guided walkthrough state.
-
-        Valid states: None, 'complete', 'current', 'pending',
-        'warning', 'error', 'auto_configured'.
-        """
+        """Set guided walkthrough state: None, 'complete', 'current', 'pending'."""
         if self._guided_state != state:
             self._guided_state = state
             # Subscribe/unsubscribe from pulse animation
-            needs_pulse = state in ("current", "warning", "error")
-            if needs_pulse:
+            if state == "current":
                 _ensure_pulse_timer()
                 if self not in _pulse_subscribers:
                     _pulse_subscribers.append(self)
@@ -351,23 +345,11 @@ class _MenuItem(QWidget):
                 icon_name = "mdi.circle"
                 color     = _ACCENT()
                 pulse     = True
-            elif self._guided_state == "warning":
-                icon_name = "mdi.alert"
-                color     = PALETTE['warning']
-                pulse     = True
-            elif self._guided_state == "error":
-                icon_name = "mdi.alert-circle"
-                color     = PALETTE['danger']
-                pulse     = True
-            elif self._guided_state == "auto_configured":
-                icon_name = "mdi.information"
-                color     = _ACCENT()
             elif self._guided_state == "pending":
                 icon_name = "mdi.circle-outline"
                 color     = _TEXT_DIM()
 
             if icon_name and color:
-                # Apply pulse opacity for animated states
                 opacity = _pulse_opacity if pulse else 1.0
                 p.setOpacity(opacity)
 
@@ -792,7 +774,6 @@ class _Sidebar(QWidget):
         self._phase_containers: List[QWidget]       = []
         self._phase_separators: List[_PhaseSeparator] = []
         self._workspace_mode:   str = "standard"
-        self._auto_configured:  set = set()    # labels auto-set by profile
 
         self.setFixedWidth(_W_FULL)
         self.setStyleSheet(f"background:{_BG()};")
@@ -934,37 +915,16 @@ class _Sidebar(QWidget):
     ]
 
     # Labels whose settings were auto-configured by a profile selection.
-    def mark_auto_configured(self, labels: list[str]) -> None:
-        """Mark sidebar items as auto-configured by Measurement Setup.
-
-        Items show an ℹ info badge until the user visits them or the
-        guided step completes.
-        """
-        self._auto_configured.update(labels)
-        # Trigger a visual refresh if we have a cached workspace mode
-        if hasattr(self, "_last_workspace_mode"):
-            self.update_guided_states(
-                self._last_tracker, self._last_workspace_mode)
-
-    def clear_auto_configured(self, label: str) -> None:
-        """Clear auto-configured state for a tab (e.g. when user visits it)."""
-        self._auto_configured.discard(label)
-
     def update_guided_states(self, tracker, workspace_mode: str) -> None:
         """Update guided step indicators on each nav item.
 
-        State priority (highest wins):
-        - 'complete'         — green checkmark (step verified)
-        - 'current'          — pulsing accent dot (next action needed)
-        - 'auto_configured'  — accent ℹ (profile set this, review suggested)
-        - 'pending'          — dim hollow circle (future step)
+        In guided mode, items participating in the walkthrough show:
+        - 'complete': green check-circle
+        - 'current':  pulsing accent dot (first incomplete step)
+        - 'pending':  dim circle outline (future steps)
 
-        Warning/error states are set directly via set_guided_state()
-        and are not overwritten by this method.
+        In standard/expert modes, all indicators are cleared.
         """
-        self._last_tracker = tracker
-        self._last_workspace_mode = workspace_mode
-
         # Build a label → state map
         state_map: dict[str, str] = {}
         if workspace_mode == "guided":
@@ -973,22 +933,14 @@ class _Sidebar(QWidget):
                 checks = tracker._checks.get(phase, {})
                 if checks.get(key, False):
                     state_map[nav_label] = "complete"
-                    # Auto-configured clears when step completes
-                    self._auto_configured.discard(nav_label)
                 elif not found_current:
                     state_map[nav_label] = "current"
                     found_current = True
                 else:
-                    # Show auto_configured instead of pending if applicable
-                    if nav_label in self._auto_configured:
-                        state_map[nav_label] = "auto_configured"
-                    else:
-                        state_map[nav_label] = "pending"
+                    state_map[nav_label] = "pending"
 
-        # Apply to all menu items (skip items with warning/error set directly)
+        # Apply to all menu items
         for mi in self._items:
-            if mi._guided_state in ("warning", "error"):
-                continue    # preserve directly-set severity states
             mi.set_guided_state(state_map.get(mi._item.label))
 
     # ── Legacy group builders (still used for SYSTEM section) ────
@@ -1162,14 +1114,6 @@ class SidebarNav(QWidget):
     def update_guided_states(self, tracker, workspace_mode: str) -> None:
         """Update per-item guided step indicators from PhaseTracker state."""
         self._sidebar.update_guided_states(tracker, workspace_mode)
-
-    def mark_auto_configured(self, labels: list[str]) -> None:
-        """Mark sidebar items as auto-configured by Measurement Setup."""
-        self._sidebar.mark_auto_configured(labels)
-
-    def clear_auto_configured(self, label: str) -> None:
-        """Clear auto-configured state when user visits a tab."""
-        self._sidebar.clear_auto_configured(label)
 
     @property
     def guided_skip_requested(self):
