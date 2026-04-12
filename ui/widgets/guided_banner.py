@@ -31,9 +31,14 @@ log = logging.getLogger(__name__)
 # to the tuple format used internally by the banner.
 from ui.guidance.steps import WORKFLOW_STEPS as _WF_STEPS
 
+# Only surface Phases 1–3 in the guided banner.  Phases 4–5 remain in
+# PhaseTracker for future expansion but are not shown to users yet.
+_MAX_GUIDED_PHASE = 3
+
 _STEPS = [
     (s.phase, s.key, s.label, s.nav_target, s.icon, s.hint)
     for s in _WF_STEPS
+    if s.phase <= _MAX_GUIDED_PHASE
 ]
 
 
@@ -272,8 +277,10 @@ class GuidedBanner(QWidget):
                 self._action_btn.setText("Go →")
                 self._action_btn.setVisible(True)
                 self._skip_btn.setVisible(True)
-                # Auto-navigate to the next step
-                self.navigate_requested.emit(nav)
+                # Don't auto-navigate — let the user click "Go →" when ready.
+                # Auto-navigating caused jarring jumps (e.g. from Live View
+                # back to a Configuration step) when steps completed in the
+                # background.
             else:
                 self._label.setText("All steps complete — ready for analysis!")
                 self._current_nav = "Sessions"

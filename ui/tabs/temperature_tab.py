@@ -39,6 +39,8 @@ from hardware.app_state    import app_state
 from ui.widgets.temp_plot  import TempPlot
 from ui.widgets.more_options import MoreOptionsPanel
 from ui.theme import FONT, PALETTE, scaled_qss, MONO_FONT
+from ui.guidance import get_section_cards, GuidanceCard, WorkflowFooter
+from ui.guidance.steps import next_steps_after
 
 # Approximate TEC temperature ramp rate (°C per minute).
 # Used for the stabilization time estimate shown in the UI.
@@ -511,6 +513,7 @@ class TecPanel(QWidget):
 class TemperatureTab(QWidget):
 
     open_device_manager = pyqtSignal()
+    navigate_requested = pyqtSignal(str)
 
     def __init__(self, n_tecs: int, hw_service=None, has_chuck: bool = False):
         super().__init__()
@@ -523,6 +526,54 @@ class TemperatureTab(QWidget):
         # Outer layout holds the stacked widget
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
+
+        # ── Guidance cards (Guided mode) — scrollable area ────────
+        _cards = get_section_cards("temperature")
+        def _body(cid):
+            for c in _cards:
+                if c["card_id"] == cid:
+                    return c["body"]
+            return ""
+
+        self._cards_widget = QWidget()
+        cards_lay = QVBoxLayout(self._cards_widget)
+        cards_lay.setContentsMargins(0, 0, 0, 0)
+        cards_lay.setSpacing(4)
+
+        self._overview_card = GuidanceCard(
+            "temperature.overview",
+            "Getting Started with Temperature",
+            _body("temperature.overview"))
+        self._overview_card.setVisible(False)
+        cards_lay.addWidget(self._overview_card)
+
+        self._guide_card1 = GuidanceCard(
+            "temperature.setup",
+            "Set a Stable Baseline",
+            _body("temperature.setup"),
+            step_number=1)
+        self._guide_card1.setVisible(False)
+        cards_lay.addWidget(self._guide_card1)
+
+        self._cards_scroll = QScrollArea()
+        self._cards_scroll.setWidgetResizable(True)
+        self._cards_scroll.setFrameShape(QFrame.NoFrame)
+        self._cards_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self._cards_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._cards_scroll.setMaximumHeight(200)
+        self._cards_scroll.setWidget(self._cards_widget)
+        self._cards_scroll.setVisible(False)
+        outer.addWidget(self._cards_scroll)
+
+        for c in (self._overview_card, self._guide_card1):
+            c.dismissed.connect(self._update_cards_scroll_visibility)
+
+        _NEXT = [(s.nav_target, s.label, s.hint)
+                 for s in next_steps_after("Temperature", count=3)]
+        self._workflow_footer = WorkflowFooter(_NEXT)
+        self._workflow_footer.navigate_requested.connect(self.navigate_requested)
+        self._workflow_footer.setVisible(False)
+
         self._stack = QStackedWidget()
         outer.addWidget(self._stack)
 
@@ -570,6 +621,8 @@ class TemperatureTab(QWidget):
         scroll.setWidget(controls)
         self._stack.addWidget(scroll)
         self._stack.setCurrentIndex(0)  # empty state until device connects
+
+        outer.addWidget(self._workflow_footer)
 
     def _build_empty_state(self, title: str, device: str, tip: str) -> QWidget:
         from ui.widgets.empty_state import build_empty_state
@@ -786,10 +839,29 @@ class TemperatureTab(QWidget):
                 box._chuck_stab_dot.setToolTip(
                     f"Settling — Δ{diff:+.2f}°C from target")
 
+    # ── Workspace mode ────────────────────────────────────────────────
+
+    def set_workspace_mode(self, mode: str) -> None:
+        is_guided = (mode == "guided")
+        self._guide_card1.setVisible(is_guided)
+        self._workflow_footer.setVisible(is_guided)
+        self._overview_card.setVisible(not is_guided)
+        self._update_cards_scroll_visibility()
+
+    def _update_cards_scroll_visibility(self) -> None:
+        any_visible = any(c.isVisible() for c in (
+            self._overview_card, self._guide_card1))
+        self._cards_scroll.setVisible(any_visible)
+
     # ── Theme ────────────────────────────────────────────────────────
 
     def _apply_styles(self) -> None:
         P = PALETTE
+        # Guidance cards
+        for c in (self._overview_card, self._guide_card1):
+            if hasattr(c, "_apply_styles"):
+                c._apply_styles()
+        self._workflow_footer._apply_styles()
         # Delegate to each TEC panel
         for panel in self._panels:
             panel._apply_styles()

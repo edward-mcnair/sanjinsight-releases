@@ -675,6 +675,8 @@ class LiveCanvas(QWidget):
 
 class LiveTab(QWidget):
 
+    navigate_requested = pyqtSignal(str)
+
     def __init__(self):
         super().__init__()
         self._proc    = None
@@ -753,6 +755,7 @@ class LiveTab(QWidget):
         _NEXT = [(s.nav_target, s.label, s.hint)
                  for s in next_steps_after("Live View", count=3)]
         self._workflow_footer = WorkflowFooter(_NEXT)
+        self._workflow_footer.navigate_requested.connect(self.navigate_requested)
         self._workflow_footer.setVisible(False)
 
         # Quick hardware controls bar

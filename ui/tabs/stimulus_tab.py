@@ -10,13 +10,16 @@ from __future__ import annotations
 
 import logging
 
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QTabWidget
-from PyQt5.QtCore    import pyqtSignal, QSize
+from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QTabWidget,
+                             QScrollArea, QSizePolicy)
+from PyQt5.QtCore    import Qt, pyqtSignal, QSize
 
 from ui.theme import FONT, PALETTE
 from ui.icons import IC, make_icon
 from ui.widgets.tab_helpers import inner_tab_qss
 from ui.widgets.tab_attention import TabAttentionMixin
+from ui.guidance import get_section_cards, GuidanceCard, WorkflowFooter
+from ui.guidance.steps import next_steps_after
 
 log = logging.getLogger(__name__)
 
@@ -26,6 +29,7 @@ class StimulusTab(QWidget, TabAttentionMixin):
 
     # Pass-through signals from inner tabs
     open_device_manager = pyqtSignal()
+    navigate_requested = pyqtSignal(str)
 
     def __init__(self, fpga_tab: QWidget, bias_tab: QWidget, parent=None):
         super().__init__(parent)
@@ -39,6 +43,62 @@ class StimulusTab(QWidget, TabAttentionMixin):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
+        # ── Guidance cards (Guided mode) — scrollable area ────────
+        _cards = get_section_cards("stimulus")
+        def _body(cid):
+            for c in _cards:
+                if c["card_id"] == cid:
+                    return c["body"]
+            return ""
+
+        self._cards_widget = QWidget()
+        cards_lay = QVBoxLayout(self._cards_widget)
+        cards_lay.setContentsMargins(0, 0, 0, 0)
+        cards_lay.setSpacing(4)
+
+        self._overview_card = GuidanceCard(
+            "stimulus.overview",
+            "Getting Started with Stimulus",
+            _body("stimulus.overview"))
+        self._overview_card.setVisible(False)
+        cards_lay.addWidget(self._overview_card)
+
+        self._guide_card1 = GuidanceCard(
+            "stimulus.modulation",
+            "Configure the Modulation Signal",
+            _body("stimulus.modulation"),
+            step_number=1)
+        self._guide_card1.setVisible(False)
+        cards_lay.addWidget(self._guide_card1)
+
+        self._guide_card2 = GuidanceCard(
+            "stimulus.bias",
+            "Set the Bias Current",
+            _body("stimulus.bias"),
+            step_number=2)
+        self._guide_card2.setVisible(False)
+        cards_lay.addWidget(self._guide_card2)
+
+        self._cards_scroll = QScrollArea()
+        self._cards_scroll.setWidgetResizable(True)
+        self._cards_scroll.setFrameShape(QScrollArea.NoFrame)
+        self._cards_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self._cards_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._cards_scroll.setMaximumHeight(280)
+        self._cards_scroll.setWidget(self._cards_widget)
+        self._cards_scroll.setVisible(False)
+        root.addWidget(self._cards_scroll)
+
+        for c in (self._overview_card, self._guide_card1, self._guide_card2):
+            c.dismissed.connect(self._update_cards_scroll_visibility)
+
+        _NEXT = [(s.nav_target, s.label, s.hint)
+                 for s in next_steps_after("Stimulus", count=3)]
+        self._workflow_footer = WorkflowFooter(_NEXT)
+        self._workflow_footer.navigate_requested.connect(self.navigate_requested)
+        self._workflow_footer.setVisible(False)
+
+        # ── Sub-tabs ──────────────────────────────────────────────
         self._tabs = QTabWidget()
         self._tabs.setDocumentMode(True)
         self._tabs.setStyleSheet(self._tab_qss())
@@ -49,6 +109,7 @@ class StimulusTab(QWidget, TabAttentionMixin):
         self._init_tab_attention(self._tabs)
 
         root.addWidget(self._tabs, 1)
+        root.addWidget(self._workflow_footer)
 
         # Wire inner open_device_manager signals upward
         for tab in (fpga_tab, bias_tab):
@@ -77,6 +138,21 @@ class StimulusTab(QWidget, TabAttentionMixin):
         """Wire bias/camera drivers into the IV Sweep sub-tab."""
         self._iv_sweep_tab.set_drivers(bias_driver, camera_driver, pipeline)
 
+    # ── Workspace mode ────────────────────────────────────────────────
+
+    def set_workspace_mode(self, mode: str) -> None:
+        is_guided = (mode == "guided")
+        self._guide_card1.setVisible(is_guided)
+        self._guide_card2.setVisible(is_guided)
+        self._workflow_footer.setVisible(is_guided)
+        self._overview_card.setVisible(not is_guided)
+        self._update_cards_scroll_visibility()
+
+    def _update_cards_scroll_visibility(self) -> None:
+        any_visible = any(c.isVisible() for c in (
+            self._overview_card, self._guide_card1, self._guide_card2))
+        self._cards_scroll.setVisible(any_visible)
+
     # ── Theme ─────────────────────────────────────────────────────────
 
     def _apply_styles(self) -> None:
@@ -85,6 +161,10 @@ class StimulusTab(QWidget, TabAttentionMixin):
         for sub in (self._fpga_tab, self._bias_tab, self._iv_sweep_tab):
             if hasattr(sub, "_apply_styles"):
                 sub._apply_styles()
+        for c in (self._overview_card, self._guide_card1, self._guide_card2):
+            if hasattr(c, "_apply_styles"):
+                c._apply_styles()
+        self._workflow_footer._apply_styles()
 
     def _apply_tab_icons(self) -> None:
         icons = [

@@ -937,7 +937,8 @@ class MainWindow(QMainWindow):
         self._modality_section.set_workspace_mode(ws_mgr.mode.value)
         for w in (self._live_tab, self._focus_stage_tab,
                   self._signal_check_section, self._capture_tab,
-                  self._cal_tab, self._recipe_run):
+                  self._cal_tab, self._recipe_run,
+                  self._stimulus_tab, self._temp_tab):
             if hasattr(w, "set_workspace_mode"):
                 w.set_workspace_mode(ws_mgr.mode.value)
         # Navigate to Measurement Setup as landing in Guided mode
@@ -1305,7 +1306,9 @@ class MainWindow(QMainWindow):
 
         # Section "navigate" signals → sidebar navigation
         for w in (self._data_tab, self._focus_stage_tab,
-                  self._signal_check_section, self._capture_tab):
+                  self._signal_check_section, self._capture_tab,
+                  self._live_tab, self._cal_tab,
+                  self._stimulus_tab, self._temp_tab):
             if hasattr(w, "navigate_requested"):
                 w.navigate_requested.connect(self._nav.select_by_label)
 
@@ -1656,7 +1659,9 @@ class MainWindow(QMainWindow):
                   getattr(self, "_focus_stage_tab", None),
                   getattr(self, "_signal_check_section", None),
                   getattr(self, "_capture_tab", None),
-                  getattr(self, "_cal_tab", None)):
+                  getattr(self, "_cal_tab", None),
+                  getattr(self, "_stimulus_tab", None),
+                  getattr(self, "_temp_tab", None)):
             if w is not None and hasattr(w, "set_workspace_mode"):
                 w.set_workspace_mode(mode)
         # Sync settings tab buttons if change came from sidebar indicator
@@ -2124,6 +2129,7 @@ class MainWindow(QMainWindow):
 
         app_state.active_camera_type = cam_type
         self._refresh_camera_dependent_ui(cam_type, source="header_dropdown")
+        self._phase_tracker.mark(1, "camera_selected")
 
     def _on_camera_bar_changed(self, cam_type: str) -> None:
         """
@@ -2131,6 +2137,7 @@ class MainWindow(QMainWindow):
         The bar has already updated app_state.active_camera_type.
         """
         self._refresh_camera_dependent_ui(cam_type, source="camera_bar")
+        self._phase_tracker.mark(1, "camera_selected")
 
     def _on_modality_changed(self, cam_type: str) -> None:
         """Handle camera type change from ModalitySection's combo."""
@@ -2140,6 +2147,8 @@ class MainWindow(QMainWindow):
         except Exception:
             app_state.active_camera_type = cam_type
         self._refresh_camera_dependent_ui(cam_type, source="modality_section")
+        # Mark camera_selected when the user explicitly picks a camera type
+        self._phase_tracker.mark(1, "camera_selected")
 
     def _refresh_all_camera_selectors(self) -> None:
         """

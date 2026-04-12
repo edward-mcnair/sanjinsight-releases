@@ -19,7 +19,7 @@ from PyQt5.QtWidgets import (
     QDoubleSpinBox, QSpinBox, QGroupBox, QGridLayout, QProgressBar,
     QFileDialog, QSplitter, QTabWidget,
     QSizePolicy, QToolButton, QScrollArea, QMessageBox, QComboBox)
-from PyQt5.QtCore import Qt, QRect
+from PyQt5.QtCore import Qt, QRect, pyqtSignal
 from PyQt5.QtGui  import (QImage, QPixmap, QPainter, QPen, QColor,
                            QBrush, QLinearGradient)
 
@@ -184,6 +184,8 @@ class MapPane(QWidget):
 
 class CalibrationTab(QWidget):
 
+    navigate_requested = pyqtSignal(str)
+
     def __init__(self):
         super().__init__()
         self._runner   = None
@@ -260,6 +262,7 @@ class CalibrationTab(QWidget):
         _NEXT = [(s.nav_target, s.label, s.hint)
                  for s in next_steps_after("Calibration", count=3)]
         self._workflow_footer = WorkflowFooter(_NEXT)
+        self._workflow_footer.navigate_requested.connect(self.navigate_requested)
         self._workflow_footer.setVisible(False)
         lay.addWidget(self._workflow_footer)
 
