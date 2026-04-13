@@ -196,6 +196,7 @@ from ui.tabs.autoscan_tab        import AutoScanTab
 from ui.scripting_console        import ScriptingConsoleTab # ← Python console
 from ui.sidebar_nav              import SidebarNav          # ← grouped sidebar nav
 from ui.nav_labels               import NavLabel as NL, validate_nav_targets
+from measurement_context         import measurement_context as mctx
 from hardware.device_manager     import DeviceManager
 from ui.device_manager_dialog    import DeviceManagerDialog
 from ui.notifications            import ToastManager
@@ -805,6 +806,8 @@ class MainWindow(QMainWindow):
             lambda: self._phase_tracker.mark(3, "recipe_run"))
         self._recipe_run.edit_recipe_requested.connect(
             lambda uid: self._nav.select_by_label(NL.LIBRARY))
+        self._recipe_run.recipe_selection_changed.connect(
+            self._on_recipe_selection_changed)
 
         # Experiment Log → open session
         self._experiment_log_widget.open_session_requested.connect(
@@ -2151,11 +2154,13 @@ class MainWindow(QMainWindow):
         Called when the user picks a camera from the global CameraContextBar.
         The bar has already updated app_state.active_camera_type.
         """
+        mctx.camera_key = cam_type
         self._refresh_camera_dependent_ui(cam_type, source="camera_bar")
         self._phase_tracker.mark(1, "camera_selected")
 
     def _on_modality_changed(self, cam_type: str) -> None:
         """Handle camera type change from ModalitySection's combo."""
+        mctx.camera_key = cam_type
         # Sync the camera context bar (it checks for redundant updates internally)
         try:
             self._cam_bar.set_camera_type(cam_type)
@@ -3267,6 +3272,15 @@ class MainWindow(QMainWindow):
     def _apply_recipe(self, recipe) -> None:
         self._recipe_svc.apply(recipe)
 
+    # ── Measurement context handlers ──────────────────────────────────
+
+    def _on_recipe_selection_changed(self, uid: str, label: str) -> None:
+        """Update MeasurementContext when scan profile selection changes."""
+        if uid:
+            mctx.set_scan_profile(uid, label)
+        else:
+            mctx.clear_scan_profile()
+
     # ── Phase 1 workflow layer handlers ───────────────────────────────
 
     def _on_recipe_run_requested(self, payload: dict) -> None:
@@ -3455,6 +3469,10 @@ class MainWindow(QMainWindow):
         self._nav.select_by_label(NL.SESSIONS)
 
     def _on_profile_applied(self, profile):
+        mctx.set_material_profile(
+            getattr(profile, "uid", None),
+            getattr(profile, "name", None),
+        )
         self._profile_svc.apply(profile)
         # Mark affected section sub-tabs as needing review (amber)
         tip = "Prefilled from Measurement Setup — review suggested"

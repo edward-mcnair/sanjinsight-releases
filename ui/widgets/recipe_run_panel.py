@@ -138,6 +138,7 @@ class RecipeRunPanel(QWidget):
     run_completed = pyqtSignal()
     edit_recipe_requested = pyqtSignal(str)
     navigate_requested = pyqtSignal(str)
+    recipe_selection_changed = pyqtSignal(str, str)  # (uid, label) — ("", "") on clear
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -622,11 +623,13 @@ class RecipeRunPanel(QWidget):
             self._run_btn.setEnabled(False)
             self._summary_frame.setVisible(False)
             self._vars_container.setVisible(False)
+            self.recipe_selection_changed.emit("", "")
             return
 
         recipe = self._recipes[index]
         self._active_recipe = recipe
         self._run_btn.setEnabled(True)
+        self.recipe_selection_changed.emit(recipe.uid, recipe.label)
         self._result_strip.setVisible(False)
 
         # Update summary strip
