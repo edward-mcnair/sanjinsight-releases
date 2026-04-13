@@ -44,6 +44,7 @@ from ui.guidance.content import (
 )
 from ui.guidance.steps import next_steps_after
 from ui.display_terms import TERMS
+from ui.nav_labels import NavLabel as NL
 
 log = logging.getLogger(__name__)
 
@@ -52,17 +53,17 @@ log = logging.getLogger(__name__)
 # Goals are filtered by camera type at runtime.
 
 _GOALS_TR = [
-    ("measurement",      "Measurement",         "Acquire thermal image",           "mdi.thermometer",       "Live View"),
-    ("calibration",      "Calibration",          "Create or verify C_T map",        "mdi.chart-line",        "Calibration"),
-    ("hotspot_detection","Hotspot Detection",    "Capture and analyse for defects", "mdi.target",            "Capture"),
-    ("transient_series", "Transient Series",     "Time-resolved thermal response",  "mdi.chart-timeline",    "Transient"),
-    ("dataset_analysis", "Data Set Analysis",    "Analyse saved sessions",          "mdi.folder-search",     "Sessions"),
+    ("measurement",      "Measurement",         "Acquire thermal image",           "mdi.thermometer",       NL.LIVE_VIEW),
+    ("calibration",      "Calibration",          "Create or verify C_T map",        "mdi.chart-line",        NL.CALIBRATION),
+    ("hotspot_detection","Hotspot Detection",    "Capture and analyse for defects", "mdi.target",            NL.CAPTURE),
+    ("transient_series", "Transient Series",     "Time-resolved thermal response",  "mdi.chart-timeline",    NL.TRANSIENT),
+    ("dataset_analysis", "Data Set Analysis",    "Analyse saved sessions",          "mdi.folder-search",     NL.SESSIONS),
 ]
 _GOALS_IR = [
-    ("measurement",      "Measurement",         "Acquire thermal image",           "mdi.thermometer",       "Live View"),
-    ("calibration",      "Calibration",          "Create or verify emissivity map", "mdi.chart-line",        "Calibration"),
-    ("hotspot_detection","Hotspot Detection",    "Capture and analyse for defects", "mdi.target",            "Capture"),
-    ("dataset_analysis", "Data Set Analysis",    "Analyse saved sessions",          "mdi.folder-search",     "Sessions"),
+    ("measurement",      "Measurement",         "Acquire thermal image",           "mdi.thermometer",       NL.LIVE_VIEW),
+    ("calibration",      "Calibration",          "Create or verify emissivity map", "mdi.chart-line",        NL.CALIBRATION),
+    ("hotspot_detection","Hotspot Detection",    "Capture and analyse for defects", "mdi.target",            NL.CAPTURE),
+    ("dataset_analysis", "Data Set Analysis",    "Analyse saved sessions",          "mdi.folder-search",     NL.SESSIONS),
 ]
 
 def _goals_for(cam_type: str) -> list:
