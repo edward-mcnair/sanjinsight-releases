@@ -76,6 +76,7 @@ from PyQt5.QtWidgets import (
 )
 
 from ui.theme import FONT, PALETTE
+from ui.display_terms import TERMS
 from ui.operator.recipe_selector_panel import RecipeSelectorPanel
 from ui.operator.scan_work_area        import ScanWorkArea
 from ui.operator.shift_log_panel       import ShiftLogPanel
@@ -339,7 +340,7 @@ class OperatorShell(QMainWindow):
         self._active_recipe = recipe
         self._scan_area.set_recipe(recipe)
         if recipe is not None:
-            self._set_status(f"Recipe: {recipe.label}")
+            self._set_status(f"{TERMS['recipe']}: {recipe.label}")
         else:
             self._set_status("Ready")
 

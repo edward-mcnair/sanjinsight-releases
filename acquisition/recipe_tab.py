@@ -284,6 +284,7 @@ from PyQt5.QtGui import QColor, QFont
 from ui.icons import set_btn_icon
 from ui.theme import FONT, PALETTE, scaled_qss, MONO_FONT
 from ui.workspace import get_manager
+from ui.display_terms import TERMS
 
 
 class RecipeTab(QWidget):
@@ -736,10 +737,10 @@ class RecipeTab(QWidget):
         self._lock_btn.setEnabled(can_lock)
         if enabled:
             if locked:
-                self._lock_btn.setText("Unlock Recipe")
+                self._lock_btn.setText(TERMS["unlock_recipe"])
                 set_btn_icon(self._lock_btn, "fa5s.unlock")
             else:
-                self._lock_btn.setText("Approve && Lock")
+                self._lock_btn.setText(TERMS["lock_recipe"])
                 set_btn_icon(self._lock_btn, "fa5s.lock")
 
     # ── List operations ─────────────────────────────────────────────
@@ -938,8 +939,8 @@ class RecipeTab(QWidget):
         lay.setSpacing(8)
 
         hdr = QLabel(
-            "Choose a preset to load into the Recipe Editor.\n"
-            "Rename and save it to create your own scan profile."
+            f"Choose a preset to load into the {TERMS['recipe']} editor.\n"
+            f"Rename and save it to create your own {TERMS['recipe'].lower()}."
         )
         hdr.setStyleSheet(f"color:{PALETTE['textDim']}; font-size:{FONT['sublabel']}pt;")
         lay.addWidget(hdr)

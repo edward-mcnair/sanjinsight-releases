@@ -266,21 +266,22 @@ class AcquireTab(QWidget):
         self._progress.setStyleSheet(progress_bar_qss())
         cl.addWidget(self._progress, 5, 0, 1, 2)
 
-        # Recipe quick-access row
+        # Scan Profile quick-access row
         from PyQt5.QtWidgets import QFrame as _QFrame
+        from ui.display_terms import TERMS
         recipe_row = QHBoxLayout()
-        recipe_lbl = QLabel("Recipe:")
+        recipe_lbl = QLabel(f"{TERMS['recipe']}:")
         recipe_lbl.setStyleSheet(f"color:{PALETTE['textSub']}; font-size:{FONT['label']}pt;")
         recipe_row.addWidget(recipe_lbl)
         self._active_recipe_lbl = QLabel("(none)")
         self._active_recipe_lbl.setStyleSheet(
             f"color:{PALETTE['accent']}; font-size:{FONT['label']}pt; font-style:italic;")
         recipe_row.addWidget(self._active_recipe_lbl, 1)
-        self._load_recipe_btn = QPushButton("Load Recipe…")
+        self._load_recipe_btn = QPushButton(f"Load {TERMS['recipe']}…")
         set_btn_icon(self._load_recipe_btn, "fa5s.clipboard-list")
         self._load_recipe_btn.setFixedHeight(26)
         self._load_recipe_btn.setToolTip(
-            "Open the Recipe Manager to select and apply a hardware + "
+            f"Open the {TERMS['recipe']} manager to select and apply a hardware + "
             "acquisition configuration preset")
         self._load_recipe_btn.clicked.connect(self._open_recipe_manager)
         recipe_row.addWidget(self._load_recipe_btn)

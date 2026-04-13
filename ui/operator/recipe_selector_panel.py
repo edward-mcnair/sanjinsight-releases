@@ -43,6 +43,7 @@ from PyQt5.QtWidgets import (
 )
 
 from ui.theme import FONT, PALETTE
+from ui.display_terms import TERMS
 
 log = logging.getLogger(__name__)
 
@@ -71,7 +72,7 @@ class _RecipeCard(QFrame):
         title_row = QHBoxLayout()
         title_row.setSpacing(6)
 
-        label_txt = recipe.label or "Untitled Recipe"
+        label_txt = recipe.label or f"Untitled {TERMS['recipe']}"
         self._title_lbl = QLabel(label_txt)
         self._title_lbl.setStyleSheet(
             f"font-size:{FONT.get('body', 11)}pt; font-weight:700; "
