@@ -754,6 +754,8 @@ class MainWindow(QMainWindow):
             self._on_profile_applied)
         self._modality_section.navigate_requested.connect(
             self._nav.select_by_label)
+        self._modality_section.scan_profile_selected.connect(
+            self._on_recipe_selection_changed)
 
         self._acq_settings_section  = AcquisitionSettingsSection()
         self._signal_check_section  = SignalCheckSection()

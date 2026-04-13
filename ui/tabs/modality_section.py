@@ -43,6 +43,7 @@ from ui.guidance.content import (
     get_modality_info,
 )
 from ui.guidance.steps import next_steps_after
+from ui.display_terms import TERMS
 
 log = logging.getLogger(__name__)
 
@@ -138,6 +139,7 @@ class ModalitySection(QWidget):
     modality_changed    = pyqtSignal(str)         # "tr" | "ir"
     profile_selected    = pyqtSignal(object)      # MaterialProfile
     custom_selected     = pyqtSignal()
+    scan_profile_selected = pyqtSignal(str, str)  # (uid, label) — ("", "") on clear
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -304,8 +306,30 @@ class ModalitySection(QWidget):
         lc.addWidget(self._sep_goal)
         lc.addSpacing(4)
 
-        # ── Profile section ───────────────────────────────────────────
-        prof_lbl = QLabel("Profile")
+        # ── Scan Profile section (camera-filtered) ────────────────────
+        scan_lbl = QLabel(TERMS["recipe"])
+        scan_lbl.setStyleSheet(self._section_label_qss())
+        lc.addWidget(scan_lbl)
+        lc.addSpacing(2)
+
+        self._scan_combo = QComboBox()
+        self._scan_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._scan_combo.setPlaceholderText(f"Select a {TERMS['recipe'].lower()}\u2026")
+        self._scan_combo.currentIndexChanged.connect(self._on_scan_profile_changed)
+        lc.addWidget(self._scan_combo)
+
+        self._scan_desc = QLabel("")
+        self._scan_desc.setWordWrap(True)
+        self._scan_desc.setStyleSheet(_dim_style())
+        lc.addWidget(self._scan_desc)
+
+        lc.addSpacing(4)
+        self._sep_scan = _separator()
+        lc.addWidget(self._sep_scan)
+        lc.addSpacing(4)
+
+        # ── Material Profile section ──────────────────────────────────
+        prof_lbl = QLabel("Material Profile")
         prof_lbl.setStyleSheet(self._section_label_qss())
         lc.addWidget(prof_lbl)
         lc.addSpacing(2)
@@ -746,8 +770,9 @@ class ModalitySection(QWidget):
 
         self._update_modality_desc(active)
         self._cam_combo.blockSignals(False)
-        # Refresh goals for current camera type
+        # Refresh goals and scan profiles for current camera type
         self._refresh_goals(active)
+        self._refresh_scan_profiles(active)
 
     def _on_camera_type_changed(self, index: int) -> None:
         if index < 0:
@@ -763,6 +788,7 @@ class ModalitySection(QWidget):
         self._refresh_ffc_row()
         self._refresh_preview_card_info()
         self._profile_picker.filter_by_modality(cam_type)
+        self._refresh_scan_profiles(cam_type)
         self.modality_changed.emit(cam_type)
 
     # ── Measurement Goal ──────────────────────────────────────────────
@@ -802,6 +828,71 @@ class ModalitySection(QWidget):
             return
         gid, subtitle, icon, nav = data
         self.navigate_requested.emit(nav)
+
+    # ── Scan Profile (camera-filtered) ────────────────────────────────
+
+    _CAM_TO_MODALITY = {"tr": "thermoreflectance", "ir": "ir_lockin"}
+
+    def _refresh_scan_profiles(self, cam_type: str) -> None:
+        """Populate the scan profile combo filtered by camera modality."""
+        from acquisition.recipe_tab import RecipeStore
+        self._scan_combo.blockSignals(True)
+        self._scan_combo.clear()
+
+        modality = self._CAM_TO_MODALITY.get(cam_type, "thermoreflectance")
+        try:
+            recipes = RecipeStore().list()
+        except Exception:
+            recipes = []
+
+        matching = [r for r in recipes
+                    if r.acquisition.modality == modality]
+
+        for recipe in matching:
+            suffix = " \U0001f512" if recipe.locked else ""
+            self._scan_combo.addItem(
+                f"{recipe.label}{suffix}",
+                userData=(recipe.uid, recipe.label))
+
+        if not matching:
+            self._scan_desc.setText(
+                f"No {TERMS['recipe_plural'].lower()} for this camera.")
+        else:
+            self._scan_desc.setText("")
+
+        self._scan_combo.setCurrentIndex(-1)  # no selection
+        self._scan_combo.blockSignals(False)
+        self.scan_profile_selected.emit("", "")  # clear on camera change
+
+    def _on_scan_profile_changed(self, index: int) -> None:
+        """Handle scan profile selection change."""
+        if index < 0:
+            self._scan_desc.setText("")
+            self.scan_profile_selected.emit("", "")
+            return
+        data = self._scan_combo.itemData(index)
+        if data is None:
+            self.scan_profile_selected.emit("", "")
+            return
+        uid, label = data
+        self.scan_profile_selected.emit(uid, label)
+        # Show key parameters
+        from acquisition.recipe_tab import RecipeStore
+        try:
+            store = RecipeStore()
+            for r in store.list():
+                if r.uid == uid:
+                    parts = []
+                    parts.append(f"{r.camera.n_frames} frames")
+                    parts.append(f"{r.camera.exposure_us:.0f} \u00b5s")
+                    if r.tec.enabled:
+                        parts.append(f"TEC {r.tec.setpoint_c:.0f}\u00b0C")
+                    if r.bias.enabled:
+                        parts.append(f"Bias {r.bias.voltage_v:.1f}V")
+                    self._scan_desc.setText("  \u00b7  ".join(parts))
+                    break
+        except Exception:
+            pass
 
     def _on_profile_picked(self, profile) -> None:
         self.profile_selected.emit(profile)
