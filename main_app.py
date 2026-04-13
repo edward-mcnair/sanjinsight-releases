@@ -443,7 +443,7 @@ class MainWindow(QMainWindow):
 
         # Validate that all workflow step nav_targets exist in the sidebar.
         # strict=True in dev mode (raises RuntimeError); warns in production.
-        sidebar_labels = {mi._item.label for mi in self._nav._items}
+        sidebar_labels = {mi._item.label for mi in self._nav._sidebar._items}
         from ui.guidance.steps import WORKFLOW_STEPS
         validate_nav_targets(
             [s.nav_target for s in WORKFLOW_STEPS],
