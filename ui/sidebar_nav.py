@@ -216,6 +216,23 @@ class _MenuItem(QWidget):
                     _pulse_subscribers.remove(self)
             self.update()
 
+    def set_readiness_severity(self, severity):
+        """Set readiness indicator: None, 'blocking', 'review', 'info'.
+
+        blocking = red pulsing dot, review = steady amber dot,
+        info = steady accent dot, None = no indicator.
+        """
+        old = getattr(self, '_readiness_severity', None)
+        self._readiness_severity = severity
+        if severity == "blocking":
+            _ensure_pulse_timer()
+            if self not in _pulse_subscribers:
+                _pulse_subscribers.append(self)
+        elif old == "blocking":
+            if self in _pulse_subscribers and self._guided_state != "current":
+                _pulse_subscribers.remove(self)
+        self.update()
+
     def event(self, e):
         if e.type() == QEvent.ToolTip:
             _SidebarTooltip.get().show_tip(e.globalPos(), self._item.label)
@@ -358,6 +375,25 @@ class _MenuItem(QWidget):
                     p.drawEllipse(bx + r - 5, by + r - 5, 10, 10)
 
                 p.setOpacity(1.0)
+
+        # ── Readiness severity dot ─────────────────────────────────────
+        _rsev = getattr(self, '_readiness_severity', None)
+        if _rsev and self._guided_state is None:
+            _DOT_R = 5
+            dx = w - _DOT_R * 2 - 10
+            dy = (h - _DOT_R * 2) // 2
+            _sev_colors = {
+                "blocking": PALETTE.get('danger', '#ff4444'),
+                "review":   PALETTE.get('warning', '#ffb300'),
+                "info":     PALETTE.get('accent', '#3d8bef'),
+            }
+            dot_color = QColor(_sev_colors.get(_rsev, _sev_colors["info"]))
+            if _rsev == "blocking":
+                p.setOpacity(_pulse_opacity)
+            p.setBrush(dot_color)
+            p.setPen(Qt.NoPen)
+            p.drawEllipse(dx, dy, _DOT_R * 2, _DOT_R * 2)
+            p.setOpacity(1.0)
 
         # ── Focus rectangle (keyboard navigation) ────────────────────
         if self.hasFocus():
@@ -937,6 +973,22 @@ class _Sidebar(QWidget):
         for mi in self._items:
             mi.set_guided_state(state_map.get(mi._item.label))
 
+    # ── Readiness indicators ──────────────────────────────────────
+
+    def set_readiness_indicators(self, severity_map: dict) -> None:
+        """Update readiness severity dots on sidebar items.
+
+        Parameters
+        ----------
+        severity_map : dict[str, str | None]
+            Maps NavLabel string → highest severity for that tab.
+            e.g. ``{"Settings": "blocking", "Focus & Stage": "review"}``
+            Items not in the map (or mapped to None) have their dot cleared.
+        """
+        for mi in self._items:
+            sev = severity_map.get(mi._item.label)
+            mi.set_readiness_severity(sev)
+
     # ── Legacy group builders (still used for SYSTEM section) ────
 
     def add_section(self, title: str, items: List[NavItem]):
@@ -1154,6 +1206,19 @@ class SidebarNav(QWidget):
                 return
         _log.warning("select_by_label: NO MATCH for %r in %d items",
                      label, len(self._sidebar._items))
+
+    # ── Readiness indicators (public) ────────────────────────────────
+
+    def set_readiness_indicators(self, severity_map: dict) -> None:
+        """Update readiness severity dots on sidebar items.
+
+        Parameters
+        ----------
+        severity_map : dict[str, str | None]
+            Maps NavLabel string → highest severity for that tab.
+            e.g. ``{"Settings": "blocking", "Focus & Stage": "review"}``
+        """
+        self._sidebar.set_readiness_indicators(severity_map)
 
     # ── Theme support ────────────────────────────────────────────────
 
