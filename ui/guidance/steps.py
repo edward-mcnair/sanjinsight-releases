@@ -1,30 +1,17 @@
 """
-ui/guidance/steps.py  —  Workflow step definitions
+ui/guidance/steps.py  —  Workflow step compatibility shim
 
-The canonical definition of all guided-walkthrough steps.  Both the
-GuidedBanner and section-level guidance cards pull from this registry
-rather than maintaining parallel step lists.
-
-Each step has:
-  phase       int     1=Configuration, 2=Image Acquisition, 3=Analysis
-  key         str     PhaseTracker check key (e.g. "camera_selected")
-  label       str     Human-readable action text
-  nav_target  str     Sidebar nav label to navigate to
-  icon        str     MDI icon constant name (from IC)
-  hint        str     Contextual tip shown when user is on this step's page
-
-The ordered list WORKFLOW_STEPS is the single source of truth.
+The guided walkthrough has been replaced by the Recipe execution model.
+This stub provides the WorkflowStep type and empty registries so
+existing imports continue to work.
 """
 from __future__ import annotations
 
 from typing import NamedTuple
 
-from ui.icons import IC
-from ui.nav_labels import NavLabel as NL
-
 
 class WorkflowStep(NamedTuple):
-    """One step in the guided workflow."""
+    """One step in the (deprecated) guided workflow."""
     phase: int
     key: str
     label: str
@@ -33,112 +20,14 @@ class WorkflowStep(NamedTuple):
     hint: str
 
 
-# ── Master step list (ordered) ─────────────────────────────────────────
-# This is the single source of truth for the guided walkthrough.
-# guided_banner.py reads from here instead of maintaining its own copy.
-
-WORKFLOW_STEPS: list[WorkflowStep] = [
-    # Phase 1: CONFIGURATION
-    WorkflowStep(
-        1, "camera_selected", "Select your camera",
-        NL.MEASUREMENT_SETUP, IC.CAMERA,
-        "Choose the camera for this measurement (TR or IR)."),
-    WorkflowStep(
-        1, "profile_selected", "Select a material profile",
-        NL.MEASUREMENT_SETUP, IC.LIBRARY,
-        "Pick a profile to auto-fill stimulus, temperature, and analysis settings."),
-    WorkflowStep(
-        1, "stimulus_configured", "Verify stimulus settings",
-        NL.STIMULUS, IC.SETTINGS,
-        "Settings were loaded from your profile — verify or adjust if needed."),
-    WorkflowStep(
-        1, "temperature_set", "Set the TEC temperature",
-        NL.TEMPERATURE, IC.TEMPERATURE,
-        "Set a target temperature and wait for it to stabilise."),
-
-    # Phase 2: IMAGE ACQUISITION
-    WorkflowStep(
-        2, "live_viewed", "Start the live view",
-        NL.LIVE_VIEW, IC.LIVE,
-        "The live feed starts automatically — verify you can see the sample."),
-    WorkflowStep(
-        2, "focused", "Focus and auto-expose",
-        NL.FOCUS_STAGE, IC.AUTOFOCUS,
-        "Run autofocus or manually adjust. Look for red dots on tabs that need attention."),
-    WorkflowStep(
-        2, "signal_checked", "Check the signal quality",
-        NL.SIGNAL_CHECK, IC.CHECK,
-        "Run the signal check. If it fails, adjust focus or exposure, then retry."),
-
-    # Phase 3: ANALYSIS
-    WorkflowStep(
-        3, "captured", "Run an acquisition",
-        NL.CAPTURE, IC.PLAY,
-        "Start a single-point or grid acquisition."),
-    WorkflowStep(
-        3, "calibrated", "Calibrate the measurement",
-        NL.CALIBRATION, IC.CHART_LINE,
-        "Run a calibration sweep, or skip if using a saved .cal file."),
-    WorkflowStep(
-        3, "recipe_run", "Run a scan profile",
-        NL.RUN_SCAN, IC.RECIPES,
-        "Select a saved scan profile and run it for consistent, repeatable measurements."),
-
-    # Phase 4: HARDWARE AUTOMATION
-    WorkflowStep(
-        4, "hardware_ready", "Verify hardware readiness",
-        NL.CAMERAS, IC.CONNECT,
-        "Run the readiness check to ensure all hardware is configured."),
-    WorkflowStep(
-        4, "optimization_applied", "Apply optimization suggestions",
-        NL.CAPTURE, IC.SETTINGS,
-        "Review and apply the auto-gain and exposure optimization tips."),
-
-    # Phase 5: DATA & REPORTING
-    WorkflowStep(
-        5, "session_reviewed", "Review session results",
-        NL.SESSIONS, IC.CHECK,
-        "Open a session and mark it as reviewed after inspecting the data."),
-    WorkflowStep(
-        5, "data_exported", "Export measurement data",
-        NL.SESSIONS, IC.EXPORT,
-        "Export your session in one or more formats (TIFF, HDF5, CSV, etc.)."),
-    WorkflowStep(
-        5, "report_generated", "Generate a report",
-        NL.SESSIONS, IC.EXPORT_PDF,
-        "Generate a PDF or HTML report with your analysis results."),
-]
+WORKFLOW_STEPS: list[WorkflowStep] = []
 
 
-def get_step(key: str) -> WorkflowStep | None:
-    """Look up a step by its check key (e.g. 'camera_selected')."""
-    for step in WORKFLOW_STEPS:
-        if step.key == key:
-            return step
+def get_step(step_id: str) -> WorkflowStep | None:
+    """Return None — no guided steps are defined."""
     return None
 
 
-def steps_for_phase(phase: int) -> list[WorkflowStep]:
-    """Return all steps belonging to a phase number."""
-    return [s for s in WORKFLOW_STEPS if s.phase == phase]
-
-
-def next_steps_after(nav_target: str, count: int = 3) -> list[WorkflowStep]:
-    """Return the next N steps (unique targets) after a given nav target.
-
-    Used by WorkflowFooter to show "What happens next?" from any section.
-    Steps whose nav_target matches the source are excluded so the footer
-    only shows *different* sections.
-    """
-    found = False
-    result: list[WorkflowStep] = []
-    seen_targets: set[str] = {nav_target}  # exclude source target
-    for step in WORKFLOW_STEPS:
-        if found and step.nav_target not in seen_targets:
-            result.append(step)
-            seen_targets.add(step.nav_target)
-            if len(result) >= count:
-                break
-        if step.nav_target == nav_target:
-            found = True
-    return result
+def next_steps_after(section: str, count: int = 3) -> list[WorkflowStep]:
+    """Return an empty list — workflow footer has no steps to show."""
+    return []

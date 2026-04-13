@@ -18,9 +18,9 @@ The help popover appears near the button that was clicked,
 stays open until the user clicks elsewhere, and never blocks
 the rest of the UI.
 
-NOTE: Help content is now centralized in ``ui.guidance.content``.
-This module re-exports ``HELP_CONTENT`` for backwards compatibility.
-All new content should be added to ``ui/guidance/content.py``.
+Help content is defined inline in this module.  The previous
+``ui.guidance.content`` module has been removed (guided mode replaced
+by Recipe execution).
 """
 
 from __future__ import annotations
@@ -34,17 +34,13 @@ from PyQt5.QtGui   import QColor, QFont, QCursor
 from ui.theme import FONT, PALETTE, scaled_qss
 
 # ------------------------------------------------------------------ #
-#  Help content — imported from centralized guidance module            #
+#  Help content                                                        #
 # ------------------------------------------------------------------ #
 #
-# HELP_CONTENT is now the single source of truth in ui.guidance.content.
-# This re-export preserves all existing ``from ui.help import HELP_CONTENT``
-# call sites without changes.
-from ui.guidance.content import HELP_CONTENT  # noqa: E402
-
-# Legacy stub kept only for git diff readability — the actual content
-# lives in ui/guidance/content.py.  This dict is never used.
-_HELP_CONTENT_LEGACY: dict[str, dict] = {
+# HELP_CONTENT was previously re-exported from ui.guidance.content,
+# which has been removed (guided mode replaced by Recipe execution).
+# The content now lives here directly.
+HELP_CONTENT: dict[str, dict] = {
 
     # ---- Analysis / Pass-Fail ----------------------------------------
 

@@ -951,38 +951,8 @@ class MainWindow(QMainWindow):
 
         self._nav.finish()
 
-        # Apply initial workspace mode
-        ws_mgr = _get_ws_manager()
-        self._nav.set_workspace_mode(ws_mgr.mode.value)
-        self._modality_section.set_workspace_mode(ws_mgr.mode.value)
-        for w in (self._live_tab, self._focus_stage_tab,
-                  self._signal_check_section, self._capture_tab,
-                  self._cal_tab, self._recipe_run,
-                  self._stimulus_tab, self._temp_tab):
-            if hasattr(w, "set_workspace_mode"):
-                w.set_workspace_mode(ws_mgr.mode.value)
-        # Navigate to Measurement Setup as landing in Guided mode
-        if ws_mgr.mode.value == "guided":
-            self._nav.select_by_label(NL.MEASUREMENT_SETUP)
-        ws_mgr.mode_changed.connect(self._nav.set_workspace_mode)
-        # Mode indicator in sidebar header cycles through modes
-        self._nav.mode_cycle_requested.connect(self._on_workspace_changed)
-
-        # Phase completion tracker
+        # Phase tracker (compatibility shim — all methods are no-ops)
         self._phase_tracker = PhaseTracker(parent=self)
-        self._phase_tracker.phase_updated.connect(self._nav.set_phase_badge)
-        self._phase_tracker.phase_updated.connect(
-            lambda *_: self._nav.update_guided_banner(self._phase_tracker))
-        self._phase_tracker.phase_updated.connect(
-            lambda *_: self._nav.update_guided_states(
-                self._phase_tracker, _get_ws_manager().mode.value))
-        # Initial banner + sidebar step indicators
-        self._nav.update_guided_banner(self._phase_tracker)
-        self._nav.update_guided_states(
-            self._phase_tracker, _get_ws_manager().mode.value)
-        # Skip button in guided banner → force-mark the step as done
-        self._nav.guided_skip_requested.connect(
-            lambda phase, key: self._phase_tracker.mark(phase, key, True))
         self._live_viewed_marked = False
         self._tec_target_marked = False
 
@@ -1648,43 +1618,8 @@ class MainWindow(QMainWindow):
                       exc_info=True)
 
     def _on_workspace_changed(self, mode: str) -> None:
-        """Handle workspace mode switch from Settings or sidebar indicator."""
-        mgr = _get_ws_manager()
-        mgr.set_mode(mode)
-        # Adjust bottom drawer visibility based on mode
-        if mode == "expert" and not self._bottom_drawer.isVisible():
-            self._toggle_bottom_drawer()
-        elif mode == "guided" and self._bottom_drawer.isVisible():
-            self._toggle_bottom_drawer()
-        # Update log verbosity
-        if hasattr(self._log_tab, "set_verbosity"):
-            self._log_tab.set_verbosity(mgr.console_verbosity())
-        # Update AI agent behaviour
-        if hasattr(self, "_ai_service"):
-            self._ai_service.set_workspace_mode(mode)
-        # Refresh sidebar step indicators for the new mode
-        if hasattr(self, "_phase_tracker"):
-            self._nav.update_guided_states(self._phase_tracker, mode)
-        # Recipe Run Panel mode gating
-        rr = getattr(self, "_recipe_run", None)
-        if rr is not None and hasattr(rr, "set_workspace_mode"):
-            rr.set_workspace_mode(mode)
-        # Navigate to Measurement Setup landing in Guided mode
-        ms = getattr(self, "_modality_section", None)
-        if mode == "guided" and ms is not None:
-            self._nav.navigate_to(ms)
-        # Switch section layouts (Guided vs compact)
-        for w in (getattr(self, "_modality_section", None),
-                  getattr(self, "_live_tab", None),
-                  getattr(self, "_acquire_tab", None),
-                  getattr(self, "_focus_stage_tab", None),
-                  getattr(self, "_signal_check_section", None),
-                  getattr(self, "_capture_tab", None),
-                  getattr(self, "_cal_tab", None),
-                  getattr(self, "_stimulus_tab", None),
-                  getattr(self, "_temp_tab", None)):
-            if w is not None and hasattr(w, "set_workspace_mode"):
-                w.set_workspace_mode(mode)
+        """No-op — workspace modes are deprecated (recipe-mode branch)."""
+        pass
         # Sync settings tab buttons if change came from sidebar indicator
         if hasattr(self, "_settings_tab"):
             idx = {"guided": 0, "standard": 1, "expert": 2}.get(mode, 1)

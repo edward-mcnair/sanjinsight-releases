@@ -5811,21 +5811,12 @@ class TestPhase1Integration:
         assert "NL.SESSIONS" in src
         assert "select_session" in src
 
-    def test_guided_mode_navigates_to_measurement_setup(self):
-        """Switching to Guided mode navigates to Measurement Setup."""
+    def test_workspace_changed_is_noop(self):
+        """_on_workspace_changed is a no-op after guided mode removal."""
         import inspect
         from main_app import MainWindow
         src = inspect.getsource(MainWindow._on_workspace_changed)
-        assert 'mode == "guided"' in src
-        assert "navigate_to" in src
-        assert "_modality_section" in src
-
-    def test_recipe_run_mode_gated(self):
-        """Recipe Run Panel receives set_workspace_mode calls."""
-        import inspect
-        from main_app import MainWindow
-        src = inspect.getsource(MainWindow._on_workspace_changed)
-        assert "_recipe_run" in src
+        assert "No-op" in src or "pass" in src
 
     def test_recipes_loaded_at_startup(self):
         """Recipes are loaded into the run panel at startup."""
@@ -6590,12 +6581,12 @@ class TestHwSummaryStripWiring:
         assert "_acquire_tab" in src
         assert "update_bias" in src
 
-    def test_acquire_tab_in_workspace_mode_loop(self):
-        """AcquireTab should be included in workspace mode propagation."""
+    def test_workspace_mode_loop_is_noop(self):
+        """Workspace mode propagation is a no-op after guided mode removal."""
         import inspect
         from main_app import MainWindow
         src = inspect.getsource(MainWindow._on_workspace_changed)
-        assert "_acquire_tab" in src
+        assert "No-op" in src or "pass" in src
 
 
 # ╔══════════════════════════════════════════════════════════════════╗
