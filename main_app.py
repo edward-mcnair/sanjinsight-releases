@@ -195,6 +195,7 @@ from ui.tabs.prober_tab          import ProberTab           # ← probe-station 
 from ui.tabs.autoscan_tab        import AutoScanTab
 from ui.scripting_console        import ScriptingConsoleTab # ← Python console
 from ui.sidebar_nav              import SidebarNav          # ← grouped sidebar nav
+from ui.nav_labels               import NavLabel as NL
 from hardware.device_manager     import DeviceManager
 from ui.device_manager_dialog    import DeviceManagerDialog
 from ui.notifications            import ToastManager
@@ -669,7 +670,7 @@ class MainWindow(QMainWindow):
         ]:
             ind = CalibrationIndicator()
             ind.navigate_requested.connect(
-                lambda: self._nav.select_by_label("Calibration"))
+                lambda: self._nav.select_by_label(NL.CALIBRATION))
             insert_fn(ind)
             self._cal_indicators.append(ind)
         # Initial state
@@ -689,9 +690,9 @@ class MainWindow(QMainWindow):
         for bar in (self._pcab_acquire, self._pcab_scan,
                     self._pcab_transient, self._pcab_movie):
             bar.view_sessions_clicked.connect(
-                lambda: self._nav.select_by_label("Sessions"))
+                lambda: self._nav.select_by_label(NL.SESSIONS))
             bar.open_analysis_clicked.connect(
-                lambda: self._nav.select_by_label("Analysis"))
+                lambda: self._nav.select_by_label(NL.SESSIONS))
         self._pcab_acquire.export_clicked.connect(
             self._acquire_tab._export if hasattr(
                 self._acquire_tab, "_export") else lambda: None)
@@ -792,7 +793,7 @@ class MainWindow(QMainWindow):
         self._recipe_run.run_completed.connect(
             lambda: self._phase_tracker.mark(3, "recipe_run"))
         self._recipe_run.edit_recipe_requested.connect(
-            lambda uid: self._nav.select_by_label("Library"))
+            lambda uid: self._nav.select_by_label(NL.LIBRARY))
 
         # Experiment Log → open session
         self._experiment_log_widget.open_session_requested.connect(
@@ -875,32 +876,32 @@ class MainWindow(QMainWindow):
         # Phase 1: CONFIGURATION
         self._nav.add_phase(1, "CONFIGURATION",
             "Set up your hardware and measurement parameters", [
-            NI("Measurement Setup",    _I["Measurement Setup"],    self._modality_section),
-            NI("Stimulus",             _I["Stimulus"],             self._stimulus_tab),
-            NI("Timing",               _I["Timing"],               self._timing_tab),
-            NI("Temperature",          _I["Temperature"],          self._temp_tab),
-            NI("Acquisition Settings", _I["Acquisition Settings"], self._acq_settings_section),
+            NI(NL.MEASUREMENT_SETUP,    _I["Measurement Setup"],    self._modality_section),
+            NI(NL.STIMULUS,             _I["Stimulus"],             self._stimulus_tab),
+            NI(NL.TIMING,               _I["Timing"],               self._timing_tab),
+            NI(NL.TEMPERATURE,          _I["Temperature"],          self._temp_tab),
+            NI(NL.ACQUISITION_SETTINGS, _I["Acquisition Settings"], self._acq_settings_section),
         ])
 
         # Phase 2: IMAGE ACQUISITION
         self._nav.add_phase(2, "IMAGE ACQUISITION",
             "Preview, focus, and verify your signal", [
-            NI("Live View",     _I["Live View"],     self._live_tab),
-            NI("ROI",           _I["ROI"],           self._roi_tab),
-            NI("Focus & Stage", _I["Focus & Stage"], self._focus_stage_tab),
-            NI("Signal Check",  _I["Signal Check"],  self._signal_check_section),
-            NI("Transient",     _I["Transient"],     self._transient_capture_tab),
-            NI("Movie",         _I["Movie"],         self._movie_tab),
+            NI(NL.LIVE_VIEW,     _I["Live View"],     self._live_tab),
+            NI(NL.ROI,           _I["ROI"],           self._roi_tab),
+            NI(NL.FOCUS_STAGE,   _I["Focus & Stage"], self._focus_stage_tab),
+            NI(NL.SIGNAL_CHECK,  _I["Signal Check"],  self._signal_check_section),
+            NI(NL.TRANSIENT,     _I["Transient"],     self._transient_capture_tab),
+            NI(NL.MOVIE,         _I["Movie"],         self._movie_tab),
         ])
 
         # Phase 3: ANALYSIS
         self._nav.add_phase(3, "ANALYSIS",
             "Capture data and analyze results", [
-            NI("Capture",     _I["Capture"],     self._capture_tab),
-            NI("Calibration", _I["Calibration"], self._cal_tab),
-            NI("3D Surface",  _I["3D Surface"],  self._surface_tab),
-            NI("Sessions",    _I["Sessions"],    self._data_tab),
-            NI("Emissivity",  _I["Emissivity"],  self._emissivity_tab),
+            NI(NL.CAPTURE,     _I["Capture"],     self._capture_tab),
+            NI(NL.CALIBRATION, _I["Calibration"], self._cal_tab),
+            NI(NL.SURFACE_3D,  _I["3D Surface"],  self._surface_tab),
+            NI(NL.SESSIONS,    _I["Sessions"],    self._data_tab),
+            NI(NL.EMISSIVITY,  _I["Emissivity"],  self._emissivity_tab),
         ])
 
         # ─── separator ───
@@ -908,24 +909,24 @@ class MainWindow(QMainWindow):
 
         # HARDWARE (collapsible — 6 categories matching Device Manager)
         self._nav.add_collapsible("HARDWARE", "mdi.chip", [
-            NI("Cameras",           _I["Cameras"],           self._hw_cameras_panel),
-            NI("Stages",            _I["Stages"],            self._hw_stages_panel),
-            NI("Thermal Control",   _I["Thermal Control"],   self._hw_thermal_control_panel),
-            NI("Stimulus & Timing", _I["Stimulus & Timing"], self._hw_stimulus_panel),
-            NI("Probes",            _I["Probes"],            self._hw_probes_panel),
-            NI("Sensors",           _I["Sensors"],           self._hw_sensors_panel),
+            NI(NL.CAMERAS,          _I["Cameras"],           self._hw_cameras_panel),
+            NI(NL.STAGES,           _I["Stages"],            self._hw_stages_panel),
+            NI(NL.THERMAL_CONTROL,  _I["Thermal Control"],   self._hw_thermal_control_panel),
+            NI(NL.STIMULUS_TIMING,  _I["Stimulus & Timing"], self._hw_stimulus_panel),
+            NI(NL.PROBES,           _I["Probes"],            self._hw_probes_panel),
+            NI(NL.SENSORS,          _I["Sensors"],           self._hw_sensors_panel),
         ])
 
         # WORKFLOW
         self._nav.add_section("WORKFLOW", [
-            NI("Run Scan",        _I["Recipes"],        self._recipe_run),
-            NI("Experiment Log",  _I["Experiment Log"], self._experiment_log_widget),
+            NI(NL.RUN_SCAN,        _I["Recipes"],        self._recipe_run),
+            NI(NL.EXPERIMENT_LOG,  _I["Experiment Log"], self._experiment_log_widget),
         ])
 
         # SYSTEM
         self._nav.add_section("SYSTEM", [
-            NI("Library",     _I["Library"],    self._library_tab),
-            NI("Settings",    _I["Settings"],    self._settings_tab),
+            NI(NL.LIBRARY,     _I["Library"],    self._library_tab),
+            NI(NL.SETTINGS,    _I["Settings"],    self._settings_tab),
         ])
 
         # ─── Plugin system ────────────────────────────────────────────
@@ -2928,7 +2929,7 @@ class MainWindow(QMainWindow):
         act_settings = help_menu.addAction("Settings")
         act_settings.setShortcut(QKeySequence("Ctrl+,"))
         act_settings.triggered.connect(
-            lambda: self._nav.select_by_label("Settings"))
+            lambda: self._nav.select_by_label(NL.SETTINGS))
 
         help_menu.addSeparator()
 
@@ -3295,7 +3296,7 @@ class MainWindow(QMainWindow):
 
     def _on_experiment_log_open_session(self, session_uid: str) -> None:
         """Handle Experiment Log row double-click: navigate to session."""
-        self._nav.select_by_label("Sessions")
+        self._nav.select_by_label(NL.SESSIONS)
         try:
             self._data_tab.select_session(session_uid)
         except Exception:
@@ -3367,7 +3368,7 @@ class MainWindow(QMainWindow):
                 source_label=f"Session: {label}",
                 context=ctx)
             session.unload()  # free memory after pushing maps
-            self._nav.select_by_label("Analysis")
+            self._nav.select_by_label(NL.SESSIONS)
         except Exception:
             import logging
             logging.getLogger(__name__).debug(
@@ -3387,7 +3388,7 @@ class MainWindow(QMainWindow):
                 return
             self._transient_tab.load_session(session)
             # Don't unload — TransientTab holds mmap references to the arrays
-            self._nav.select_by_label("Transient")
+            self._nav.select_by_label(NL.TRANSIENT)
         except Exception:
             log.debug("Session open-transient failed", exc_info=True)
             self._toasts.show_warning("Failed to load transient session")
@@ -3425,7 +3426,7 @@ class MainWindow(QMainWindow):
             self._movie_tab.load_session(session)
             # Don't unload — MovieTab holds mmap references to the arrays
             # Navigate to Transient capture tab, then switch to Burst sub-tab
-            self._nav.select_by_label("Transient")
+            self._nav.select_by_label(NL.TRANSIENT)
             self._transient_capture_tab._tabs.setCurrentIndex(1)
         except Exception:
             log.debug("Session open-movie failed", exc_info=True)
@@ -3440,7 +3441,7 @@ class MainWindow(QMainWindow):
         self._analysis_tab.push_result(
             dt_map=dt_map, drr_map=drr_map,
             base_image=None, source_label="AutoScan")
-        self._nav.select_by_label("Analysis")
+        self._nav.select_by_label(NL.SESSIONS)
 
     def _on_profile_applied(self, profile):
         self._profile_svc.apply(profile)
@@ -4628,12 +4629,12 @@ class MainWindow(QMainWindow):
         elif code == "autofocus":
             # Navigate to autofocus tab
             try:
-                self._nav.select_by_label("Cameras")
+                self._nav.select_by_label(NL.CAMERAS)
             except Exception:
                 log.debug("Swallowed exception", exc_info=True)
         elif code == "tec_wait":
             try:
-                self._nav.select_by_label("Thermal Control")
+                self._nav.select_by_label(NL.THERMAL_CONTROL)
             except Exception:
                 log.debug("Swallowed exception", exc_info=True)
 

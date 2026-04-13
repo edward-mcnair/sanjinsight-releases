@@ -110,14 +110,7 @@ _W_FULL    = 240   # expanded width
 _W_MINI    = 22    # collapsed — thin blue bar
 
 # ── Label aliases (old name → new name) for backward compatibility ─
-_LABEL_ALIASES: Dict[str, str] = {
-    "Live":       "Live View",
-    "Stage":      "Focus & Stage",
-    "Autofocus":  "Focus & Stage",
-    "Analysis":   "Sessions",
-    "Compare":    "Sessions",
-    "3D Surface": "Sessions",
-}
+from ui.nav_labels import NavLabel as NL, LABEL_ALIASES as _LABEL_ALIASES
 
 # ── Fonts ──────────────────────────────────────────────────────────
 # Font point sizes are NOT cached here as module-level constants.
@@ -903,16 +896,16 @@ class _Sidebar(QWidget):
 
     # Mapping from (phase, check_key) → sidebar nav label
     _STEP_NAV_MAP: list[tuple[int, str, str]] = [
-        (1, "camera_selected",     "Measurement Setup"),
-        (1, "profile_selected",    "Measurement Setup"),
-        (1, "stimulus_configured", "Stimulus"),
-        (1, "temperature_set",     "Temperature"),
-        (2, "live_viewed",         "Live View"),
-        (2, "focused",             "Focus & Stage"),
-        (2, "signal_checked",      "Signal Check"),
-        (3, "captured",            "Capture"),
-        (3, "calibrated",          "Calibration"),
-        (3, "recipe_run",          "Run Scan"),
+        (1, "camera_selected",     NL.MEASUREMENT_SETUP),
+        (1, "profile_selected",    NL.MEASUREMENT_SETUP),
+        (1, "stimulus_configured", NL.STIMULUS),
+        (1, "temperature_set",     NL.TEMPERATURE),
+        (2, "live_viewed",         NL.LIVE_VIEW),
+        (2, "focused",             NL.FOCUS_STAGE),
+        (2, "signal_checked",      NL.SIGNAL_CHECK),
+        (3, "captured",            NL.CAPTURE),
+        (3, "calibrated",          NL.CALIBRATION),
+        (3, "recipe_run",          NL.RUN_SCAN),
     ]
 
     # Labels whose settings were auto-configured by a profile selection.

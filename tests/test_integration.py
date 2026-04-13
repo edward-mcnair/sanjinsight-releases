@@ -5760,7 +5760,7 @@ class TestPhase1Integration:
         import inspect
         from main_app import MainWindow
         src = inspect.getsource(MainWindow._build_ui)
-        assert '"Run Scan"' in src
+        assert "NL.RUN_SCAN" in src
         assert "self._recipe_run" in src
 
     def test_experiment_log_in_sidebar(self):
@@ -5808,7 +5808,7 @@ class TestPhase1Integration:
         import inspect
         from main_app import MainWindow
         src = inspect.getsource(MainWindow._on_experiment_log_open_session)
-        assert "Sessions" in src
+        assert "NL.SESSIONS" in src
         assert "select_session" in src
 
     def test_guided_mode_navigates_to_measurement_setup(self):
@@ -7236,7 +7236,7 @@ class TestExperimentLogSessionDrillDown:
         import inspect
         from main_app import MainWindow
         src = inspect.getsource(MainWindow._on_experiment_log_open_session)
-        assert "Sessions" in src
+        assert "NL.SESSIONS" in src
         assert "select_session" in src
 
     def test_session_uid_stored_on_first_column(self):
