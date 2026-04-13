@@ -7,12 +7,16 @@ layouts) but render as invisible zero-height widgets.
 """
 from __future__ import annotations
 
-from PyQt5.QtWidgets import QFrame, QWidget
+from PyQt5.QtWidgets import QFrame, QVBoxLayout, QWidget
 from PyQt5.QtCore import pyqtSignal
 
 
 class GuidanceCard(QFrame):
-    """Invisible stub — accepts the original constructor signature."""
+    """Invisible stub — accepts the original constructor signature.
+
+    A QVBoxLayout is created so that callers who access ``.layout()``
+    (e.g. to tweak margins) do not get ``None``.
+    """
 
     dismissed = pyqtSignal(str)
 
@@ -30,6 +34,7 @@ class GuidanceCard(QFrame):
         self.card_id = card_id
         self.step_id = card_id
         self.target_widget = target_widget
+        QVBoxLayout(self)  # ensure .layout() is never None
         self.setVisible(False)
         self.setMaximumHeight(0)
 
@@ -44,6 +49,7 @@ class WorkflowFooter(QFrame):
 
     def __init__(self, steps=None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        QVBoxLayout(self)  # ensure .layout() is never None
         self.setVisible(False)
         self.setMaximumHeight(0)
 
