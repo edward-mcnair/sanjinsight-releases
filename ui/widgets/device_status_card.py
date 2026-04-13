@@ -29,7 +29,7 @@ Usage
     card.add_tile("Temperature", "—", "°C")
     card.add_info("Controller", "Meerstetter TEC-1089")
     card.configure_clicked.connect(
-        lambda: nav.select_by_label("Temperature"))
+        lambda: nav.select_by_label(NL.TEMPERATURE))
 """
 
 from __future__ import annotations

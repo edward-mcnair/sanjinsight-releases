@@ -195,7 +195,7 @@ from ui.tabs.prober_tab          import ProberTab           # ← probe-station 
 from ui.tabs.autoscan_tab        import AutoScanTab
 from ui.scripting_console        import ScriptingConsoleTab # ← Python console
 from ui.sidebar_nav              import SidebarNav          # ← grouped sidebar nav
-from ui.nav_labels               import NavLabel as NL
+from ui.nav_labels               import NavLabel as NL, validate_nav_targets
 from hardware.device_manager     import DeviceManager
 from ui.device_manager_dialog    import DeviceManagerDialog
 from ui.notifications            import ToastManager
@@ -438,6 +438,17 @@ class MainWindow(QMainWindow):
                                                thread_name_prefix="msanj_worker")
         self._session_save_thread = None  # tracked for clean shutdown
         self._build_ui()
+
+        # Validate that all workflow step nav_targets exist in the sidebar.
+        # strict=True in dev mode (raises RuntimeError); warns in production.
+        sidebar_labels = {mi._item.label for mi in self._nav._items}
+        from ui.guidance.steps import WORKFLOW_STEPS
+        validate_nav_targets(
+            [s.nav_target for s in WORKFLOW_STEPS],
+            sidebar_labels,
+            strict=__debug__,
+        )
+
         self._connect_signals()
         # Show logged-in user name in the operator slot when auth is active
         if self._auth_session is not None:

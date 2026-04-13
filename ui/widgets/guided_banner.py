@@ -30,6 +30,7 @@ log = logging.getLogger(__name__)
 # Canonical step list is in ui.guidance.steps.  We import and convert
 # to the tuple format used internally by the banner.
 from ui.guidance.steps import WORKFLOW_STEPS as _WF_STEPS
+from ui.nav_labels import NavLabel as NL
 
 # Only surface Phases 1–3 in the guided banner.  Phases 4–5 remain in
 # PhaseTracker for future expansion but are not shown to users yet.
@@ -298,7 +299,7 @@ class GuidedBanner(QWidget):
         if self._current_step_idx >= len(_STEPS):
             # All steps complete — navigate to Sessions and dismiss banner
             log.info("GuidedBanner: View → clicked, navigating to Sessions")
-            self.navigate_requested.emit("Sessions")
+            self.navigate_requested.emit(NL.SESSIONS)
             self.setVisible(False)
             return
         # "Next →" — mark current step done and navigate forward.

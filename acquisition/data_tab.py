@@ -28,6 +28,7 @@ import config as cfg_mod
 from ui.icons import IC, make_icon_label, set_btn_icon
 from ui.theme import FONT, PALETTE, scaled_qss, MONO_FONT
 from ui.charts import SessionTrendChart
+from ui.nav_labels import NavLabel as NL
 
 
 # ------------------------------------------------------------------ #
@@ -795,7 +796,7 @@ class DataTab(QWidget):
         go_btn.setFixedHeight(34)
         go_btn.setCursor(Qt.PointingHandCursor)
         set_btn_icon(go_btn, IC.PLAY, PALETTE['accent'])
-        go_btn.clicked.connect(lambda: self.navigate_requested.emit("Capture"))
+        go_btn.clicked.connect(lambda: self.navigate_requested.emit(NL.CAPTURE))
         lay.addWidget(go_btn, 0, Qt.AlignCenter)
 
         return w

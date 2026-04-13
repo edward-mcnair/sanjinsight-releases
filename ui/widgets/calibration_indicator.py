@@ -21,7 +21,7 @@ Usage
 
     # Wire navigation:
     indicator.navigate_requested.connect(
-        lambda: nav.select_by_label("Calibration"))
+        lambda: nav.select_by_label(NL.CALIBRATION))
 """
 
 from __future__ import annotations
