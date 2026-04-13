@@ -221,6 +221,21 @@ class CameraContextBar(QWidget):
         any_visible = any(d.isVisible() for d, _ in self._periph_widgets.values())
         self._periph_sep.setVisible(any_visible)
 
+    # ── Public API ───────────────────────────────────────────────────────
+
+    def set_camera_type(self, cam_type: str) -> None:
+        """Programmatically select a camera type ("tr" or "ir").
+
+        Updates the combo without re-emitting camera_changed (avoids loops).
+        """
+        self._combo.blockSignals(True)
+        for i in range(self._combo.count()):
+            if self._combo.itemData(i) == cam_type:
+                self._combo.setCurrentIndex(i)
+                break
+        self._combo.blockSignals(False)
+        self._update_mode_badge(cam_type)
+
     # ── Private helpers ──────────────────────────────────────────────────
 
     def _on_changed(self, index: int) -> None:
