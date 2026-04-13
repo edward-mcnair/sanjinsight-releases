@@ -194,6 +194,7 @@ from acquisition.workflows import (                          # ← workflow prof
 from ui.tabs.prober_tab          import ProberTab           # ← probe-station chuck
 from ui.tabs.autoscan_tab        import AutoScanTab
 from ui.scripting_console        import ScriptingConsoleTab # ← Python console
+from ui.tabs.measurement_dashboard import MeasurementDashboard
 from ui.sidebar_nav              import SidebarNav          # ← grouped sidebar nav
 from ui.nav_labels               import NavLabel as NL, validate_nav_targets
 from measurement_context         import measurement_context as mctx
@@ -754,6 +755,14 @@ class MainWindow(QMainWindow):
             self._on_profile_applied)
         self._modality_section.navigate_requested.connect(
             self._nav.select_by_label)
+
+        # Measurement Dashboard — replaces ModalitySection in nav slot
+        self._dashboard = MeasurementDashboard()
+        self._dashboard.navigate_requested.connect(
+            self._nav.select_by_label)
+        self._dashboard.open_session_requested.connect(
+            self._on_experiment_log_open_session)
+
         self._acq_settings_section  = AcquisitionSettingsSection()
         self._signal_check_section  = SignalCheckSection()
         self._focus_stage_tab       = FocusStageTab(
@@ -890,7 +899,7 @@ class MainWindow(QMainWindow):
         # Phase 1: CONFIGURATION
         self._nav.add_phase(1, "CONFIGURATION",
             "Set up your hardware and measurement parameters", [
-            NI(NL.MEASUREMENT_SETUP,    _I["Measurement Setup"],    self._modality_section),
+            NI(NL.MEASUREMENT_SETUP,    _I["Measurement Setup"],    self._dashboard),
             NI(NL.STIMULUS,             _I["Stimulus"],             self._stimulus_tab),
             NI(NL.TIMING,               _I["Timing"],               self._timing_tab),
             NI(NL.TEMPERATURE,          _I["Temperature"],          self._temp_tab),
@@ -960,7 +969,7 @@ class MainWindow(QMainWindow):
                 w.set_workspace_mode(ws_mgr.mode.value)
         # Navigate to Measurement Setup as landing in Guided mode
         if ws_mgr.mode.value == "guided":
-            self._nav.navigate_to(self._modality_section)
+            self._nav.select_by_label(NL.MEASUREMENT_SETUP)
         ws_mgr.mode_changed.connect(self._nav.set_workspace_mode)
         # Mode indicator in sidebar header cycles through modes
         self._nav.mode_cycle_requested.connect(self._on_workspace_changed)
@@ -1120,7 +1129,7 @@ class MainWindow(QMainWindow):
         return [
             # ── CONFIGURATION ─────────────────────────────────────────
             PaletteItem("Measurement Setup",    "Configuration",
-                        lambda: self._nav.navigate_to(self._modality_section),
+                        lambda: self._nav.select_by_label(NL.MEASUREMENT_SETUP),
                         keywords=["modality", "camera", "objective", "fov", "lens", "setup"]),
             PaletteItem("Stimulus",             "Configuration",
                         lambda: self._nav.navigate_to(self._stimulus_tab),
@@ -2854,7 +2863,7 @@ class MainWindow(QMainWindow):
         act_modality = view_menu.addAction("Measurement Setup")
         act_modality.setShortcut(QKeySequence("Ctrl+1"))
         act_modality.triggered.connect(
-            lambda: self._nav.navigate_to(self._modality_section))
+            lambda: self._nav.select_by_label(NL.MEASUREMENT_SETUP))
 
         act_stimulus = view_menu.addAction("Stimulus")
         act_stimulus.setShortcut(QKeySequence("Ctrl+2"))
