@@ -194,7 +194,6 @@ from acquisition.workflows import (                          # ← workflow prof
 from ui.tabs.prober_tab          import ProberTab           # ← probe-station chuck
 from ui.tabs.autoscan_tab        import AutoScanTab
 from ui.scripting_console        import ScriptingConsoleTab # ← Python console
-from ui.tabs.measurement_dashboard import MeasurementDashboard
 from ui.sidebar_nav              import SidebarNav          # ← grouped sidebar nav
 from ui.nav_labels               import NavLabel as NL, validate_nav_targets
 from measurement_context         import measurement_context as mctx
@@ -756,13 +755,6 @@ class MainWindow(QMainWindow):
         self._modality_section.navigate_requested.connect(
             self._nav.select_by_label)
 
-        # Measurement Dashboard — replaces ModalitySection in nav slot
-        self._dashboard = MeasurementDashboard()
-        self._dashboard.navigate_requested.connect(
-            self._nav.select_by_label)
-        self._dashboard.open_session_requested.connect(
-            self._on_experiment_log_open_session)
-
         self._acq_settings_section  = AcquisitionSettingsSection()
         self._signal_check_section  = SignalCheckSection()
         self._focus_stage_tab       = FocusStageTab(
@@ -899,7 +891,7 @@ class MainWindow(QMainWindow):
         # Phase 1: CONFIGURATION
         self._nav.add_phase(1, "CONFIGURATION",
             "Set up your hardware and measurement parameters", [
-            NI(NL.MEASUREMENT_SETUP,    _I["Measurement Setup"],    self._dashboard),
+            NI(NL.MEASUREMENT_SETUP,    _I["Measurement Setup"],    self._modality_section),
             NI(NL.STIMULUS,             _I["Stimulus"],             self._stimulus_tab),
             NI(NL.TIMING,               _I["Timing"],               self._timing_tab),
             NI(NL.TEMPERATURE,          _I["Temperature"],          self._temp_tab),

@@ -7286,108 +7286,13 @@ class TestExperimentLogEndToEndFlow:
 
 
 # ════════════════════════════════════════════════════════════════════
-#  MEASUREMENT DASHBOARD TESTS
+#  MEASUREMENT CONTEXT INFRASTRUCTURE TESTS
 # ════════════════════════════════════════════════════════════════════
 
-class TestMeasurementDashboard:
-    """Tests for the Measurement Dashboard (v1)."""
-
-    def test_dashboard_import(self):
-        """Dashboard module imports cleanly."""
-        from ui.tabs.measurement_dashboard import MeasurementDashboard
-        assert MeasurementDashboard is not None
-
-    def test_dashboard_has_required_signals(self):
-        """Dashboard exposes navigate_requested and open_session_requested."""
-        from ui.tabs.measurement_dashboard import MeasurementDashboard
-        assert hasattr(MeasurementDashboard, "navigate_requested")
-        assert hasattr(MeasurementDashboard, "open_session_requested")
-
-    def test_dashboard_replaces_modality_in_nav(self):
-        """Measurement Setup NI uses the dashboard, not ModalitySection."""
-        import inspect
-        from main_app import MainWindow
-        src = inspect.getsource(MainWindow._build_ui)
-        assert "self._dashboard" in src
-        assert "NL.MEASUREMENT_SETUP" in src
-
-    def test_modality_section_still_instantiated(self):
-        """ModalitySection is still created for signal wiring."""
-        import inspect
-        from main_app import MainWindow
-        src = inspect.getsource(MainWindow._build_ui)
-        assert "ModalitySection()" in src
-        assert "modality_changed" in src
-
-    def test_context_strip_reads_mctx(self):
-        """Dashboard _refresh_context reads from measurement_context."""
-        import inspect
-        from ui.tabs.measurement_dashboard import MeasurementDashboard
-        src = inspect.getsource(MeasurementDashboard._refresh_context)
-        assert "mctx.camera_key" in src
-        assert "mctx.material_profile_name" in src
-        assert "mctx.scan_profile_label" in src
-        assert "mctx.scan_profile_modified" in src
-
-    def test_context_cards_navigate_to_correct_targets(self):
-        """Context card clicks emit correct navigation labels."""
-        import inspect
-        from ui.tabs.measurement_dashboard import MeasurementDashboard
-        src = inspect.getsource(MeasurementDashboard._build_context_strip)
-        assert "NL.CAMERAS" in src
-        assert "NL.LIBRARY" in src
-        assert "NL.RUN_SCAN" in src
-
-    def test_device_status_reads_app_state(self):
-        """Device status reads from app_state, not local cache."""
-        import inspect
-        from ui.tabs.measurement_dashboard import MeasurementDashboard
-        src = inspect.getsource(MeasurementDashboard._refresh_device_status)
-        assert "app_state.cam" in src
-        assert "app_state.tecs" in src
-        assert "app_state.fpga" in src
-        assert "app_state.bias" in src
-        assert "app_state.stage" in src
-
-    def test_recents_use_session_manager(self):
-        """Recent sessions come from session_mgr.all_metas()."""
-        import inspect
-        from ui.tabs.measurement_dashboard import MeasurementDashboard
-        src = inspect.getsource(MeasurementDashboard._refresh_recent_sessions)
-        assert "session_mgr" in src
-        assert "all_metas" in src
-
-    def test_recents_use_recipe_store(self):
-        """Recent profiles come from RecipeStore.list()."""
-        import inspect
-        from ui.tabs.measurement_dashboard import MeasurementDashboard
-        src = inspect.getsource(MeasurementDashboard._refresh_recent_profiles)
-        assert "RecipeStore" in src
-        assert "list()" in src
-
-    def test_uses_display_terms(self):
-        """Dashboard uses TERMS for scan profile terminology."""
-        import inspect
-        from ui.tabs.measurement_dashboard import MeasurementDashboard
-        src = inspect.getsource(MeasurementDashboard)
-        assert "TERMS[" in src
-
-    def test_no_guided_banner_duplication(self):
-        """Dashboard does not contain guided/workflow step logic."""
-        import inspect
-        from ui.tabs.measurement_dashboard import MeasurementDashboard
-        src = inspect.getsource(MeasurementDashboard)
-        assert "GuidedBanner" not in src
-        assert "PhaseTracker" not in src
-        assert "WORKFLOW_STEPS" not in src
-        assert "next_step" not in src.lower()
+class TestMeasurementContextInfra:
+    """Tests for MeasurementContext wiring (Gate B)."""
 
     def test_recipe_selection_changed_signal_exists(self):
         """RecipeRunPanel has recipe_selection_changed for mctx wiring."""
         from ui.widgets.recipe_run_panel import RecipeRunPanel
         assert hasattr(RecipeRunPanel, "recipe_selection_changed")
-
-    def test_dashboard_has_theme_support(self):
-        """Dashboard implements _apply_styles for theme switching."""
-        from ui.tabs.measurement_dashboard import MeasurementDashboard
-        assert hasattr(MeasurementDashboard, "_apply_styles")
