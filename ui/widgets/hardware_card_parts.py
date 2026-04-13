@@ -139,11 +139,6 @@ class DeviceHeaderBar(QFrame):
         lay.setContentsMargins(16, 10, 16, 10)
         lay.setSpacing(10)
 
-        # ── Status dot ────────────────────────────────────────────
-        self._dot = QLabel()
-        self._dot.setFixedSize(10, 10)
-        lay.addWidget(self._dot, 0, Qt.AlignVCenter)
-
         # ── Icon ──────────────────────────────────────────────────
         self._icon_lbl = make_icon_label(icon, color=PALETTE["accent"],
                                          size=24)
@@ -213,7 +208,6 @@ class DeviceHeaderBar(QFrame):
     def set_connected(self, connected: bool) -> None:
         self._connected = connected
         self._apply_badge()
-        self._apply_dot()
 
     # ── Theme ─────────────────────────────────────────────────────
 
@@ -241,7 +235,6 @@ class DeviceHeaderBar(QFrame):
             f"padding: 0 16px; }}"
             f"QPushButton:hover {{ background: {P.get('accentHover', P['accent'])}; }}")
         self._apply_badge()
-        self._apply_dot()
 
     def _apply_badge(self) -> None:
         P, F = PALETTE, FONT
@@ -260,11 +253,6 @@ class DeviceHeaderBar(QFrame):
                 f"font-size: {F['sublabel']}pt; font-weight: 600; "
                 f"padding: 2px 8px;")
 
-    def _apply_dot(self) -> None:
-        P = PALETTE
-        color = P['accent'] if self._connected else P['danger']
-        self._dot.setStyleSheet(
-            f"background: {color}; border-radius: 5px; border: none;")
 
 
 # ── Info Card ──────────────────────────────────────────────────────────

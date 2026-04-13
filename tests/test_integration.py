@@ -5201,7 +5201,7 @@ class TestRecipeRunPanelStructure:
         from ui.widgets.recipe_run_panel import RecipeRunPanel
         src = inspect.getsource(RecipeRunPanel._build_ui)
         assert "_run_btn" in src
-        assert "RUN RECIPE" in src
+        assert "RUN SCAN" in src
 
     def test_has_abort_button(self):
         """Panel has an abort button (hidden until running)."""
@@ -5406,13 +5406,13 @@ class TestExperimentLogWidgetStructure:
         assert len(_COLUMNS) == 12
 
     def test_has_source_filter(self):
-        """Widget has a source filter combo (All/Recipe/Manual)."""
+        """Widget has a source filter combo (All/Scan Profile/Manual)."""
         import inspect
         from ui.widgets.experiment_log_widget import ExperimentLogWidget
         src = inspect.getsource(ExperimentLogWidget._build_ui)
         assert "_source_filter" in src
         assert '"All"' in src
-        assert '"Recipe"' in src
+        assert '"Scan Profile"' in src
         assert '"Manual"' in src
 
     def test_has_verdict_filter(self):

@@ -244,7 +244,7 @@ class EmissivityCalTab(QWidget):
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
 
-        self._fit_btn = QPushButton("◉  Fit")
+        self._fit_btn = QPushButton("Fit")
         set_btn_icon(self._fit_btn, "fa5s.chart-line", PALETTE['accent'])
         self._fit_btn.setObjectName("primary")
         self._fit_btn.setFixedHeight(32)

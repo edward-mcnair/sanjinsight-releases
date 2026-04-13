@@ -20,6 +20,7 @@ from __future__ import annotations
 from typing import NamedTuple
 
 from ui.icons import IC
+from ui.nav_labels import NavLabel as NL
 
 
 class WorkflowStep(NamedTuple):
@@ -40,71 +41,71 @@ WORKFLOW_STEPS: list[WorkflowStep] = [
     # Phase 1: CONFIGURATION
     WorkflowStep(
         1, "camera_selected", "Select your camera",
-        "Measurement Setup", IC.CAMERA,
+        NL.MEASUREMENT_SETUP, IC.CAMERA,
         "Choose the camera for this measurement (TR or IR)."),
     WorkflowStep(
         1, "profile_selected", "Select a material profile",
-        "Measurement Setup", IC.LIBRARY,
+        NL.MEASUREMENT_SETUP, IC.LIBRARY,
         "Pick a profile to auto-fill stimulus, temperature, and analysis settings."),
     WorkflowStep(
         1, "stimulus_configured", "Verify stimulus settings",
-        "Stimulus", IC.SETTINGS,
+        NL.STIMULUS, IC.SETTINGS,
         "Settings were loaded from your profile — verify or adjust if needed."),
     WorkflowStep(
         1, "temperature_set", "Set the TEC temperature",
-        "Temperature", IC.TEMPERATURE,
+        NL.TEMPERATURE, IC.TEMPERATURE,
         "Set a target temperature and wait for it to stabilise."),
 
     # Phase 2: IMAGE ACQUISITION
     WorkflowStep(
         2, "live_viewed", "Start the live view",
-        "Live View", IC.LIVE,
+        NL.LIVE_VIEW, IC.LIVE,
         "The live feed starts automatically — verify you can see the sample."),
     WorkflowStep(
         2, "focused", "Focus and auto-expose",
-        "Focus & Stage", IC.AUTOFOCUS,
+        NL.FOCUS_STAGE, IC.AUTOFOCUS,
         "Run autofocus or manually adjust. Look for red dots on tabs that need attention."),
     WorkflowStep(
         2, "signal_checked", "Check the signal quality",
-        "Signal Check", IC.CHECK,
+        NL.SIGNAL_CHECK, IC.CHECK,
         "Run the signal check. If it fails, adjust focus or exposure, then retry."),
 
     # Phase 3: ANALYSIS
     WorkflowStep(
         3, "captured", "Run an acquisition",
-        "Capture", IC.PLAY,
+        NL.CAPTURE, IC.PLAY,
         "Start a single-point or grid acquisition."),
     WorkflowStep(
         3, "calibrated", "Calibrate the measurement",
-        "Calibration", IC.CHART_LINE,
+        NL.CALIBRATION, IC.CHART_LINE,
         "Run a calibration sweep, or skip if using a saved .cal file."),
     WorkflowStep(
         3, "recipe_run", "Run a scan profile",
-        "Run Scan", IC.RECIPES,
+        NL.RUN_SCAN, IC.RECIPES,
         "Select a saved scan profile and run it for consistent, repeatable measurements."),
 
     # Phase 4: HARDWARE AUTOMATION
     WorkflowStep(
         4, "hardware_ready", "Verify hardware readiness",
-        "Cameras", IC.CONNECT,
+        NL.CAMERAS, IC.CONNECT,
         "Run the readiness check to ensure all hardware is configured."),
     WorkflowStep(
         4, "optimization_applied", "Apply optimization suggestions",
-        "Capture", IC.SETTINGS,
+        NL.CAPTURE, IC.SETTINGS,
         "Review and apply the auto-gain and exposure optimization tips."),
 
     # Phase 5: DATA & REPORTING
     WorkflowStep(
         5, "session_reviewed", "Review session results",
-        "Sessions", IC.CHECK,
+        NL.SESSIONS, IC.CHECK,
         "Open a session and mark it as reviewed after inspecting the data."),
     WorkflowStep(
         5, "data_exported", "Export measurement data",
-        "Sessions", IC.EXPORT,
+        NL.SESSIONS, IC.EXPORT,
         "Export your session in one or more formats (TIFF, HDF5, CSV, etc.)."),
     WorkflowStep(
         5, "report_generated", "Generate a report",
-        "Sessions", IC.EXPORT_PDF,
+        NL.SESSIONS, IC.EXPORT_PDF,
         "Generate a PDF or HTML report with your analysis results."),
 ]
 
