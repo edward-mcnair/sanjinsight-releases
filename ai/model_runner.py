@@ -20,12 +20,20 @@ during model loading — particularly when Metal/GPU initialisation
 fails on macOS.  A Python try/except cannot catch a segfault because
 it is an OS-level signal (SIGSEGV) that terminates the process.
 
-To guard against this, ``_load_worker`` runs a **subprocess preflight**
-before loading in-process.  The preflight attempts to instantiate the
-Llama model in an isolated child process with a timeout.  If the child
-segfaults (exit code < 0) or times out, the load is aborted and
-``load_failed`` is emitted with a diagnostic message — the main app
-stays alive.
+Two layers of protection:
+
+1. **CPU-only subprocess preflight** — Before loading in-process, a
+   child process instantiates the model with ``n_gpu_layers=0`` (CPU
+   only) to validate the GGUF file without touching Metal/GPU.  If the
+   child crashes or times out, the load is aborted with a diagnostic
+   message.  The preflight runs CPU-only to avoid GPU resource
+   conflicts with Qt's Metal rendering in the parent process.
+
+2. **Watchdog timer** — After preflight passes, the in-process load
+   runs in a daemon thread with a watchdog.  If the thread dies without
+   emitting ``load_complete`` or ``load_failed`` (i.e. a silent
+   segfault killed the thread but not the process), the watchdog fires
+   after a timeout and emits ``load_failed``.
 
 Cancellation
 ------------
@@ -36,6 +44,7 @@ response_complete() with whatever text was generated so far.
 
 from __future__ import annotations
 
+import faulthandler
 import logging
 import os
 import signal
@@ -46,7 +55,7 @@ import threading
 from pathlib import Path
 from typing import Optional
 
-from PyQt5.QtCore import QObject, pyqtSignal
+from PyQt5.QtCore import QObject, QTimer, pyqtSignal
 
 log = logging.getLogger(__name__)
 
@@ -67,24 +76,22 @@ def llama_available() -> bool:
 #  Subprocess preflight — catches segfaults during model load             #
 # ---------------------------------------------------------------------- #
 
-# Timeout for the preflight subprocess (seconds).  The child only needs
-# to instantiate Llama() and exit — it doesn't run inference.  If Metal
-# shader compilation is slow this may take a while, but 90 s is generous.
-_PREFLIGHT_TIMEOUT = 90
+# Timeout for the preflight subprocess (seconds).  CPU-only loading is
+# slower than GPU but avoids Metal resource conflicts with Qt.
+_PREFLIGHT_TIMEOUT = 120
 
 # Inline script executed in the child process.  It imports llama_cpp,
-# instantiates Llama with the given arguments, and exits 0 on success.
+# instantiates Llama **CPU-only** to validate the file, and exits 0.
 # Any Python exception exits 1; a segfault exits with a negative signal.
 _PREFLIGHT_SCRIPT = """\
 import sys, os
-# Suppress llama.cpp verbose output in the child
-os.environ.setdefault("LLAMA_LOG_LEVEL", "0")
+os.environ["LLAMA_LOG_LEVEL"] = "0"
 try:
     from llama_cpp import Llama
     model = Llama(
         model_path=sys.argv[1],
-        n_gpu_layers=int(sys.argv[2]),
-        n_ctx=int(sys.argv[3]),
+        n_gpu_layers=0,
+        n_ctx=int(sys.argv[2]),
         verbose=False,
     )
     del model
@@ -97,9 +104,11 @@ except BaseException as exc:
 """
 
 
-def _run_preflight(model_path: str, n_gpu_layers: int,
-                   n_ctx: int) -> tuple[bool, str]:
-    """Run model load in a subprocess to detect segfaults.
+def _run_preflight(model_path: str, n_ctx: int) -> tuple[bool, str]:
+    """Run model load CPU-only in a subprocess to validate the GGUF file.
+
+    The preflight always uses ``n_gpu_layers=0`` to avoid Metal/GPU
+    resource conflicts with Qt's rendering in the parent process.
 
     Returns
     -------
@@ -110,16 +119,15 @@ def _run_preflight(model_path: str, n_gpu_layers: int,
     try:
         result = subprocess.run(
             [sys.executable, "-c", _PREFLIGHT_SCRIPT,
-             model_path, str(n_gpu_layers), str(n_ctx)],
+             model_path, str(n_ctx)],
             capture_output=True, text=True,
             timeout=_PREFLIGHT_TIMEOUT,
         )
     except subprocess.TimeoutExpired:
         return False, (
             f"Model preflight timed out after {_PREFLIGHT_TIMEOUT}s. "
-            f"The model file may be too large or GPU initialisation is "
-            f"hanging. Try setting GPU layers to 0 (CPU-only) in "
-            f"Settings → AI."
+            f"The model file may be corrupt or too large for available "
+            f"memory. Try a smaller model."
         )
     except Exception as exc:
         return False, f"Preflight subprocess error: {exc}"
@@ -134,10 +142,10 @@ def _run_preflight(model_path: str, n_gpu_layers: int,
         stderr_tail = (result.stderr or "").strip()[-500:]
         return False, (
             f"Model loading crashed ({sig_name}) in the native "
-            f"llama.cpp library. This usually means the GPU/Metal "
-            f"backend is incompatible with this model format.\n\n"
+            f"llama.cpp library. This model file may be corrupt or "
+            f"incompatible with the installed llama-cpp-python.\n\n"
             f"Suggestions:\n"
-            f"  • Set GPU layers to 0 (CPU-only) in Settings → AI\n"
+            f"  • Re-download the model file (possible corruption)\n"
             f"  • Try a smaller quantisation (Q4_K_S instead of Q4_K_M)\n"
             f"  • Update llama-cpp-python: pip install -U llama-cpp-python\n"
             + (f"\nNative error output:\n{stderr_tail}" if stderr_tail else "")
@@ -158,6 +166,13 @@ def _signal_name(sig_num: int) -> str:
         return f"{name} (signal {sig_num})"
     except (ValueError, AttributeError):
         return f"signal {sig_num}"
+
+
+# ---------------------------------------------------------------------- #
+#  Watchdog — detects silent thread death from in-process segfaults        #
+# ---------------------------------------------------------------------- #
+
+_WATCHDOG_INTERVAL_MS = 2000   # check every 2 seconds
 
 
 class ModelRunner(QObject):
@@ -186,6 +201,11 @@ class ModelRunner(QObject):
         self._busy         = False
         self._cancel_event = threading.Event()
 
+        # Watchdog state — tracks whether the load thread is alive
+        self._load_thread: Optional[threading.Thread] = None
+        self._load_settled = threading.Event()  # set when load emits a signal
+        self._watchdog_timer: Optional[QTimer] = None
+
     # ------------------------------------------------------------------ #
     #  Public API                                                          #
     # ------------------------------------------------------------------ #
@@ -206,12 +226,16 @@ class ModelRunner(QObject):
         if not Path(model_path).is_file():
             self.load_failed.emit(f"Model file not found: {model_path}")
             return
-        threading.Thread(
+        self._load_settled.clear()
+        t = threading.Thread(
             target=self._load_worker,
             args=(model_path, n_gpu_layers, n_ctx),
             daemon=True,
             name="ai-model-load",
-        ).start()
+        )
+        self._load_thread = t
+        t.start()
+        self._start_watchdog()
 
     def infer(self, messages: list[dict],
               max_tokens: int = 512,
@@ -253,25 +277,88 @@ class ModelRunner(QObject):
         log.info("AI model unloaded")
 
     # ------------------------------------------------------------------ #
+    #  Watchdog                                                            #
+    # ------------------------------------------------------------------ #
+
+    def _start_watchdog(self) -> None:
+        """Start a QTimer that checks if the load thread is still alive."""
+        self._stop_watchdog()
+        self._watchdog_timer = QTimer(self)
+        self._watchdog_timer.timeout.connect(self._watchdog_check)
+        self._watchdog_timer.start(_WATCHDOG_INTERVAL_MS)
+
+    def _stop_watchdog(self) -> None:
+        if self._watchdog_timer is not None:
+            self._watchdog_timer.stop()
+            self._watchdog_timer.deleteLater()
+            self._watchdog_timer = None
+
+    def _watchdog_check(self) -> None:
+        """Called periodically to detect silent thread death."""
+        # If the load already emitted a signal, nothing to do
+        if self._load_settled.is_set():
+            self._stop_watchdog()
+            return
+
+        t = self._load_thread
+        if t is None:
+            self._stop_watchdog()
+            return
+
+        # Thread still alive → keep watching
+        if t.is_alive():
+            return
+
+        # Thread is dead but never emitted load_complete/load_failed.
+        # This means it was killed by a signal (segfault) or an
+        # unhandled error in native code that bypassed Python's
+        # exception handling.
+        self._stop_watchdog()
+        self._load_thread = None
+        log.error(
+            "AI model load thread died without signalling completion. "
+            "This usually means a segfault in native llama.cpp / Metal "
+            "code.  The model will not be available."
+        )
+        self.load_failed.emit(
+            "Model loading crashed silently (likely a segfault in the "
+            "native GPU/Metal backend).\n\n"
+            "Suggestions:\n"
+            "  • Set GPU layers to 0 (CPU-only) in Settings → AI\n"
+            "  • Try a smaller quantisation (Q4_K_S instead of Q4_K_M)\n"
+            "  • Update llama-cpp-python: pip install -U llama-cpp-python"
+        )
+
+    # ------------------------------------------------------------------ #
     #  Worker threads                                                      #
     # ------------------------------------------------------------------ #
 
     def _load_worker(self, model_path: str, n_gpu_layers: int, n_ctx: int):
-        # ── Step 1: subprocess preflight ──────────────────────────────
-        # Catches segfaults in native llama.cpp / Metal code that would
-        # otherwise kill the entire application.
-        log.info("AI model preflight check: %s (n_gpu_layers=%d)",
-                 model_path, n_gpu_layers)
-        ok, msg = _run_preflight(model_path, n_gpu_layers, n_ctx)
+        # Enable faulthandler so segfaults dump a Python traceback to
+        # stderr before the thread dies — helps with post-mortem debugging.
+        try:
+            faulthandler.enable()
+        except Exception:
+            pass
+
+        # ── Step 1: CPU-only subprocess preflight ─────────────────────
+        # Validates the GGUF file can be parsed by llama.cpp without
+        # touching Metal/GPU.  This avoids GPU resource conflicts with
+        # Qt's Metal rendering in the parent process.
+        log.info("AI model preflight (CPU-only): %s", model_path)
+        ok, msg = _run_preflight(model_path, n_ctx)
         if not ok:
             log.error("AI model preflight FAILED: %s", msg)
             self.load_failed.emit(msg)
+            self._load_settled.set()
             return
-        log.info("AI model preflight passed — loading in-process")
+        log.info("AI model preflight passed — loading in-process "
+                 "(n_gpu_layers=%d)", n_gpu_layers)
 
-        # ── Step 2: load in-process ───────────────────────────────────
-        # The preflight succeeded, so the same load should work here.
-        # We still wrap in try/except for non-fatal errors (OOM, etc.).
+        # ── Step 2: load in-process (with GPU if configured) ──────────
+        # The preflight validated the file is parseable.  The in-process
+        # load may still fail (OOM, Metal crash, etc.).  The watchdog
+        # detects silent death from a segfault.
         try:
             model = Llama(
                 model_path=model_path,
@@ -286,6 +373,8 @@ class ModelRunner(QObject):
         except Exception as exc:
             log.exception("AI model load failed (in-process)")
             self.load_failed.emit(str(exc))
+        finally:
+            self._load_settled.set()
 
     def _infer_worker(self, messages: list[dict],
                       max_tokens: int, temperature: float):
