@@ -13,6 +13,20 @@ Graceful degradation
 If llama-cpp-python is not installed the ModelRunner still loads and emits
 load_failed() so the rest of the code can respond appropriately.
 
+Segfault protection
+-------------------
+llama-cpp-python wraps native C++ code (llama.cpp) that can segfault
+during model loading — particularly when Metal/GPU initialisation
+fails on macOS.  A Python try/except cannot catch a segfault because
+it is an OS-level signal (SIGSEGV) that terminates the process.
+
+To guard against this, ``_load_worker`` runs a **subprocess preflight**
+before loading in-process.  The preflight attempts to instantiate the
+Llama model in an isolated child process with a timeout.  If the child
+segfaults (exit code < 0) or times out, the load is aborted and
+``load_failed`` is emitted with a diagnostic message — the main app
+stays alive.
+
 Cancellation
 ------------
 Call cancel() to set a threading.Event that the inference worker checks
@@ -23,8 +37,13 @@ response_complete() with whatever text was generated so far.
 from __future__ import annotations
 
 import logging
+import os
+import signal
+import subprocess
+import sys
 import time
 import threading
+from pathlib import Path
 from typing import Optional
 
 from PyQt5.QtCore import QObject, pyqtSignal
@@ -42,6 +61,103 @@ except ImportError:
 def llama_available() -> bool:
     """Return True if llama-cpp-python is installed."""
     return _LLAMA_AVAILABLE
+
+
+# ---------------------------------------------------------------------- #
+#  Subprocess preflight — catches segfaults during model load             #
+# ---------------------------------------------------------------------- #
+
+# Timeout for the preflight subprocess (seconds).  The child only needs
+# to instantiate Llama() and exit — it doesn't run inference.  If Metal
+# shader compilation is slow this may take a while, but 90 s is generous.
+_PREFLIGHT_TIMEOUT = 90
+
+# Inline script executed in the child process.  It imports llama_cpp,
+# instantiates Llama with the given arguments, and exits 0 on success.
+# Any Python exception exits 1; a segfault exits with a negative signal.
+_PREFLIGHT_SCRIPT = """\
+import sys, os
+# Suppress llama.cpp verbose output in the child
+os.environ.setdefault("LLAMA_LOG_LEVEL", "0")
+try:
+    from llama_cpp import Llama
+    model = Llama(
+        model_path=sys.argv[1],
+        n_gpu_layers=int(sys.argv[2]),
+        n_ctx=int(sys.argv[3]),
+        verbose=False,
+    )
+    del model
+    sys.exit(0)
+except SystemExit:
+    raise
+except BaseException as exc:
+    print(f"PREFLIGHT_ERROR: {exc}", file=sys.stderr)
+    sys.exit(1)
+"""
+
+
+def _run_preflight(model_path: str, n_gpu_layers: int,
+                   n_ctx: int) -> tuple[bool, str]:
+    """Run model load in a subprocess to detect segfaults.
+
+    Returns
+    -------
+    (ok, message)
+        ok is True if the child loaded the model without crashing.
+        message describes the failure if ok is False.
+    """
+    try:
+        result = subprocess.run(
+            [sys.executable, "-c", _PREFLIGHT_SCRIPT,
+             model_path, str(n_gpu_layers), str(n_ctx)],
+            capture_output=True, text=True,
+            timeout=_PREFLIGHT_TIMEOUT,
+        )
+    except subprocess.TimeoutExpired:
+        return False, (
+            f"Model preflight timed out after {_PREFLIGHT_TIMEOUT}s. "
+            f"The model file may be too large or GPU initialisation is "
+            f"hanging. Try setting GPU layers to 0 (CPU-only) in "
+            f"Settings → AI."
+        )
+    except Exception as exc:
+        return False, f"Preflight subprocess error: {exc}"
+
+    if result.returncode == 0:
+        return True, ""
+
+    # Negative return code → killed by signal (e.g. -11 = SIGSEGV)
+    if result.returncode < 0:
+        sig_num = -result.returncode
+        sig_name = _signal_name(sig_num)
+        stderr_tail = (result.stderr or "").strip()[-500:]
+        return False, (
+            f"Model loading crashed ({sig_name}) in the native "
+            f"llama.cpp library. This usually means the GPU/Metal "
+            f"backend is incompatible with this model format.\n\n"
+            f"Suggestions:\n"
+            f"  • Set GPU layers to 0 (CPU-only) in Settings → AI\n"
+            f"  • Try a smaller quantisation (Q4_K_S instead of Q4_K_M)\n"
+            f"  • Update llama-cpp-python: pip install -U llama-cpp-python\n"
+            + (f"\nNative error output:\n{stderr_tail}" if stderr_tail else "")
+        )
+
+    # Positive return code → Python exception in child
+    stderr_tail = (result.stderr or "").strip()[-500:]
+    return False, (
+        f"Model preflight failed (exit code {result.returncode}).\n"
+        + (stderr_tail if stderr_tail else "Unknown error")
+    )
+
+
+def _signal_name(sig_num: int) -> str:
+    """Human-readable signal name, e.g. 'SIGSEGV (signal 11)'."""
+    try:
+        name = signal.Signals(sig_num).name
+        return f"{name} (signal {sig_num})"
+    except (ValueError, AttributeError):
+        return f"signal {sig_num}"
 
 
 class ModelRunner(QObject):
@@ -86,6 +202,9 @@ class ModelRunner(QObject):
                 "llama-cpp-python is not installed.\n"
                 "Install it with:  pip install llama-cpp-python"
             )
+            return
+        if not Path(model_path).is_file():
+            self.load_failed.emit(f"Model file not found: {model_path}")
             return
         threading.Thread(
             target=self._load_worker,
@@ -138,7 +257,21 @@ class ModelRunner(QObject):
     # ------------------------------------------------------------------ #
 
     def _load_worker(self, model_path: str, n_gpu_layers: int, n_ctx: int):
-        log.info("Loading AI model from %s (n_gpu_layers=%d)", model_path, n_gpu_layers)
+        # ── Step 1: subprocess preflight ──────────────────────────────
+        # Catches segfaults in native llama.cpp / Metal code that would
+        # otherwise kill the entire application.
+        log.info("AI model preflight check: %s (n_gpu_layers=%d)",
+                 model_path, n_gpu_layers)
+        ok, msg = _run_preflight(model_path, n_gpu_layers, n_ctx)
+        if not ok:
+            log.error("AI model preflight FAILED: %s", msg)
+            self.load_failed.emit(msg)
+            return
+        log.info("AI model preflight passed — loading in-process")
+
+        # ── Step 2: load in-process ───────────────────────────────────
+        # The preflight succeeded, so the same load should work here.
+        # We still wrap in try/except for non-fatal errors (OOM, etc.).
         try:
             model = Llama(
                 model_path=model_path,
@@ -151,7 +284,7 @@ class ModelRunner(QObject):
             log.info("AI model loaded successfully")
             self.load_complete.emit()
         except Exception as exc:
-            log.exception("AI model load failed")
+            log.exception("AI model load failed (in-process)")
             self.load_failed.emit(str(exc))
 
     def _infer_worker(self, messages: list[dict],
