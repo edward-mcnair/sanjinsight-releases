@@ -186,6 +186,58 @@ class Recipe:
 
         return r
 
+    @classmethod
+    def from_run_payload(cls, payload: dict, *,
+                         label: str = "") -> "Recipe":
+        """Reconstruct a Recipe from a completed run's payload dict.
+
+        Creates a new UID.  Only fields present in the payload are set;
+        anything the payload did not capture stays at dataclass defaults.
+
+        Parameters
+        ----------
+        payload : dict
+            The ``RecipeRunPayload.to_dict()`` dict emitted by the run panel.
+        label : str, optional
+            Override label.  Falls back to payload's ``recipe_label``, then
+            a timestamped default.
+        """
+        r = cls()
+        r.uid        = str(uuid.uuid4())[:8]
+        r.label      = (label
+                        or payload.get("recipe_label")
+                        or f"from_run_{int(time.time())}")
+        r.created_at = time.strftime("%Y-%m-%dT%H:%M:%S")
+        r.description = "Created from measurement run"
+        r.scan_type   = payload.get("scan_type", "single")
+
+        # Camera
+        r.camera.exposure_us = payload.get("exposure_us", r.camera.exposure_us)
+        r.camera.gain_db     = payload.get("gain_db",     r.camera.gain_db)
+        r.camera.n_frames    = payload.get("n_frames",    r.camera.n_frames)
+
+        # Acquisition
+        r.acquisition.modality            = (payload.get("modality")
+                                             or r.acquisition.modality)
+        r.acquisition.inter_phase_delay_s = payload.get(
+            "inter_phase_delay_s", r.acquisition.inter_phase_delay_s)
+
+        # Analysis
+        r.analysis.threshold_k = payload.get("threshold_k",
+                                             r.analysis.threshold_k)
+
+        # Hardware presets
+        r.bias.enabled   = payload.get("bias_enabled",   r.bias.enabled)
+        r.bias.voltage_v = payload.get("bias_voltage_v", r.bias.voltage_v)
+        r.bias.current_a = payload.get("bias_current_a", r.bias.current_a)
+        r.tec.enabled    = payload.get("tec_enabled",    r.tec.enabled)
+        r.tec.setpoint_c = payload.get("tec_setpoint_c", r.tec.setpoint_c)
+
+        # Material profile (informational — name only)
+        r.profile_name = payload.get("profile_name", "")
+
+        return r
+
 
 # ================================================================== #
 #  Variable designation registry                                       #
@@ -266,6 +318,22 @@ class RecipeStore:
             with open(path) as f:
                 return Recipe.from_dict(json.load(f))
         return None
+
+    def save_as_new(self, recipe: Recipe) -> Path:
+        """Persist a recipe using its UID as filename (collision-safe).
+
+        Unlike :meth:`save`, which derives the filename from the label
+        (risking overwrites when labels collide), this method uses the
+        recipe's UID to guarantee a unique file path.
+
+        Use this for programmatic saves (post-run, import, duplication)
+        where the caller has already assigned a fresh UID.
+        """
+        path = self._dir / f"{recipe.uid}.json"
+        with open(path, "w") as f:
+            json.dump(recipe.to_dict(), f, indent=2)
+        log.info("Recipe saved (UID-keyed) → %s", path)
+        return path
 
 
 # ================================================================== #
