@@ -351,7 +351,6 @@ from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QColor, QFont
 from ui.icons import set_btn_icon
 from ui.theme import FONT, PALETTE, scaled_qss, MONO_FONT
-from ui.workspace import get_manager
 from ui.display_terms import TERMS
 
 
@@ -375,12 +374,8 @@ class RecipeTab(QWidget):
         self._current:     Optional[Recipe] = None
         self._auth_session = None   # set by main_app after login
         self._var_toggles: Dict[str, QCheckBox] = {}  # field_path → checkbox
-        self._workspace_mode = "standard"
         self._build()
         self._refresh_list()
-        # Wire workspace mode
-        self.set_workspace_mode(get_manager().mode)
-        get_manager().mode_changed.connect(self.set_workspace_mode)
 
     # ── UI ──────────────────────────────────────────────────────────
 
@@ -726,8 +721,7 @@ class RecipeTab(QWidget):
         active = [fp for fp, cb in self._var_toggles.items() if cb.isChecked()]
         if not active:
             self._preview_body.setText("No variables designated.")
-            self._preview_frame.setVisible(
-                self._workspace_mode == "expert" and self._current is not None)
+            self._preview_frame.setVisible(False)
             return
         lines = []
         for fp in active:
@@ -742,52 +736,11 @@ class RecipeTab(QWidget):
             lines.append(f"  {label}{val}")
         self._preview_body.setText(
             "Operator will see these adjustable fields:\n" + "\n".join(lines))
-        self._preview_frame.setVisible(
-            self._workspace_mode == "expert" and self._current is not None)
-
-    def set_workspace_mode(self, mode: str) -> None:
-        """Adjust visibility and editability for workspace mode.
-
-        Standard: view-only (all editor fields disabled, no variable toggles).
-        Expert: full edit access, variable toggles visible, preview panel.
-        Guided: hidden (parent typically hides the entire tab).
-        """
-        self._workspace_mode = mode
-        is_expert = (mode == "expert")
-
-        # Variable toggle visibility — Expert only
-        for cb in self._var_toggles.values():
-            cb.setVisible(is_expert)
-
-        # Preview panel — Expert only
-        self._preview_frame.setVisible(
-            is_expert and self._current is not None
-            and any(cb.isChecked() for cb in self._var_toggles.values()))
-
-        # Lock/Capture buttons — Expert only
-        self._lock_btn.setVisible(is_expert)
-        self._cap_btn.setVisible(is_expert)
-
-        # Standard: disable all editing (view-only)
-        if mode == "standard":
-            for w in [self._label_edit, self._desc_edit, self._prof_edit,
-                      self._exposure_spin, self._gain_spin, self._frames_spin,
-                      self._delay_spin, self._modality_combo,
-                      self._thresh_spin, self._fail_hs_spin, self._fail_peak_spin,
-                      self._notes_edit, self._save_btn, self._cap_btn,
-                      self._new_btn, self._lock_btn]:
-                w.setEnabled(False)
-            # Run + Delete still active
-            self._run_btn.setEnabled(self._current is not None)
-            self._delete_btn.setEnabled(False)
-        elif self._current is not None:
-            # Re-apply normal enable/disable logic
-            self._set_editor_enabled(True)
+        self._preview_frame.setVisible(False)
 
     def _set_editor_enabled(self, enabled: bool):
         locked = bool(self._current and self._current.locked)
-        is_standard = (self._workspace_mode == "standard")
-        can_edit = enabled and not locked and not is_standard
+        can_edit = enabled and not locked
         for w in [self._label_edit, self._desc_edit, self._prof_edit,
                   self._exposure_spin, self._gain_spin, self._frames_spin,
                   self._delay_spin, self._modality_combo,
@@ -796,12 +749,9 @@ class RecipeTab(QWidget):
             w.setEnabled(can_edit)
         # Delete and Run stay enabled (can still run or delete a locked recipe)
         for w in [self._run_btn, self._delete_btn]:
-            w.setEnabled(enabled and not is_standard)
-        # Run is still usable in Standard mode
-        if is_standard:
-            self._run_btn.setEnabled(enabled)
+            w.setEnabled(enabled)
         # Lock button — enabled if a recipe is selected and user can edit recipes
-        can_lock = enabled and self._can_edit_recipes() and not is_standard
+        can_lock = enabled and self._can_edit_recipes()
         self._lock_btn.setEnabled(can_lock)
         if enabled:
             if locked:

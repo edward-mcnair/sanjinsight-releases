@@ -38,7 +38,6 @@ from PyQt5.QtCore import Qt, pyqtSignal
 
 from ui.theme import PALETTE, FONT, MONO_FONT
 from ui.icons import IC, set_btn_icon
-from ui.workspace import get_manager
 
 log = logging.getLogger(__name__)
 
@@ -96,14 +95,8 @@ class ExperimentLogWidget(QWidget):
         super().__init__(parent)
         self._entries: list = []        # cached RunEntry list (newest first)
         self._log_dir = str(Path.home() / ".microsanj")
-        self._workspace_mode = "standard"
-
         self._build_ui()
         self._apply_styles()
-
-        # Wire workspace mode
-        self.set_workspace_mode(get_manager().mode)
-        get_manager().mode_changed.connect(self.set_workspace_mode)
 
     # ── UI construction ──────────────────────────────────────────────
 
@@ -248,18 +241,6 @@ class ExperimentLogWidget(QWidget):
         """
         self._entries.insert(0, entry)  # newest first
         self._apply_filters_and_populate()
-
-    def set_workspace_mode(self, mode: str) -> None:
-        """Adjust column visibility for Guided/Standard/Expert.
-
-        Guided: simplified — hides Source, Modality, Device ID, Project,
-                Operator columns so the table is less intimidating.
-        Standard/Expert: all 12 columns visible.
-        """
-        self._workspace_mode = mode
-        is_guided = (mode == "guided")
-        for i, (key, _, _, _) in enumerate(_COLUMNS):
-            self._table.setColumnHidden(i, is_guided and key in _GUIDED_HIDDEN)
 
     def showEvent(self, event) -> None:
         """Auto-refresh entries whenever the widget becomes visible."""

@@ -130,9 +130,7 @@ def _separator() -> QFrame:
 class ModalitySection(QWidget):
     """Camera type, objective, FOV — Phase 1 CONFIGURATION.
 
-    Builds a single controls page with guidance cards that are shown/hidden
-    based on workspace mode.  ``set_workspace_mode(mode)`` controls which
-    guidance elements are visible.
+    Builds a single controls page with guidance cards.
     """
 
     open_device_manager = pyqtSignal()
@@ -146,7 +144,6 @@ class ModalitySection(QWidget):
         super().__init__(parent)
         self._preview_frame_n = 0
         self._preview_live    = False
-        self._current_mode    = "standard"
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -536,26 +533,6 @@ class ModalitySection(QWidget):
         return page
 
     # ── Auto-config info banner ────────────────────────────────────
-
-    # ── Mode switching ──────────────────────────────────────────────
-
-    def set_workspace_mode(self, mode: str) -> None:
-        """Toggle visibility of guidance elements based on mode.
-
-        Guided:  show numbered step cards + workflow footer, hide compact card
-        Compact: show compact card, hide step cards + footer
-        """
-        self._current_mode = mode
-        is_guided = (mode == "guided")
-
-        # Guided-only elements
-        self._guide_card1.setVisible(is_guided)
-        self._guide_card2.setVisible(is_guided)
-        self._guide_card3.setVisible(is_guided)
-        self._workflow_footer.setVisible(is_guided)
-
-        # Compact-only element
-        self._compact_card.setVisible(not is_guided)
 
     # ── Modality badge ─────────────────────────────────────────────────
 

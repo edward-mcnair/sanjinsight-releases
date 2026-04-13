@@ -1,11 +1,7 @@
 """
-ui/widgets/more_options.py  —  Workspace-aware "More Options" disclosure panel
+ui/widgets/more_options.py  —  "More Options" disclosure panel
 
-Extends CollapsiblePanel to respect the active workspace mode:
-
-    Guided   → always starts collapsed
-    Standard → remembers user's per-section toggle state
-    Expert   → always starts expanded
+Extends CollapsiblePanel with per-section state persistence.
 
 Usage
 -----
@@ -21,19 +17,18 @@ from PyQt5.QtWidgets import QWidget
 
 import config as cfg_mod
 from ui.widgets.collapsible_panel import CollapsiblePanel
-from ui.workspace import get_manager, WorkspaceMode
 
 
 class MoreOptionsPanel(CollapsiblePanel):
-    """CollapsiblePanel whose default state adapts to the workspace mode.
+    """CollapsiblePanel that remembers per-section toggle state.
 
     Parameters
     ----------
     title : str
         Header text (default ``"More Options"``).
     section_key : str
-        Unique key for per-section state persistence in Standard mode.
-        If empty, the panel won't remember its state across mode switches.
+        Unique key for per-section state persistence.
+        If empty, the panel won't remember its state.
     parent : QWidget | None
         Parent widget.
     """
@@ -45,46 +40,22 @@ class MoreOptionsPanel(CollapsiblePanel):
         parent: QWidget | None = None,
     ) -> None:
         self._section_key = section_key
-        manager = get_manager()
 
-        # Determine initial collapsed state based on workspace mode
-        start_collapsed = not manager.more_options_default_expanded()
-
-        # In Standard mode, honour per-section saved state if available
-        if manager.mode == WorkspaceMode.STANDARD and section_key:
+        # Honour per-section saved state if available
+        start_collapsed = True  # default: collapsed
+        if section_key:
             saved = cfg_mod.get_pref(f"ui.more_options.{section_key}", None)
             if saved is not None:
                 start_collapsed = not saved
 
         super().__init__(title, parent, start_collapsed=start_collapsed)
 
-        # Persist toggle state in Standard mode
+        # Persist toggle state
         self.btn.toggled.connect(self._on_user_toggle)
-
-        # React to workspace mode changes
-        manager.mode_changed.connect(self._on_mode_changed)
 
     # ── Internal ─────────────────────────────────────────────────────
 
     def _on_user_toggle(self, expanded: bool) -> None:
-        """Save per-section expansion state for Standard mode recall."""
-        if self._section_key and get_manager().mode == WorkspaceMode.STANDARD:
+        """Save per-section expansion state."""
+        if self._section_key:
             cfg_mod.set_pref(f"ui.more_options.{self._section_key}", expanded)
-
-    def _on_mode_changed(self, mode: str) -> None:
-        """Adjust expansion state when the workspace mode switches."""
-        if mode == WorkspaceMode.EXPERT:
-            # Expert: force expand
-            if not self.btn.isChecked():
-                self.btn.setChecked(True)
-        elif mode == WorkspaceMode.GUIDED:
-            # Guided: force collapse
-            if self.btn.isChecked():
-                self.btn.setChecked(False)
-        else:
-            # Standard: restore saved state or leave as-is
-            if self._section_key:
-                saved = cfg_mod.get_pref(
-                    f"ui.more_options.{self._section_key}", None)
-                if saved is not None:
-                    self.btn.setChecked(saved)

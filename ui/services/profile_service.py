@@ -379,17 +379,7 @@ class ProfileApplicationService:
         except Exception as _e:
             log.debug("Profile apply — analysis thresholds: %s", _e)
 
-        # 16. Phase tracker
-        try:
-            self._phase_tracker.mark(1, "camera_selected", True)
-            self._phase_tracker.mark(1, "profile_selected", True)
-            self._phase_tracker.mark(1, "stimulus_configured", True)
-            if getattr(profile, "tec_enabled", False):
-                self._phase_tracker.mark(1, "temperature_set", True)
-        except Exception as _e:
-            log.debug("Profile apply — phase tracker: %s", _e)
-
-        # 17. Log
+        # 16. Log
         self._log_tab.append(
             f"Profile applied: {profile.name}  ·  "
             f"C_T = {profile.ct_value:.3e} K⁻¹  ·  "

@@ -138,16 +138,6 @@ class StimulusTab(QWidget, TabAttentionMixin):
         """Wire bias/camera drivers into the IV Sweep sub-tab."""
         self._iv_sweep_tab.set_drivers(bias_driver, camera_driver, pipeline)
 
-    # ── Workspace mode ────────────────────────────────────────────────
-
-    def set_workspace_mode(self, mode: str) -> None:
-        is_guided = (mode == "guided")
-        self._guide_card1.setVisible(is_guided)
-        self._guide_card2.setVisible(is_guided)
-        self._workflow_footer.setVisible(is_guided)
-        self._overview_card.setVisible(not is_guided)
-        self._update_cards_scroll_visibility()
-
     def _update_cards_scroll_visibility(self) -> None:
         any_visible = any(c.isVisible() for c in (
             self._overview_card, self._guide_card1, self._guide_card2))

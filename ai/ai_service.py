@@ -220,14 +220,6 @@ class AIService(QObject):
         self._ctx.set_active_tab(tab_name)
         self._digest_cache.invalidate()
 
-    def set_workspace_mode(self, mode: str) -> None:
-        """Adapt AI behaviour to the workspace mode.
-
-        The mode prefix is prepended to the persona's system prompt
-        at inference time, so it layers on top of the existing persona.
-        """
-        self._workspace_mode = mode
-
     def invalidate_context(self) -> None:
         """Signal that instrument state has changed materially.
 
@@ -528,8 +520,7 @@ class AIService(QObject):
         effective_n_ctx = self._n_ctx if bud["include_guide"] else 0
         base    = tmpl.build_system_prompt(persona.system_prompt, effective_n_ctx)
 
-        mode = getattr(self, "_workspace_mode", "standard")
-        prefix = self._MODE_PROMPT_PREFIX.get(mode, "")
+        prefix = self._MODE_PROMPT_PREFIX.get("standard", "")
         if prefix:
             return f"{prefix}\n\n{base}"
         return base

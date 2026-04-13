@@ -616,12 +616,6 @@ class CalibrationTab(QWidget):
     #  Camera-mode adaptation                                          #
     # ---------------------------------------------------------------- #
 
-    def set_workspace_mode(self, mode: str) -> None:
-        is_guided = (mode == "guided")
-        self._guide_card1.setVisible(is_guided)
-        self._workflow_footer.setVisible(is_guided)
-        self._overview_card.setVisible(not is_guided)
-
     def refresh_camera_mode(self) -> None:
         """Show/hide TR/IR preset buttons based on active camera type.
 

@@ -847,15 +847,6 @@ class TemperatureTab(QWidget):
                 box._chuck_stab_dot.setToolTip(
                     f"Settling — Δ{diff:+.2f}°C from target")
 
-    # ── Workspace mode ────────────────────────────────────────────────
-
-    def set_workspace_mode(self, mode: str) -> None:
-        is_guided = (mode == "guided")
-        self._guide_card1.setVisible(is_guided)
-        self._workflow_footer.setVisible(is_guided)
-        self._overview_card.setVisible(not is_guided)
-        self._update_cards_scroll_visibility()
-
     def _update_cards_scroll_visibility(self) -> None:
         any_visible = any(c.isVisible() for c in (
             self._overview_card, self._guide_card1))

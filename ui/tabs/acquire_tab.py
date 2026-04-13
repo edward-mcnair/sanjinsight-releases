@@ -444,11 +444,6 @@ class AcquireTab(QWidget):
         if hasattr(self, "_hw_strip"):
             self._hw_strip._apply_styles()
 
-    def set_workspace_mode(self, mode: str) -> None:
-        """Control component visibility based on workspace mode."""
-        if hasattr(self, "_hw_strip"):
-            self._hw_strip.set_workspace_mode(mode)
-
     def set_active_recipe_name(self, name: str | None) -> None:
         """Called by MainWindow when a recipe is applied to reflect its name."""
         self._active_recipe_lbl.setText(name or "(none)")

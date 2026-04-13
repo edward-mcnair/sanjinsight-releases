@@ -68,7 +68,6 @@ from PyQt5.QtCore import Qt, pyqtSignal
 
 from ui.theme import PALETTE, FONT, MONO_FONT
 from ui.icons import IC, set_btn_icon
-from ui.workspace import get_manager
 
 log = logging.getLogger(__name__)
 
@@ -150,10 +149,6 @@ class RecipeRunPanel(QWidget):
         self._build_ui()
         self._apply_styles()
         self._connect_signals()
-
-        # Initial mode
-        self.set_workspace_mode(get_manager().mode)
-        get_manager().mode_changed.connect(self.set_workspace_mode)
 
     # ── UI construction ──────────────────────────────────────────────
 
@@ -588,31 +583,6 @@ class RecipeRunPanel(QWidget):
             f"font-size: {FONT['caption']}pt; "
             f"color: {PALETTE['danger']};")
         self._result_strip.setVisible(True)
-
-    def set_workspace_mode(self, mode: str) -> None:
-        """Adjust visibility and density for the current workspace mode."""
-        is_guided = (mode == "guided")
-        is_expert = (mode == "expert")
-
-        # Guided: hide context fields (auto-filled from lab prefs)
-        self._context_frame.setVisible(not is_guided)
-
-        # Expert: show "Edit Recipe ▸" link
-        self._edit_link.setVisible(is_expert)
-
-        # Guidance cards + footer (Guided mode only)
-        self._cards_scroll.setVisible(is_guided and len(self._guidance_cards) > 0)
-        self._workflow_footer.setVisible(is_guided)
-
-        # Pre-fill operator from lab prefs in guided mode
-        if is_guided:
-            try:
-                import config as cfg_mod
-                op = cfg_mod.get_pref("lab.active_operator", "")
-                if op:
-                    self._operator_input.setText(op)
-            except Exception:
-                pass
 
     # ── Internal handlers ────────────────────────────────────────────
 

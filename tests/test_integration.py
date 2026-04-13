@@ -5267,20 +5267,6 @@ class TestRecipeRunPanelBehavior:
         assert "run_requested.emit" in src
         assert "_build_payload" in src
 
-    def test_workspace_mode_guided(self):
-        """Guided mode hides context fields."""
-        import inspect
-        from ui.widgets.recipe_run_panel import RecipeRunPanel
-        src = inspect.getsource(RecipeRunPanel.set_workspace_mode)
-        assert "_context_frame.setVisible(not is_guided)" in src
-
-    def test_workspace_mode_expert(self):
-        """Expert mode shows edit recipe link."""
-        import inspect
-        from ui.widgets.recipe_run_panel import RecipeRunPanel
-        src = inspect.getsource(RecipeRunPanel.set_workspace_mode)
-        assert "_edit_link.setVisible(is_expert)" in src
-
     def test_on_run_complete_appends_log(self):
         """on_run_complete() appends to the experiment log."""
         import inspect
@@ -6252,14 +6238,6 @@ class TestMergeViewLiveTab:
         src = inspect.getsource(LiveTab._on_view_mode)
         assert "set_merge" in src
 
-    def test_guided_mode_hides_merge_toggle(self):
-        """In Guided mode, the Merge toggle should be hidden."""
-        import inspect
-        from acquisition.live_tab import LiveTab
-        src = inspect.getsource(LiveTab.set_workspace_mode)
-        assert "_view_seg" in src
-        assert "not is_guided" in src
-
     def test_view_seg_connected(self):
         src = self._src()
         assert "_view_seg.selection_changed.connect(self._on_view_mode)" in src
@@ -6389,10 +6367,6 @@ class TestHwSummaryStripWidget:
         from ui.widgets.hw_summary_strip import HwSummaryStrip
         assert callable(getattr(HwSummaryStrip, "update_bias", None))
 
-    def test_set_workspace_mode_method(self):
-        from ui.widgets.hw_summary_strip import HwSummaryStrip
-        assert callable(getattr(HwSummaryStrip, "set_workspace_mode", None))
-
     def test_apply_styles_method(self):
         from ui.widgets.hw_summary_strip import HwSummaryStrip
         assert callable(getattr(HwSummaryStrip, "_apply_styles", None))
@@ -6465,25 +6439,6 @@ class TestHwSummaryStripFormatting:
         assert _dot(False) == "\u25cb"
 
 
-class TestHwSummaryStripModeGating:
-    """Verify workspace mode visibility."""
-
-    def test_guided_hides(self):
-        """set_workspace_mode('guided') should hide the strip."""
-        import inspect
-        from ui.widgets.hw_summary_strip import HwSummaryStrip
-        src = inspect.getsource(HwSummaryStrip.set_workspace_mode)
-        assert '"guided"' in src
-        assert "setVisible" in src
-
-    def test_standard_shows(self):
-        """Standard mode should show the strip (mode != 'guided')."""
-        import inspect
-        from ui.widgets.hw_summary_strip import HwSummaryStrip
-        src = inspect.getsource(HwSummaryStrip.set_workspace_mode)
-        assert 'mode != "guided"' in src
-
-
 class TestHwSummaryStripInLiveTab:
     """Verify strip is embedded in Live View tab."""
 
@@ -6500,13 +6455,6 @@ class TestHwSummaryStripInLiveTab:
         from acquisition.live_tab import LiveTab
         src = inspect.getsource(LiveTab.__init__)
         assert "root.addWidget(self._hw_strip)" in src
-
-    def test_workspace_mode_forwards_to_strip(self):
-        import inspect
-        from acquisition.live_tab import LiveTab
-        src = inspect.getsource(LiveTab.set_workspace_mode)
-        assert "_hw_strip" in src
-        assert "set_workspace_mode" in src
 
     def test_apply_styles_forwards_to_strip(self):
         import inspect
@@ -6531,16 +6479,6 @@ class TestHwSummaryStripInAcquireTab:
         from ui.tabs.acquire_tab import AcquireTab
         src = inspect.getsource(AcquireTab.__init__)
         assert "left.addWidget(self._hw_strip)" in src
-
-    def test_set_workspace_mode_exists(self):
-        from ui.tabs.acquire_tab import AcquireTab
-        assert callable(getattr(AcquireTab, "set_workspace_mode", None))
-
-    def test_workspace_mode_forwards_to_strip(self):
-        import inspect
-        from ui.tabs.acquire_tab import AcquireTab
-        src = inspect.getsource(AcquireTab.set_workspace_mode)
-        assert "_hw_strip" in src
 
     def test_apply_styles_forwards_to_strip(self):
         import inspect
@@ -6952,53 +6890,6 @@ class TestRecipeTabVariableToggles:
         assert "_var_toggles" in src
 
 
-class TestRecipeTabWorkspaceMode:
-    """RecipeTab workspace mode gating."""
-
-    def test_set_workspace_mode_exists(self):
-        from acquisition.recipe_tab import RecipeTab
-        assert callable(getattr(RecipeTab, "set_workspace_mode", None))
-
-    def test_workspace_mode_standard_view_only(self):
-        """Standard mode disables editing."""
-        import inspect
-        from acquisition.recipe_tab import RecipeTab
-        src = inspect.getsource(RecipeTab.set_workspace_mode)
-        assert "standard" in src
-        assert "setEnabled" in src
-
-    def test_workspace_mode_expert_shows_toggles(self):
-        """Expert mode shows variable toggles."""
-        import inspect
-        from acquisition.recipe_tab import RecipeTab
-        src = inspect.getsource(RecipeTab.set_workspace_mode)
-        assert "expert" in src
-        assert "_var_toggles" in src
-
-    def test_workspace_mode_hides_lock_in_standard(self):
-        """Standard hides lock/capture buttons."""
-        import inspect
-        from acquisition.recipe_tab import RecipeTab
-        src = inspect.getsource(RecipeTab.set_workspace_mode)
-        assert "_lock_btn" in src
-        assert "_cap_btn" in src
-
-    def test_set_editor_enabled_respects_standard(self):
-        """_set_editor_enabled checks workspace_mode."""
-        import inspect
-        from acquisition.recipe_tab import RecipeTab
-        src = inspect.getsource(RecipeTab._set_editor_enabled)
-        assert "is_standard" in src or "workspace_mode" in src
-
-    def test_wires_workspace_manager(self):
-        """RecipeTab connects to workspace manager on init."""
-        import inspect
-        from acquisition.recipe_tab import RecipeTab
-        src = inspect.getsource(RecipeTab.__init__)
-        assert "get_manager" in src
-        assert "mode_changed" in src
-
-
 class TestRecipeTabPreviewPanel:
     """Run-time preview panel in RecipeTab."""
 
@@ -7114,46 +7005,6 @@ class TestRecipeBuilderConsistency:
 # ================================================================== #
 #  Phase B Step 5 — Experiment Log Beta Tightening                    #
 # ================================================================== #
-
-
-class TestExperimentLogWorkspaceMode:
-    """Experiment Log workspace mode gating."""
-
-    def test_set_workspace_mode_exists(self):
-        from ui.widgets.experiment_log_widget import ExperimentLogWidget
-        assert callable(getattr(ExperimentLogWidget, "set_workspace_mode", None))
-
-    def test_guided_hidden_columns_defined(self):
-        from ui.widgets.experiment_log_widget import _GUIDED_HIDDEN
-        assert isinstance(_GUIDED_HIDDEN, set)
-        assert "source" in _GUIDED_HIDDEN
-        assert "modality" in _GUIDED_HIDDEN
-        assert "device_id" in _GUIDED_HIDDEN
-        assert "project" in _GUIDED_HIDDEN
-        assert "operator" in _GUIDED_HIDDEN
-
-    def test_guided_keeps_essential_columns(self):
-        """Guided mode does NOT hide critical columns."""
-        from ui.widgets.experiment_log_widget import _GUIDED_HIDDEN
-        essential = {"timestamp", "recipe_label", "session_label",
-                     "verdict", "hotspot_count", "roi_peak_k", "duration_s"}
-        assert not (essential & _GUIDED_HIDDEN)
-
-    def test_set_workspace_mode_hides_columns(self):
-        """set_workspace_mode('guided') hides columns in _GUIDED_HIDDEN."""
-        import inspect
-        from ui.widgets.experiment_log_widget import ExperimentLogWidget
-        src = inspect.getsource(ExperimentLogWidget.set_workspace_mode)
-        assert "setColumnHidden" in src
-        assert "_GUIDED_HIDDEN" in src
-
-    def test_wires_workspace_manager(self):
-        """Widget connects to workspace manager on init."""
-        import inspect
-        from ui.widgets.experiment_log_widget import ExperimentLogWidget
-        src = inspect.getsource(ExperimentLogWidget.__init__)
-        assert "get_manager" in src
-        assert "mode_changed" in src
 
 
 class TestExperimentLogAutoRefresh:

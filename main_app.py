@@ -334,7 +334,6 @@ from ui.tabs.modality_section      import ModalitySection
 from ui.tabs.acquisition_settings_section import AcquisitionSettingsSection
 from ui.tabs.signal_check_section  import SignalCheckSection
 from ui.workspace                  import get_manager as _get_ws_manager
-from ui.phase_tracker              import PhaseTracker
 from ui.widgets.bottom_drawer      import BottomDrawer, DrawerToggleBar
 from ui.widgets.connection_health_panel import ConnectionHealthPanel, STATE_CONNECTED, STATE_ERROR
 from ui.widgets.measurement_strip  import MeasurementReadoutStrip
@@ -615,8 +614,6 @@ class MainWindow(QMainWindow):
         self._ai_service = AIService(parent=self)
         self._ai_service.set_metrics(self._metrics)
         self._ai_service.set_diagnostics(self._diagnostic_engine)
-        self._ai_service.set_workspace_mode(
-            config.get_pref("ui.workspace", "standard"))
         self._model_downloader = ModelDownloader(parent=self)
 
         self._ai_panel = AIPanelWidget(llama_installed=llama_available())
@@ -805,8 +802,6 @@ class MainWindow(QMainWindow):
         self._recipe_run.run_requested.connect(self._on_recipe_run_requested)
         self._recipe_run.run_completed.connect(
             self._experiment_log_widget.refresh)
-        self._recipe_run.run_completed.connect(
-            lambda: self._phase_tracker.mark(3, "recipe_run"))
         self._recipe_run.edit_recipe_requested.connect(
             lambda uid: self._nav.select_by_label(NL.LIBRARY))
         self._recipe_run.recipe_selection_changed.connect(
@@ -950,11 +945,6 @@ class MainWindow(QMainWindow):
         self._wire_plugins(NI, _I)
 
         self._nav.finish()
-
-        # Phase tracker (compatibility shim — all methods are no-ops)
-        self._phase_tracker = PhaseTracker(parent=self)
-        self._live_viewed_marked = False
-        self._tec_target_marked = False
 
         # ── Auto-hide unconfigured items ──────────────────────────────────
         _hw_cfg = config.get("hardware", {})
@@ -1206,10 +1196,6 @@ class MainWindow(QMainWindow):
         if hasattr(hw_service, 'bundle_suggested'):
             hw_service.bundle_suggested.connect(self._on_bundle_suggested)
 
-        # Signal check section → phase tracker
-        self._signal_check_section.signal_check_passed.connect(
-            lambda: self._phase_tracker.mark(2, "signal_checked"))
-
         # Camera selection from Connected Devices dropdown
         self._header.connect_camera_selection(self._on_camera_selected)
 
@@ -1280,7 +1266,6 @@ class MainWindow(QMainWindow):
             hw=hw_service, app_state=app_state,
             header=self._header, toasts=self._toasts,
             log_tab=self._log_tab, status=self._status,
-            phase_tracker=self._phase_tracker,
             recipe_store=self._recipe_store,
             profile_mgr=self._profile_mgr,
             camera_tab=self._camera_tab, acquire_tab=self._acquire_tab,
@@ -1303,14 +1288,6 @@ class MainWindow(QMainWindow):
             if hasattr(w, "navigate_requested"):
                 w.navigate_requested.connect(self._nav.select_by_label)
 
-        # Phase 5 tracking: data/export/reporting milestones
-        self._data_tab.status_changed.connect(
-            lambda uid, s: (self._phase_tracker.mark(5, "session_reviewed")
-                            if s == "reviewed" else None))
-        self._data_tab.export_completed.connect(
-            lambda uid: self._phase_tracker.mark(5, "data_exported"))
-        self._data_tab.report_completed.connect(
-            lambda uid: self._phase_tracker.mark(5, "report_generated"))
         self._data_tab.analyze_requested.connect(
             self._on_session_analyze_requested)
         self._data_tab.open_transient_requested.connect(
@@ -1494,9 +1471,6 @@ class MainWindow(QMainWindow):
         """Track which section the user visits for phase completion."""
         # AI context
         self._ai_service.set_active_tab(type(panel).__name__)
-        # Phase 1: visiting Modality with a camera connected → camera_selected
-        if panel is self._modality_section and app_state.cam is not None:
-            self._phase_tracker.mark(1, "camera_selected")
         # Sessions: auto-select latest session if nothing is selected
         if panel is self._data_tab and self._data_tab._selected is None:
             self._data_tab.select_latest()
@@ -1663,11 +1637,6 @@ class MainWindow(QMainWindow):
             f"Frame {frame.frame_index}  |  "
             f"Exp {frame.exposure_us:.0f}μs")
 
-        # Phase tracker: mark live view as visited (one-shot)
-        if not self._live_viewed_marked:
-            self._live_viewed_marked = True
-            self._phase_tracker.mark(2, "live_viewed")
-
         # Feed signal check section
         self._signal_check_section.update_frame(frame)
 
@@ -1707,13 +1676,6 @@ class MainWindow(QMainWindow):
                if ok else f"TEC {index+1} error: {status.error}")
         self._header.set_connected(key, ok, tip)
         self._cam_bar.set_peripheral("tec", ok, tip)
-
-        # Phase tracker: mark temperature_set once a non-zero setpoint is active
-        if ok and not self._tec_target_marked:
-            sp = getattr(status, "target_temp", None)
-            if sp is not None and sp != 0:
-                self._tec_target_marked = True
-                self._phase_tracker.mark(1, "temperature_set")
 
         # Update live BT/dT readout strip from primary TEC (index 0)
         if index == 0 and ok:
@@ -1788,7 +1750,6 @@ class MainWindow(QMainWindow):
 
     def _on_cal_complete(self, result):
         self._cal_tab.update_complete(result)
-        self._phase_tracker.mark(3, "calibrated", result.valid)
         if result.valid:
             self._live_tab.set_calibration(result)
             self._log_tab.append(
@@ -2085,7 +2046,6 @@ class MainWindow(QMainWindow):
 
         app_state.active_camera_type = cam_type
         self._refresh_camera_dependent_ui(cam_type, source="header_dropdown")
-        self._phase_tracker.mark(1, "camera_selected")
 
     def _on_camera_bar_changed(self, cam_type: str) -> None:
         """
@@ -2094,7 +2054,6 @@ class MainWindow(QMainWindow):
         """
         mctx.camera_key = cam_type
         self._refresh_camera_dependent_ui(cam_type, source="camera_bar")
-        self._phase_tracker.mark(1, "camera_selected")
 
     def _on_modality_changed(self, cam_type: str) -> None:
         """Handle camera type change from ModalitySection's combo."""
@@ -2105,8 +2064,6 @@ class MainWindow(QMainWindow):
         except Exception:
             app_state.active_camera_type = cam_type
         self._refresh_camera_dependent_ui(cam_type, source="modality_section")
-        # Mark camera_selected when the user explicitly picks a camera type
-        self._phase_tracker.mark(1, "camera_selected")
 
     def _refresh_all_camera_selectors(self) -> None:
         """
@@ -2284,12 +2241,6 @@ class MainWindow(QMainWindow):
         # Camera connect/disconnect → rebuild all camera selectors (global bar
         # + per-tab combos) so the IR entry appears as soon as the IR driver
         # finishes initialising on its background thread.
-        # Phase tracker: camera hardware is available but not yet "selected"
-        # until the user visits the Modality section (see panel_changed handler).
-        # Stimulus is marked when FPGA connects (less ambiguous).
-        if "fpga" in key:
-            self._phase_tracker.mark(1, "stimulus_configured", ok)
-
         if "camera" in key:
             # Set header entry for this camera so Connected Devices count is correct.
             # Live-frame handler only sets the *active* camera; this ensures
@@ -3441,18 +3392,13 @@ class MainWindow(QMainWindow):
     def _on_af_complete(self, result):
         self._af_tab.update_complete(result)
         self._log_tab.append(result.message)
-        # Phase tracker: mark focused if autofocus succeeded
-        if getattr(result, 'best_z', None) is not None:
-            self._phase_tracker.mark(2, "focused")
 
     def _on_acq_progress(self, p):
         self._acquire_tab.update_progress(p)
         self._log_tab.append(p.message)
 
     def _on_acq_complete(self, r):
-        # Phase tracker: mark captured if result has data
         if getattr(r, 'delta_r_over_r', None) is not None:
-            self._phase_tracker.mark(3, "captured")
             self._toasts.show_success(
                 "Acquisition complete — data saved to Sessions",
                 auto_dismiss_ms=5000)

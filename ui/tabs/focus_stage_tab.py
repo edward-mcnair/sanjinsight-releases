@@ -124,19 +124,6 @@ class FocusStageTab(QWidget, TabAttentionMixin):
             if idx >= 0:
                 self._tabs.setTabVisible(idx, visible)
 
-    # ── Workspace mode ────────────────────────────────────────────────
-
-    def set_workspace_mode(self, mode: str) -> None:
-        is_guided = (mode == "guided")
-        self._guide_card1.setVisible(is_guided)
-        self._guide_card2.setVisible(is_guided)
-        self._workflow_footer.setVisible(is_guided)
-        self._overview_card.setVisible(not is_guided)
-        # Show the scrollable card container when any card is visible
-        any_visible = any(c.isVisible() for c in (
-            self._overview_card, self._guide_card1, self._guide_card2))
-        self._cards_scroll.setVisible(any_visible)
-
     def _update_cards_scroll_visibility(self, _card_id: str = "") -> None:
         any_visible = any(c.isVisible() for c in (
             self._overview_card, self._guide_card1, self._guide_card2))

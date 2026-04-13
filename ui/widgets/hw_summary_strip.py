@@ -13,10 +13,6 @@ Usage
     # Wire to status signals:
     strip.update_timing(status)
     strip.update_bias(status)
-    # Mode gating:
-    strip.set_workspace_mode("standard")   # visible
-    strip.set_workspace_mode("guided")     # hidden
-
 Height: ~28 px.  Read-only -- no controls, no navigation side-effects.
 """
 from __future__ import annotations
@@ -218,15 +214,6 @@ class HwSummaryStrip(QWidget):
                           "warning" if on else "textDim")
         self._apply_color(self._out_val,
                           "success" if on else "textDim")
-
-    def set_workspace_mode(self, mode: str) -> None:
-        """Control visibility based on workspace mode.
-
-        Guided  : hidden (keep the flow clean)
-        Standard: visible
-        Expert  : visible (full panels also accessible)
-        """
-        self.setVisible(mode != "guided")
 
     # ---- styling -------------------------------------------------------------
 

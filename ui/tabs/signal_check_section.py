@@ -754,17 +754,6 @@ class SignalCheckSection(QWidget):
             on_action=self.open_device_manager.emit,
         )
 
-    # ── Workspace mode ────────────────────────────────────────────────
-
-    def set_workspace_mode(self, mode: str) -> None:
-        is_guided = (mode == "guided")
-        self._guide_card1.setVisible(is_guided)
-        self._workflow_footer.setVisible(is_guided)
-        self._overview_card.setVisible(not is_guided)
-        any_visible = any(c.isVisible() for c in (
-            self._overview_card, self._guide_card1))
-        self._cards_scroll.setVisible(any_visible)
-
     def _update_cards_scroll_visibility(self, _card_id: str = "") -> None:
         any_visible = any(c.isVisible() for c in (
             self._overview_card, self._guide_card1))

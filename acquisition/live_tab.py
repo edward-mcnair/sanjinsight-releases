@@ -782,23 +782,6 @@ class LiveTab(QWidget):
         self._canvas.set_cmap(self._saved_cmap)
         self._cmap_combo.currentTextChanged.connect(self._canvas.set_cmap)
 
-    # ── Workspace mode ────────────────────────────────────────────────
-
-    def set_workspace_mode(self, mode: str) -> None:
-        is_guided = (mode == "guided")
-        self._guide_card1.setVisible(is_guided)
-        self._workflow_footer.setVisible(is_guided)
-        self._overview_card.setVisible(not is_guided)
-        any_visible = any(c.isVisible() for c in (
-            self._overview_card, self._guide_card1))
-        self._cards_scroll.setVisible(any_visible)
-        # Merge toggle: hidden in Guided (keep it clean), visible otherwise
-        if hasattr(self, "_view_seg"):
-            self._view_seg.setVisible(not is_guided)
-        # Hardware summary strip: hidden in Guided
-        if hasattr(self, "_hw_strip"):
-            self._hw_strip.set_workspace_mode(mode)
-
     def _update_cards_scroll_visibility(self, _card_id: str = "") -> None:
         any_visible = any(c.isVisible() for c in (
             self._overview_card, self._guide_card1))
