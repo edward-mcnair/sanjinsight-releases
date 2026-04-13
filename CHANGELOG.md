@@ -6,6 +6,28 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.45.0-beta.1] — 2026-04-13
+
+### Added
+- **Detachable pop-out viewers on every image surface** — Every image and visualization now has a ⧉ button in its upper-right corner. Pop-out windows are freely resizable, movable to second monitors, and persist their positions across sessions
+- **Bidirectional sidebar sync** — Clicking a pop-out viewer switches the main app sidebar to the corresponding settings tab; selecting a sidebar item brings matching pop-out windows to the front
+- **Window arrangement persistence** — Full layout (main window geometry, sidebar state, open pop-out viewers with positions) saved on quit and restored on next launch, with user prompt control (Ask / Always / Never)
+- **Session restore viewer rebinding** — Restored pop-out viewers are automatically reconnected to their source tabs so they receive live data during acquisition
+- **DetachableFrame overlay widget** (`ui/widgets/detach_helpers.py`) — Shared infrastructure: DetachableFrame, open_detached_viewer lifecycle helper, global viewer registry, source holder registry, auto-navigate callback
+- **Session state module** (`ui/session_state.py`) — WindowArrangement dataclass, save/restore with geometry persistence, user prompt dialogs
+
+### Changed
+- **DetachedViewer v4** — Added `source_id` for geometry persistence, `activated` signal for focus-based sidebar sync, `changeEvent` override for window activation detection, static snapshot mode
+- **All 15 image surfaces wrapped** — AcquireTab (6 panes), CalibrationTab (3 maps), DataTab (5 panes), ScanTab (2 maps), ComparisonTab (3 panels), SurfacePlotTab (3D canvas), TransientTab, MovieTab, AnalysisTab, CameraTab, AutoScanTab, LivePreviewDock, ScanWorkArea
+- Operator panels, first-run wizard, settings tab, sidebar nav, and display terms updated for recipe-mode workflow
+
+### Fixed
+- **Window activation detection** — Changed `event.WindowActivate` (always False) to `QEvent.WindowActivate` in DetachedViewer.changeEvent
+- **Source ID mismatches** — Corrected transient.view→transient.playback, movie.view→movie.playback, analysis.canvas→analysis.result in navigation map
+- **AI model preflight GPU crash** — Subprocess guard prevents GPU crash on window resize
+
+---
+
 ## [0.44.0-beta.1] — 2026-04-09
 
 ### Added
