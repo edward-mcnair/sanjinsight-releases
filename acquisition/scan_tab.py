@@ -25,6 +25,7 @@ from PyQt5.QtWidgets import (
     QSizePolicy, QCheckBox, QComboBox, QScrollArea, QMessageBox)
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from ui.icons import set_btn_icon
+from ui.widgets.detach_helpers import DetachableFrame, open_detached_viewer
 from PyQt5.QtGui  import (QImage, QPixmap, QPainter, QPen, QColor,
                            QBrush, QFont)
 
@@ -515,15 +516,23 @@ class ScanTab(QWidget):
         self._map_drr = ScanMapView()
         self._map_drr.context_save_image.connect(
             lambda: self._save_map_ctx(self._map_drr))
-        dw.addWidget(self._map_drr)
+        self._map_drr_frame = DetachableFrame(self._map_drr)
+        self._map_drr_frame.detach_requested.connect(
+            lambda: self._on_detach_map("scan.drr", "Scan — ΔR/R Map",
+                                        self._map_drr))
+        dw.addWidget(self._map_drr_frame)
 
         self._map_dt  = ScanMapView()
         self._map_dt.set_title("ΔT (°C)  — requires calibration")
         self._map_dt.context_save_image.connect(
             lambda: self._save_map_ctx(self._map_dt))
+        self._map_dt_frame = DetachableFrame(self._map_dt)
+        self._map_dt_frame.detach_requested.connect(
+            lambda: self._on_detach_map("scan.dt", "Scan — ΔT Map",
+                                        self._map_dt))
 
         result_tabs.addTab(drr_wrapper,  " ΔR/R Map ")
-        result_tabs.addTab(self._map_dt, " ΔT Map ")
+        result_tabs.addTab(self._map_dt_frame, " ΔT Map ")
         lay.addWidget(result_tabs, 1)
 
         # ---- Export buttons ----
@@ -550,6 +559,26 @@ class ScanTab(QWidget):
         self._save_prof_btn.clicked.connect(self._save_as_profile)
 
         return w
+
+    # ---------------------------------------------------------------- #
+    #  Detached viewer helpers                                          #
+    # ---------------------------------------------------------------- #
+
+    def _on_detach_map(self, source_id: str, label: str, map_view) -> None:
+        """Open a detached viewer for a scan map surface."""
+        attr = f"_detached_{source_id.replace('.', '_')}"
+
+        def _push(viewer):
+            pix = map_view.grab()
+            if pix is not None and not pix.isNull():
+                viewer.update_image(pix, label)
+
+        open_detached_viewer(
+            self, attr,
+            source_id=source_id,
+            title=f"Scan — {label}",
+            initial_push=_push,
+            static=True)
 
     # ---------------------------------------------------------------- #
     #  Public API                                                       #
@@ -827,7 +856,7 @@ class ScanTab(QWidget):
         fl = QFormLayout(dlg)
         fl.setSpacing(8)
 
-        name_edit = QLineEdit("My Scan Profile")
+        name_edit = QLineEdit("My Recipe")
         mat_edit  = QLineEdit("")
         cat_cb    = _CB()
         for c in [CATEGORY_SEMICONDUCTOR, CATEGORY_PCB,
@@ -859,7 +888,7 @@ class ScanTab(QWidget):
         try:
             from hardware.app_state import app_state
             app_state._window._profile_tab.save_from_settings(
-                name         = name_edit.text().strip() or "Scan Profile",
+                name         = name_edit.text().strip() or "Recipe",
                 material     = mat_edit.text().strip(),
                 category     = cat_cb.currentText(),
                 ct_value     = ct_spin.value(),

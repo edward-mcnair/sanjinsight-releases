@@ -98,8 +98,12 @@ class CameraTab(QWidget):
         # ── Image preview ─────────────────────────────────────────────
         img_box = QGroupBox("Frame")
         il = QVBoxLayout(img_box)
+
+        from ui.widgets.detach_helpers import DetachableFrame
         self._pane = ImagePane("", 640, 480)
-        il.addWidget(self._pane)
+        self._pane_frame = DetachableFrame(self._pane)
+        self._pane_frame.detach_requested.connect(self._on_detach_viewer)
+        il.addWidget(self._pane_frame)
         top.addWidget(img_box, 3)
 
         # ── Controls ──────────────────────────────────────────────────
@@ -614,6 +618,13 @@ class CameraTab(QWidget):
         d = frame.data
         mode = "auto" if self._bg.checkedId() == 0 else "fixed"
         self._pane.show_array(d, mode=mode)
+
+        # Push to detached viewer if open
+        if self._detached_viewer is not None:
+            pix = self._pane._lbl.pixmap()
+            if pix is not None and not pix.isNull():
+                self._detached_viewer.update_image(pix, "Camera Preview", data=d)
+
         self._stat_min._val.setText(str(int(d.min())))
         self._stat_max._val.setText(str(int(d.max())))
         self._stat_mean._val.setText(f"{d.mean():.1f}")
@@ -1092,3 +1103,22 @@ class CameraTab(QWidget):
         log.info("Auto-gain %s: %.1f dB (SNR %.1f dB, %d steps)",
                  status, gain, result.snr_db, result.iterations)
         self.auto_gain_complete.emit(gain)
+
+    # ── Detached viewer ────────────────────────────────────────────
+
+    _detached_viewer = None
+
+    def _on_detach_viewer(self) -> None:
+        """Open (or bring to front) a detached camera preview viewer."""
+        from ui.widgets.detach_helpers import open_detached_viewer
+
+        def _push(viewer):
+            pix = self._pane._lbl.pixmap()
+            if pix is not None and not pix.isNull():
+                viewer.update_image(pix, "Camera Preview")
+
+        open_detached_viewer(
+            self, "_detached_viewer",
+            source_id="camera.preview",
+            title="Camera — Preview",
+            initial_push=_push)

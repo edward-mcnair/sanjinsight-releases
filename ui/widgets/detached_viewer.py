@@ -1,5 +1,5 @@
 """
-ui/widgets/detached_viewer.py  —  Detachable image viewer window (v3)
+ui/widgets/detached_viewer.py  —  Detachable image viewer window (v4)
 
 A top-level window that displays a synced copy of the current image from
 a source screen (Capture live feed, Movie frame, Transient frame, etc.).
@@ -15,10 +15,17 @@ Features (v3 — light interaction):
   - ROI overlay toggle
   - Cursor readout — pixel coords + data value at mouse position
 
+Features (v4 — app-wide consistency):
+  - ``source_id`` tag for geometry persistence + session restore
+  - Geometry saved to config prefs on close / move / resize
+  - Geometry restored on open if a previous position exists
+  - Static mode (snapshot badge, "← Source" cmap hidden)
+  - ``update_context()`` for info-bar updates without a new image
+
 Design: display-focused tool.  No acquisition controls, no editing.
 
 Usage:
-    viewer = DetachedViewer("Live Feed")
+    viewer = DetachedViewer("Live Feed", source_id="capture.live")
     viewer.show()
     # Source pushes updates (with optional raw data for cursor readout):
     viewer.update_image(pixmap, "Basler acA1920 · 1920×1080 · Live",
@@ -35,7 +42,7 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
     QCheckBox, QSizePolicy,
 )
-from PyQt5.QtCore import Qt, pyqtSignal, QPoint
+from PyQt5.QtCore import Qt, pyqtSignal, QPoint, QEvent
 from PyQt5.QtGui import (
     QPixmap, QPainter, QColor, QKeyEvent, QMouseEvent,
     QPen, QImage,
@@ -173,7 +180,7 @@ class _ViewerCanvas(QWidget):
 # ── DetachedViewer ───────────────────────────────────────────────────
 
 class DetachedViewer(QWidget):
-    """Detached image viewer window with light interaction (v3).
+    """Detached image viewer window with light interaction (v4).
 
     Signals
     -------
@@ -181,12 +188,15 @@ class DetachedViewer(QWidget):
         Emitted when the viewer window is closed.
     """
 
-    closed = pyqtSignal()
+    closed    = pyqtSignal()
+    activated = pyqtSignal()   # emitted when the window gains focus
 
     def __init__(self, title: str = "Viewer",
-                 parent: QWidget | None = None) -> None:
+                 parent: QWidget | None = None, *,
+                 source_id: str = "") -> None:
         # Top-level window — no parent ownership (freely movable)
         super().__init__(None, Qt.Window)
+        self._source_id = source_id
         self.setWindowTitle(f"SanjINSIGHT \u2014 {title}")
         self.setMinimumSize(640, 480)
         self.resize(960, 720)
@@ -196,6 +206,10 @@ class DetachedViewer(QWidget):
         self._local_cmap: str = ""       # user-selected colormap (empty = follow source)
         self._data: np.ndarray | None = None
         self._source_pixmap: QPixmap | None = None
+        self._static_mode: bool = False
+
+        # Restore geometry from prefs if we have a source_id
+        self._restore_geometry()
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -324,6 +338,77 @@ class DetachedViewer(QWidget):
         if info:
             self._info.setText(info)
 
+    # ── Source ID / static mode ──────────────────────────────────
+
+    @property
+    def source_id(self) -> str:
+        return self._source_id
+
+    def set_static_mode(self, static: bool) -> None:
+        """Enable/disable static (snapshot) mode.
+
+        In static mode the "← Source" colormap option is hidden and
+        a "Snapshot" badge appears in the info bar.
+        """
+        self._static_mode = static
+        if static:
+            # Hide "← Source" sentinel (index 0)
+            if self._cmap_combo.count() > 0 and \
+                    self._cmap_combo.itemText(0).startswith("\u2190"):
+                self._cmap_combo.removeItem(0)
+            if not self._info.text():
+                self._info.setText("Snapshot")
+        else:
+            # Re-insert "← Source" if missing
+            if self._cmap_combo.count() == 0 or \
+                    not self._cmap_combo.itemText(0).startswith("\u2190"):
+                self._cmap_combo.insertItem(0, "\u2190 Source")
+                self._cmap_combo.setCurrentIndex(0)
+
+    def update_context(self, info: str) -> None:
+        """Update the bottom info-bar text without pushing a new image."""
+        self._info.setText(info)
+
+    # ── Geometry persistence ─────────────────────────────────────
+
+    def _restore_geometry(self) -> None:
+        """Restore window position/size from user prefs."""
+        if not self._source_id:
+            return
+        try:
+            import config as _cfg
+            from PyQt5.QtCore import QByteArray
+            geo = _cfg.get_pref(f"ui.detach.{self._source_id}.geometry", "")
+            if geo:
+                self.restoreGeometry(QByteArray.fromHex(geo.encode()))
+        except Exception:
+            pass
+
+    def _save_geometry(self) -> None:
+        """Persist window position/size to user prefs."""
+        if not self._source_id:
+            return
+        try:
+            import config as _cfg
+            _cfg.set_pref(
+                f"ui.detach.{self._source_id}.geometry",
+                self.saveGeometry().toHex().data().decode())
+        except Exception:
+            pass
+
+    def changeEvent(self, event) -> None:
+        super().changeEvent(event)
+        if event.type() == QEvent.WindowActivate:
+            self.activated.emit()
+
+    def moveEvent(self, event) -> None:
+        super().moveEvent(event)
+        self._save_geometry()
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._save_geometry()
+
     # ── Colormap ──────────────────────────────────────────────────
 
     def _on_cmap_changed(self, idx: int) -> None:
@@ -395,6 +480,7 @@ class DetachedViewer(QWidget):
     # ── Lifecycle ─────────────────────────────────────────────────
 
     def closeEvent(self, event) -> None:
+        self._save_geometry()
         self.closed.emit()
         super().closeEvent(event)
 

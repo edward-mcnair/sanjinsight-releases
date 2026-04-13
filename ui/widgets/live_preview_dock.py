@@ -32,6 +32,7 @@ from PyQt5.QtCore import Qt, QPoint
 from PyQt5.QtGui import QImage, QPixmap, QPainter, QPen, QColor
 
 from ui.theme import FONT, PALETTE, scaled_qss, MONO_FONT
+from ui.widgets.detach_helpers import DetachableFrame, open_detached_viewer
 from ui.font_utils import mono_font
 
 log = logging.getLogger(__name__)
@@ -227,7 +228,9 @@ class LivePreviewDock(QDockWidget):
 
         # Canvas
         self._canvas = _PreviewCanvas()
-        root.addWidget(self._canvas, stretch=1)
+        self._canvas_frame = DetachableFrame(self._canvas)
+        self._canvas_frame.detach_requested.connect(self._on_detach_preview)
+        root.addWidget(self._canvas_frame, stretch=1)
 
         self.setWidget(container)
         self.setMinimumSize(250, 200)
@@ -249,6 +252,21 @@ class LivePreviewDock(QDockWidget):
         mode_map = {"Native": "native", "Grayscale": "grayscale",
                     "False Color": "falsecolor"}
         self._canvas.set_view_mode(mode_map.get(text, "native"))
+
+    _detached_preview = None
+
+    def _on_detach_preview(self) -> None:
+        """Open a detached viewer for the live camera preview."""
+        def _push(viewer):
+            pix = self._canvas.grab()
+            if pix is not None and not pix.isNull():
+                viewer.update_image(pix, "Live Preview")
+
+        open_detached_viewer(
+            self, "_detached_preview",
+            source_id="live_preview.camera",
+            title="Live Preview",
+            initial_push=_push)
 
     def _apply_styles(self):
         self._canvas._apply_styles()

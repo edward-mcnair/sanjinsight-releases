@@ -76,9 +76,12 @@ class AcquireTab(QWidget):
         live_box = QGroupBox("Live Feed")
         ll = QVBoxLayout(live_box)
         self._live = ImagePane("", 500, 375, expanding=True)
-        ll.addWidget(self._live)
+        from ui.widgets.detach_helpers import DetachableFrame
+        self._live_frame = DetachableFrame(self._live)
+        self._live_frame.detach_requested.connect(self._on_detach_viewer)
+        ll.addWidget(self._live_frame)
 
-        # Camera context strip (identity + modality confirmation + detach)
+        # Camera context strip (identity + modality confirmation)
         ctx_row = QHBoxLayout()
         ctx_row.setContentsMargins(0, 0, 0, 0)
         ctx_row.setSpacing(8)
@@ -95,17 +98,6 @@ class AcquireTab(QWidget):
         self._mode_badge.setFixedHeight(20)
         self._mode_badge.setVisible(False)
         ctx_row.addWidget(self._mode_badge)
-
-        # Detach button — open large viewer window
-        self._detach_btn = QPushButton()
-        set_btn_icon(self._detach_btn, "mdi.open-in-new", PALETTE['textDim'])
-        self._detach_btn.setFixedSize(24, 24)
-        self._detach_btn.setToolTip(
-            "Open a detached large viewer window.\n"
-            "Can be moved to a second monitor or made full-screen (F11).")
-        self._detach_btn.setFlat(True)
-        self._detach_btn.clicked.connect(self._on_detach_viewer)
-        ctx_row.addWidget(self._detach_btn)
 
         ll.addLayout(ctx_row)
         left.addWidget(live_box)
@@ -266,7 +258,7 @@ class AcquireTab(QWidget):
         self._progress.setStyleSheet(progress_bar_qss())
         cl.addWidget(self._progress, 5, 0, 1, 2)
 
-        # Scan Profile quick-access row
+        # Recipe quick-access row
         from PyQt5.QtWidgets import QFrame as _QFrame
         from ui.display_terms import TERMS
         recipe_row = QHBoxLayout()
@@ -362,16 +354,35 @@ class AcquireTab(QWidget):
         res_box = QGroupBox("Results")
         rl = QGridLayout(res_box)
         rl.setSpacing(6)
+
         self._cold_pane = ImagePane("COLD  (baseline)", 310, 230)
         self._hot_pane  = ImagePane("HOT  (stimulus)",  310, 230)
         self._diff_pane = ImagePane("DIFFERENCE  hot − cold", 310, 230)
         self._drr_pane  = ImagePane("ΔR/R  thermoreflectance", 310, 230)
         self._dt_pane   = ImagePane("ΔT  temperature change  (°C)", 310, 230)
-        rl.addWidget(self._cold_pane, 0, 0)
-        rl.addWidget(self._hot_pane,  0, 1)
-        rl.addWidget(self._diff_pane, 1, 0)
-        rl.addWidget(self._drr_pane,  1, 1)
-        rl.addWidget(self._dt_pane,   2, 0, 1, 2)
+
+        # Wrap each result pane in DetachableFrame (⧉ upper-right)
+        self._result_frames = {}
+        _res_panes = [
+            ("capture.cold", "Cold", self._cold_pane, 0, 0),
+            ("capture.hot",  "Hot",  self._hot_pane,  0, 1),
+            ("capture.diff", "Difference", self._diff_pane, 1, 0),
+            ("capture.drr",  "ΔR/R", self._drr_pane, 1, 1),
+        ]
+        for sid, label, pane, row, col in _res_panes:
+            frame = DetachableFrame(pane)
+            frame.detach_requested.connect(
+                lambda _s=sid, _l=label, _p=pane:
+                    self._on_detach_result_pane(_s, _l, _p))
+            self._result_frames[sid] = frame
+            rl.addWidget(frame, row, col)
+
+        dt_frame = DetachableFrame(self._dt_pane)
+        dt_frame.detach_requested.connect(
+            lambda: self._on_detach_result_pane(
+                "capture.dt", "ΔT", self._dt_pane))
+        self._result_frames["capture.dt"] = dt_frame
+        rl.addWidget(dt_frame, 2, 0, 1, 2)
         right.addWidget(res_box)
 
         bot = QHBoxLayout()
@@ -520,29 +531,63 @@ class AcquireTab(QWidget):
                 self._detached_viewer.update_image(
                     pix, info, data=frame.data)
 
-    # ── Detached viewer ─────────────────────────────────────────────
+    # ── Detached viewers ────────────────────────────────────────────
 
     _detached_viewer = None
 
     def _on_detach_viewer(self) -> None:
-        """Open (or bring to front) a detached large viewer window."""
-        if self._detached_viewer is not None:
-            self._detached_viewer.raise_()
-            self._detached_viewer.activateWindow()
-            return
-        from ui.widgets.detached_viewer import DetachedViewer
-        self._detached_viewer = DetachedViewer("Capture — Live Feed")
-        self._detached_viewer.closed.connect(self._on_viewer_closed)
-        self._detached_viewer.show()
+        """Open (or bring to front) a detached live-feed viewer."""
+        from ui.widgets.detach_helpers import open_detached_viewer
 
-        # Push current frame immediately if available
-        pix = self._live._lbl.pixmap()
-        if pix is not None and not pix.isNull():
-            self._detached_viewer.update_image(pix, "")
+        def _push(viewer):
+            pix = self._live._lbl.pixmap()
+            if pix is not None and not pix.isNull():
+                viewer.update_image(pix, "")
 
-    def _on_viewer_closed(self) -> None:
-        """Clean up reference when the detached viewer is closed."""
-        self._detached_viewer = None
+        open_detached_viewer(
+            self, "_detached_viewer",
+            source_id="capture.live",
+            title="Capture — Live Feed",
+            initial_push=_push)
+
+    def _on_detach_result_pane(self, source_id: str, label: str,
+                                pane) -> None:
+        """Open a detached viewer for one result pane (Cold/Hot/Diff/ΔR/R/ΔT)."""
+        from ui.widgets.detach_helpers import open_detached_viewer
+        attr = f"_detached_{source_id.replace('.', '_')}"
+
+        def _push(viewer):
+            pix = pane._lbl.pixmap()
+            if pix is not None and not pix.isNull():
+                viewer.update_image(pix, label)
+
+        open_detached_viewer(
+            self, attr,
+            source_id=source_id,
+            title=f"Capture — {label}",
+            initial_push=_push,
+            static=True)
+
+    def _push_results_to_detached(self) -> None:
+        """Push current data to any open result detached viewers."""
+        r = getattr(self, "_result", None)
+        _map = {
+            "capture.cold": (self._cold_pane, "Cold", getattr(r, "cold_avg", None)),
+            "capture.hot":  (self._hot_pane,  "Hot",  getattr(r, "hot_avg", None)),
+            "capture.diff": (self._diff_pane, "Difference", getattr(r, "difference", None)),
+            "capture.drr":  (self._drr_pane,  "ΔR/R", getattr(r, "delta_r_over_r", None)),
+            "capture.dt":   (self._dt_pane,   "ΔT",   getattr(r, "delta_t", None)),
+        }
+        for sid, (pane, label, data) in _map.items():
+            viewer = getattr(self, f"_detached_{sid.replace('.', '_')}", None)
+            if viewer is None:
+                continue
+            try:
+                pix = pane._lbl.pixmap()
+                if pix is not None and not pix.isNull():
+                    viewer.update_image(pix, label, data=data)
+            except Exception:
+                pass
 
     def update_progress(self, p: AcquisitionProgress):
         self.log(p.message)
@@ -616,6 +661,8 @@ class AcquireTab(QWidget):
         if result.snr_db is not None:
             self._snr_lbl.setText(f"SNR  {result.snr_db:.1f} dB")
         self._export_btn.setEnabled(True)
+        # Push to detached result viewer if open
+        self._push_results_to_detached()
 
     def log(self, msg):
         ts = time.strftime("%H:%M:%S")

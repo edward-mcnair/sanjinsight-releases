@@ -4405,7 +4405,7 @@ class TestMovieViewerFirstLayout:
         import inspect
         from acquisition.movie_tab import MovieTab
         src = inspect.getsource(MovieTab._build_right)
-        assert "addWidget(self._compositor, 3)" in src
+        assert "addWidget(self._compositor_frame, 3)" in src
 
     def test_chart_stretch_secondary(self):
         """Chart gets stretch=1 (secondary to viewer)."""
@@ -4485,7 +4485,7 @@ class TestTransientViewerFirstLayout:
         import inspect
         from acquisition.transient_tab import TransientTab
         src = inspect.getsource(TransientTab._build_right)
-        assert "addWidget(self._compositor, 3)" in src
+        assert "addWidget(self._compositor_frame, 3)" in src
 
     def test_chart_stretch_secondary(self):
         """Chart gets stretch=1 (secondary to viewer)."""
@@ -4631,29 +4631,29 @@ class TestDetachedViewer:
 
 
 class TestCaptureDetachIntegration:
-    """Capture (AcquireTab) integrates with DetachedViewer."""
+    """Capture (AcquireTab) integrates with DetachedViewer (v4 helper pattern)."""
 
-    def test_detach_button_exists(self):
-        """AcquireTab has a detach button."""
+    def test_detach_frame_exists(self):
+        """AcquireTab wraps live feed in DetachableFrame."""
         import inspect
         from ui.tabs.acquire_tab import AcquireTab
         src = inspect.getsource(AcquireTab.__init__)
-        assert "_detach_btn" in src
+        assert "_live_frame" in src
 
-    def test_detach_button_icon(self):
-        """Detach button uses mdi.open-in-new icon."""
+    def test_detachable_frame_wraps_live(self):
+        """Live feed uses DetachableFrame overlay."""
         import inspect
         from ui.tabs.acquire_tab import AcquireTab
         src = inspect.getsource(AcquireTab.__init__)
-        assert "mdi.open-in-new" in src
+        assert "DetachableFrame" in src
 
-    def test_detach_handler(self):
-        """_on_detach_viewer creates a DetachedViewer."""
+    def test_detach_handler_uses_helper(self):
+        """_on_detach_viewer uses open_detached_viewer."""
         import inspect
         from ui.tabs.acquire_tab import AcquireTab
         src = inspect.getsource(AcquireTab._on_detach_viewer)
-        assert "DetachedViewer" in src
-        assert "_detached_viewer" in src
+        assert "open_detached_viewer" in src
+        assert "capture.live" in src
 
     def test_update_live_pushes_to_viewer(self):
         """update_live pushes pixmap to detached viewer if open."""
@@ -4663,22 +4663,21 @@ class TestCaptureDetachIntegration:
         assert "_detached_viewer" in src
         assert "update_image" in src
 
-    def test_viewer_closed_cleanup(self):
-        """_on_viewer_closed nulls the viewer reference."""
-        import inspect
-        from ui.tabs.acquire_tab import AcquireTab
-        src = inspect.getsource(AcquireTab._on_viewer_closed)
-        assert "_detached_viewer = None" in src
-
-    def test_detach_button_in_context_strip(self):
-        """Detach button is in the camera context strip row."""
+    def test_result_frames_exist(self):
+        """AcquireTab wraps result panes in DetachableFrame."""
         import inspect
         from ui.tabs.acquire_tab import AcquireTab
         src = inspect.getsource(AcquireTab.__init__)
-        # _detach_btn is added to ctx_row
-        detach_pos = src.index("_detach_btn")
+        assert "_result_frames" in src
+
+    def test_live_frame_before_context_strip(self):
+        """Live DetachableFrame is built before the context strip."""
+        import inspect
+        from ui.tabs.acquire_tab import AcquireTab
+        src = inspect.getsource(AcquireTab.__init__)
+        frame_pos = src.index("_live_frame")
         ctx_row_pos = src.index("ctx_row")
-        assert detach_pos > ctx_row_pos
+        assert frame_pos < ctx_row_pos
 
 
 # ================================================================== #
@@ -5392,14 +5391,15 @@ class TestExperimentLogWidgetStructure:
         assert len(_COLUMNS) == 12
 
     def test_has_source_filter(self):
-        """Widget has a source filter combo (All/Scan Profile/Manual)."""
+        """Widget has a source filter combo (All/Recipe/Manual)."""
         import inspect
         from ui.widgets.experiment_log_widget import ExperimentLogWidget
         src = inspect.getsource(ExperimentLogWidget._build_ui)
         assert "_source_filter" in src
         assert '"All"' in src
-        assert '"Scan Profile"' in src
-        assert '"Manual"' in src
+        # Source filter uses TERMS for recipe and manual labels
+        assert "TERMS" in src
+        assert "source_recipe" in src
 
     def test_has_verdict_filter(self):
         """Widget has a verdict filter combo (All/Pass/Warning/Fail)."""
@@ -5851,14 +5851,14 @@ class TestPhase1Integration:
         ms_pos = src.index('"Measurement Setup"')
         assert ms_pos > config_pos  # inside the CONFIGURATION section
 
-    def test_sidebar_order_workflow_before_system(self):
-        """WORKFLOW section appears before SYSTEM in sidebar."""
+    def test_sidebar_order_operate_before_system(self):
+        """OPERATE section appears before SYSTEM in sidebar."""
         import inspect
         from main_app import MainWindow
         src = inspect.getsource(MainWindow._build_ui)
-        wf_pos = src.index('"WORKFLOW"')
+        op_pos = src.index('"OPERATE"')
         sys_pos = src.index('"SYSTEM"')
-        assert wf_pos < sys_pos
+        assert op_pos < sys_pos
 
 
 # ╔══════════════════════════════════════════════════════════════════╗
@@ -5866,38 +5866,27 @@ class TestPhase1Integration:
 # ╚══════════════════════════════════════════════════════════════════╝
 
 class TestDetachedViewerV2MovieTab:
-    """Verify Movie tab has detached viewer plumbing."""
+    """Verify Movie tab has detached viewer plumbing (v4 DetachableFrame)."""
 
     def _src(self):
         import inspect
         from acquisition.movie_tab import MovieTab
         return inspect.getsource(MovieTab)
 
-    # ── Button exists ──────────────────────────────────────────
-    def test_detach_button_created(self):
+    # ── DetachableFrame wraps compositor ───────────────────────
+    def test_detachable_frame_created(self):
         src = self._src()
-        assert "_detach_btn" in src
+        assert "DetachableFrame" in src
 
-    def test_detach_button_icon(self):
+    def test_detachable_frame_connected(self):
         src = self._src()
-        assert "mdi.open-in-new" in src
-
-    def test_detach_button_tooltip(self):
-        src = self._src()
-        assert "detached large viewer" in src.lower()
-
-    def test_detach_button_connected(self):
-        src = self._src()
-        assert "_detach_btn.clicked.connect(self._on_detach_viewer)" in src
+        assert "detach_requested" in src
+        assert "_on_detach_viewer" in src
 
     # ── Methods exist ──────────────────────────────────────────
     def test_on_detach_viewer_method(self):
         from acquisition.movie_tab import MovieTab
         assert callable(getattr(MovieTab, "_on_detach_viewer", None))
-
-    def test_on_viewer_closed_method(self):
-        from acquisition.movie_tab import MovieTab
-        assert callable(getattr(MovieTab, "_on_viewer_closed", None))
 
     def test_push_to_detached_method(self):
         from acquisition.movie_tab import MovieTab
@@ -5908,10 +5897,10 @@ class TestDetachedViewerV2MovieTab:
         from acquisition.movie_tab import MovieTab
         assert MovieTab._detached_viewer is None
 
-    # ── DetachedViewer import ──────────────────────────────────
-    def test_lazy_import_detached_viewer(self):
+    # ── Uses open_detached_viewer helper ───────────────────────
+    def test_uses_open_detached_viewer_helper(self):
         src = self._src()
-        assert "from ui.widgets.detached_viewer import DetachedViewer" in src
+        assert "open_detached_viewer" in src
 
     # ── Push call in _show_frame ───────────────────────────────
     def test_push_called_in_show_frame(self):
@@ -5920,17 +5909,10 @@ class TestDetachedViewerV2MovieTab:
         src = inspect.getsource(MovieTab._show_frame)
         assert "_push_to_detached" in src
 
-    # ── Title ──────────────────────────────────────────────────
-    def test_viewer_title_contains_movie(self):
+    # ── Source ID ──────────────────────────────────────────────
+    def test_source_id_contains_movie(self):
         src = self._src()
-        assert 'DetachedViewer("Movie' in src
-
-    # ── _on_viewer_closed resets to None ───────────────────────
-    def test_viewer_closed_resets(self):
-        import inspect
-        from acquisition.movie_tab import MovieTab
-        src = inspect.getsource(MovieTab._on_viewer_closed)
-        assert "_detached_viewer = None" in src
+        assert "movie.playback" in src
 
     # ── Push uses compositor.grab() ────────────────────────────
     def test_push_uses_compositor_grab(self):
@@ -5948,32 +5930,25 @@ class TestDetachedViewerV2MovieTab:
 
 
 class TestDetachedViewerV2TransientTab:
-    """Verify Transient tab has detached viewer plumbing."""
+    """Verify Transient tab has detached viewer plumbing (v4 DetachableFrame)."""
 
     def _src(self):
         import inspect
         from acquisition.transient_tab import TransientTab
         return inspect.getsource(TransientTab)
 
-    def test_detach_button_created(self):
+    def test_detachable_frame_created(self):
         src = self._src()
-        assert "_detach_btn" in src
+        assert "DetachableFrame" in src
 
-    def test_detach_button_icon(self):
+    def test_detachable_frame_connected(self):
         src = self._src()
-        assert "mdi.open-in-new" in src
-
-    def test_detach_button_connected(self):
-        src = self._src()
-        assert "_detach_btn.clicked.connect(self._on_detach_viewer)" in src
+        assert "detach_requested" in src
+        assert "_on_detach_viewer" in src
 
     def test_on_detach_viewer_method(self):
         from acquisition.transient_tab import TransientTab
         assert callable(getattr(TransientTab, "_on_detach_viewer", None))
-
-    def test_on_viewer_closed_method(self):
-        from acquisition.transient_tab import TransientTab
-        assert callable(getattr(TransientTab, "_on_viewer_closed", None))
 
     def test_push_to_detached_method(self):
         from acquisition.transient_tab import TransientTab
@@ -5983,9 +5958,9 @@ class TestDetachedViewerV2TransientTab:
         from acquisition.transient_tab import TransientTab
         assert TransientTab._detached_viewer is None
 
-    def test_lazy_import_detached_viewer(self):
+    def test_uses_open_detached_viewer_helper(self):
         src = self._src()
-        assert "from ui.widgets.detached_viewer import DetachedViewer" in src
+        assert "open_detached_viewer" in src
 
     def test_push_called_in_show_frame(self):
         import inspect
@@ -5993,15 +5968,9 @@ class TestDetachedViewerV2TransientTab:
         src = inspect.getsource(TransientTab._show_frame)
         assert "_push_to_detached" in src
 
-    def test_viewer_title_contains_transient(self):
+    def test_source_id_contains_transient(self):
         src = self._src()
-        assert 'DetachedViewer("Transient' in src
-
-    def test_viewer_closed_resets(self):
-        import inspect
-        from acquisition.transient_tab import TransientTab
-        src = inspect.getsource(TransientTab._on_viewer_closed)
-        assert "_detached_viewer = None" in src
+        assert "transient.playback" in src
 
     def test_push_uses_compositor_grab(self):
         import inspect
@@ -6017,32 +5986,25 @@ class TestDetachedViewerV2TransientTab:
 
 
 class TestDetachedViewerV2AnalysisTab:
-    """Verify Analysis tab has detached viewer plumbing."""
+    """Verify Analysis tab has detached viewer plumbing (v4 DetachableFrame)."""
 
     def _src(self):
         import inspect
         from acquisition.analysis_tab import AnalysisTab
         return inspect.getsource(AnalysisTab)
 
-    def test_detach_button_created(self):
+    def test_detachable_frame_created(self):
         src = self._src()
-        assert "_detach_btn" in src
+        assert "DetachableFrame" in src
 
-    def test_detach_button_icon(self):
+    def test_detachable_frame_connected(self):
         src = self._src()
-        assert "mdi.open-in-new" in src
-
-    def test_detach_button_connected(self):
-        src = self._src()
-        assert "_detach_btn.clicked.connect(self._on_detach_viewer)" in src
+        assert "detach_requested" in src
+        assert "_on_detach_viewer" in src
 
     def test_on_detach_viewer_method(self):
         from acquisition.analysis_tab import AnalysisTab
         assert callable(getattr(AnalysisTab, "_on_detach_viewer", None))
-
-    def test_on_viewer_closed_method(self):
-        from acquisition.analysis_tab import AnalysisTab
-        assert callable(getattr(AnalysisTab, "_on_viewer_closed", None))
 
     def test_push_to_detached_method(self):
         from acquisition.analysis_tab import AnalysisTab
@@ -6052,9 +6014,9 @@ class TestDetachedViewerV2AnalysisTab:
         from acquisition.analysis_tab import AnalysisTab
         assert AnalysisTab._detached_viewer is None
 
-    def test_lazy_import_detached_viewer(self):
+    def test_uses_open_detached_viewer_helper(self):
         src = self._src()
-        assert "from ui.widgets.detached_viewer import DetachedViewer" in src
+        assert "open_detached_viewer" in src
 
     def test_push_called_in_run(self):
         """Push is called after _canvas.update_result in _run."""
@@ -6063,15 +6025,9 @@ class TestDetachedViewerV2AnalysisTab:
         src = inspect.getsource(AnalysisTab._run)
         assert "_push_to_detached" in src
 
-    def test_viewer_title_contains_analysis(self):
+    def test_source_id_contains_analysis(self):
         src = self._src()
-        assert 'DetachedViewer("Analysis' in src
-
-    def test_viewer_closed_resets(self):
-        import inspect
-        from acquisition.analysis_tab import AnalysisTab
-        src = inspect.getsource(AnalysisTab._on_viewer_closed)
-        assert "_detached_viewer = None" in src
+        assert "analysis.result" in src
 
     def test_push_uses_canvas_grab(self):
         """Analysis uses _canvas.grab() (not _compositor)."""
@@ -6095,23 +6051,24 @@ class TestDetachedViewerV2AnalysisTab:
         params = [p for p in sig.parameters if p != "self"]
         assert len(params) == 0
 
-    def test_detach_button_in_toolbar(self):
-        """Detach button is built inside _build_toolbar."""
+    def test_detachable_frame_in_canvas_build(self):
+        """DetachableFrame wraps the canvas."""
         import inspect
         from acquisition.analysis_tab import AnalysisTab
-        src = inspect.getsource(AnalysisTab._build_toolbar)
-        assert "_detach_btn" in src
+        src = inspect.getsource(AnalysisTab._build_canvas)
+        assert "DetachableFrame" in src
 
 
 class TestDetachedViewerV2Consistency:
-    """Cross-tab consistency checks for Detached Viewer v2."""
+    """Cross-tab consistency checks for Detached Viewer v4 (unified helpers)."""
 
-    def test_all_three_tabs_have_detach(self):
-        """Movie, Transient, and Analysis all expose _on_detach_viewer."""
+    def test_all_tabs_have_detach(self):
+        """All image-bearing tabs expose _on_detach_viewer."""
         from acquisition.movie_tab import MovieTab
         from acquisition.transient_tab import TransientTab
         from acquisition.analysis_tab import AnalysisTab
-        for cls in (MovieTab, TransientTab, AnalysisTab):
+        from ui.tabs.acquire_tab import AcquireTab
+        for cls in (MovieTab, TransientTab, AnalysisTab, AcquireTab):
             assert callable(getattr(cls, "_on_detach_viewer", None)), \
                 f"{cls.__name__} missing _on_detach_viewer"
 
@@ -6123,30 +6080,143 @@ class TestDetachedViewerV2Consistency:
             assert callable(getattr(cls, "_push_to_detached", None)), \
                 f"{cls.__name__} missing _push_to_detached"
 
-    def test_all_three_have_closed(self):
-        from acquisition.movie_tab import MovieTab
-        from acquisition.transient_tab import TransientTab
-        from acquisition.analysis_tab import AnalysisTab
-        for cls in (MovieTab, TransientTab, AnalysisTab):
-            assert callable(getattr(cls, "_on_viewer_closed", None)), \
-                f"{cls.__name__} missing _on_viewer_closed"
-
-    def test_all_use_same_icon(self):
-        """All three tabs use the same icon for the detach button."""
+    def test_all_use_helper_pattern(self):
+        """All tabs use the centralized open_detached_viewer helper."""
         import inspect
         from acquisition.movie_tab import MovieTab
         from acquisition.transient_tab import TransientTab
         from acquisition.analysis_tab import AnalysisTab
-        for cls in (MovieTab, TransientTab, AnalysisTab):
+        from acquisition.scan_tab import ScanTab
+        from acquisition.comparison_tab import ComparisonTab
+        from acquisition.surface_plot_tab import SurfacePlotTab
+        from ui.tabs.acquire_tab import AcquireTab
+        for cls in (MovieTab, TransientTab, AnalysisTab, AcquireTab,
+                    ScanTab, ComparisonTab, SurfacePlotTab):
             src = inspect.getsource(cls)
-            count = src.count("mdi.open-in-new")
-            assert count >= 1, f"{cls.__name__} missing mdi.open-in-new"
+            assert "open_detached_viewer" in src, \
+                f"{cls.__name__} not using open_detached_viewer helper"
+
+    def test_all_use_detachable_frame(self):
+        """All tabs use DetachableFrame for image pop-out."""
+        import inspect
+        from acquisition.movie_tab import MovieTab
+        from acquisition.transient_tab import TransientTab
+        from acquisition.analysis_tab import AnalysisTab
+        from acquisition.scan_tab import ScanTab
+        from acquisition.comparison_tab import ComparisonTab
+        from acquisition.surface_plot_tab import SurfacePlotTab
+        from ui.tabs.acquire_tab import AcquireTab
+        for cls in (MovieTab, TransientTab, AnalysisTab, AcquireTab,
+                    ScanTab, ComparisonTab, SurfacePlotTab):
+            src = inspect.getsource(cls)
+            assert "DetachableFrame" in src, \
+                f"{cls.__name__} not using DetachableFrame"
 
     def test_acquire_tab_also_has_detach(self):
-        """Verify existing AcquireTab still has detached viewer (v1)."""
+        """Verify AcquireTab still has detached viewer."""
         from ui.tabs.acquire_tab import AcquireTab
         assert callable(getattr(AcquireTab, "_on_detach_viewer", None))
         assert AcquireTab._detached_viewer is None
+
+    def test_detach_helpers_module_exists(self):
+        """The shared detach_helpers module is importable."""
+        from ui.widgets.detach_helpers import (
+            make_detach_button, open_detached_viewer,
+            close_all_detached, list_open_viewers)
+        assert callable(make_detach_button)
+        assert callable(open_detached_viewer)
+        assert callable(close_all_detached)
+        assert callable(list_open_viewers)
+
+    def test_detached_viewer_has_source_id(self):
+        """DetachedViewer constructor accepts source_id."""
+        import inspect
+        from ui.widgets.detached_viewer import DetachedViewer
+        sig = inspect.signature(DetachedViewer.__init__)
+        assert "source_id" in sig.parameters
+
+    def test_scan_tab_has_detachable_frame(self):
+        """ScanTab wraps ScanMapView in DetachableFrame."""
+        import inspect
+        from acquisition.scan_tab import ScanTab
+        src = inspect.getsource(ScanTab)
+        assert "DetachableFrame" in src
+        assert "_map_drr_frame" in src
+        assert "_map_dt_frame" in src
+
+    def test_comparison_tab_has_detachable_frame(self):
+        """ComparisonTab wraps _MapPanel in DetachableFrame."""
+        import inspect
+        from acquisition.comparison_tab import ComparisonTab
+        src = inspect.getsource(ComparisonTab)
+        assert "DetachableFrame" in src
+        assert "_panel_a_frame" in src
+        assert "_panel_b_frame" in src
+        assert "_panel_diff_frame" in src
+
+    def test_surface_plot_tab_has_detachable_frame(self):
+        """SurfacePlotTab wraps FigureCanvas in DetachableFrame."""
+        import inspect
+        from acquisition.surface_plot_tab import SurfacePlotTab
+        src = inspect.getsource(SurfacePlotTab)
+        assert "DetachableFrame" in src
+        assert "_canvas_frame" in src
+
+    def test_live_preview_dock_has_detachable_frame(self):
+        """LivePreviewDock wraps _PreviewCanvas in DetachableFrame."""
+        import inspect
+        from ui.widgets.live_preview_dock import LivePreviewDock
+        src = inspect.getsource(LivePreviewDock)
+        assert "DetachableFrame" in src
+        assert "_canvas_frame" in src
+
+    def test_scan_work_area_has_detachable_frame(self):
+        """ScanWorkArea wraps _LiveCanvas in DetachableFrame."""
+        import inspect
+        from ui.operator.scan_work_area import ScanWorkArea
+        src = inspect.getsource(ScanWorkArea)
+        assert "DetachableFrame" in src
+        assert "_canvas_frame" in src
+
+    def test_auto_navigate_callback_registration(self):
+        """detach_helpers exposes set_navigate_callback and raise_viewers_for_label."""
+        from ui.widgets.detach_helpers import (
+            set_navigate_callback, raise_viewers_for_label,
+            _SOURCE_ID_TO_NAV)
+        assert callable(set_navigate_callback)
+        assert callable(raise_viewers_for_label)
+        assert isinstance(_SOURCE_ID_TO_NAV, dict)
+        assert len(_SOURCE_ID_TO_NAV) > 0
+
+    def test_auto_navigate_source_id_mapping(self):
+        """All known source_ids map to a nav label."""
+        from ui.widgets.detach_helpers import _SOURCE_ID_TO_NAV
+        expected_ids = [
+            "capture.live", "capture.drr", "calibration.ct",
+            "scan.drr", "scan.dt", "comparison.a", "comparison.b",
+            "comparison.diff", "surface.3d", "live_preview.camera",
+            "operator.live", "transient.playback", "movie.playback",
+            "analysis.result", "session.drr", "session.cold",
+        ]
+        for sid in expected_ids:
+            assert sid in _SOURCE_ID_TO_NAV, \
+                f"source_id {sid!r} missing from _SOURCE_ID_TO_NAV"
+
+    def test_source_holder_registry_and_rebind(self):
+        """register_source and rebind_restored_viewers are callable."""
+        from ui.widgets.detach_helpers import (
+            register_source, rebind_restored_viewers, _source_holders)
+        assert callable(register_source)
+        assert callable(rebind_restored_viewers)
+        assert isinstance(_source_holders, dict)
+
+    def test_session_state_module_exists(self):
+        """The session state module is importable."""
+        from ui.session_state import (
+            save_window_arrangement, restore_window_arrangement,
+            should_save_arrangement, should_restore_arrangement)
+        assert callable(save_window_arrangement)
+        assert callable(restore_window_arrangement)
 
 
 # ╔══════════════════════════════════════════════════════════════════╗

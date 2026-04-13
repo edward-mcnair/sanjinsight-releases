@@ -664,8 +664,11 @@ class AutoScanTab(QWidget):
         lay.setContentsMargins(8, 8, 8, 8)
         lay.setSpacing(8)
 
+        from ui.widgets.detach_helpers import DetachableFrame
         self._live_view = _LiveImageView()
-        lay.addWidget(self._live_view, 1)
+        self._live_view_frame = DetachableFrame(self._live_view)
+        self._live_view_frame.detach_requested.connect(self._on_detach_viewer)
+        lay.addWidget(self._live_view_frame, 1)
 
         self._progress = QProgressBar()
         self._progress.setRange(0, 100)
@@ -969,6 +972,11 @@ class AutoScanTab(QWidget):
             buf    = rgb.tobytes()
             qi     = QImage(buf, w, h, w * 3, QImage.Format_RGB888)
             self._live_view.set_frame(QPixmap.fromImage(qi))
+            # Push to detached viewer if open
+            if self._detached_viewer is not None:
+                pix = self._live_view.pixmap()
+                if pix is not None and not pix.isNull():
+                    self._detached_viewer.update_image(pix, "AutoScan Preview")
         except Exception:
             pass
 
@@ -1033,6 +1041,11 @@ class AutoScanTab(QWidget):
                 rgb = np.stack([r, g, b], axis=-1)
                 qi  = QImage(rgb.tobytes(), w, h, w * 3, QImage.Format_RGB888)
                 self._live_view.set_frame(QPixmap.fromImage(qi))
+            # Push to detached viewer if open
+            if self._detached_viewer is not None:
+                pix = self._live_view.pixmap()
+                if pix is not None and not pix.isNull():
+                    self._detached_viewer.update_image(pix, "AutoScan Preview")
         except Exception:
             pass
 
@@ -1168,4 +1181,23 @@ class AutoScanTab(QWidget):
                 f"font-size:{FONT['body']}pt; padding:0 12px; }}"
                 f"QPushButton:hover {{ border-color:{P.get('accent',PALETTE['accent'])}; }}"
             ))
+
+    # ── Detached viewer ────────────────────────────────────────────
+
+    _detached_viewer = None
+
+    def _on_detach_viewer(self) -> None:
+        """Open (or bring to front) a detached thermal preview viewer."""
+        from ui.widgets.detach_helpers import open_detached_viewer
+
+        def _push(viewer):
+            pix = self._live_view.pixmap()
+            if pix is not None and not pix.isNull():
+                viewer.update_image(pix, "AutoScan Preview")
+
+        open_detached_viewer(
+            self, "_detached_viewer",
+            source_id="autoscan.preview",
+            title="AutoScan — Thermal Preview",
+            initial_push=_push)
 

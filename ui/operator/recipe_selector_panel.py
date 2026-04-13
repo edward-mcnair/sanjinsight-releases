@@ -158,12 +158,12 @@ class RecipeSelectorPanel(QWidget):
         root.setSpacing(8)
 
         # ── Header ─────────────────────────────────────────────────────────
-        self._hdr = QLabel("Select Scan Profile")
+        self._hdr = QLabel(f"Select {TERMS['recipe']}")
         root.addWidget(self._hdr)
 
         # ── Search box ─────────────────────────────────────────────────────
         self._search = QLineEdit()
-        self._search.setPlaceholderText("Search scan profiles…")
+        self._search.setPlaceholderText("Search recipes…")
         self._search.setFixedHeight(32)
         root.addWidget(self._search)
 
@@ -188,8 +188,8 @@ class RecipeSelectorPanel(QWidget):
 
         # ── Empty-state label ──────────────────────────────────────────────
         self._empty_lbl = QLabel(
-            "No approved scan profiles.\n\n"
-            "Ask your engineer to approve a scan profile\n"
+            "No approved recipes.\n\n"
+            "Ask your engineer to approve a recipe\n"
             "from the Library tab.")
         self._empty_lbl.setAlignment(Qt.AlignCenter)
         self._empty_lbl.setWordWrap(True)
@@ -306,12 +306,12 @@ class RecipeSelectorPanel(QWidget):
         if visible_count == 0:
             if not has_any_approved:
                 self._empty_lbl.setText(
-                    "No approved scan profiles.\n\n"
-                    "Ask your engineer to approve a scan profile\n"
+                    "No approved recipes.\n\n"
+                    "Ask your engineer to approve a recipe\n"
                     "from the Library tab.")
             elif query:
                 self._empty_lbl.setText(
-                    f"No scan profiles matching\n\"{text.strip()}\"")
+                    f"No recipes matching\n\"{text.strip()}\"")
             self._empty_lbl.setVisible(True)
         else:
             self._empty_lbl.setVisible(False)

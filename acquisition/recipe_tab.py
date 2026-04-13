@@ -393,7 +393,7 @@ class RecipeTab(QWidget):
         left_lay.setContentsMargins(0, 0, 0, 0)
         left_lay.setSpacing(4)
 
-        self._list_hdr = QLabel("Saved Scan Profiles")
+        self._list_hdr = QLabel("Saved Recipes")
         list_hdr = self._list_hdr
         list_hdr.setStyleSheet(f"color:{PALETTE['text']}; font-size:{FONT['heading']}pt; font-weight:600;")
         left_lay.addWidget(list_hdr)
@@ -434,7 +434,7 @@ class RecipeTab(QWidget):
         self._preset_btn.setFixedHeight(28)
         self._preset_btn.setToolTip(
             "Load a factory preset into the editor as a starting point.\n"
-            "Rename and save it to create your own scan profile."
+            "Rename and save it to create your own recipe."
         )
         self._preset_btn.clicked.connect(self._on_load_preset)
         left_lay.addWidget(self._preset_btn)
@@ -447,7 +447,7 @@ class RecipeTab(QWidget):
         right_lay.setContentsMargins(0, 0, 0, 0)
         right_lay.setSpacing(6)
 
-        self._right_hdr = QLabel("Scan Profile Editor")
+        self._right_hdr = QLabel("Recipe Editor")
         right_hdr = self._right_hdr
         right_hdr.setStyleSheet(f"color:{PALETTE['text']}; font-size:{FONT['heading']}pt; font-weight:600;")
         right_lay.addWidget(right_hdr)
@@ -610,18 +610,18 @@ class RecipeTab(QWidget):
         footer = QHBoxLayout()
         right_lay.addLayout(footer)
 
-        self._save_btn = QPushButton("Save Scan Profile")
+        self._save_btn = QPushButton("Save Recipe")
         set_btn_icon(self._save_btn, "fa5s.save")
         self._cap_btn  = QPushButton("Capture Current Settings")
         set_btn_icon(self._cap_btn, "fa5s.camera")
         self._cap_btn.setToolTip(
             "Read current camera / analysis / profile settings from the app "
-            "and populate this scan profile automatically.")
+            "and populate this recipe automatically.")
         self._lock_btn = QPushButton("Approve && Lock")
         set_btn_icon(self._lock_btn, "fa5s.lock")
         self._lock_btn.setToolTip(
-            "Lock this scan profile so operators can run it. "
-            "Locked scan profiles cannot be edited without unlocking first.")
+            "Lock this recipe so operators can run it. "
+            "Locked recipes cannot be edited without unlocking first.")
         for b in [self._save_btn, self._cap_btn]:
             b.setFixedHeight(28)
             footer.addWidget(b)
@@ -771,7 +771,7 @@ class RecipeTab(QWidget):
             item.setForeground(QColor(PALETTE['text']))
             self._list.addItem(item)
         if self._list.count() == 0:
-            placeholder = QListWidgetItem("No scan profiles yet — click New")
+            placeholder = QListWidgetItem("No recipes yet — click New")
             placeholder.setForeground(QColor(PALETTE['textSub']))
             placeholder.setFlags(Qt.NoItemFlags)
             self._list.addItem(placeholder)
@@ -867,7 +867,7 @@ class RecipeTab(QWidget):
     def _on_save(self):
         recipe = self._editor_to_recipe()
         if not recipe.label:
-            QMessageBox.warning(self, "Save Scan Profile", "Please enter a label.")
+            QMessageBox.warning(self, "Save Recipe", "Please enter a label.")
             return
         self._store.save(recipe)
         self._current = recipe
@@ -884,8 +884,8 @@ class RecipeTab(QWidget):
         if self._current is None:
             return
         ans = QMessageBox.question(
-            self, "Delete Scan Profile",
-            f"Delete scan profile '{self._current.label}'?",
+            self, "Delete Recipe",
+            f"Delete recipe '{self._current.label}'?",
             QMessageBox.Yes | QMessageBox.Cancel
         )
         if ans == QMessageBox.Yes:
@@ -901,7 +901,7 @@ class RecipeTab(QWidget):
         recipe = self._current
         if recipe.locked:
             ans = QMessageBox.question(
-                self, "Unlock Scan Profile",
+                self, "Unlock Recipe",
                 f"Unlock '{recipe.label}'?\n\n"
                 "This will remove operator approval and allow editing.",
                 QMessageBox.Yes | QMessageBox.Cancel,
@@ -916,7 +916,7 @@ class RecipeTab(QWidget):
             if not recipe.uid:
                 QMessageBox.warning(
                     self, "Approve & Lock",
-                    "Please save this scan profile before locking it.")
+                    "Please save this recipe before locking it.")
                 return
             approver = ""
             if self._auth_session is not None:
@@ -1072,7 +1072,7 @@ def _flat_params(recipe: Recipe) -> "dict[str, str]":
 
 class _RecipeDiffDialog(QDialog):
     """
-    Side-by-side diff viewer for two scan profiles.
+    Side-by-side diff viewer for two recipes.
 
     Opens via the "Compare…" button in RecipeTab.
     Highlights changed parameters: left value in amber, right in teal.
@@ -1080,7 +1080,7 @@ class _RecipeDiffDialog(QDialog):
 
     def __init__(self, recipes: List[Recipe], parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Compare Scan Profiles")
+        self.setWindowTitle("Compare Recipes")
         self.resize(700, 520)
         self.setStyleSheet(
             f"background:{PALETTE['bg']}; "
@@ -1152,7 +1152,7 @@ class _RecipeDiffDialog(QDialog):
         if len(recipes) >= 2:
             self._rebuild_diff()
         else:
-            self._show_message("Need at least two scan profiles to compare.")
+            self._show_message("Need at least two recipes to compare.")
 
     # ── Diff rendering ───────────────────────────────────────────────
 
@@ -1161,7 +1161,7 @@ class _RecipeDiffDialog(QDialog):
         right_recipe = self._combo_right.currentData()
 
         if left_recipe is None or right_recipe is None:
-            self._show_message("Need at least two scan profiles to compare.")
+            self._show_message("Need at least two recipes to compare.")
             return
 
         if left_recipe.uid == right_recipe.uid:

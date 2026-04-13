@@ -1753,7 +1753,7 @@ class StatusHeader(QWidget):
         self._login_btn.setAccessibleName("Log in as administrator")
         self._login_btn.setToolTip(
             "Log in to access administrator features\n"
-            "(User Management, Security settings, Scan Profile approval)")
+            "(User Management, Security settings, Recipe approval)")
         self._login_btn.setVisible(False)
         self._login_btn.clicked.connect(self.admin_login_requested)
         lay.addWidget(self._login_btn)

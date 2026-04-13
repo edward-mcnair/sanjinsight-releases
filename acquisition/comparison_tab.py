@@ -38,6 +38,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QFont, QImage, QPixmap, QColor
 from ui.icons import set_btn_icon
+from ui.widgets.detach_helpers import DetachableFrame, open_detached_viewer
 from ui.theme import PALETTE, FONT, MONO_FONT, scaled_qss
 
 import matplotlib
@@ -377,9 +378,22 @@ class ComparisonTab(QWidget):
         self._panel_b    = _MapPanel("Session B")
         self._panel_diff = _MapPanel("Difference  (B − A)")
 
-        maps_split.addWidget(self._panel_a)
-        maps_split.addWidget(self._panel_b)
-        maps_split.addWidget(self._panel_diff)
+        self._panel_a_frame = DetachableFrame(self._panel_a)
+        self._panel_a_frame.detach_requested.connect(
+            lambda: self._on_detach_panel("comparison.a", "Session A",
+                                          self._panel_a))
+        self._panel_b_frame = DetachableFrame(self._panel_b)
+        self._panel_b_frame.detach_requested.connect(
+            lambda: self._on_detach_panel("comparison.b", "Session B",
+                                          self._panel_b))
+        self._panel_diff_frame = DetachableFrame(self._panel_diff)
+        self._panel_diff_frame.detach_requested.connect(
+            lambda: self._on_detach_panel("comparison.diff", "Difference (B−A)",
+                                          self._panel_diff))
+
+        maps_split.addWidget(self._panel_a_frame)
+        maps_split.addWidget(self._panel_b_frame)
+        maps_split.addWidget(self._panel_diff_frame)
         maps_split.setSizes([400, 400, 400])
         lay.addWidget(maps_split, 3)
 
@@ -397,6 +411,22 @@ class ComparisonTab(QWidget):
         lay.addWidget(stats_box, 1)
 
         return content
+
+    def _on_detach_panel(self, source_id: str, label: str, panel) -> None:
+        """Open a detached viewer for one comparison map panel."""
+        attr = f"_detached_{source_id.replace('.', '_')}"
+
+        def _push(viewer):
+            pix = panel.grab()
+            if pix is not None and not pix.isNull():
+                viewer.update_image(pix, label)
+
+        open_detached_viewer(
+            self, attr,
+            source_id=source_id,
+            title=f"Compare — {label}",
+            initial_push=_push,
+            static=True)
 
     def _apply_styles(self) -> None:
         """Re-apply PALETTE / FONT styles after a theme change."""

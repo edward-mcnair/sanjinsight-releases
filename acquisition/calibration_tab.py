@@ -491,12 +491,23 @@ class CalibrationTab(QWidget):
         lay.addWidget(stats_box)
 
         # ---- Map tabs ----
-        map_tabs = QTabWidget()
-        map_tabs.setDocumentMode(True)
+        self._map_tabs = QTabWidget()
+        self._map_tabs.setDocumentMode(True)
 
         self._ct_pane   = MapPane("C_T COEFFICIENT MAP  [1/K]")
         self._r2_pane   = MapPane("R² FIT QUALITY MAP")
         self._res_pane  = MapPane("RESIDUAL RMS MAP")
+
+        from ui.widgets.detach_helpers import DetachableFrame
+        self._ct_frame = DetachableFrame(self._ct_pane)
+        self._ct_frame.detach_requested.connect(
+            lambda: self._on_detach_map_pane("calibration.ct", "C_T Coefficient", self._ct_pane))
+        self._r2_frame = DetachableFrame(self._r2_pane)
+        self._r2_frame.detach_requested.connect(
+            lambda: self._on_detach_map_pane("calibration.r2", "R² Fit Quality", self._r2_pane))
+        self._res_frame = DetachableFrame(self._res_pane)
+        self._res_frame.detach_requested.connect(
+            lambda: self._on_detach_map_pane("calibration.res", "Residual RMS", self._res_pane))
 
         # cmap selector
         cmap_row = QHBoxLayout()
@@ -515,16 +526,18 @@ class CalibrationTab(QWidget):
         cw = QVBoxLayout(ct_wrapper)
         cw.setContentsMargins(4, 4, 4, 4)
         cw.addLayout(cmap_row)
-        cw.addWidget(self._ct_pane)
+        cw.addWidget(self._ct_frame)
 
         # Quality chart tab — R² histogram + C_T histogram + calibration curve
         from ui.charts import CalibrationQualityChart
         self._quality_chart = CalibrationQualityChart(show_curve=True)
-        map_tabs.addTab(ct_wrapper,          " C_T Map ")
-        map_tabs.addTab(self._r2_pane,       " R² Map ")
-        map_tabs.addTab(self._res_pane,      " Residual ")
-        map_tabs.addTab(self._quality_chart, " Quality ✦ ")
-        lay.addWidget(map_tabs, 1)
+        self._map_tabs.addTab(ct_wrapper,          " C_T Map ")
+        self._map_tabs.addTab(self._r2_frame,      " R² Map ")
+        self._map_tabs.addTab(self._res_frame,     " Residual ")
+        self._map_tabs.addTab(self._quality_chart, " Quality ✦ ")
+
+        self._map_tabs.currentChanged.connect(lambda: self._push_map_to_detached())
+        lay.addWidget(self._map_tabs, 1)
 
         # ---- Save / load ----
         file_box = QGroupBox("Calibration File")
@@ -789,6 +802,7 @@ class CalibrationTab(QWidget):
         self._r2_pane.show_map(result.r2_map,  result.mask, cmap="viridis")
         self._res_pane.show_map(result.residual_map, result.mask, cmap="Magmafall")
         self._quality_chart.update_data(result)
+        self._push_map_to_detached()
 
         valid_pct = 100.0 * result.mask.mean() if result.mask is not None else 0
         ct_mean   = (float(result.ct_map[result.mask].mean())
@@ -889,3 +903,41 @@ class CalibrationTab(QWidget):
         detail = (f"{n} steps × ({ramp:.0f} s ramp + {settle:.0f} s settle"
                   f" + {n_avg} frames @ 5 fps)")
         self._time_est_lbl.set_estimate(secs, detail)
+
+    # ---------------------------------------------------------------- #
+    #  Detached viewer                                                  #
+    # ---------------------------------------------------------------- #
+
+    def _on_detach_map_pane(self, source_id: str, label: str, pane) -> None:
+        from ui.widgets.detach_helpers import open_detached_viewer
+        attr = f"_detached_{source_id.replace('.', '_')}"
+
+        def _push(viewer):
+            pix = pane._img_lbl.pixmap() if hasattr(pane, '_img_lbl') else pane.grab()
+            if pix is not None and not pix.isNull():
+                viewer.update_image(pix, label)
+
+        open_detached_viewer(
+            self, attr,
+            source_id=source_id,
+            title=f"Calibration \u2014 {label}",
+            initial_push=_push,
+            static=True)
+
+    def _push_map_to_detached(self) -> None:
+        """Send calibration maps to any open detached viewers."""
+        _map = {
+            "calibration.ct":  (self._ct_pane,  "C_T Coefficient"),
+            "calibration.r2":  (self._r2_pane,  "R\u00b2 Fit Quality"),
+            "calibration.res": (self._res_pane, "Residual RMS"),
+        }
+        for sid, (pane, label) in _map.items():
+            viewer = getattr(self, f"_detached_{sid.replace('.', '_')}", None)
+            if viewer is None:
+                continue
+            try:
+                pix = pane._img_lbl.pixmap() if hasattr(pane, '_img_lbl') else pane.grab()
+                if pix is not None and not pix.isNull():
+                    viewer.update_image(pix, label)
+            except Exception:
+                pass

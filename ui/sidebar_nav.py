@@ -505,32 +505,29 @@ class _CollapseHeader(QWidget):
 #  _LogoHeader  — app name + collapse arrow                          #
 # ================================================================== #
 class _LogoHeader(QWidget):
-    """Sidebar header containing the workspace mode pill toggle and collapse arrow."""
+    """Sidebar header containing the app name and collapse arrow."""
     collapse_clicked = pyqtSignal()
-    mode_clicked = pyqtSignal(str)
 
     _ARROW_W = 28   # width of the clickable arrow zone on the right
 
     def __init__(self, app_name: str, parent=None):
         super().__init__(parent)
+        self._app_name = app_name
         self._arrow_hover = False
         self.setFixedHeight(_LOGO_H)
         self.setStyleSheet(f"background:{_HDR_BG()};")
         self.setMouseTracking(True)
 
-        # Layout: [pill toggle] [stretch] [collapse arrow]
+        # Layout: [app name] [stretch] [collapse arrow]
         lay = QHBoxLayout(self)
         lay.setContentsMargins(8, 0, 4, 0)
         lay.setSpacing(0)
 
-        # Mode pill toggle (Guided / Standard / Expert)
-        from ui.widgets.segmented_control import SegmentedControl
-        self._mode_pill = SegmentedControl(
-            ["Guided", "Standard", "Expert"], seg_width=66, height=28)
-        _MODE_NAMES = ("guided", "standard", "expert")
-        self._mode_pill.selection_changed.connect(
-            lambda idx: self.mode_clicked.emit(_MODE_NAMES[idx]))
-        lay.addWidget(self._mode_pill)
+        self._name_lbl = QLabel(app_name)
+        self._name_lbl.setStyleSheet(
+            f"color:{_TEXT_WHITE()}; font-size:{_FONT['body']}pt; "
+            f"font-weight:600; background:transparent;")
+        lay.addWidget(self._name_lbl)
 
         lay.addStretch()
 
@@ -573,9 +570,11 @@ class _LogoHeader(QWidget):
 
     def _apply_styles(self) -> None:
         self.setStyleSheet(f"background:{_HDR_BG()};")
+        self._name_lbl.setStyleSheet(
+            f"color:{_TEXT_WHITE()}; font-size:{_FONT['body']}pt; "
+            f"font-weight:600; background:transparent;")
         self._arrow_lbl.setStyleSheet(
             f"color:{_TEXT_DIM()}; font-size:{_FONT['body']}pt; background:transparent;")
-        self._mode_pill._apply_styles()
 
 
 
@@ -786,7 +785,6 @@ class _PhaseSeparator(QWidget):
 class _Sidebar(QWidget):
     item_selected    = pyqtSignal(object)
     collapse_clicked = pyqtSignal()
-    mode_changed     = pyqtSignal(str)
 
     def __init__(self, app_name: str = "SanjINSIGHT", parent=None):
         super().__init__(parent)
@@ -802,7 +800,6 @@ class _Sidebar(QWidget):
         self._phase_hints:      List[_PhaseHint]    = []
         self._phase_containers: List[QWidget]       = []
         self._phase_separators: List[_PhaseSeparator] = []
-        self._workspace_mode:   str = "standard"
 
         self.setFixedWidth(_W_FULL)
         self.setStyleSheet(f"background:{_BG()};")
@@ -811,11 +808,9 @@ class _Sidebar(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # Logo header with built-in collapse arrow + mode indicator
+        # Logo header with built-in collapse arrow
         self._logo_hdr = _LogoHeader(app_name)
         self._logo_hdr.collapse_clicked.connect(self.collapse_clicked)
-        self._logo_hdr.mode_clicked.connect(
-            lambda mode: self.mode_changed.emit(mode))
         root.addWidget(self._logo_hdr)
 
         # Scrollable menu
@@ -854,7 +849,7 @@ class _Sidebar(QWidget):
         self._lay.addWidget(header)
 
         hint_w = _PhaseHint(hint)
-        hint_w.setVisible(self._workspace_mode == "guided")
+        hint_w.setVisible(False)   # phase hints are deprecated
         self._phase_hints.append(hint_w)
         self._lay.addWidget(hint_w)
 
@@ -882,46 +877,8 @@ class _Sidebar(QWidget):
         self._lay.addWidget(sep)
 
     def set_workspace_mode(self, mode: str) -> None:
-        """Reconfigure sidebar presentation for the given workspace mode."""
-        self._workspace_mode = mode
-        _mode_map = {"guided": 0, "standard": 1, "expert": 2}
-        self._logo_hdr._mode_pill.set_index(_mode_map.get(mode, 1))
-
-        for i, header in enumerate(self._phase_headers):
-            if mode == "expert":
-                header.setVisible(False)
-                # Ensure phase containers are visible — they may have been
-                # hidden by a prior Guided-mode collapse.
-                if i < len(self._phase_containers):
-                    self._phase_containers[i].setVisible(True)
-            else:
-                header.setVisible(True)
-                # In Guided mode, collapse non-active phases
-                if mode == "guided" and self._active:
-                    active_in_phase = False
-                    if i < len(self._phase_containers):
-                        container = self._phase_containers[i]
-                        for mi in self._items:
-                            if mi.parent() is container and mi._active:
-                                active_in_phase = True
-                                break
-                    if not active_in_phase:
-                        header.set_collapsed(True)
-                    else:
-                        header.set_collapsed(False)
-                elif mode == "standard":
-                    header.set_collapsed(False)
-
-        for hint in self._phase_hints:
-            hint.setVisible(mode == "guided")
-
-        for sep in self._phase_separators:
-            sep.setVisible(mode != "expert")
-
-        # Adjust item height for Expert compact mode
-        compact_h = _ITEM_H_COMPACT if mode == "expert" else _ITEM_H
-        for mi in self._items:
-            mi.setFixedHeight(compact_h)
+        """No-op — workspace modes are deprecated (recipe-mode branch)."""
+        pass
 
     def set_phase_badge(self, phase_number: int, text: str) -> None:
         """Update the completion badge on a phase header."""
@@ -930,48 +887,9 @@ class _Sidebar(QWidget):
                 header.set_badge(text)
                 break
 
-    # Mapping from (phase, check_key) → sidebar nav label
-    _STEP_NAV_MAP: list[tuple[int, str, str]] = [
-        (1, "camera_selected",     NL.MEASUREMENT_SETUP),
-        (1, "profile_selected",    NL.MEASUREMENT_SETUP),
-        (1, "stimulus_configured", NL.STIMULUS),
-        (1, "temperature_set",     NL.TEMPERATURE),
-        (2, "live_viewed",         NL.LIVE_VIEW),
-        (2, "focused",             NL.FOCUS_STAGE),
-        (2, "signal_checked",      NL.SIGNAL_CHECK),
-        (3, "captured",            NL.CAPTURE),
-        (3, "calibrated",          NL.CALIBRATION),
-        (3, "recipe_run",          NL.RUN_SCAN),
-    ]
-
-    # Labels whose settings were auto-configured by a profile selection.
-    def update_guided_states(self, tracker, workspace_mode: str) -> None:
-        """Update guided step indicators on each nav item.
-
-        In guided mode, items participating in the walkthrough show:
-        - 'complete': green check-circle
-        - 'current':  pulsing accent dot (first incomplete step)
-        - 'pending':  dim circle outline (future steps)
-
-        In standard/expert modes, all indicators are cleared.
-        """
-        # Build a label → state map
-        state_map: dict[str, str] = {}
-        if workspace_mode == "guided":
-            found_current = False
-            for phase, key, nav_label in self._STEP_NAV_MAP:
-                checks = tracker._checks.get(phase, {})
-                if checks.get(key, False):
-                    state_map[nav_label] = "complete"
-                elif not found_current:
-                    state_map[nav_label] = "current"
-                    found_current = True
-                else:
-                    state_map[nav_label] = "pending"
-
-        # Apply to all menu items
-        for mi in self._items:
-            mi.set_guided_state(state_map.get(mi._item.label))
+    def update_guided_states(self, tracker=None, workspace_mode: str = "") -> None:
+        """No-op — guided step indicators are deprecated (recipe-mode branch)."""
+        pass
 
     # ── Readiness indicators ──────────────────────────────────────
 
@@ -1073,7 +991,6 @@ class SidebarNav(QWidget):
     Collapse : click the ◀ arrow in the logo header area.
     """
     panel_changed = pyqtSignal(object)
-    mode_cycle_requested = pyqtSignal(str)  # from mode indicator in header
 
     def __init__(self, app_name: str = "SanjINSIGHT", parent=None):
         super().__init__(parent)
@@ -1193,6 +1110,13 @@ class SidebarNav(QWidget):
                 return
         _log.warning("select_by_label: NO MATCH for %r in %d items",
                      label, len(self._sidebar._items))
+
+    def label_for_panel(self, panel) -> Optional[str]:
+        """Return the sidebar label for a given panel widget, or None."""
+        for mi in self._sidebar._items:
+            if mi.panel is panel:
+                return mi._item.label
+        return None
 
     # ── Readiness indicators (public) ────────────────────────────────
 

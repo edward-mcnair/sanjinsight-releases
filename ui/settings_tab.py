@@ -69,7 +69,7 @@ class SettingsTab(AISettingsMixin, QWidget):
     check_for_updates_requested   = pyqtSignal()
     theme_changed                 = pyqtSignal(str)   # emits "auto", "dark", or "light"
     colors_changed                = pyqtSignal(str)   # emits "standard" or "accessible"
-    workspace_changed             = pyqtSignal(str)   # emits "guided", "standard", or "expert"
+    # workspace_changed removed — modes deprecated (recipe-mode branch)
     ai_enable_requested           = pyqtSignal(str, int)
     ai_disable_requested          = pyqtSignal()
     download_model_requested      = pyqtSignal(str, str)
@@ -272,36 +272,6 @@ class SettingsTab(AISettingsMixin, QWidget):
         colors_desc_row.addWidget(self._colors_desc_lbl)
         lay.addLayout(colors_desc_row)
 
-        # ── Workspace mode selector ─────────────────────────────────
-        from ui.workspace import get_manager, MODE_DESCRIPTORS
-
-        ws_row = QHBoxLayout()
-        ws_lbl = QLabel("Workspace")
-        ws_lbl.setStyleSheet(
-            f"font-size:{FONT['body']}pt; color:{PALETTE['text']};")
-        ws_row.addWidget(ws_lbl)
-        ws_row.addStretch()
-
-        self._ws_seg = SegmentedControl(
-            ["Guided", "Standard", "Expert"], seg_width=80)
-        current_ws = cfg_mod.get_pref("ui.workspace", "standard")
-        self._ws_seg.set_index(
-            {"guided": 0, "standard": 1, "expert": 2}.get(current_ws, 1))
-        self._ws_seg.selection_changed.connect(self._on_workspace_btn)
-        ws_row.addWidget(self._ws_seg)
-        lay.addLayout(ws_row)
-
-        # Descriptor label below the segmented control
-        self._ws_desc_lbl = QLabel(MODE_DESCRIPTORS.get(current_ws, ""))
-        self._ws_desc_lbl.setStyleSheet(
-            f"font-size:{FONT['caption']}pt; color:{PALETTE['textDim']}; "
-            "font-style: italic;")
-        self._ws_desc_lbl.setWordWrap(True)
-        desc_row = QHBoxLayout()
-        desc_row.addStretch()
-        desc_row.addWidget(self._ws_desc_lbl)
-        lay.addLayout(desc_row)
-
         return grp
 
     def _on_colors_btn(self, idx: int) -> None:
@@ -312,10 +282,8 @@ class SettingsTab(AISettingsMixin, QWidget):
         self.colors_changed.emit(mode)
 
     def _on_workspace_btn(self, idx: int) -> None:
-        from ui.workspace import MODE_DESCRIPTORS
-        mode = ("guided", "standard", "expert")[idx]
-        self._ws_desc_lbl.setText(MODE_DESCRIPTORS.get(mode, ""))
-        self.workspace_changed.emit(mode)
+        """No-op — workspace modes are deprecated (recipe-mode branch)."""
+        pass
 
     # ── Hardware Profiles section ────────────────────────────────────────
 

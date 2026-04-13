@@ -38,6 +38,7 @@ from PyQt5.QtCore import Qt, pyqtSignal
 
 from ui.theme import PALETTE, FONT, MONO_FONT
 from ui.icons import IC, set_btn_icon
+from ui.display_terms import TERMS
 
 log = logging.getLogger(__name__)
 
@@ -49,7 +50,7 @@ log = logging.getLogger(__name__)
 _COLUMNS = [
     ("timestamp",       "Time",       140, Qt.AlignLeft),
     ("source",          "Source",      80,  Qt.AlignCenter),
-    ("recipe_label",    "Scan Profile", 120, Qt.AlignLeft),
+    ("recipe_label",    TERMS["recipe"], 120, Qt.AlignLeft),
     ("session_label",   "Session",    140, Qt.AlignLeft),
     ("modality",        "Type",        80, Qt.AlignCenter),
     ("device_id",       "Device ID",  100, Qt.AlignLeft),
@@ -127,7 +128,7 @@ class ExperimentLogWidget(QWidget):
             f"font-size: {FONT['caption']}pt; color: {PALETTE['textDim']};")
         tb_lay.addWidget(src_lbl)
         self._source_filter = QComboBox()
-        self._source_filter.addItems(["All", "Scan Profile", "Manual"])
+        self._source_filter.addItems(["All", TERMS["source_recipe"], TERMS["source_manual"]])
         self._source_filter.setFixedWidth(110)
         self._source_filter.currentIndexChanged.connect(self._on_filter_changed)
         tb_lay.addWidget(self._source_filter)
@@ -330,7 +331,7 @@ class ExperimentLogWidget(QWidget):
         elif key == "modality":
             display = _MODALITY_SHORT.get(str(val), str(val)[:10])
         elif key == "source":
-            _SRC_DISPLAY = {"recipe": "Scan Profile", "manual": "Manual"}
+            _SRC_DISPLAY = {"recipe": TERMS["source_recipe"], "manual": TERMS["source_manual"]}
             display = _SRC_DISPLAY.get(str(val), str(val).title())
         elif key == "verdict":
             display = str(val).title() if val else "—"

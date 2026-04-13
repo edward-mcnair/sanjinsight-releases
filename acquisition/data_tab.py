@@ -976,13 +976,35 @@ class DataTab(QWidget):
 
         # ---- Bottom: image viewer tabs ----
         img_tabs = QTabWidget()
+        self._img_tabs = img_tabs
         img_tabs.setDocumentMode(True)
 
+        from ui.widgets.detach_helpers import DetachableFrame
+
         self._pane_cold = DataImagePane("COLD  (baseline)")
+        self._cold_frame = DetachableFrame(self._pane_cold)
+        self._cold_frame.detach_requested.connect(
+            lambda: self._on_detach_pane("session.cold", "Cold", self._pane_cold))
+
         self._pane_hot  = DataImagePane("HOT  (stimulus)")
+        self._hot_frame = DetachableFrame(self._pane_hot)
+        self._hot_frame.detach_requested.connect(
+            lambda: self._on_detach_pane("session.hot", "Hot", self._pane_hot))
+
         self._pane_diff = DataImagePane("DIFFERENCE  hot − cold")
+        self._diff_frame = DetachableFrame(self._pane_diff)
+        self._diff_frame.detach_requested.connect(
+            lambda: self._on_detach_pane("session.diff", "Difference", self._pane_diff))
+
         self._pane_drr  = DataImagePane("ΔR/R  thermoreflectance")
+        self._drr_frame = DetachableFrame(self._pane_drr)
+        self._drr_frame.detach_requested.connect(
+            lambda: self._on_detach_pane("session.drr", "ΔR/R", self._pane_drr))
+
         self._pane_cmp  = DataImagePane("COMPARISON  A − B  ΔR/R")
+        self._cmp_frame = DetachableFrame(self._pane_cmp)
+        self._cmp_frame.detach_requested.connect(
+            lambda: self._on_detach_pane("session.cmp", "Compare", self._pane_cmp))
 
         self._cmap_combo = QComboBox()
         self._cmap_combo.setMinimumWidth(160)
@@ -1000,15 +1022,15 @@ class DataTab(QWidget):
         cmap_row.addWidget(self._cmap_combo)
         cmap_row.addStretch()
         dw.addLayout(cmap_row)
-        dw.addWidget(self._pane_drr)
+        dw.addWidget(self._drr_frame)
 
         self._trend_chart = SessionTrendChart()
 
-        img_tabs.addTab(self._pane_cold,      " Cold ")
-        img_tabs.addTab(self._pane_hot,       " Hot ")
-        img_tabs.addTab(self._pane_diff,      " Difference ")
+        img_tabs.addTab(self._cold_frame,     " Cold ")
+        img_tabs.addTab(self._hot_frame,      " Hot ")
+        img_tabs.addTab(self._diff_frame,     " Difference ")
         img_tabs.addTab(drr_wrapper,          " ΔR/R ")
-        img_tabs.addTab(self._pane_cmp,       " Compare ")
+        img_tabs.addTab(self._cmp_frame,      " Compare ")
         img_tabs.addTab(self._trend_chart,    " Trends ✦ ")
 
         # Export history tab
@@ -1032,6 +1054,44 @@ class DataTab(QWidget):
         self._compare_btn.clicked.connect(self._run_compare)
 
         return w
+
+    # ── Detached viewer ────────────────────────────────────────────
+
+    def _on_detach_pane(self, source_id: str, label: str, pane) -> None:
+        from ui.widgets.detach_helpers import open_detached_viewer
+        attr = f"_detached_{source_id.replace('.', '_')}"
+
+        def _push(viewer):
+            pix = pane._lbl.pixmap()
+            if pix is not None and not pix.isNull():
+                viewer.update_image(pix, label)
+
+        open_detached_viewer(
+            self, attr,
+            source_id=source_id,
+            title=f"Session — {label}",
+            initial_push=_push,
+            static=True)
+
+    def _push_image_to_detached(self) -> None:
+        """Push images to all open detached viewers."""
+        _map = {
+            "session.cold": (self._pane_cold, "Cold"),
+            "session.hot":  (self._pane_hot,  "Hot"),
+            "session.diff": (self._pane_diff, "Difference"),
+            "session.drr":  (self._pane_drr,  "ΔR/R"),
+            "session.cmp":  (self._pane_cmp,  "Compare"),
+        }
+        for sid, (pane, label) in _map.items():
+            viewer = getattr(self, f"_detached_{sid.replace('.', '_')}", None)
+            if viewer is None:
+                continue
+            try:
+                pix = pane._lbl.pixmap()
+                if pix is not None and not pix.isNull():
+                    viewer.update_image(pix, label)
+            except Exception:
+                pass
 
     # ---------------------------------------------------------------- #
     #  Public API — called by main window                              #
@@ -1331,6 +1391,7 @@ class DataTab(QWidget):
             cmap = self._cmap_combo.currentText()
             mode = "signed" if cmap in ("Thermal Delta", "signed") else "percentile"
             self._pane_drr.show_array(session.delta_r_over_r, mode=mode, cmap=cmap)
+            self._push_image_to_detached()
             session.unload()   # free memory after display
 
         def _on_error(msg):

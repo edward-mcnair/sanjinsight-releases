@@ -158,6 +158,21 @@ class BosonDriver(CameraDriver):
 
         # ── 1. Control channel (optional) ─────────────────────────────────────
         if self._serial_port:
+            # Quick check: bail early if the serial port doesn't exist.
+            # This avoids expensive SDK initialisation and OpenCV probing
+            # during auto-reconnect when the Boson is physically unplugged.
+            # On macOS/Linux, serial ports are device files we can stat.
+            # On Windows, COM ports aren't filesystem paths — skip this check.
+            import sys as _sys_chk, os as _os
+            if _sys_chk.platform != "win32" and not _os.path.exists(self._serial_port):
+                raise RuntimeError(
+                    f"FLIR Boson: serial port {self._serial_port} not found.\n"
+                    "The camera may be unplugged or the port name has changed.\n"
+                    "Check:\n"
+                    "  1. Boson is physically connected via USB\n"
+                    "  2. The serial port in Device Manager matches the actual device"
+                )
+
             try:
                 from hardware.cameras.boson.CommunicationFiles.CommonFslp import (
                     CommonFslp, FSLP_TYPE_E,
@@ -225,9 +240,11 @@ class BosonDriver(CameraDriver):
                     "resolution (%dx%d). Rejecting to avoid using webcam.",
                     video_idx, _actual_w, _actual_h, self._W, self._H)
                 cap.release()
-                cap = cv2.VideoCapture(-1)  # force isOpened() == False
+                # Don't pass -1 to VideoCapture — it segfaults in native
+                # OpenCV code.  Just set cap to None and check below.
+                cap = None
 
-        if not cap.isOpened():
+        if cap is None or not cap.isOpened():
             # Serial was opened successfully — close it before raising
             if self._client:
                 try:
@@ -317,8 +334,10 @@ class BosonDriver(CameraDriver):
         import cv2
 
         # Try configured index first, then scan 0–5.
-        candidates = [self._video_index] + [
-            i for i in range(6) if i != self._video_index
+        # Guard: reject negative indices — OpenCV segfaults on negative values.
+        _cfg_idx = max(0, self._video_index)
+        candidates = [_cfg_idx] + [
+            i for i in range(6) if i != _cfg_idx
         ]
         _backend = cv2.CAP_DSHOW if _sys.platform == "win32" else 0
         _set_verify_candidates = []   # indices to retry with set-and-verify

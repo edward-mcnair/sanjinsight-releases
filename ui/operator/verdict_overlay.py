@@ -54,6 +54,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtGui import QColor, QPalette
 
 from ui.theme import FONT, PALETTE
+from ui.display_terms import TERMS
 
 log = logging.getLogger(__name__)
 
@@ -214,7 +215,7 @@ class VerdictOverlay(QDialog):
         ))
         recipe_label = getattr(recipe, "label", "")
         col2.addWidget(self._metric_row(
-            "Scan Profile",
+            TERMS["recipe"],
             recipe_label or "—",
             "",
             accent_hex,

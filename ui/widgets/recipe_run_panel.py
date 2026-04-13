@@ -68,6 +68,7 @@ from PyQt5.QtCore import Qt, pyqtSignal
 
 from ui.theme import PALETTE, FONT, MONO_FONT
 from ui.icons import IC, set_btn_icon
+from ui.display_terms import TERMS
 
 log = logging.getLogger(__name__)
 
@@ -190,7 +191,7 @@ class RecipeRunPanel(QWidget):
         sel_row.setContentsMargins(12, 10, 12, 6)
         sel_row.setSpacing(8)
 
-        sel_lbl = QLabel("Scan Profile:")
+        sel_lbl = QLabel(f"{TERMS['recipe']}:")
         sel_lbl.setStyleSheet(
             f"font-size: {FONT['label']}pt; color: {PALETTE['text']};")
         sel_row.addWidget(sel_lbl)
@@ -199,15 +200,15 @@ class RecipeRunPanel(QWidget):
         self._recipe_combo.setMinimumWidth(200)
         self._recipe_combo.setSizePolicy(
             QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self._recipe_combo.setPlaceholderText("Select a scan profile…")
+        self._recipe_combo.setPlaceholderText(f"Select a {TERMS['recipe'].lower()}\u2026")
         sel_row.addWidget(self._recipe_combo, 1)
 
         root.addLayout(sel_row)
 
         # ── Empty-state hint (visible when no recipes loaded) ────────
         self._empty_hint = QLabel(
-            "No scan profiles available.\n"
-            "Create one in the Library tab, or ask your engineer to set up a scan profile.")
+            f"No {TERMS['recipe_plural'].lower()} available.\n"
+            f"Create one in the Library tab, or ask your engineer to set up a {TERMS['recipe'].lower()}.")
         self._empty_hint.setWordWrap(True)
         self._empty_hint.setAlignment(Qt.AlignCenter)
         self._empty_hint.setStyleSheet(
@@ -334,7 +335,7 @@ class RecipeRunPanel(QWidget):
         bypass_row.addStretch()
 
         # Expert: "Edit Recipe ▸" link
-        self._edit_link = QPushButton("Edit Scan Profile ▸")
+        self._edit_link = QPushButton(f"Edit {TERMS['recipe']} \u25b8")
         self._edit_link.setFlat(True)
         self._edit_link.setCursor(Qt.PointingHandCursor)
         self._edit_link.setStyleSheet(

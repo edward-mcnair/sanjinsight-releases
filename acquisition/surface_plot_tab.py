@@ -36,6 +36,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QTimer
 from ui.icons import set_btn_icon
+from ui.widgets.detach_helpers import DetachableFrame, open_detached_viewer
 from ui.theme import FONT, PALETTE, scaled_qss
 from .processing import (COLORMAP_OPTIONS, COLORMAP_TOOLTIPS,
                          setup_cmap_combo, get_mpl_cmap_name)
@@ -211,7 +212,9 @@ class SurfacePlotTab(QWidget):
         self._fig  = Figure(figsize=(8, 5), facecolor=PALETTE['canvas'], tight_layout=True)
         self._canvas = FigureCanvas(self._fig)
         self._canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        lay.addWidget(self._canvas, 1)
+        self._canvas_frame = DetachableFrame(self._canvas)
+        self._canvas_frame.detach_requested.connect(self._on_detach_canvas)
+        lay.addWidget(self._canvas_frame, 1)
 
         # ─ View-angle sliders ─
         angle_row = QHBoxLayout()
@@ -237,6 +240,24 @@ class SurfacePlotTab(QWidget):
 
         self._replot()
         return content
+
+    # ── Detached viewer ────────────────────────────────────────────
+
+    _detached_surface = None
+
+    def _on_detach_canvas(self) -> None:
+        """Open a detached viewer for the 3D surface plot."""
+        def _push(viewer):
+            pix = self._canvas.grab()
+            if pix is not None and not pix.isNull():
+                viewer.update_image(pix, self._title)
+
+        open_detached_viewer(
+            self, "_detached_surface",
+            source_id="surface.3d",
+            title="3D Surface",
+            initial_push=_push,
+            static=True)
 
     # ── Public API ──────────────────────────────────────────────────
 

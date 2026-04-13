@@ -36,6 +36,7 @@ from PyQt5.QtWidgets import (
 )
 
 from ui.theme import FONT, PALETTE
+from ui.display_terms import TERMS
 
 log = logging.getLogger(__name__)
 
@@ -225,7 +226,7 @@ class ShiftLogPanel(QWidget):
         try:
             with open(path, "w", newline="", encoding="utf-8") as fh:
                 writer = csv.writer(fh)
-                writer.writerow(["Timestamp", "Verdict", "Part ID", "Scan Profile"])
+                writer.writerow(["Timestamp", "Verdict", "Part ID", TERMS["recipe"]])
                 for card in self._cards:
                     writer.writerow(card.to_csv_row())
             log.info("ShiftLogPanel: exported %d rows to %s", len(self._cards), path)

@@ -849,8 +849,7 @@ class MainWindow(QMainWindow):
         # Wire Settings tab → colors palette (Standard / Accessible)
         self._settings_tab.colors_changed.connect(self._apply_colors)
 
-        # Wire Settings tab → workspace mode (Guided / Standard / Expert)
-        self._settings_tab.workspace_changed.connect(self._on_workspace_changed)
+        # (Workspace mode wiring removed — modes deprecated, recipe-mode branch)
 
         # Wire Settings tab → manual update check
         self._settings_tab.check_for_updates_requested.connect(
@@ -929,8 +928,8 @@ class MainWindow(QMainWindow):
             NI(NL.SENSORS,          _I["Sensors"],           self._hw_sensors_panel),
         ])
 
-        # WORKFLOW
-        self._nav.add_section("WORKFLOW", [
+        # OPERATE
+        self._nav.add_section("OPERATE", [
             NI(NL.RUN_SCAN,        _I["Recipes"],        self._recipe_run),
             NI(NL.EXPERIMENT_LOG,  _I["Experiment Log"], self._experiment_log_widget),
         ])
@@ -971,6 +970,37 @@ class MainWindow(QMainWindow):
         self._timing_tab.set_bias_source(self._bias_tab)
 
         self._nav.select_first()
+
+        # Register auto-navigate callback for detached viewers
+        from ui.widgets.detach_helpers import set_navigate_callback, register_source
+        set_navigate_callback(self._nav.select_by_label)
+
+        # Register all source_id → (tab, attr) mappings so session restore
+        # can rebind restored viewers to the correct tab attribute.
+        _src = register_source
+        _src("capture.live", self._acquire_tab, "_detached_viewer")
+        _src("capture.cold", self._acquire_tab, "_detached_capture_cold")
+        _src("capture.hot",  self._acquire_tab, "_detached_capture_hot")
+        _src("capture.diff", self._acquire_tab, "_detached_capture_diff")
+        _src("capture.drr",  self._acquire_tab, "_detached_capture_drr")
+        _src("capture.dt",   self._acquire_tab, "_detached_capture_dt")
+        _src("calibration.ct",  self._cal_tab, "_detached_calibration_ct")
+        _src("calibration.r2",  self._cal_tab, "_detached_calibration_r2")
+        _src("calibration.res", self._cal_tab, "_detached_calibration_res")
+        _src("session.cold", self._data_tab, "_detached_session_cold")
+        _src("session.hot",  self._data_tab, "_detached_session_hot")
+        _src("session.diff", self._data_tab, "_detached_session_diff")
+        _src("session.drr",  self._data_tab, "_detached_session_drr")
+        _src("session.cmp",  self._data_tab, "_detached_session_cmp")
+        _src("transient.playback", self._transient_tab, "_detached_viewer")
+        _src("movie.playback",     self._movie_tab,     "_detached_viewer")
+        _src("analysis.result",    self._analysis_tab,  "_detached_viewer")
+        _src("scan.drr",  self._scan_tab, "_detached_scan_drr")
+        _src("scan.dt",   self._scan_tab, "_detached_scan_dt")
+        _src("comparison.a",    self._compare_tab, "_detached_comparison_a")
+        _src("comparison.b",    self._compare_tab, "_detached_comparison_b")
+        _src("comparison.diff", self._compare_tab, "_detached_comparison_diff")
+        _src("surface.3d", self._surface_tab, "_detached_surface")
 
         # Connect demo mode exit button
         self._header.exit_demo_requested.connect(self._deactivate_demo_mode)
@@ -1474,6 +1504,11 @@ class MainWindow(QMainWindow):
         # Sessions: auto-select latest session if nothing is selected
         if panel is self._data_tab and self._data_tab._selected is None:
             self._data_tab.select_latest()
+        # Bring matching detached viewers to front
+        nav_label = self._nav.label_for_panel(panel)
+        if nav_label:
+            from ui.widgets.detach_helpers import raise_viewers_for_label
+            raise_viewers_for_label(nav_label)
 
     def _update_tab_attention(self, snapshot: dict) -> None:
         """Update sub-tab attention badges from MetricsService snapshot."""
@@ -1594,15 +1629,6 @@ class MainWindow(QMainWindow):
     def _on_workspace_changed(self, mode: str) -> None:
         """No-op — workspace modes are deprecated (recipe-mode branch)."""
         pass
-        # Sync settings tab buttons if change came from sidebar indicator
-        if hasattr(self, "_settings_tab"):
-            idx = {"guided": 0, "standard": 1, "expert": 2}.get(mode, 1)
-            if hasattr(self._settings_tab, "_ws_btn_grp"):
-                btn = self._settings_tab._ws_btn_grp.button(idx)
-                if btn and not btn.isChecked():
-                    btn.setChecked(True)
-                    # Update descriptor label too
-                    self._settings_tab._on_workspace_btn(idx)
 
     def _poll_system_theme(self) -> None:
         """Called every 5 s while auto mode is active; swaps if OS theme changed."""
@@ -5021,6 +5047,19 @@ class MainWindow(QMainWindow):
         if not getattr(self, '_layout_restored', False):
             self._layout_restored = True
             self._restore_layout()
+            # Restore window arrangement (detached viewers, sidebar tab, etc.)
+            try:
+                from ui.session_state import (
+                    should_restore_arrangement, restore_window_arrangement)
+                if should_restore_arrangement():
+                    restore_window_arrangement(self)
+                    # Rebind restored viewers to their source tabs so data
+                    # pushes (live frames, results) reach them.
+                    from ui.widgets.detach_helpers import rebind_restored_viewers
+                    rebind_restored_viewers()
+            except Exception:
+                log.debug("showEvent: arrangement restore failed (non-fatal)",
+                          exc_info=True)
             # Evaluate device readiness at startup so the safe-mode banner
             # appears immediately if hardware is not connected.
             self._update_safe_mode()
@@ -5306,6 +5345,24 @@ class MainWindow(QMainWindow):
                       exc_info=True)
 
         self._save_layout()
+
+        # ── Window arrangement persistence ────────────────────────
+        try:
+            from ui.session_state import should_save_arrangement, save_window_arrangement
+            if should_save_arrangement():
+                save_window_arrangement(self)
+        except Exception:
+            log.debug("closeEvent: arrangement save failed (non-fatal)",
+                      exc_info=True)
+
+        # ── Close all detached viewers ────────────────────────────
+        try:
+            from ui.widgets.detach_helpers import close_all_detached
+            close_all_detached()
+        except Exception:
+            log.debug("closeEvent: close_all_detached failed (non-fatal)",
+                      exc_info=True)
+
         # Clear autosave checkpoints on clean exit (not a crash)
         try:
             from acquisition.autosave import acquire_autosave, scan_autosave

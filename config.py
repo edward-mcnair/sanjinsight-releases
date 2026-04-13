@@ -433,6 +433,9 @@ _PREF_DEFAULTS: dict[str, Any] = {
     "ui.colors":              "standard",
     "ui.workspace":           "standard",
     "ui.license_prompted":    False,
+    "ui.save_arrangement":    "ask",       # "ask" | "always" | "never"
+    "ui.restore_arrangement": "ask",       # "ask" | "always" | "never"
+    "ui.window_arrangement":  None,        # dict — see ui/session_state.py
 
     # ── Display ─────────────────────────────────────────────────────────
     "display.colormap":       "Thermal Delta",
@@ -553,6 +556,9 @@ _PREF_VALIDATORS: dict[str, Any] = {
                                                    "protanopia", "tritanopia"),
     "ui.workspace":         _make_choice_validator("guided", "standard", "expert"),
     "ui.license_prompted":  _validate_bool,
+    "ui.save_arrangement":  _make_choice_validator("ask", "always", "never"),
+    "ui.restore_arrangement": _make_choice_validator("ask", "always", "never"),
+    # ui.window_arrangement is a free-form dict — no validator needed.
 
     # ── Auth ────────────────────────────────────────────────────────────
     "auth.require_login":   _validate_bool,

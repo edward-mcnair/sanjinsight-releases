@@ -53,6 +53,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtGui import QImage, QPixmap, QPainter
 
 from ui.theme import FONT, PALETTE
+from ui.widgets.detach_helpers import DetachableFrame, open_detached_viewer
 
 log = logging.getLogger(__name__)
 
@@ -173,7 +174,9 @@ class ScanWorkArea(QWidget):
 
         # ── Live canvas ────────────────────────────────────────────────────
         self._canvas = _LiveCanvas()
-        root.addWidget(self._canvas, 1)
+        self._canvas_frame = DetachableFrame(self._canvas)
+        self._canvas_frame.detach_requested.connect(self._on_detach_live)
+        root.addWidget(self._canvas_frame, 1)
 
         # ── Recipe note (shown when no recipe selected) ────────────────────
         self._recipe_note = QLabel(
@@ -204,6 +207,23 @@ class ScanWorkArea(QWidget):
         self._pid_edit.textChanged.connect(self._update_scan_btn)
 
         self._apply_styles()
+
+    # ── Detached viewer ──────────────────────────────────────────────────────────
+
+    _detached_live = None
+
+    def _on_detach_live(self) -> None:
+        """Open a detached viewer for the operator live camera feed."""
+        def _push(viewer):
+            pix = self._canvas.grab()
+            if pix is not None and not pix.isNull():
+                viewer.update_image(pix, "Operator — Live Feed")
+
+        open_detached_viewer(
+            self, "_detached_live",
+            source_id="operator.live",
+            title="Operator — Live Feed",
+            initial_push=_push)
 
     # ── Theming ─────────────────────────────────────────────────────────────────
 

@@ -391,21 +391,13 @@ class AnalysisTab(QWidget):
 
     def _on_detach_viewer(self) -> None:
         """Open (or bring to front) a detached large viewer window."""
-        if self._detached_viewer is not None:
-            self._detached_viewer.raise_()
-            self._detached_viewer.activateWindow()
-            return
-        from ui.widgets.detached_viewer import DetachedViewer
-        self._detached_viewer = DetachedViewer("Analysis — Result")
-        self._detached_viewer.closed.connect(self._on_viewer_closed)
-        self._detached_viewer.show()
-
-        # Push current canvas immediately if a result exists
-        self._push_to_detached()
-
-    def _on_viewer_closed(self) -> None:
-        """Clean up reference when the detached viewer is closed."""
-        self._detached_viewer = None
+        from ui.widgets.detach_helpers import open_detached_viewer
+        open_detached_viewer(
+            self, "_detached_viewer",
+            source_id="analysis.result",
+            title="Analysis — Result",
+            initial_push=lambda v: self._push_to_detached(),
+            static=True)
 
     def _push_to_detached(self) -> None:
         """Send the current canvas pixmap to the detached viewer."""
@@ -519,16 +511,6 @@ class AnalysisTab(QWidget):
         lay.addWidget(self._clear_btn)
         lay.addWidget(self._auto_cb)
         lay.addStretch()
-
-        self._detach_btn = QPushButton()
-        set_btn_icon(self._detach_btn, "mdi.open-in-new", PALETTE['textDim'])
-        self._detach_btn.setFixedSize(24, 24)
-        self._detach_btn.setToolTip(
-            "Open a detached large viewer window.\n"
-            "Can be moved to a second monitor or made full-screen (F11).")
-        self._detach_btn.setFlat(True)
-        self._detach_btn.clicked.connect(self._on_detach_viewer)
-        lay.addWidget(self._detach_btn)
 
         # Source indicator
         self._source_lbl = self._badge("No data", PALETTE['surface2'], PALETTE['textDim'])
@@ -672,12 +654,15 @@ class AnalysisTab(QWidget):
     # ---------------------------------------------------------------- #
 
     def _build_canvas(self) -> QWidget:
+        from ui.widgets.detach_helpers import DetachableFrame
         w = QWidget()
         lay = QVBoxLayout(w)
         lay.setContentsMargins(4, 4, 4, 4)
         self._canvas = OverlayCanvas()
         self._canvas.context_save_png.connect(self._save_overlay_png)
-        lay.addWidget(self._canvas)
+        self._canvas_frame = DetachableFrame(self._canvas)
+        self._canvas_frame.detach_requested.connect(self._on_detach_viewer)
+        lay.addWidget(self._canvas_frame)
         return w
 
     def _save_overlay_png(self):

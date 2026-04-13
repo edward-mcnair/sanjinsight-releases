@@ -59,7 +59,7 @@ class ProfileApplicationService:
     # ── Save / Load dialogs ──────────────────────────────────────────
 
     def navigate_to_profiles(self):
-        """Navigate to the Library tab → Scan Profiles sub-tab."""
+        """Navigate to the Library tab → Recipes sub-tab."""
         self._nav.navigate_to(self._library_tab)
         self._library_tab._tabs.setCurrentIndex(1)
 

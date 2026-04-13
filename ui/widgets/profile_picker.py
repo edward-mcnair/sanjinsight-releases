@@ -103,6 +103,18 @@ class ProfilePicker(QWidget):
         # Profile not in current list — may need modality filter update
         log.debug("ProfilePicker.set_profile: %r not in visible list", profile.name)
 
+    def set_by_name(self, name: str) -> None:
+        """Select a profile by name (best-effort — no signal emitted).
+
+        Used by recipe cascade to pre-select the material profile
+        referenced in a recipe.  If not found, silently does nothing.
+        """
+        for p in self._all_profiles:
+            if getattr(p, "name", "") == name:
+                self.set_profile(p)
+                return
+        log.debug("ProfilePicker.set_by_name: %r not found", name)
+
     def filter_by_wavelength(self, wavelength_nm: int) -> None:
         """Legacy — filter by wavelength (0 = show all)."""
         # Modality filter is the primary mechanism now; wavelength is

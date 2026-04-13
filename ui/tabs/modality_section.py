@@ -1,21 +1,17 @@
 """
 ui/tabs/modality_section.py  —  Measurement Setup section
 
-Camera → Measurement Goal → Profile → Begin.
+Recipe → Camera → Measurement Goal → Material Profile → Begin.
 Phase 1 · CONFIGURATION
 
 Layout: two-card architecture
-  LEFT  — Configuration card: camera, goal, profile, objective, advanced, begin
+  LEFT  — Configuration card: recipe, camera, goal, profile, objective, advanced, begin
   RIGHT — Preview card: live feed, camera identity, modality badge
 
-Two presentation modes controlled by workspace mode:
-
-  GUIDED  — numbered guidance cards above the two-card body
-  COMPACT — compact help card above the two-card body
-
-Both modes share the same widgets and controls page.  Mode switching
-toggles visibility of guidance elements (cards, footer, step badges)
-rather than moving widgets between layouts.
+Selecting a Recipe at the top cascades settings down to camera type,
+measurement goal, and material profile.  Sub-controls remain editable
+for manual tweaks.  The Begin button changes to "Apply Recipe" when
+a recipe is selected.
 """
 from __future__ import annotations
 
@@ -231,11 +227,51 @@ class ModalitySection(QWidget):
         lc.setContentsMargins(14, 12, 14, 12)
         lc.setSpacing(0)
 
-        # ── Camera section ────────────────────────────────────────────
-        cam_lbl = QLabel("Camera")
-        cam_lbl.setStyleSheet(self._section_label_qss())
-        lc.addWidget(cam_lbl)
+        # ── Recipe section (top — cascades to camera, goal, profile) ──
+        recipe_lbl = QLabel(TERMS["recipe"])
+        recipe_lbl.setStyleSheet(self._section_label_qss())
+        lc.addWidget(recipe_lbl)
         lc.addSpacing(2)
+
+        self._scan_combo = QComboBox()
+        self._scan_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._scan_combo.setPlaceholderText(f"Select a {TERMS['recipe'].lower()}\u2026")
+        self._scan_combo.currentIndexChanged.connect(self._on_scan_profile_changed)
+        lc.addWidget(self._scan_combo)
+
+        self._scan_desc = QLabel("")
+        self._scan_desc.setWordWrap(True)
+        self._scan_desc.setStyleSheet(_dim_style())
+        lc.addWidget(self._scan_desc)
+
+        # Settings preview — shown when a recipe is selected
+        self._recipe_detail = QLabel("")
+        self._recipe_detail.setWordWrap(True)
+        self._recipe_detail.setStyleSheet(
+            f"font-size:{FONT['caption']}pt; color:{PALETTE['textSub']}; "
+            f"background:{PALETTE['bg']}; border:1px solid {PALETTE['border']}; "
+            f"border-radius:4px; padding:6px 8px;")
+        self._recipe_detail.setVisible(False)
+        lc.addWidget(self._recipe_detail)
+
+        lc.addSpacing(4)
+        self._sep_recipe = _separator()
+        lc.addWidget(self._sep_recipe)
+        lc.addSpacing(4)
+
+        # ── Camera section ────────────────────────────────────────────
+        self._cam_lbl = QLabel("Camera")
+        self._cam_lbl.setStyleSheet(self._section_label_qss())
+        lc.addWidget(self._cam_lbl)
+        lc.addSpacing(2)
+
+        # "(set by recipe)" annotation — shown when recipe auto-configured
+        self._cam_recipe_hint = QLabel("")
+        self._cam_recipe_hint.setStyleSheet(
+            f"font-size:{FONT['caption']}pt; color:{PALETTE['accent']}; "
+            f"font-style:italic;")
+        self._cam_recipe_hint.setVisible(False)
+        lc.addWidget(self._cam_recipe_hint)
 
         # Multi-camera: combo selector
         self._cam_combo = QComboBox()
@@ -288,6 +324,13 @@ class ModalitySection(QWidget):
         lc.addWidget(goal_lbl)
         lc.addSpacing(2)
 
+        self._goal_recipe_hint = QLabel("")
+        self._goal_recipe_hint.setStyleSheet(
+            f"font-size:{FONT['caption']}pt; color:{PALETTE['accent']}; "
+            f"font-style:italic;")
+        self._goal_recipe_hint.setVisible(False)
+        lc.addWidget(self._goal_recipe_hint)
+
         self._goal_combo = QComboBox()
         self._goal_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self._goal_combo.currentIndexChanged.connect(self._on_goal_changed)
@@ -304,33 +347,18 @@ class ModalitySection(QWidget):
         lc.addWidget(self._sep_goal)
         lc.addSpacing(4)
 
-        # ── Scan Profile section (camera-filtered) ────────────────────
-        scan_lbl = QLabel(TERMS["recipe"])
-        scan_lbl.setStyleSheet(self._section_label_qss())
-        lc.addWidget(scan_lbl)
-        lc.addSpacing(2)
-
-        self._scan_combo = QComboBox()
-        self._scan_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self._scan_combo.setPlaceholderText(f"Select a {TERMS['recipe'].lower()}\u2026")
-        self._scan_combo.currentIndexChanged.connect(self._on_scan_profile_changed)
-        lc.addWidget(self._scan_combo)
-
-        self._scan_desc = QLabel("")
-        self._scan_desc.setWordWrap(True)
-        self._scan_desc.setStyleSheet(_dim_style())
-        lc.addWidget(self._scan_desc)
-
-        lc.addSpacing(4)
-        self._sep_scan = _separator()
-        lc.addWidget(self._sep_scan)
-        lc.addSpacing(4)
-
         # ── Material Profile section ──────────────────────────────────
         prof_lbl = QLabel("Material Profile")
         prof_lbl.setStyleSheet(self._section_label_qss())
         lc.addWidget(prof_lbl)
         lc.addSpacing(2)
+
+        self._profile_recipe_hint = QLabel("")
+        self._profile_recipe_hint.setStyleSheet(
+            f"font-size:{FONT['caption']}pt; color:{PALETTE['accent']}; "
+            f"font-style:italic;")
+        self._profile_recipe_hint.setVisible(False)
+        lc.addWidget(self._profile_recipe_hint)
 
         self._profile_picker = ProfilePicker()
         self._profile_picker.profile_selected.connect(self._on_profile_picked)
@@ -424,7 +452,7 @@ class ModalitySection(QWidget):
         self._opts_panel.addWidget(opts_inner)
         lc.addWidget(self._opts_panel)
 
-        # ── Begin button ──────────────────────────────────────────────
+        # ── Begin / Apply Recipe button ──────────────────────────────
         lc.addSpacing(8)
         self._begin_btn = QPushButton("  Begin Measurement")
         set_btn_icon(self._begin_btn, IC.PLAY,
@@ -432,19 +460,12 @@ class ModalitySection(QWidget):
         self._begin_btn.setMinimumHeight(36)
         self._begin_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self._begin_btn.setCursor(Qt.PointingHandCursor)
-        self._begin_btn.setStyleSheet(
-            f"QPushButton {{"
-            f"  background: {PALETTE['cta']}; "
-            f"  color: {PALETTE.get('ctaText', '#fff')}; "
-            f"  border: none; border-radius: 6px; "
-            f"  font-size: {FONT['body']}pt; font-weight: 600; "
-            f"  padding: 4px 16px;"
-            f"}}"
-            f"QPushButton:hover {{"
-            f"  background: {PALETTE.get('ctaHover', PALETTE['cta'])};"
-            f"}}")
+        self._begin_btn.setStyleSheet(self._cta_qss())
         self._begin_btn.clicked.connect(self._on_begin)
         lc.addWidget(self._begin_btn)
+
+        # Track whether a recipe is currently driving the UI
+        self._active_recipe = None  # Recipe object or None
 
         body.addWidget(left_card, 3)
 
@@ -797,7 +818,15 @@ class ModalitySection(QWidget):
                      color=PALETTE.get("ctaText", "#fff"))
 
     def _on_begin(self) -> None:
-        """Handle Begin button click — navigate to the goal's target panel."""
+        """Handle Begin / Apply Recipe button click.
+
+        If a recipe is active, emit the recipe for application and navigate
+        to the goal.  Otherwise, navigate to the goal's target panel.
+        """
+        if self._active_recipe is not None:
+            self.scan_profile_selected.emit(
+                self._active_recipe.uid, self._active_recipe.label)
+
         index = self._goal_combo.currentIndex()
         if index < 0:
             return
@@ -807,70 +836,179 @@ class ModalitySection(QWidget):
         gid, subtitle, icon, nav = data
         self.navigate_requested.emit(nav)
 
-    # ── Scan Profile (camera-filtered) ────────────────────────────────
+    # ── Recipe list ──────────────────────────────────────────────────
 
-    _CAM_TO_MODALITY = {"tr": "thermoreflectance", "ir": "ir_lockin"}
+    def _refresh_scan_profiles(self, cam_type: str | None = None) -> None:
+        """Populate the recipe combo.
 
-    def _refresh_scan_profiles(self, cam_type: str) -> None:
-        """Populate the scan profile combo filtered by camera modality."""
+        All recipes are shown (recipe drives camera, not vice versa).
+        The ``cam_type`` parameter is accepted for backward compatibility
+        but no longer used for filtering.
+        """
         from acquisition.recipe_tab import RecipeStore
         self._scan_combo.blockSignals(True)
         self._scan_combo.clear()
 
-        modality = self._CAM_TO_MODALITY.get(cam_type, "thermoreflectance")
         try:
             recipes = RecipeStore().list()
         except Exception:
             recipes = []
 
-        matching = [r for r in recipes
-                    if r.acquisition.modality == modality]
-
-        for recipe in matching:
+        for recipe in recipes:
             suffix = " \U0001f512" if recipe.locked else ""
             self._scan_combo.addItem(
                 f"{recipe.label}{suffix}",
                 userData=(recipe.uid, recipe.label))
 
-        if not matching:
+        if not recipes:
             self._scan_desc.setText(
-                f"No {TERMS['recipe_plural'].lower()} for this camera.")
+                f"No {TERMS['recipe_plural'].lower()} available.")
         else:
             self._scan_desc.setText("")
 
         self._scan_combo.setCurrentIndex(-1)  # no selection
         self._scan_combo.blockSignals(False)
-        self.scan_profile_selected.emit("", "")  # clear on camera change
+        self._active_recipe = None
+        self._clear_recipe_hints()
+        self._update_begin_button()
+        self.scan_profile_selected.emit("", "")
 
     def _on_scan_profile_changed(self, index: int) -> None:
-        """Handle scan profile selection change."""
+        """Handle recipe selection — cascade settings to camera/goal/profile."""
+        _HINT = "(set by recipe)"
+
         if index < 0:
             self._scan_desc.setText("")
+            self._recipe_detail.setVisible(False)
+            self._active_recipe = None
+            self._clear_recipe_hints()
+            self._update_begin_button()
             self.scan_profile_selected.emit("", "")
             return
         data = self._scan_combo.itemData(index)
         if data is None:
+            self._active_recipe = None
+            self._clear_recipe_hints()
+            self._update_begin_button()
             self.scan_profile_selected.emit("", "")
             return
         uid, label = data
         self.scan_profile_selected.emit(uid, label)
-        # Show key parameters
+
+        # Fetch full recipe to cascade settings
         from acquisition.recipe_tab import RecipeStore
+        recipe = None
         try:
             store = RecipeStore()
             for r in store.list():
                 if r.uid == uid:
-                    parts = []
-                    parts.append(f"{r.camera.n_frames} frames")
-                    parts.append(f"{r.camera.exposure_us:.0f} \u00b5s")
-                    if r.tec.enabled:
-                        parts.append(f"TEC {r.tec.setpoint_c:.0f}\u00b0C")
-                    if r.bias.enabled:
-                        parts.append(f"Bias {r.bias.voltage_v:.1f}V")
-                    self._scan_desc.setText("  \u00b7  ".join(parts))
+                    recipe = r
                     break
         except Exception:
             pass
+
+        if recipe is None:
+            self._active_recipe = None
+            self._clear_recipe_hints()
+            self._update_begin_button()
+            return
+
+        self._active_recipe = recipe
+
+        # ── Summary line (compact) ────────────────────────────────────
+        parts = []
+        parts.append(f"{recipe.camera.n_frames} frames")
+        parts.append(f"{recipe.camera.exposure_us:.0f} \u00b5s")
+        if recipe.tec.enabled:
+            parts.append(f"TEC {recipe.tec.setpoint_c:.0f}\u00b0C")
+        if recipe.bias.enabled:
+            parts.append(f"Bias {recipe.bias.voltage_v:.1f}V")
+        self._scan_desc.setText("  \u00b7  ".join(parts))
+
+        # ── Settings detail panel ─────────────────────────────────────
+        lines = []
+        lines.append(f"\u25b8 Camera: {recipe.camera.exposure_us:.0f} \u00b5s, "
+                      f"{recipe.camera.gain_db:.1f} dB, "
+                      f"{recipe.camera.n_frames} frames")
+        lines.append(f"\u25b8 Modality: {recipe.acquisition.modality}")
+        if recipe.profile_name:
+            lines.append(f"\u25b8 Material Profile: {recipe.profile_name}")
+        if recipe.tec.enabled:
+            lines.append(f"\u25b8 TEC: {recipe.tec.setpoint_c:.1f}\u00b0C")
+        if recipe.bias.enabled:
+            lines.append(f"\u25b8 Bias: {recipe.bias.voltage_v:.1f} V / "
+                          f"{recipe.bias.current_a:.3f} A")
+        lines.append(f"\u25b8 Analysis: threshold {recipe.analysis.threshold_k:.1f} K")
+        self._recipe_detail.setText("\n".join(lines))
+        self._recipe_detail.setVisible(True)
+
+        # ── Cascade: camera modality ──────────────────────────────────
+        modality = recipe.acquisition.modality
+        _MOD_TO_CAM = {"thermoreflectance": "tr", "ir_lockin": "ir"}
+        target_cam = _MOD_TO_CAM.get(modality, "tr")
+        for i in range(self._cam_combo.count()):
+            if self._cam_combo.itemData(i) == target_cam:
+                self._cam_combo.setCurrentIndex(i)
+                break
+        self._cam_recipe_hint.setText(_HINT)
+        self._cam_recipe_hint.setVisible(True)
+
+        # ── Cascade: measurement goal ─────────────────────────────────
+        # Map scan_type → goal id
+        _TYPE_TO_GOAL = {
+            "single": "measurement",
+            "autoscan": "hotspot_detection",
+            "transient": "transient_series",
+        }
+        goal_id = _TYPE_TO_GOAL.get(recipe.scan_type, "measurement")
+        for i in range(self._goal_combo.count()):
+            data = self._goal_combo.itemData(i)
+            if data and data[0] == goal_id:
+                self._goal_combo.setCurrentIndex(i)
+                break
+        self._goal_recipe_hint.setText(_HINT)
+        self._goal_recipe_hint.setVisible(True)
+
+        # ── Cascade: material profile ─────────────────────────────────
+        if recipe.profile_name:
+            self._profile_picker.set_by_name(recipe.profile_name)
+            self._profile_recipe_hint.setText(_HINT)
+            self._profile_recipe_hint.setVisible(True)
+        else:
+            self._profile_recipe_hint.setVisible(False)
+
+        self._update_begin_button()
+
+    def _clear_recipe_hints(self) -> None:
+        """Hide all '(set by recipe)' annotations."""
+        for hint in (self._cam_recipe_hint,
+                     self._goal_recipe_hint,
+                     self._profile_recipe_hint):
+            hint.setVisible(False)
+            hint.setText("")
+        self._recipe_detail.setVisible(False)
+
+    def _update_begin_button(self) -> None:
+        """Toggle Begin button between manual and recipe modes."""
+        if self._active_recipe is not None:
+            self._begin_btn.setText(f"  Apply {TERMS['recipe']}")
+            set_btn_icon(self._begin_btn, IC.RECIPES,
+                         color=PALETTE.get("ctaText", "#fff"))
+        else:
+            # Restore goal-driven text
+            index = self._goal_combo.currentIndex()
+            if index >= 0:
+                data = self._goal_combo.itemData(index)
+                if data:
+                    gid, subtitle, icon, nav = data
+                    goal_title = self._goal_combo.currentText()
+                    self._begin_btn.setText(f"  Begin {goal_title}")
+                    set_btn_icon(self._begin_btn, icon,
+                                 color=PALETTE.get("ctaText", "#fff"))
+                    return
+            self._begin_btn.setText("  Begin Measurement")
+            set_btn_icon(self._begin_btn, IC.PLAY,
+                         color=PALETTE.get("ctaText", "#fff"))
 
     def _on_profile_picked(self, profile) -> None:
         self.profile_selected.emit(profile)
@@ -1063,13 +1201,10 @@ class ModalitySection(QWidget):
         return (f"font-size:{FONT['label']}pt; font-weight:600; "
                 f"color:{PALETTE['text']};")
 
-    def _apply_styles(self) -> None:
-        self._modality_desc.setStyleSheet(_dim_style())
-        self._goal_desc.setStyleSheet(_dim_style())
-        self._obj_fov_lbl.setStyleSheet(_dim_style())
-        self._sensor_lbl.setStyleSheet(_mono_style())
-        # Begin button
-        self._begin_btn.setStyleSheet(
+    @staticmethod
+    def _cta_qss() -> str:
+        """CTA button stylesheet (used by Begin / Apply Recipe button)."""
+        return (
             f"QPushButton {{"
             f"  background: {PALETTE['cta']}; "
             f"  color: {PALETTE.get('ctaText', '#fff')}; "
@@ -1080,6 +1215,14 @@ class ModalitySection(QWidget):
             f"QPushButton:hover {{"
             f"  background: {PALETTE.get('ctaHover', PALETTE['cta'])};"
             f"}}")
+
+    def _apply_styles(self) -> None:
+        self._modality_desc.setStyleSheet(_dim_style())
+        self._goal_desc.setStyleSheet(_dim_style())
+        self._obj_fov_lbl.setStyleSheet(_dim_style())
+        self._sensor_lbl.setStyleSheet(_mono_style())
+        # Begin button
+        self._begin_btn.setStyleSheet(self._cta_qss())
         # Section labels in left card
         for child in self.findChildren(QLabel):
             if child.text() in ("Camera", "Measurement Goal", "Profile", "Objective"):
@@ -1096,7 +1239,7 @@ class ModalitySection(QWidget):
         for child in self.findChildren(QFrame, "CardFrame"):
             child.setStyleSheet(card_qss)
         # Separators
-        for sep in (self._sep1, self._sep_goal, self._sep2, self._preview_sep):
+        for sep in (self._sep_recipe, self._sep1, self._sep_goal, self._sep2, self._preview_sep):
             sep.setStyleSheet(
                 f"background: {PALETTE['border']}; border: none;")
         # Preview panel

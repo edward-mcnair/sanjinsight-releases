@@ -325,25 +325,17 @@ class MovieTab(QWidget):
         view_row.addWidget(self._cmap_combo)
         view_row.addStretch()
 
-        # Detach button — open large viewer window
-        self._detach_btn = QPushButton()
-        set_btn_icon(self._detach_btn, "mdi.open-in-new", PALETTE['textDim'])
-        self._detach_btn.setFixedSize(24, 24)
-        self._detach_btn.setToolTip(
-            "Open a detached large viewer window.\n"
-            "Can be moved to a second monitor or made full-screen (F11).")
-        self._detach_btn.setFlat(True)
-        self._detach_btn.clicked.connect(self._on_detach_viewer)
-        view_row.addWidget(self._detach_btn)
-
         lay.addLayout(view_row)
 
         # ── Frame viewer (dominant — stretch=3) ───────────────────────
         from ui.widgets.overlay_compositor import OverlayCompositor
+        from ui.widgets.detach_helpers import DetachableFrame
         self._compositor = OverlayCompositor()
         self._compositor.setMinimumSize(400, 300)
         self._compositor.add_overlay("rois", self._paint_rois, label="ROIs")
-        lay.addWidget(self._compositor, 3)
+        self._compositor_frame = DetachableFrame(self._compositor)
+        self._compositor_frame.detach_requested.connect(self._on_detach_viewer)
+        lay.addWidget(self._compositor_frame, 3)
 
         # ── Frame slider (directly below viewer) ─────────────────────
         slider_row = QHBoxLayout()
@@ -1106,21 +1098,13 @@ class MovieTab(QWidget):
 
     def _on_detach_viewer(self) -> None:
         """Open (or bring to front) a detached large viewer window."""
-        if self._detached_viewer is not None:
-            self._detached_viewer.raise_()
-            self._detached_viewer.activateWindow()
-            return
-        from ui.widgets.detached_viewer import DetachedViewer
-        self._detached_viewer = DetachedViewer("Movie — Playback")
-        self._detached_viewer.closed.connect(self._on_viewer_closed)
-        self._detached_viewer.show()
-
-        # Push current frame immediately if available
-        self._push_to_detached(self._frame_slider.value())
-
-    def _on_viewer_closed(self) -> None:
-        """Clean up reference when the detached viewer is closed."""
-        self._detached_viewer = None
+        from ui.widgets.detach_helpers import open_detached_viewer
+        open_detached_viewer(
+            self, "_detached_viewer",
+            source_id="movie.playback",
+            title="Movie — Playback",
+            initial_push=lambda v: self._push_to_detached(
+                self._frame_slider.value()))
 
     def _push_to_detached(self, idx: int) -> None:
         """Send the current compositor pixmap to the detached viewer."""
