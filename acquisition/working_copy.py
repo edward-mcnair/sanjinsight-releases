@@ -26,7 +26,7 @@ import uuid
 from enum import Enum, auto
 from typing import Optional
 
-from .recipe_tab import Recipe, RecipeStore
+from .recipe import Recipe, RecipeStore
 
 log = logging.getLogger(__name__)
 

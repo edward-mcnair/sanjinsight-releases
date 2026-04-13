@@ -4,7 +4,7 @@ acquisition/recipe_presets.py
 Factory presets for common thermoreflectance measurement scenarios.
 
 Presets provide sensible starting points for engineers working with
-standard device categories.  Load a preset into the Recipe Editor,
+standard device categories.  Load a preset into the Recipe Builder,
 adjust as needed, and save with your own lab-specific label.
 
 Presets
@@ -21,8 +21,9 @@ from __future__ import annotations
 
 from typing import List
 
-from acquisition.recipe_tab import (
-    Recipe, RecipeCamera, RecipeAcquisition, RecipeAnalysis, RecipeTec,
+from acquisition.recipe import (
+    Recipe,
+    _build_standard_phases,
 )
 
 
@@ -42,23 +43,32 @@ def _make(
     tec_setpoint_c:     float  = 25.0,
     notes:              str    = "",
 ) -> Recipe:
-    r             = Recipe()
+    r = Recipe()
     r.label       = label
     r.description = description
-    r.created_at  = ""          # not a persisted recipe — no timestamp until saved
-    r.camera      = RecipeCamera(
-        exposure_us=exposure_us,
-        gain_db=gain_db,
-        n_frames=n_frames,
+    r.created_at  = ""          # not persisted — no timestamp until saved
+    r.notes       = notes
+
+    camera = {
+        "exposure_us": exposure_us,
+        "gain_db": gain_db,
+        "n_frames": n_frames,
+        "inter_phase_delay_s": delay_s,
+    }
+    tec = {
+        "enabled": tec_enabled,
+        "setpoint_c": tec_setpoint_c,
+    }
+    analysis = {
+        "threshold_k": threshold_k,
+        "fail_peak_k": fail_peak_k,
+        "fail_hotspot_count": fail_hotspot_count,
+    }
+    r.phases = _build_standard_phases(
+        camera=camera,
+        tec=tec,
+        analysis=analysis,
     )
-    r.acquisition = RecipeAcquisition(inter_phase_delay_s=delay_s)
-    r.analysis    = RecipeAnalysis(
-        threshold_k=threshold_k,
-        fail_peak_k=fail_peak_k,
-        fail_hotspot_count=fail_hotspot_count,
-    )
-    r.tec   = RecipeTec(enabled=tec_enabled, setpoint_c=tec_setpoint_c)
-    r.notes = notes
     return r
 
 

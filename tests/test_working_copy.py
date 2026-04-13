@@ -4,6 +4,8 @@ tests/test_working_copy.py  —  WorkingCopy model tests
 Covers the six core operations (load, edit, save, save-as, revert, deselect)
 plus the guardrails (equality-based modified, locked protection, rebase
 after save-as, generated profile restrictions).
+
+Uses the v2 phase-based Recipe model.
 """
 from __future__ import annotations
 
@@ -13,7 +15,9 @@ from pathlib import Path
 
 import pytest
 
-from acquisition.recipe_tab import Recipe, RecipeStore
+from acquisition.recipe import (
+    Recipe, RecipeStore, _build_standard_phases, infer_requirements,
+)
 from acquisition.working_copy import (
     WorkingCopy, Origin,
     load_working_copy, generated_working_copy,
@@ -26,17 +30,29 @@ def tmp_store(tmp_path):
     return RecipeStore(directory=tmp_path)
 
 
+def _make_recipe(**overrides) -> Recipe:
+    """Helper to create a v2 Recipe with standard phases."""
+    r = Recipe()
+    r.label = overrides.pop("label", "Test Profile")
+    r.notes = overrides.pop("notes", "")
+    r.locked = overrides.pop("locked", False)
+    r.approved_by = overrides.pop("approved_by", "")
+    r.approved_at = overrides.pop("approved_at", "")
+    r.phases = _build_standard_phases(
+        camera={"exposure_us": overrides.pop("exposure_us", 1000),
+                "gain_db": overrides.pop("gain_db", 6.0)},
+        bias={"enabled": overrides.pop("bias_enabled", True),
+              "voltage_v": overrides.pop("bias_voltage_v", 3.3)},
+    )
+    r.variables = overrides.pop("variables", [])
+    r.requirements = infer_requirements(r)
+    return r
+
+
 @pytest.fixture
 def saved_recipe(tmp_store):
     """A recipe saved to disk via the store."""
-    r = Recipe()
-    r.label = "Test Profile"
-    r.camera.exposure_us = 1000.0
-    r.camera.gain_db = 6.0
-    r.acquisition.modality = "thermoreflectance"
-    r.analysis.threshold_k = 5.0
-    r.bias.enabled = True
-    r.bias.voltage_v = 3.3
+    r = _make_recipe()
     tmp_store.save(r)
     return r
 
@@ -44,15 +60,42 @@ def saved_recipe(tmp_store):
 @pytest.fixture
 def locked_recipe(tmp_store):
     """A locked/approved recipe saved to disk."""
-    r = Recipe()
-    r.label = "Locked Baseline"
-    r.locked = True
-    r.approved_by = "admin"
-    r.approved_at = "2026-01-01T00:00:00"
-    r.variables = ["bias.voltage_v", "tec.setpoint_c"]
-    r.camera.exposure_us = 2000.0
+    r = _make_recipe(
+        label="Locked Baseline",
+        locked=True,
+        approved_by="admin",
+        approved_at="2026-01-01T00:00:00",
+        exposure_us=2000,
+    )
     tmp_store.save(r)
     return r
+
+
+def _get_hw_config(recipe: Recipe) -> dict:
+    """Get the hardware_setup phase config from a recipe."""
+    return recipe.get_phase_config("hardware_setup")
+
+
+def _set_exposure(recipe: Recipe, val: float) -> None:
+    """Set exposure_us in the hardware_setup phase."""
+    hw = recipe.get_phase("hardware_setup")
+    hw.config["camera"]["exposure_us"] = val
+
+
+def _get_exposure(recipe: Recipe) -> float:
+    """Get exposure_us from the hardware_setup phase."""
+    return _get_hw_config(recipe)["camera"]["exposure_us"]
+
+
+def _set_bias_voltage(recipe: Recipe, val: float) -> None:
+    """Set bias voltage in the hardware_setup phase."""
+    hw = recipe.get_phase("hardware_setup")
+    hw.config["bias"]["voltage_v"] = val
+
+
+def _get_bias_voltage(recipe: Recipe) -> float:
+    """Get bias voltage from the hardware_setup phase."""
+    return _get_hw_config(recipe)["bias"]["voltage_v"]
 
 
 # ── Baseline behavior ──────────────────────────────────────────────
@@ -65,16 +108,16 @@ class TestLoadAndModified:
 
     def test_modified_after_edit(self, saved_recipe, tmp_store):
         wc = load_working_copy(saved_recipe, tmp_store)
-        wc.recipe.camera.exposure_us = 9999.0
+        _set_exposure(wc.recipe, 9999.0)
         assert wc.modified
 
     def test_modified_returns_false_when_reverted_by_hand(self, saved_recipe, tmp_store):
         """Equality-based: change a value, change it back → not modified."""
         wc = load_working_copy(saved_recipe, tmp_store)
-        original_exposure = wc.recipe.camera.exposure_us
-        wc.recipe.camera.exposure_us = 9999.0
+        original = _get_exposure(wc.recipe)
+        _set_exposure(wc.recipe, 9999.0)
         assert wc.modified
-        wc.recipe.camera.exposure_us = original_exposure
+        _set_exposure(wc.recipe, original)
         assert not wc.modified
 
     def test_origin_is_loaded(self, saved_recipe, tmp_store):
@@ -88,8 +131,8 @@ class TestLoadAndModified:
     def test_deep_copy_isolation(self, saved_recipe, tmp_store):
         """Edits to working copy do not mutate the original Recipe object."""
         wc = load_working_copy(saved_recipe, tmp_store)
-        wc.recipe.camera.exposure_us = 9999.0
-        assert saved_recipe.camera.exposure_us == 1000.0
+        _set_exposure(wc.recipe, 9999.0)
+        assert _get_exposure(saved_recipe) == 1000.0
 
 
 # ── Save ────────────────────────────────────────────────────────────
@@ -110,17 +153,17 @@ class TestSave:
 
     def test_save_updates_disk(self, saved_recipe, tmp_store):
         wc = load_working_copy(saved_recipe, tmp_store)
-        wc.recipe.camera.exposure_us = 7777.0
+        _set_exposure(wc.recipe, 7777.0)
         wc.save()
 
         # Reload from disk and check
-        reloaded = tmp_store.load(saved_recipe.label)
+        reloaded = tmp_store.load(saved_recipe.uid)
         assert reloaded is not None
-        assert reloaded.camera.exposure_us == 7777.0
+        assert _get_exposure(reloaded) == 7777.0
 
     def test_save_resets_modified(self, saved_recipe, tmp_store):
         wc = load_working_copy(saved_recipe, tmp_store)
-        wc.recipe.camera.exposure_us = 7777.0
+        _set_exposure(wc.recipe, 7777.0)
         assert wc.modified
         wc.save()
         assert not wc.modified
@@ -154,7 +197,7 @@ class TestSaveAs:
     def test_save_as_rebases(self, saved_recipe, tmp_store):
         """After save-as, origin becomes LOADED, modified is False."""
         wc = load_working_copy(saved_recipe, tmp_store)
-        wc.recipe.camera.exposure_us = 5555.0
+        _set_exposure(wc.recipe, 5555.0)
         assert wc.modified
         wc.save_as("Cloned Profile")
         assert not wc.modified
@@ -163,7 +206,7 @@ class TestSaveAs:
 
     def test_save_as_persists_to_disk(self, saved_recipe, tmp_store):
         wc = load_working_copy(saved_recipe, tmp_store)
-        wc.recipe.camera.exposure_us = 5555.0
+        _set_exposure(wc.recipe, 5555.0)
         result = wc.save_as("Cloned Profile")
 
         # UID-keyed file should exist
@@ -171,8 +214,11 @@ class TestSaveAs:
         assert uid_file.exists()
         with open(uid_file) as f:
             data = json.load(f)
-        assert data["camera"]["exposure_us"] == 5555.0
         assert data["label"] == "Cloned Profile"
+        # Verify exposure in hardware_setup phase
+        hw_phase = [p for p in data["phases"]
+                    if p["phase_type"] == "hardware_setup"][0]
+        assert hw_phase["config"]["camera"]["exposure_us"] == 5555.0
 
     def test_save_as_clears_lock_state(self, locked_recipe, tmp_store):
         wc = load_working_copy(locked_recipe, tmp_store)
@@ -195,7 +241,7 @@ class TestSaveAs:
         """After save-as, Save should work (now loaded, not locked)."""
         wc = load_working_copy(saved_recipe, tmp_store)
         wc.save_as("Cloned Profile")
-        wc.recipe.camera.exposure_us = 3333.0
+        _set_exposure(wc.recipe, 3333.0)
         assert wc.can_save
         wc.save()  # should not raise
         assert not wc.modified
@@ -207,24 +253,24 @@ class TestSaveAs:
 class TestRevert:
     def test_revert_restores_all_fields(self, saved_recipe, tmp_store):
         wc = load_working_copy(saved_recipe, tmp_store)
-        wc.recipe.camera.exposure_us = 9999.0
-        wc.recipe.bias.voltage_v = 99.0
+        _set_exposure(wc.recipe, 9999.0)
+        _set_bias_voltage(wc.recipe, 99.0)
         wc.recipe.label = "Changed Name"
         wc.revert()
-        assert wc.recipe.camera.exposure_us == 1000.0
-        assert wc.recipe.bias.voltage_v == 3.3
+        assert _get_exposure(wc.recipe) == 1000.0
+        assert _get_bias_voltage(wc.recipe) == 3.3
         assert wc.recipe.label == "Test Profile"
 
     def test_revert_clears_modified(self, saved_recipe, tmp_store):
         wc = load_working_copy(saved_recipe, tmp_store)
-        wc.recipe.camera.exposure_us = 9999.0
+        _set_exposure(wc.recipe, 9999.0)
         assert wc.modified
         wc.revert()
         assert not wc.modified
 
     def test_revert_preserves_locked_state(self, locked_recipe, tmp_store):
         wc = load_working_copy(locked_recipe, tmp_store)
-        wc.recipe.bias.voltage_v = 99.0
+        _set_bias_voltage(wc.recipe, 99.0)
         wc.revert()
         assert wc.recipe.locked
         assert wc.recipe.approved_by == "admin"
@@ -249,7 +295,7 @@ class TestLockedProfile:
     def test_variable_edit_marks_modified(self, locked_recipe, tmp_store):
         """Editing an allowed variable field still sets modified."""
         wc = load_working_copy(locked_recipe, tmp_store)
-        wc.recipe.bias.voltage_v = 5.0
+        _set_bias_voltage(wc.recipe, 5.0)
         assert wc.modified
 
 
@@ -263,7 +309,7 @@ class TestDisplayLabel:
 
     def test_modified_label(self, saved_recipe, tmp_store):
         wc = load_working_copy(saved_recipe, tmp_store)
-        wc.recipe.camera.exposure_us = 9999.0
+        _set_exposure(wc.recipe, 9999.0)
         assert wc.display_label == "Test Profile (modified)"
 
     def test_locked_label(self, locked_recipe, tmp_store):
@@ -291,5 +337,5 @@ class TestDeselectGuard:
 
     def test_prompt_needed_when_modified(self, saved_recipe, tmp_store):
         wc = load_working_copy(saved_recipe, tmp_store)
-        wc.recipe.camera.exposure_us = 9999.0
+        _set_exposure(wc.recipe, 9999.0)
         assert wc.modified  # caller should prompt before discarding
