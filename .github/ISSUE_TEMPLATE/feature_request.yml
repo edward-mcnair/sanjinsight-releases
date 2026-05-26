@@ -1,0 +1,53 @@
+name: "Feature request / missing capability"
+description: "Something you need that isn't there, or a workflow that could be better"
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Feature ideas from real bench use are gold — thank you. The clearer the
+        *why*, the better we can design the *what*.
+  - type: textarea
+    id: need
+    attributes:
+      label: "What do you need? (the capability or change)"
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: "Why — what are you trying to accomplish? (the use case)"
+      description: "What does this let you do that you can't today, and how do you work around it now?"
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: "Which workflow / area?"
+      multiple: true
+      options:
+        - "Measurement"
+        - "Calibration"
+        - "Hot Spot Detection"
+        - "Transient Series"
+        - "Data Set Analysis"
+        - "Camera / live preview"
+        - "Focus & stage"
+        - "Stimulus / timing / temperature"
+        - "Sessions / experiment log / export"
+        - "Profiles / recipes / automations"
+        - "Reporting"
+        - "Other"
+    validations:
+      required: true
+  - type: dropdown
+    id: importance
+    attributes:
+      label: "How important is this to your work?"
+      options:
+        - "Critical — blocks how I need to use the instrument"
+        - "High — I'd use it constantly"
+        - "Nice to have"
+    validations:
+      required: true

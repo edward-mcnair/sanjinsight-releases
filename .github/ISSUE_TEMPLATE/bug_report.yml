@@ -1,0 +1,96 @@
+name: "Bug report"
+description: "Something is broken, wrong, or behaving unexpectedly (not a crash)"
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing **SanjINSIGHT**! 🙏
+
+        The single most useful thing you can attach is a **Support Bundle**:
+        in the app, **Help → Create Support Bundle…** saves a `.zip` (logs,
+        config, device inventory, event timeline). Please drag that file onto
+        this issue — it usually lets us go straight to the cause.
+  - type: input
+    id: version
+    attributes:
+      label: "App version"
+      description: "Help → About"
+      placeholder: "e.g. 0.49.0-beta.28"
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: "Severity"
+      options:
+        - "Blocker — data loss, unsafe, or makes the app unusable"
+        - "Major — a workflow is broken or gives a wrong result"
+        - "Minor — cosmetic, confusing, or a small annoyance"
+        - "Idea — works, but could be better"
+    validations:
+      required: true
+  - type: dropdown
+    id: environment
+    attributes:
+      label: "Hardware / environment"
+      options:
+        - "Windows + full bench hardware"
+        - "Windows + partial or different hardware"
+        - "Windows + Simulation Mode (no hardware)"
+        - "macOS (analysis / simulation build)"
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: "Affected workflow / area"
+      multiple: true
+      options:
+        - "Measurement"
+        - "Calibration"
+        - "Hot Spot Detection"
+        - "Transient Series"
+        - "Data Set Analysis"
+        - "Camera / live preview / exposure"
+        - "Focus & stage"
+        - "Stimulus / timing / temperature (FPGA / TEC / LDD / bias)"
+        - "Sessions / experiment log / export"
+        - "Device Manager / hardware connect"
+        - "Theme / UI / text legibility"
+        - "Software update"
+        - "AI Advisor"
+        - "Other / not sure"
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: "Steps to reproduce"
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: "What you expected to happen"
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: "What actually happened — paste any on-screen error text or traceback"
+      render: text
+    validations:
+      required: true
+  - type: checkboxes
+    id: diagnostics
+    attributes:
+      label: "Diagnostics attached"
+      options:
+        - label: "I attached a Support Bundle (Help → Create Support Bundle…)"
+        - label: "I attached a screenshot (please do for any visual / legibility issue)"

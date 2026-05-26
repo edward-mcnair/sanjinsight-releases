@@ -1,0 +1,6 @@
+# Force the structured forms — no blank free-form issues.
+blank_issues_enabled: false
+contact_links:
+  - name: "Urgent bench / hardware problem"
+    url: "https://microsanj.com/support"
+    about: "For time-sensitive bench or safety issues, contact Microsanj support directly rather than filing an issue."

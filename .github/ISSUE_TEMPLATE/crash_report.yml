@@ -1,0 +1,73 @@
+name: "Crash / freeze report"
+description: "The app closed unexpectedly, froze, or failed to start"
+title: "[Crash] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Sorry it crashed — let's get it fixed. Two attachments make crashes
+        much faster to diagnose:
+
+        1. **Support Bundle** — **Help → Create Support Bundle…** (if the app
+           still opens). It includes the rotating log at
+           `~/.microsanj/logs/sanjinsight.log`.
+        2. **Startup crash log** — if the app crashed *while launching*, attach
+           `~/.microsanj/logs/startup_crash.txt`
+           (Windows: `C:\Users\<you>\.microsanj\logs\startup_crash.txt`).
+  - type: input
+    id: version
+    attributes:
+      label: "App version"
+      description: "Help → About (or the installer filename if it won't open)"
+      placeholder: "e.g. 0.49.0-beta.28"
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: "What kind of failure?"
+      options:
+        - "App closed / disappeared suddenly"
+        - "App froze / became unresponsive"
+        - "App failed to start at all"
+        - "Hung during a specific operation"
+    validations:
+      required: true
+  - type: dropdown
+    id: environment
+    attributes:
+      label: "Hardware / environment"
+      options:
+        - "Windows + full bench hardware"
+        - "Windows + partial or different hardware"
+        - "Windows + Simulation Mode (no hardware)"
+        - "macOS (analysis / simulation build)"
+    validations:
+      required: true
+  - type: textarea
+    id: doing
+    attributes:
+      label: "What were you doing right before it crashed?"
+      placeholder: |
+        e.g. clicked Run Transient with 50 delays, ~10 s in it closed.
+    validations:
+      required: true
+  - type: textarea
+    id: repeatable
+    attributes:
+      label: "Does it happen every time? What steps trigger it?"
+    validations:
+      required: true
+  - type: textarea
+    id: error
+    attributes:
+      label: "Any error text on screen (paste it here)"
+      render: text
+  - type: checkboxes
+    id: diagnostics
+    attributes:
+      label: "Diagnostics attached"
+      options:
+        - label: "I attached a Support Bundle (or sanjinsight.log)"
+        - label: "I attached startup_crash.txt (only if it crashed while launching)"
